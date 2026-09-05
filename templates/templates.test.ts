@@ -7,7 +7,7 @@
  * template publishes only through the operator's queue.
  */
 import { describe, expect, it } from "vitest";
-import { ACTIVE, CHANNEL_IDENTITY, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
 import type { MediaTemplate } from "./template.ts";
 
 const both = Object.values(TEMPLATES);
@@ -115,6 +115,164 @@ describe("the crews", () => {
         expect(agent.system).toMatch(/`account`/);
         expect(agent.system).toMatch(/`media_url`/);
         expect(agent.system).toMatch(/`source`/);
+      }
+    }
+  });
+});
+
+/**
+ * The crons — the difference between a channel and a chat window.
+ *
+ * Neither template declared a single schedule, so nothing this crew does ever started by itself:
+ * a provisioned channel sat there until a human opened Chat, which is the opposite of the product
+ * the README sells. The cadence is asserted here rather than the exact wording of a fire, because
+ * the cadence is the promise; and the shape of a cron string is asserted because `naive up` matches
+ * live deployments to declarations BY EXACT CRON TEXT — "0 8 * * 1" and "0 08 * * 1" are a delete
+ * plus a create, not a patch.
+ */
+describe("the channel's clock", () => {
+  /** Which agent of each template makes the pieces. The manager is shared; this one is not. */
+  const SPECIALIST: Record<string, string> = { faceless: "producer", clipping: "clipper" };
+
+  const schedulesOf = (template: MediaTemplate, name: string) =>
+    template.agents.find((agent) => agent.name === name)?.schedules ?? [];
+  const everySchedule = both.flatMap((template) =>
+    template.agents.flatMap((agent) => agent.schedules ?? []),
+  );
+
+  /**
+   * Every fire this repo declares: one on each specialist and three on each manager. Called by the
+   * tests below that assert a property of each schedule, because a `for` loop over a template that
+   * declares none passes — which is exactly the state this whole block exists to keep out.
+   */
+  const everyFireCounted = () => expect(everySchedule).toHaveLength(8);
+
+  const fields = (cron: string) => cron.split(" ");
+  const hourOf = (cron: string) => Number(fields(cron)[1]);
+  /** Fires every day: no day-of-month, month or day-of-week restriction. */
+  const isDaily = (cron: string) => {
+    const [, , dom, month, dow] = fields(cron);
+    return dom === "*" && month === "*" && dow === "*";
+  };
+  /** Fires once a week: every month, any day-of-month, one named weekday. */
+  const isWeekly = (cron: string) => {
+    const [, , dom, month, dow] = fields(cron);
+    return dom === "*" && month === "*" && /^[0-6]$/.test(dow ?? "");
+  };
+
+  it("gives every agent of every template a cron, so the channel works with nobody watching", () => {
+    // Counted per agent so a failure names the one that fires at nothing.
+    const counts = both.flatMap((template) =>
+      template.agents.map(
+        (agent) => [`${template.name}/${agent.name}`, (agent.schedules ?? []).length] as const,
+      ),
+    );
+    expect(counts).toHaveLength(4);
+    expect(counts.filter(([, count]) => count === 0)).toEqual([]);
+  });
+
+  it("makes the next piece daily, on whichever agent this template's pieces come from", () => {
+    for (const template of both) {
+      const crons = schedulesOf(template, SPECIALIST[template.name]!).map((one) => one.cron);
+      expect(crons).toHaveLength(1);
+      expect(crons.every(isDaily)).toBe(true);
+    }
+  });
+
+  it("plans the week weekly, and runs the queue and the comments daily, on the channel manager", () => {
+    for (const template of both) {
+      const manager = schedulesOf(template, "channel-manager");
+      expect(manager).toHaveLength(3);
+      expect(manager.filter((one) => isWeekly(one.cron))).toHaveLength(1);
+      expect(manager.filter((one) => isDaily(one.cron))).toHaveLength(2);
+      // The weekly one is the plan; the daily pair is the queue and the comments.
+      expect(manager.find((one) => isWeekly(one.cron))?.input).toMatch(/plan/i);
+      const daily = manager.filter((one) => isDaily(one.cron)).map((one) => one.input);
+      expect(daily.filter((input) => /queue/i.test(input))).toHaveLength(1);
+      expect(daily.filter((input) => /comment/i.test(input))).toHaveLength(1);
+    }
+  });
+
+  it("files the day's piece before the manager sweeps the queue it lands in", () => {
+    for (const template of both) {
+      const piece = schedulesOf(template, SPECIALIST[template.name]!)[0]!;
+      const sweep = schedulesOf(template, "channel-manager").find(
+        (one) => isDaily(one.cron) && /queue/i.test(one.input),
+      )!;
+      expect(hourOf(piece.cron)).toBeLessThan(hourOf(sweep.cron));
+    }
+  });
+
+  /**
+   * An omitted `timezone` is not "the channel's local time", it is UTC — a fire in the middle of
+   * somebody's night that also drifts an hour twice a year against the audience it was tuned for.
+   */
+  it("states a real timezone on every fire instead of taking the API's UTC default", () => {
+    everyFireCounted();
+    for (const one of everySchedule) expect(one.timezone).toBe(CHANNEL_TIMEZONE);
+    // A zone the platform would reject is a zone `Intl` cannot resolve either.
+    expect(() => new Intl.DateTimeFormat("en-US", { timeZone: CHANNEL_TIMEZONE }).format()).not.toThrow();
+    expect(CHANNEL_TIMEZONE).toMatch(/^[A-Za-z_]+\/[A-Za-z_+\-0-9/]+$/);
+  });
+
+  /**
+   * The other half of the connections grant, on the unattended path. A fire with no identity speaks
+   * as nobody and its session resolves `session → agent → identity → connected accounts` to zero
+   * accounts — a cron that exists to feed the accounts and cannot reach one of them.
+   */
+  it("runs every fire as the channel persona, so a cron can reach the connected accounts", () => {
+    everyFireCounted();
+    for (const one of everySchedule) expect(one.identity).toBe(CHANNEL_IDENTITY);
+  });
+
+  /**
+   * The sharp edge, asserted. Schedules are the one place in `naive up` where OMISSION DELETES:
+   * a declared agent's schedules are owned as a complete set and matched to live rows by exact cron
+   * string, so a duplicate is refused outright and a re-spelling (`08` for `8`) silently drops the
+   * live row and creates a new one in its place.
+   */
+  it("writes each cron once per agent, in the one spelling that matches its live row", () => {
+    everyFireCounted();
+    for (const template of both) {
+      for (const agent of template.agents) {
+        const crons = (agent.schedules ?? []).map((one) => one.cron);
+        expect(new Set(crons).size).toBe(crons.length);
+        for (const cron of crons) {
+          expect(fields(cron)).toHaveLength(5);
+          expect(cron).toBe(cron.trim());
+          // No zero-padding and no double spaces: `"0 08 * * 1"` is a different string, and so a
+          // different deployment, from `"0 8 * * 1"`.
+          for (const field of fields(cron)) expect(field).not.toMatch(/^0\d/);
+        }
+      }
+    }
+  });
+
+  /** A fire is one task, and a day of fires is one day of budget. Both ceilings are the agent's. */
+  it("keeps each fire inside the per-task ceiling and a day of them inside the daily cap", () => {
+    everyFireCounted();
+    for (const template of both) {
+      for (const agent of template.agents) {
+        const schedules = agent.schedules ?? [];
+        for (const one of schedules) {
+          expect(one.budget_micro_usd).toBeGreaterThan(0);
+          expect(one.budget_micro_usd).toBeLessThanOrEqual(agent.budget.max_task_micro_usd);
+        }
+        expect(agent.budget.period).toBe("day");
+        const worstDay = schedules.reduce((sum, one) => sum + one.budget_micro_usd, 0);
+        expect(worstDay).toBeLessThanOrEqual(agent.budget.cap_micro_usd);
+      }
+    }
+  });
+
+  it("tells each fire what to do, in its own words", () => {
+    everyFireCounted();
+    for (const template of both) {
+      for (const agent of template.agents) {
+        const inputs = (agent.schedules ?? []).map((one) => one.input);
+        for (const input of inputs) expect(input.trim().length).toBeGreaterThan(40);
+        // Two fires of one agent that said the same thing would be one fire declared twice.
+        expect(new Set(inputs).size).toBe(inputs.length);
       }
     }
   });

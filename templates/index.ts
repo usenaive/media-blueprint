@@ -13,7 +13,7 @@ import { FACELESS } from "./faceless.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 export type { MediaTemplate, OnboardingQuestion, PostKindDecl, TemplateName } from "./template.ts";
-export { CHANNEL_IDENTITY } from "./template.ts";
+export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE } from "./template.ts";
 
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING };
 
