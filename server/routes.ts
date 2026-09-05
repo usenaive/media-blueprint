@@ -1,0 +1,238 @@
+/**
+ * The dashboard's whole HTTP surface, as one function over one store (ADR-0374).
+ *
+ * Both callers are thin adapters over this file: `server/index.ts` (node `http`, `pnpm serve`) and
+ * `server/api-entry.ts` (the single deployed function behind `/api/app`). Neither holds a route,
+ * so the browser and the org's agents read and write the same rows by construction — `/mcp` is
+ * simply the first row of the table below.
+ *
+ * `handleRequest` needs no socket and no database to test: the store is opened lazily, through
+ * `ctx.store()`, and only by the routes that actually touch it.
+ */
+import { authError, bearerMatches, handleMcp } from "./mcp.ts";
+import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
+import type { ChannelProfile, Store } from "./store.ts";
+import { POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
+import { ACTIVE, type MediaTemplate } from "../templates/index.ts";
+
+export interface ApiRequest {
+  /** Upper-case. */
+  method: string;
+  /** `"/api/posts"` or `"/mcp"` — no query, no trailing slash. */
+  path: string;
+  query: URLSearchParams;
+  /** Lower-cased names, first value only. */
+  headers: Record<string, string | undefined>;
+  /** Raw text, `""` when there is none. */
+  body: string;
+}
+
+export interface ApiReply {
+  status: number;
+  /** JSON-encoded by the adapter; `undefined` means an empty body. */
+  body?: unknown;
+  /** Set only by `/api/chat/:sid/stream` — piped, not buffered. */
+  stream?: Response;
+}
+
+export interface ApiContext {
+  /** Opens the store on first call and memoises it for this request. Platform-only routes never call it. */
+  store(): Promise<Store>;
+  config: ProxyConfig | null;
+  mcpToken: string | undefined;
+  /** The operator's bearer for `/api/*` (`DASHBOARD_TOKEN`). Undefined closes the whole surface. */
+  dashboardToken: string | undefined;
+  /** True on `pnpm serve` / `pnpm dev`. False in the deployed function. */
+  local: boolean;
+}
+
+const json = (status: number, body: unknown): ApiReply => ({ status, body });
+const fail = (status: number, error: string): ApiReply => ({ status, body: { error } });
+
+const NOT_CONFIGURED = "not configured — set NAIVE_API_KEY";
+const NO_DASHBOARD_TOKEN = "not configured — set DASHBOARD_TOKEN on this app";
+
+/** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
+const KNOWN = [/^\/api\/posts$/, /^\/api\/templates$/, /^\/api\/onboarding$/, /^\/api\/agents$/, /^\/api\/chat$/, /^\/api\/sessions$/];
+
+const parse = (body: string): Record<string, unknown> => {
+  try {
+    return (JSON.parse(body || "{}") ?? {}) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+
+/** Resolved once per warm instance: the channel-manager agent the chat talks to. */
+let managerId: string | null = null;
+async function chatAgentId(config: ProxyConfig): Promise<string | null> {
+  if (managerId !== null) return managerId;
+  const res = await proxyFetch(config, { method: "GET", path: "/v1/agents" }, null);
+  if (!res.ok) return null;
+  const list = (await res.json()) as { data?: { id: string; name: string }[] };
+  managerId = list.data?.find((a) => a.name === "channel-manager")?.id ?? null;
+  return managerId;
+}
+
+/**
+ * Publishes an approved post for real, then marks it posted.
+ *
+ * Three things this used to get wrong, each of which told the operator a lie. The finished video
+ * was dropped — only the caption travelled, so "Post now" published a bare line of text and left
+ * the work behind. The target came straight off the row, including networks the platform's social
+ * API does not accept, which came back 400 as an opaque "publish failed"; the row's platform is
+ * checked against `POST_PLATFORMS` here because a document written before that set was narrowed
+ * can still be sitting in the app database.
+ *
+ * And the two worst. It never read `post.status`, so any row — a pending draft an agent had just
+ * filed, a rejected one — published on one call, straight around the approval queue this whole
+ * blueprint is built on. And when there was no publish path (no key, or no channel identity) it
+ * skipped the upstream call entirely and still answered 200 with the row flipped to `posted` and
+ * a `postedAt`: a post that shipped nowhere, recorded as shipped, with no way to tell from the
+ * dashboard. Nothing here reports success for a publish that did not happen.
+ */
+async function postNow(store: Store, config: ProxyConfig | null, id: string): Promise<ApiReply> {
+  const post = store.read().posts.find((p) => p.id === id);
+  if (!post) return fail(404, "no such post");
+  if (post.status !== "approved") {
+    return fail(409, `this post is ${post.status} — only an approved post can be published`);
+  }
+  if (!(POST_PLATFORMS as readonly string[]).includes(post.platform)) {
+    return fail(400, `this channel cannot publish to ${post.platform} — retarget the post first`);
+  }
+  const upstream = config === null ? null : upstreamFor("POST", "/api/social/posts", config.identityId);
+  if (config === null || upstream === null) {
+    return fail(503, "publishing is not configured on this deployment — nothing was published");
+  }
+  const published = await proxyFetch(
+    config,
+    upstream,
+    JSON.stringify({
+      content: post.caption,
+      title: post.title,
+      platforms: [post.platform],
+      ...(post.mediaUrl === undefined ? {} : { media_urls: [post.mediaUrl] }),
+    }),
+  );
+  if (!published.ok) return fail(502, "publish failed");
+  return json(200, store.updatePost(post.id, { status: "posted" }));
+}
+
+/**
+ * The onboarding answers, checked against the questions the running template actually asks —
+ * `faceless` asks for a niche, `clipping` for a niche and the source channel it may cut from.
+ * Returns the profile to persist, or the sentence to refuse with.
+ *
+ * `{"niche":123}` used to fall through a `typeof` check to `null` and erase the channel's niche —
+ * a write that destroys the row it was asked to set is refused, not coerced — and a question the
+ * template added was simply dropped on the floor.
+ */
+export function channelProfile(body: Record<string, unknown>, template: MediaTemplate): ChannelProfile | string {
+  const profile: Record<string, string> = {};
+  for (const question of template.questions) {
+    const answer = body[question.key];
+    if (typeof answer !== "string" || answer.trim() === "") {
+      return `${question.label.toLowerCase()} must be a non-empty string`;
+    }
+    profile[question.key] = answer;
+  }
+  return profile as ChannelProfile;
+}
+
+/** The store-backed routes: the post queue, the style templates, the channel's onboarding state. */
+async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply | null> {
+  const { method, path } = req;
+  if (method === "GET" && path === "/api/posts") return json(200, (await ctx.store()).read().posts);
+  if (method === "GET" && path === "/api/templates") return json(200, (await ctx.store()).read().templates);
+  if (method === "GET" && path === "/api/onboarding") return json(200, (await ctx.store()).read().onboarding);
+  if (method === "PUT" && path === "/api/onboarding") {
+    const profile = channelProfile(parse(req.body), ACTIVE);
+    if (typeof profile === "string") return fail(400, profile);
+    return json(200, (await ctx.store()).setOnboarding(profile));
+  }
+  const patch = /^\/api\/posts\/([\w-]+)$/.exec(path);
+  if (patch) {
+    if (method !== "PATCH") return fail(405, "method not allowed");
+    const body = parse(req.body) as { status?: PostStatus; rejectedReason?: string };
+    if (!body.status) return fail(400, "status is required");
+    // Any string persisted before this: a post could be PATCHed into a state no tab lists, no
+    // agent understands and no screen can move it out of.
+    if (!(POST_STATUSES as readonly string[]).includes(body.status)) {
+      return fail(400, `status must be one of ${POST_STATUSES.join(", ")}`);
+    }
+    const updated = (await ctx.store()).updatePost(patch[1]!, {
+      status: body.status,
+      ...(body.rejectedReason === undefined ? {} : { rejectedReason: body.rejectedReason }),
+    });
+    return updated ? json(200, updated) : fail(404, "no such post");
+  }
+  const now = /^\/api\/posts\/([\w-]+)\/post-now$/.exec(path);
+  if (now) {
+    if (method !== "POST") return fail(405, "method not allowed");
+    return postNow(await ctx.store(), ctx.config, now[1]!);
+  }
+  return null;
+}
+
+/**
+ * The gate on every `/api/*` route: one operator bearer, `DASHBOARD_TOKEN`, compared in constant
+ * time. `/mcp` keeps its own, platform-minted token and does not pass through here.
+ *
+ * There was no gate at all. Anonymous requests moved posts between states, marked one posted, read
+ * the agent roster with its system prompts, opened a real billable session and relayed the events
+ * of a session this dashboard never created — every one of them against a public URL.
+ *
+ * Unset means **closed**, not open: a deployment whose token was never set answers 503 to every
+ * route rather than serving the org's queue to the internet. The only bypass is a genuinely local
+ * request (`pnpm serve` / `pnpm dev` from the loopback interface), which is the one caller that
+ * cannot be someone else.
+ */
+function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
+  if (!req.path.startsWith("/api/") || ctx.local) return null;
+  if (!ctx.dashboardToken) return fail(503, NO_DASHBOARD_TOKEN);
+  return bearerMatches(ctx.dashboardToken, req.headers.authorization)
+    ? null
+    : fail(401, "missing or invalid dashboard token");
+}
+
+/** Every route the dashboard serves, browser and agent alike. */
+export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<ApiReply> {
+  if (req.path === "/mcp") {
+    if (req.method !== "POST") return fail(405, "POST only");
+    const refused = authError(ctx.mcpToken ?? null, req.headers.authorization);
+    if (refused !== null) return json(401, refused);
+    const answer = await handleMcp(req.body, await ctx.store(), ctx.config);
+    // A notification has no reply: 202 with no body, as the streamable-HTTP transport asks.
+    return answer === null ? { status: 202 } : json(200, answer);
+  }
+
+  const refused = dashboardAuth(req, ctx);
+  if (refused !== null) return refused;
+
+  const stored = await storeRoutes(req, ctx);
+  if (stored !== null) return stored;
+
+  if (ctx.config === null) return fail(503, NOT_CONFIGURED);
+
+  if (req.path === "/api/chat") {
+    if (req.method !== "POST") return fail(405, "method not allowed");
+    const agent = await chatAgentId(ctx.config);
+    if (agent === null) return fail(503, "no channel-manager agent in this org");
+    const message = parse(req.body).message;
+    const created = await proxyFetch(
+      ctx.config,
+      { method: "POST", path: "/v1/sessions" },
+      JSON.stringify({ agent_id: agent, message: typeof message === "string" ? message : "" }),
+    );
+    return json(created.status, await created.json());
+  }
+
+  const upstream = upstreamFor(req.method, req.path, ctx.config.identityId);
+  if (upstream === null) {
+    return KNOWN.some((known) => known.test(req.path)) ? fail(405, "method not allowed") : fail(404, "no such route");
+  }
+  const body = req.method === "GET" ? null : req.body || "{}";
+  const answer = await proxyFetch(ctx.config, upstream, body);
+  if (upstream.sse) return { status: answer.status, stream: answer };
+  return json(answer.status, await answer.json());
+}

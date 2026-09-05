@@ -1,0 +1,39 @@
+{
+  "name": "media-blueprint",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Media channel \u2014 a company blueprint on the Vetta platform, in two templates (faceless, clipping). Dashboard UI plus a thin server that proxies the platform API.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && pnpm api:build",
+    "serve": "node --experimental-strip-types server/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "api:build": "node build-api.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.10",
+    "lucide-react": "^0.548.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-router": "8.0.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@usenaive-sdk/blueprints": "^0.1.0",
+    "@usenaive-sdk/vetta-cli": "^0.4.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "^5.1.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3",
+    "vitest": "^3.2.7",
+    "vite": "8.1.5",
+    "esbuild": "0.28.2",
+    "jsdom": "^30.0.1",
+    "@types/pg": "^8.15.6"
+  }
+}
