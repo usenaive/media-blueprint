@@ -18,8 +18,7 @@ const stream = (text: string) =>
   }), { status: 200 });
 
 describe("streamReplies", () => {
-  it("sends the operator's token and appends what the agent said", async () => {
-    vi.stubGlobal("sessionStorage", { getItem: () => "s3cret", setItem: () => {}, removeItem: () => {} });
+  it("carries no credential of its own and appends what the agent said", async () => {
     const body =
       "retry: 3000\n\n" +
       `event: message.completed\ndata: ${JSON.stringify({ data: { role: "assistant", content: "On it." } })}\n\n` +
@@ -32,7 +31,9 @@ describe("streamReplies", () => {
     await vi.waitFor(() => expect(said).toEqual(["On it."]));
 
     expect(fetchMock.mock.calls[0]![0]).toBe("/api/chat/ses_1/stream");
-    expect((fetchMock.mock.calls[0]![1] as { headers: Record<string, string> }).headers.authorization).toBe("Bearer s3cret");
+    // The relay is same-origin, so the `HttpOnly` cookie `/api/enter` set travels on its own; a
+    // header here would be a second copy of a credential this bundle is not allowed to hold.
+    expect((fetchMock.mock.calls[0]![1] as { headers: Record<string, string> }).headers).not.toHaveProperty("authorization");
     // `session.idle` ends it: the relay is not re-opened once the session is done.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

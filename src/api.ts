@@ -19,48 +19,31 @@ export class ApiError extends Error {
 
 const UNREACHABLE = "the dashboard server is unreachable";
 
-const TOKEN_KEY = "channel.dashboard-token";
-const ASK = "Dashboard token\n\nThis channel's queue, accounts and agents are behind one token. Paste the DASHBOARD_TOKEN this dashboard was deployed with.";
-
-/** Read through `globalThis` so the module also loads outside a browser (tests, SSR of any kind). */
-const session = (): Storage | undefined => (globalThis as { sessionStorage?: Storage }).sessionStorage;
-
 /**
- * The operator's bearer for `/api/*`. Asked for once per browser session and kept in
- * `sessionStorage` — not `localStorage`: it is the whole channel's key, and it should not outlive
- * the tab that was given it. A 401 forgets it, so the next call asks again (`call` retries once).
+ * NOTHING HERE HOLDS A CREDENTIAL, AND THAT IS THE POINT.
+ *
+ * This module used to `prompt()` for the app's `DASHBOARD_TOKEN` and keep the answer in
+ * `sessionStorage`. That was the only way in while the token was something an operator invented —
+ * and it stopped being one: the platform generates it (`canonical-spec §29.7`) and no route returns
+ * it, so there is no value for a person to be asked for. What replaced the box is one click in the
+ * studio, which posts a short-lived ticket to `/api/enter`; the server answers with an `HttpOnly`
+ * cookie the browser then attaches to every call below on its own.
+ *
+ * So no `authorization` header is sent, and a 401 is not a prompt any more — it is the honest
+ * sentence the server wrote, rendered by whichever screen asked.
  */
-export function dashboardToken(): string {
-  const saved = session()?.getItem(TOKEN_KEY);
-  if (saved) return saved;
-  const asked = (globalThis as { prompt?: (message: string) => string | null }).prompt?.(ASK)?.trim() ?? "";
-  if (asked) session()?.setItem(TOKEN_KEY, asked);
-  return asked;
-}
-
-/** Called on a 401: the token in hand is wrong or expired, so it must not be reused. */
-export const forgetDashboardToken = (): void => session()?.removeItem(TOKEN_KEY);
 
 /** Callers always hand a plain header bag, so the bearer can be merged into it by name. */
 interface Call extends Omit<RequestInit, "headers"> {
   headers: Record<string, string>;
 }
 
-async function call<T>(path: string, init: Call, retry = true): Promise<T> {
+async function call<T>(path: string, init: Call): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, {
-      ...init,
-      headers: { ...init.headers, authorization: `Bearer ${dashboardToken()}` },
-    });
+    res = await fetch(`/api${path}`, init);
   } catch {
     throw new ApiError(0, UNREACHABLE);
-  }
-  // The token is wrong: drop it and let one retry ask for it again, rather than making the operator
-  // reload the tab to be asked. Only once — a second 401 is an answer, not a typo.
-  if (res.status === 401) {
-    forgetDashboardToken();
-    if (retry) return call<T>(path, init, false);
   }
   const isJson = res.headers.get("content-type")?.includes("application/json") ?? false;
   const body: unknown = isJson ? await res.json().catch(() => null) : null;

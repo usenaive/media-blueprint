@@ -102,7 +102,7 @@ export const declaration = {
       // VETTA_MCP_TOKEN.
       env: {
         NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-        DASHBOARD_TOKEN: { generate: true },
+        DASHBOARD_TOKEN: { generate: true as const },
       },
     },
   ],
