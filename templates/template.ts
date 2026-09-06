@@ -14,7 +14,7 @@
  * MCP tools are below rather than in each template: they are the machine's, and a template that
  * could restate them could quietly drop the gate.
  */
-import type { AgentDecl } from "@usenaive-sdk/blueprints";
+import type { AgentDecl, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import type { PostKind } from "../seed/posts.ts";
 
 export type TemplateName = "faceless" | "clipping";
@@ -134,6 +134,79 @@ export const toolset = (names: readonly string[]) => ({
   },
 });
 
+/**
+ * The channel's clock, and the only place it is written.
+ *
+ * `POST /v1/deployments` defaults an omitted `timezone` to UTC, and a channel's 08:00 is not UTC's:
+ * an unstated timezone is not "local", it is a cron that fires in the middle of somebody's night
+ * and drifts an hour twice a year against the audience it was tuned for. Every schedule below
+ * states it, and a channel that runs on another clock is this one line rather than six.
+ */
+export const CHANNEL_TIMEZONE = "America/New_York";
+
+/**
+ * One cron on an agent — and the sharp edge of declaring any.
+ *
+ * SCHEDULES ARE THE SINGLE PLACE IN `naive up` WHERE OMISSION DELETES. Everywhere else in this
+ * config dropping a declaration is inert and only the `removed` block is a tombstone; a declared
+ * agent's `schedules` are instead owned as a COMPLETE SET, and any live deployment on that agent
+ * whose cron no schedule below names is deleted on the next `up`. Two consequences for whoever
+ * edits this file next:
+ *
+ *   · The reconciler matches live rows BY EXACT CRON STRING and by nothing else — deployments carry
+ *     no name. So `"0 8 * * 1"` and `"0 08 * * 1"` are not the same schedule: retyping one as the
+ *     other is a DELETE plus a CREATE, not a patch, and the row loses its id and its history.
+ *     Change a fire's *time* deliberately; never re-spell one that is not changing.
+ *   · Deleting a line here deletes the cron in the operator's org. Changing `input`, `timezone`,
+ *     `budget_micro_usd`, `identity` or `enabled` on a line whose cron is unchanged is a patch.
+ *
+ * (The agent's `schedules` key being absent altogether owns nothing and deletes nothing — that is
+ * how this blueprint got here. It is stating a partial set that is destructive.)
+ *
+ * `identity` is set for the same reason the agent's is: a fire with no identity speaks as nobody,
+ * and the session resolves `session → agent → identity → connected accounts` to zero accounts —
+ * an unattended run that cannot reach the very accounts it exists to feed. This blueprint declares
+ * exactly one persona (`naive.config.ts`), so every schedule names it; `up` refuses a schedule
+ * whose identity was never provisioned rather than creating one that runs as nobody.
+ *
+ * `budget_micro_usd` is per fire, and a fire is one task: keep it at or under the agent's
+ * `max_task_micro_usd` above, and keep a day's fires under `cap_micro_usd` between them.
+ */
+export const schedule = (decl: { cron: string; input: string; budget_micro_usd: number }): ScheduleDecl => ({
+  ...decl,
+  timezone: CHANNEL_TIMEZONE,
+  identity: CHANNEL_IDENTITY,
+});
+
+/**
+ * The channel manager's week, shared by both templates because the manager is.
+ *
+ * Three fires, and the cadence the landing copy already promises: the plan on Monday, the queue and
+ * the comments every day. They are staggered around the specialist's morning fire below — the plan
+ * is filed before the week's production starts, the queue is swept after the night's piece has
+ * landed in it, and the comments are read at the end of the day.
+ */
+export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
+  schedule({
+    cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
+    input:
+      "Plan the week. Read the channel profile and its niche (channel.get_onboarding), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per planned slot, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialist through the plan, not by publishing anything yourself.",
+    budget_micro_usd: 2_000_000, // $2 — the widest read of the week, once a week.
+  }),
+  schedule({
+    cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
+    input:
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.",
+    budget_micro_usd: 1_000_000, // $1 — a read and a few patches.
+  }),
+  schedule({
+    cron: "0 18 * * *", // Daily 18:00 — the comments, at the end of the channel's day.
+    input:
+      "Read the comments on what this channel has posted today and on the pieces still gathering them, and reply in the channel's voice. Every reply acts on a connected account, so it stops at the operator's Approvals screen with its text in front of a person — write the reply you would stand behind, and leave the ones you would not.",
+    budget_micro_usd: 1_000_000, // $1 — a read and a handful of replies.
+  }),
+];
+
 /** One agent of a template: its own brief and platform tools, over the shared gate, model and budget. */
 export const agent = (decl: {
   name: string;
@@ -142,6 +215,12 @@ export const agent = (decl: {
   brief: string;
   /** The platform tools this agent may call; the dashboard's own are added for it. */
   tools: string[];
+  /**
+   * The crons this agent fires on, owned as a complete set — see `schedule` above, where the
+   * ownership rule and the exact-cron-string matching are written out. An agent with none does
+   * nothing until a human opens a chat window.
+   */
+  schedules: ScheduleDecl[];
 }): AgentDecl => ({
   name: decl.name,
   model,
@@ -157,4 +236,5 @@ export const agent = (decl: {
    * social routes already hang off.
    */
   identity: CHANNEL_IDENTITY,
+  schedules: decl.schedules,
 });

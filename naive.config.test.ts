@@ -1,7 +1,7 @@
 /** The blueprint as `naive up` would read it: it parses, it names its template, and every agent carries the approval gate. */
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
-import { ACTIVE, CHANNEL_IDENTITY, TEMPLATES } from "./templates/index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -30,6 +30,31 @@ describe("naive.config", () => {
       expect(agent.tools?.default_config.permission).toBe("ask");
       expect(agent.tools?.configs["bash"]).toEqual({ enabled: false, permission: "deny" });
     }
+  });
+
+  /**
+   * The crons, as the engine actually accepted them.
+   *
+   * `defineProject` parses the declaration through the published schema and STRIPS anything that
+   * schema does not know, so reading `timezone` and `identity` back off `project` — not off the
+   * template objects — is the check that the installed `@usenaive-sdk/blueprints` really carries
+   * both fields. If a future release drops one, this test goes red here rather than at 07:00 in
+   * somebody's org, where the fire would quietly run in UTC or as nobody.
+   */
+  it("hands `up` the running crew's crons, each with the timezone and the persona it fires as", () => {
+    for (const agent of project.agents) {
+      const schedules = agent.schedules ?? [];
+      expect(schedules.length).toBeGreaterThan(0);
+      for (const one of schedules) {
+        expect(one.timezone).toBe(CHANNEL_TIMEZONE);
+        expect(one.identity).toBe(CHANNEL_IDENTITY);
+        // `up` refuses a schedule naming an identity this project never declares, so the persona
+        // on every fire has to be one of the declared ones.
+        expect(declaration.identities.map((identity) => identity.name)).toContain(one.identity);
+      }
+    }
+    // The cadence the landing copy promises, on the crew that is actually running.
+    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(4);
   });
 
   it("declares the persona its agents act as, so a connected account is reachable from a turn", () => {

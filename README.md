@@ -43,8 +43,8 @@ keeps it for that browser session; paste in the same string you exported.
 
 - **The dashboard app** — this repo's built UI, hosted under your org, backed
   by a thin server that talks to the platform on your behalf.
-- **The template's agents**, each with a system prompt, a scoped tool policy
-  and a daily budget:
+- **The template's agents**, each with a system prompt, a scoped tool policy,
+  a daily budget and its own crons:
   - `channel-manager` — plans the calendar, drafts captions, manages the
     post queue, replies to comments. Never publishes an unapproved post. Both
     templates declare it.
@@ -55,6 +55,34 @@ keeps it for that browser session; paste in the same string you exported.
 - **Nine starter style templates** (reference image + prompt) covering the
   current high-performing short-form aesthetics — the blueprint's shipped
   catalogue, present from the first turn.
+- **The channel's crons** — the schedules below, so the channel works whether or
+  not anyone opens the dashboard.
+
+## The cadence
+
+Both templates provision the same four fires, all of them in the channel's own
+timezone (`CHANNEL_TIMEZONE` in `templates/template.ts` — one line, one edit) and
+all of them running as the `channel` identity, so a scheduled run reaches the
+same connected accounts a chat turn does.
+
+| When | Who | What it does |
+|---|---|---|
+| Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video, or the next batch of clips — and files it as a pending post |
+| Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve |
+| Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
+| Monday 09:00 | `channel-manager` | Plans the week and files the briefs the specialist produces against |
+
+Nothing a cron does escapes the queue: the fires file and tidy pending posts, and
+every publish and every reply still stops at your approval, exactly as it does
+when you brief an agent in Chat.
+
+**Editing them has one sharp edge.** Schedules are the only place in `naive up`
+where dropping a declaration deletes: an agent's `schedules` are owned as a
+complete set and matched to live rows **by exact cron string**, so `"0 8 * * 1"`
+and `"0 08 * * 1"` are a delete plus a create rather than a patch. Change a
+fire's time deliberately; never re-spell one that is not changing. (An agent with
+no `schedules` key at all owns nothing and deletes nothing — it is a *partial*
+set that is destructive.)
 
 A freshly provisioned channel has **no posts and no channel profile**, and every screen
 shows its empty state until you or an agent files something. That is the truth
