@@ -100,58 +100,41 @@ describe("replyText", () => {
   });
 });
 
-describe("the dashboard token", () => {
-  const memory = (start?: string) => {
-    const box = new Map(start === undefined ? [] : [["channel.dashboard-token", start]]);
-    return {
-      store: {
-        getItem: (k: string) => box.get(k) ?? null,
-        setItem: (k: string, v: string) => void box.set(k, v),
-        removeItem: (k: string) => void box.delete(k),
-      },
-      box,
-    };
-  };
-  const bearerOf = (call: unknown[]) => (call[1] as { headers: Record<string, string> }).headers.authorization;
-
-  it("asks once, keeps it for the session, and sends it on every call", async () => {
-    // Every `/api/*` route is bearer-gated now; a request without the header is a 401 the operator
-    // can do nothing about, so the SPA has to carry it.
-    const { store, box } = memory();
-    const ask = vi.fn().mockReturnValue("  s3cret  ");
-    vi.stubGlobal("sessionStorage", store);
+/**
+ * THE OPERATOR IS NEVER ASKED FOR A CREDENTIAL, BECAUSE THERE IS NO LONGER ONE TO ASK FOR.
+ *
+ * This module used to `prompt()` for `DASHBOARD_TOKEN` and keep the answer in `sessionStorage`.
+ * The platform now generates that value (`canonical-spec §29.7`) and no route returns it, so the
+ * box was asking a person for something nobody can read: the studio's one click posts a ticket to
+ * `/api/enter` and the server answers with an `HttpOnly` cookie the browser sends by itself.
+ */
+describe("no credential passes through the browser", () => {
+  it("never asks for a token and never sends an authorization header", async () => {
+    const ask = vi.fn();
     vi.stubGlobal("prompt", ask);
     const fetchMock = vi.fn().mockResolvedValue(json([]));
     vi.stubGlobal("fetch", fetchMock);
 
     await apiGet("/posts");
-    await apiGet("/templates");
+    await apiSend("PATCH", "/posts/post_1", { status: "ready" });
 
-    expect(ask).toHaveBeenCalledTimes(1);
-    expect(box.get("channel.dashboard-token")).toBe("s3cret");
-    expect(bearerOf(fetchMock.mock.calls[0]!)).toBe("Bearer s3cret");
-    expect(bearerOf(fetchMock.mock.calls[1]!)).toBe("Bearer s3cret");
+    expect(ask).not.toHaveBeenCalled();
+    for (const call of fetchMock.mock.calls) {
+      const headers = (call[1] as { headers?: Record<string, string> }).headers ?? {};
+      expect(Object.keys(headers).map((name) => name.toLowerCase())).not.toContain("authorization");
+    }
   });
 
-  it("forgets a token the server refused and asks again, once", async () => {
-    const { store, box } = memory("stale");
-    const ask = vi.fn().mockReturnValue("fresh");
-    vi.stubGlobal("sessionStorage", store);
+  it("surfaces a 401 as the server's own sentence rather than a second prompt", async () => {
+    const ask = vi.fn();
     vi.stubGlobal("prompt", ask);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json({ error: "missing or invalid dashboard token" }, 401))
-      .mockResolvedValueOnce(json([{ id: "post_1" }]));
+    const closed = "missing or invalid dashboard token — this dashboard is opened from the studio that installed it";
+    const fetchMock = vi.fn().mockResolvedValue(json({ error: closed }, 401));
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(await apiGet("/posts")).toEqual([{ id: "post_1" }]);
-    expect(bearerOf(fetchMock.mock.calls[0]!)).toBe("Bearer stale");
-    expect(bearerOf(fetchMock.mock.calls[1]!)).toBe("Bearer fresh");
-    expect(box.get("channel.dashboard-token")).toBe("fresh");
-
-    // A second 401 is an answer, not a typo: it surfaces, and the bad token is not kept.
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: "missing or invalid dashboard token" }, 401)));
-    await expect(apiGet("/posts")).rejects.toMatchObject({ status: 401 });
-    expect(box.has("channel.dashboard-token")).toBe(false);
+    await expect(apiGet("/posts")).rejects.toMatchObject({ status: 401, message: closed });
+    // One call, not two: there is no stale token to forget and no retry to make.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(ask).not.toHaveBeenCalled();
   });
 });

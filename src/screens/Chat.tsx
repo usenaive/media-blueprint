@@ -1,6 +1,6 @@
 import { ArrowUp, Plus } from "lucide-react";
 import { useState } from "react";
-import { apiSend, dashboardToken, messageOf, replyText } from "../api";
+import { apiSend, messageOf, replyText } from "../api";
 
 interface Turn {
   you: boolean;
@@ -48,7 +48,7 @@ export function streamReplies(sessionId: string, append: (text: string) => void)
       let res: Response;
       try {
         res = await fetch(`/api/chat/${sessionId}/stream`, {
-          headers: { accept: "text/event-stream", authorization: `Bearer ${dashboardToken()}` },
+          headers: { accept: "text/event-stream" },
           signal: control.signal,
         });
       } catch {

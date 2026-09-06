@@ -43,8 +43,8 @@ importers:
         specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
       '@usenaive-sdk/blueprints':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
       '@usenaive-sdk/vetta-cli':
         specifier: ^0.4.0
         version: 0.4.0
@@ -760,8 +760,8 @@ packages:
   '@types/react@19.2.17':
     resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
 
-  '@usenaive-sdk/blueprints@0.1.0':
-    resolution: {integrity: sha512-Fv2FI+rsk1ZGqlVBMO7+XEiCaD3doBh5srkJkre1PSCaZbyfjRCRLb7WmZnzQqprf25OeVFBlR+gt8rmZbcuMw==}
+  '@usenaive-sdk/blueprints@0.3.0':
+    resolution: {integrity: sha512-fk1TCh1awZfaJpRwNr8WEKQlbdyEeeuyDFWSiySuGwrr239KDdLsRRJD73lvPu8VIzPzKpAlyGCP1jSyKPNZpw==}
     engines: {node: '>=20'}
 
   '@usenaive-sdk/vetta-cli@0.4.0':
@@ -2041,7 +2041,7 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@usenaive-sdk/blueprints@0.1.0':
+  '@usenaive-sdk/blueprints@0.3.0':
     dependencies:
       '@usenaive-sdk/vetta': 0.3.0
       jiti: 2.7.0
