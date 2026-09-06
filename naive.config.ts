@@ -82,20 +82,27 @@ export const declaration = {
       deploy_dir: "dist",
       mcp: "/mcp",
       // The dashboard's server half fronts the platform for the browser, so the deployed process
-      // needs the org key. `{from_env}` keeps the secret out of this file and refuses the apply by
-      // name when the variable is unset; the other two are literals — a base URL and an identity id
-      // are not secrets, and a `{from_env}` on an unset optional would refuse the whole apply.
+      // needs the org key. `{from_env}` keeps the secret out of this file: on a laptop it is read
+      // from the author's shell, and a hosted install reads it from the PLATFORM ENVIRONMENT
+      // (`canonical-spec §29.7`), which mints a scoped organization key for this app. Unset in both
+      // places still refuses the apply by name, with the variable named and never a value.
       //
       // DASHBOARD_TOKEN is the operator's bearer for every `/api/*` route (`server/routes.ts`).
       // It is deliberately required: the deployed URL is public, and without a token the dashboard
       // answers 503 rather than letting anyone move posts, publish, read the roster or open a
-      // billable session. Refusing the apply by name is the right failure — set it to any long
-      // random string before `naive up`, and paste the same string into the dashboard when asked.
+      // billable session. It is `{generate: true}` because the value is "any long random string" —
+      // asking a person to invent entropy was never a setup question, it was a defect — so the
+      // platform makes one, once, on the apply that creates the app, and never rolls it after.
+      //
+      // NAIVE_API_URL and NAIVE_IDENTITY_ID are NOT declared here and must not be. They were
+      // `process.env` reads, which meant the PUBLISHER'S shell was baked into the declaration every
+      // customer installs — and, on a hosted apply, that there is no shell, so both silently
+      // vanished and the dashboard's social routes answered 503 for want of a persona. The platform
+      // knows both and writes them into this app itself (§29.7), the way it already writes
+      // VETTA_MCP_TOKEN.
       env: {
         NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-        DASHBOARD_TOKEN: { from_env: "DASHBOARD_TOKEN" },
-        ...(process.env["NAIVE_API_URL"] ? { NAIVE_API_URL: process.env["NAIVE_API_URL"] } : {}),
-        ...(process.env["NAIVE_IDENTITY_ID"] ? { NAIVE_IDENTITY_ID: process.env["NAIVE_IDENTITY_ID"] } : {}),
+        DASHBOARD_TOKEN: { generate: true },
       },
     },
   ],

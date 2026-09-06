@@ -96,12 +96,31 @@ describe("naive.config", () => {
     expect(JSON.stringify(project.apps[0]?.env)).not.toMatch(/sk_|secret/i);
   });
 
-  it("declares the operator token every /api/* route is gated on", () => {
+  it("declares the operator token every /api/* route is gated on, and has the platform invent it", () => {
     // Declared nowhere before, so the deployed dashboard had no token to compare against and its
     // whole API — the queue, publishing, the roster, opening a billable session — answered anyone
-    // who found the URL. `{from_env}` refuses the apply by name rather than deploying an open one,
-    // and keeps the value out of this file.
-    expect(project.apps[0]?.env?.["DASHBOARD_TOKEN"]).toEqual({ from_env: "DASHBOARD_TOKEN" });
+    // who found the URL. It is `{generate: true}` (`canonical-spec §29.7`) rather than `{from_env}`
+    // because the value is "any long random string": a person inventing entropy is not a setup
+    // question, and a hosted install has no shell to read one out of. The platform makes it once,
+    // on the apply that creates the app, and a later apply leaves it exactly where it is.
+    expect(project.apps[0]?.env?.["DASHBOARD_TOKEN"]).toEqual({ generate: true });
+  });
+
+  /**
+   * The platform's own two values are the platform's to write (`canonical-spec §29.7`).
+   *
+   * They used to be `process.env` reads in `naive.config.ts`, which is two bugs in one line. At
+   * publish time the PUBLISHER'S shell was baked into the declaration every customer then installs;
+   * on a hosted apply there is no shell at all, so both simply vanished and the dashboard fell back
+   * to the production base URL with no persona — `/api/social/*` answering 503 for every connected
+   * account. Declaring them is not the fix either: a laptop apply would then refuse for want of two
+   * variables nobody has. The platform knows both and writes them itself.
+   */
+  it("declares neither the API base URL nor the identity id, because the platform provides both", () => {
+    expect(project.apps[0]?.env).toEqual({
+      NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
+      DASHBOARD_TOKEN: { generate: true },
+    });
   });
 
   it("serves its MCP endpoint from the dashboard and lets every agent file work through it", () => {
