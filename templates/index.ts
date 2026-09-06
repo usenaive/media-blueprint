@@ -17,5 +17,15 @@ export { CHANNEL_IDENTITY } from "./template.ts";
 
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING };
 
-/** The template this channel runs. Switching template is this line plus `naive up`. */
-export const ACTIVE: MediaTemplate = TEMPLATES.faceless;
+/**
+ * The template this repository runs. Editing this line and running `naive up` is the switch, and
+ * for an operator that is the whole story.
+ *
+ * `NAIVE_TEMPLATE` overrides it, and exists for exactly one caller: the platform's artifact
+ * publisher builds EVERY template of this repository in one pass, and it cannot edit a file it does
+ * not own between builds. Without the override it asked for `clipping` and got this
+ * line's answer back, so only the default template could ever be published. Unset — which is every
+ * run that is not that publisher — nothing changes.
+ */
+const chosen = process.env["NAIVE_TEMPLATE"] as TemplateName | undefined;
+export const ACTIVE: MediaTemplate = chosen ? (TEMPLATES[chosen] ?? TEMPLATES.faceless) : TEMPLATES.faceless;
