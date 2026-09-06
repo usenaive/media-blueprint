@@ -40,6 +40,13 @@ await build({
   // Installed from the manifest below rather than inlined: `pg` ships native-ish internals that do
   // not survive bundling, and the host installs it anyway.
   external: ["pg"],
+  // The template, substituted here for the reason `vite.config.ts` substitutes it for the screens:
+  // one build is one template. The server half imports `templates/active.ts` for the crew, the post
+  // kinds and the seed, and on the deployed host `NAIVE_TEMPLATE` is not in the environment — so a
+  // runtime read there answers with this repository's default template while the screens beside it
+  // show the built one. Substituted, the two halves of one deployment cannot disagree. Unset it is
+  // `""`, falsy, and `templates/index.ts` keeps the default the file itself names.
+  define: { "process.env.NAIVE_TEMPLATE": JSON.stringify(process.env["NAIVE_TEMPLATE"] ?? "") },
 });
 
 const rewrites = [
