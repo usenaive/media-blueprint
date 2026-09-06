@@ -9,7 +9,7 @@
  * Nothing here approves, rejects or publishes — those stay operator actions
  * on the Posts screen.
  */
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, type PostPlatform } from "../seed/posts.ts";
@@ -26,9 +26,33 @@ const rpcError = (id: JsonRpcRequest["id"], code: number, message: string) =>
  * the bearer check; `routes.ts` gates `/api/*` with the same comparison against its own token.
  */
 export function bearerMatches(expected: string, authHeader: string | undefined): boolean {
-  const given = Buffer.from(/^Bearer\s+(\S+)$/i.exec(authHeader ?? "")?.[1] ?? "");
-  const want = Buffer.from(expected);
-  return given.length === want.length && timingSafeEqual(given, want);
+  return secretMatches(expected, /^Bearer\s+(\S+)$/i.exec(authHeader ?? "")?.[1] ?? "");
+}
+
+/** The comparison itself, over two raw values — the cookie the browser holds is not a header. */
+export function secretMatches(expected: string, given: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * A PLATFORM ENTRY TICKET: `<expiry-ms>.<base64url HMAC-SHA256>`, keyed by this app's own
+ * `DASHBOARD_TOKEN` over `vetta.app-entry.v1:<expiry-ms>` (`canonical-spec §29.7`).
+ *
+ * The point of the shape is what it is NOT. The operator's browser is handed a ticket and never the
+ * token: the ticket is a one-way function of it, so a ticket read out of a log, a history entry or
+ * a `Referer` is worth two minutes and cannot be turned back into the bearer this app compares. The
+ * expiry rides in the clear because this function has to read it before it can reject a stale one,
+ * and inside the MAC because otherwise it would be the one field a holder could edit.
+ *
+ * Nothing about this is a session: it is one hop, and what it buys is the cookie (`routes.ts`).
+ */
+export function ticketMatches(token: string, ticket: string, now: number): boolean {
+  const [expiry, mac] = ticket.split(".");
+  const expiresAt = Number(expiry);
+  if (mac === undefined || !Number.isSafeInteger(expiresAt) || now >= expiresAt) return false;
+  return secretMatches(createHmac("sha256", token).update(`vetta.app-entry.v1:${expiresAt}`).digest("base64url"), mac);
 }
 
 /**

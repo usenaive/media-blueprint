@@ -68,6 +68,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
     dashboardToken,
     local: isLoopback(req.socket.remoteAddress),
   });
+  // `/api/enter` answers with a cookie and a `location` and nothing else; every other route sets none.
+  const extra = reply.headers ?? {};
   if (reply.stream) {
     res.writeHead(reply.status, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     res.write("retry: 3000\n\n");
@@ -76,8 +78,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
     for (let next = await reader.read(); !next.done; next = await reader.read()) res.write(next.value);
     return void res.end();
   }
-  if (reply.body === undefined) return void res.writeHead(reply.status).end();
-  res.writeHead(reply.status, { "content-type": "application/json" });
+  if (reply.body === undefined) return void res.writeHead(reply.status, extra).end();
+  res.writeHead(reply.status, { "content-type": "application/json", ...extra });
   res.end(JSON.stringify(reply.body));
 }
 

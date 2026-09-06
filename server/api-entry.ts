@@ -211,6 +211,8 @@ export default async function handler(req: Request, res: Response): Promise<void
     // long the browser takes to read an event stream.
     await open.document?.commit();
 
+    for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value);
+
     if (reply.stream) {
       res.status(reply.status);
       res.setHeader("content-type", "text/event-stream");
