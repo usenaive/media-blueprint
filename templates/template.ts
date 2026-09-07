@@ -55,10 +55,31 @@ export interface MediaTemplate {
   };
 }
 
-/** Modest daily channel budget; retune per channel after the first week. */
+/**
+ * What one render actually costs, measured rather than guessed.
+ *
+ * PRODUCTION, 2026-09-07: one 10-second 1080x1920 video was debited **2,210,000 µUSD**
+ * (`led_vna2cf3v27phg8meh4tdnxfcx0`) — 221,000 µUSD per second. The producer is briefed for a short
+ * "under 15 seconds", so the length it is actually asked for costs up to ~3,320,000 µUSD, and that
+ * is the number every ceiling below has to clear. Nothing publishes a price for a video model, so
+ * this figure comes from a real invoice and is the only honest one available; re-measure it when the
+ * model changes.
+ */
+export const ONE_RENDER_MICRO_USD = 3_320_000;
+
+/**
+ * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
+ * the per-task ceiling has to hold one render of the length the producer is briefed for (~$3.32)
+ * **plus** the session's own model calls, because the render's admission hold and the turn's model
+ * calls draw on the same ceiling. At $2 the very first production session on production spent the
+ * money, blew the ceiling and parked with the video already rendered.
+ *
+ * $6/task is one render with ~1.8x of headroom; $20/day is the producer's daily fire, the manager's
+ * three sweeps, and room for one retry. Retune per channel after the first week.
+ */
 const budget = {
-  cap_micro_usd: 10_000_000, // $10/day
-  max_task_micro_usd: 2_000_000, // $2/task
+  cap_micro_usd: 20_000_000, // $20/day
+  max_task_micro_usd: 6_000_000, // $6/task — one ~$3.32 render plus the turns that brief and file it.
   period: "day",
 } as const;
 

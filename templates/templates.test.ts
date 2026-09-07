@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
+import { ONE_RENDER_MICRO_USD } from "./template.ts";
 import type { MediaTemplate } from "./template.ts";
 
 const both = Object.values(TEMPLATES);
@@ -287,6 +288,29 @@ describe("the channel's clock", () => {
         expect(worstDay).toBeLessThanOrEqual(agent.budget.cap_micro_usd);
       }
     }
+  });
+
+  /**
+   * PRODUCTION, 2026-09-07. The producer's very first render — one 10-second 1080x1920 video, the
+   * exact thing this template exists to make — was debited **2,210,000 µUSD**
+   * (`led_vna2cf3v27phg8meh4tdnxfcx0`) against a `max_task_micro_usd` of 2,000,000. The session
+   * spent the money, blew the ceiling, and parked `budget_paused` with the video already rendered.
+   * The operator had to raise the cap and file the post from a second session.
+   *
+   * A template whose flagship action costs more than its own per-task ceiling fails on first use,
+   * for every customer, every time. The ceiling has to clear one render of the length the brief
+   * asks for, with the session's own model calls on top.
+   */
+  it("gives the specialist a ceiling that clears one render of what it is briefed to make", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.budget.max_task_micro_usd).toBeGreaterThan(ONE_RENDER_MICRO_USD);
+      }
+    }
+    // And the fire that produces one must be allowed to spend it: a schedule's budget is the
+    // session's own ceiling, so a fire capped under a render is the same failure one level down.
+    const producer = TEMPLATES.faceless.agents.find((one) => one.name === "producer");
+    expect(producer?.schedules?.[0]?.budget_micro_usd).toBeGreaterThan(ONE_RENDER_MICRO_USD);
   });
 
   it("tells each fire what to do, in its own words", () => {
