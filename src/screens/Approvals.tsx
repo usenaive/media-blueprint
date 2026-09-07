@@ -346,7 +346,7 @@ export function Approvals() {
               <section key={key} className="panel p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{item.agent}</span>
-                  <span className="text-sm text-ink-2">wants to run</span>
+                  <span className="text-sm text-ink-2">{item.tool === "request_tools" ? "asks to be granted tools via" : "wants to run"}</span>
                   <span className="chip chip-plain font-mono">{item.tool}</span>
                   {status}
                   <span className="ml-auto font-mono text-[0.6875rem] text-ink-3">{item.sessionId}</span>

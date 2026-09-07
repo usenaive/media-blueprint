@@ -192,16 +192,19 @@ naive session confirm <session-id> --tool-call <id> --allow   # or --deny --reas
 So a post reaches an account by exactly two routes: you publish it yourself from the Posts
 screen, or you approve an agent's held `social.post` call.
 
-**An agent can also ask you something.** Every agent holds `ask_operator` (at `ask`, like
-everything outward), and its system prompt tells it that the tools offered in a turn are the
-complete list of what it can do — so when a fire needs something it was not given (no
-`generate_video` this turn, no video model, no connected account for the platform in the brief),
-it names exactly what is missing and asks you once, instead of narrating a video it never
-rendered. The session parks at `awaiting_answer` and the question lands on the same Approvals
-screen as a card with fields rather than an approve/reject pair; your answer goes back through
-`POST /v1/sessions/:id/answers`, and the agent carries on with it. Granting the missing tool or
-model is still your change to make in the template — an answer tells the agent, it does not
-change what it holds.
+**An agent can also ask you for something.** Every agent holds two doors to you (both at `ask`,
+like everything outward), and its system prompt tells it that the tools offered in a turn are the
+complete list of what it can do. When a fire needs a *tool or model* it was not given — no
+`generate_video` this turn, no video model pinned, no `clip_video` — it calls `request_tools`,
+naming the exact tool, permission and (for video) the model in `config.models`, instead of
+narrating a video it never rendered. That is an ordinary tool card on Approvals: approving it
+mints a new version of the agent and re-pins the running session, so the tool is offered when the
+session resumes and the piece gets made; refusing it ends the request. The next `naive up` writes
+the template's toolset back, so a model you want kept belongs in `VIDEO_MODELS` too. When a fire
+needs a *fact* only you have — which account, which source video — it calls `ask_operator`: the
+session parks at `awaiting_answer`, the question lands on the same screen as a card with fields,
+and your answer goes back through `POST /v1/sessions/:id/answers`. Neither door connects an
+account: a platform's tools reach a turn only once you have connected it to the `channel` identity.
 
 ## 🛠 Building on top of it
 

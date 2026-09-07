@@ -132,24 +132,29 @@ describe("the crews", () => {
   });
 
   /**
-   * The gate tells every agent that the offered list is complete and to `ask_operator` for what it
-   * lacks — so every agent must hold that tool on purpose, not by falling through the default, and
-   * the built-ins it must not fall through to (the platform's own mailbox) are denied by name. The
-   * producer's case is the sharp one: a turn with no `generate_video` must ask, not narrate a video.
+   * The gate tells every agent that the offered list is complete, to `request_tools` for a tool or
+   * model it lacks and to `ask_operator` for a fact it lacks — so every agent must hold both on
+   * purpose, not by falling through the default, and the built-ins it must not fall through to (the
+   * platform's own mailbox) are denied by name. The producer's case is the sharp one: a turn with no
+   * `generate_video` must request it — the request is what changes its toolset — not narrate a video.
    */
   it("lets every agent ask the operator for what it lacks, and nothing else it was not named", () => {
     for (const template of both) {
       for (const agent of template.agents) {
         expect(agent.system).toMatch(/complete list of what you can do right now/);
-        expect(agent.system).toMatch(/use ask_operator/);
+        expect(agent.system).toMatch(/request it once with request_tools/);
+        expect(agent.system).toMatch(/ask once with ask_operator/);
         expect(agent.tools?.configs["ask_operator"]).toEqual({ enabled: true, permission: "ask" });
+        expect(agent.tools?.configs["request_tools"]).toEqual({ enabled: true, permission: "ask" });
         for (const mailbox of ["email.inboxes", "email.read", "email.send"]) {
           expect(agent.tools?.configs[mailbox]).toEqual({ enabled: false, permission: "deny" });
         }
       }
     }
     const producer = TEMPLATES.faceless.agents.find((agent) => agent.name === "producer");
-    expect(producer?.schedules?.[0]?.input).toMatch(/If generate_video is not among your tools.*ask_operator/);
+    expect(producer?.schedules?.[0]?.input).toMatch(/If generate_video is not among your tools.*request_tools.*config\.models/);
+    const clipper = TEMPLATES.clipping.agents.find((agent) => agent.name === "clipper");
+    expect(clipper?.schedules?.[0]?.input).toMatch(/If clip_video is not among your tools.*request_tools/);
   });
 
   it("tells each agent to sign what it files, so an operator can read the row", () => {
