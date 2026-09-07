@@ -82,6 +82,21 @@ const BUILTIN_TOOLS = [
   "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
 ] as const;
 
+/**
+ * The video models the producer may render with, best-first — and the reason this list exists.
+ *
+ * `generate_video` derives its default from the catalogue: the agent's first pinned model, or else
+ * the cheapest model the catalogue publishes a price for. Video models publish no price, so with no
+ * pin here there is no default to derive and **every call refuses** with "name a video model". A
+ * chat session survives that (a human reads the refusal and names one); the 07:00 producer cron
+ * does not — it fails the same way every night with nobody watching. A channel that renders video
+ * has to say what it renders with.
+ *
+ * First is the default. The rest are named so the producer can still reach for a different look
+ * without an operator editing this file; narrowing the list narrows what it can choose.
+ */
+const VIDEO_MODELS = ["alibaba/wan-3.0", "alibaba/wan-3.0-prime", "alibaba/happyhorse-1.1"];
+
 /** The persona every agent of this channel acts as, and the one connected accounts hang off. */
 export const CHANNEL_IDENTITY = "channel";
 
@@ -128,7 +143,12 @@ export const toolset = (names: readonly string[]) => ({
     ...Object.fromEntries(
       names.map((name) => [
         name,
-        { enabled: true, permission: name === "social.post" ? ("ask" as const) : ("allow" as const) },
+        {
+          enabled: true,
+          permission: name === "social.post" ? ("ask" as const) : ("allow" as const),
+          // The one tool with no derivable default; see `VIDEO_MODELS`.
+          ...(name === "generate_video" ? { config: { models: VIDEO_MODELS } } : {}),
+        },
       ]),
     ),
   },

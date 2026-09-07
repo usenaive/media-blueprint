@@ -48,6 +48,30 @@ describe("the crews", () => {
     expect(toolsOf(TEMPLATES.clipping, "clipper")).not.toContain("generate_video");
   });
 
+  /**
+   * The producer's first real action on a live install was `generate_video`, and it was refused:
+   * "name a video model — no default can be derived". Video models publish no price, so the
+   * catalogue-derived default the tool falls back to does not exist for them, and only a pin here
+   * supplies one. Without it the nightly producer cron fails every night with nobody watching.
+   */
+  it("pins a video model on every agent that may render, so the first call has a default", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        const config = agent.tools?.configs["generate_video"];
+        if (config?.enabled !== true) continue;
+        const models = (config.config as { models?: unknown })?.models;
+        expect(Array.isArray(models) && models.length > 0).toBe(true);
+        expect(typeof (models as string[])[0]).toBe("string");
+      }
+    }
+  });
+
+  /** The pin narrows; it must not silently narrow a tool the crew was never granted. */
+  it("pins nothing on a crew that does not render", () => {
+    expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.tools?.configs["generate_video"])
+      .toEqual({ enabled: false, permission: "deny" });
+  });
+
   it("files each agent's work through the dashboard queue, under the same gate", () => {
     for (const template of both) {
       for (const agent of template.agents) {
