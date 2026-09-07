@@ -30,7 +30,7 @@ export const FACELESS: MediaTemplate = {
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
           input:
             "Make the next piece. Read the plan and the queue (channel.list_posts) and the channel's niche (channel.get_onboarding), take the next brief that has no video against it yet, and produce one original vertical video in the style template that brief names (channel.list_style_templates). File it as a pending post. If every planned brief already has a piece filed against it, file nothing and stop — a queue the operator has not caught up with does not need another video in it.",
-          budget_micro_usd: 2_000_000, // $2 — one generated video, the agent's per-task ceiling.
+          budget_micro_usd: 6_000_000, // $6 — one generated video, the agent's per-task ceiling.
         }),
       ],
     }),
