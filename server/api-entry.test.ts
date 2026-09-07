@@ -1,6 +1,6 @@
 /** The two pieces of the deployed entry point that are decidable without a database. */
-import { describe, expect, it } from "vitest";
-import { libpqCompat, openDocument, requestOf, type Db } from "./api-entry.ts";
+import { afterEach, describe, expect, it } from "vitest";
+import { libpqCompat, openDocument, reasonOf, requestOf, whereOf, type Db } from "./api-entry.ts";
 import { emptyState, type StoreState } from "./store.ts";
 import type { Post } from "../seed/posts.ts";
 
@@ -133,7 +133,13 @@ describe("concurrent writes", () => {
     const document = await openDocument(row.client());
     document.store.createPost({ caption: "one", status: "pending" });
     await document.commit();
-    expect(row.sql).toEqual(["begin", "select state from", "update channel_store set", "commit"]);
+    expect(row.sql).toEqual([
+      "begin",
+      "savepoint before_store_probe",
+      "select state from",
+      "update channel_store set",
+      "commit",
+    ]);
   });
 
   it("releases the lock when the handler failed, without writing", async () => {
@@ -145,5 +151,156 @@ describe("concurrent writes", () => {
     const second = await openDocument(row.client());
     await second.commit();
     expect(row.posts()).toEqual([]);
+  });
+});
+
+/**
+ * The 503 has to name WHY, because "the app database is unavailable" reads identically for four
+ * problems with four different owners — and it has to do it without ever letting the driver's own
+ * words, which quote the host, the user and the password, reach a response body.
+ */
+describe("reasonOf", () => {
+  const withCode = (code: string, message = "") => Object.assign(new Error(message), { code, name: "error" });
+
+  it("names an unset variable before it names anything else", () => {
+    expect(reasonOf(new Error("DATABASE_URL is unset: the app database is not provisioned yet"))).toBe("unset");
+  });
+
+  it("reads the codes a socket fails with", () => {
+    expect(reasonOf(withCode("ENOTFOUND"))).toBe("host-not-found");
+    expect(reasonOf(withCode("ENETUNREACH"))).toBe("no-route");
+    expect(reasonOf(withCode("SELF_SIGNED_CERT_IN_CHAIN"))).toBe("tls");
+  });
+
+  it("reaches inside the aggregate Node throws when every address failed", () => {
+    // A host with several A/AAAA records fails as an AggregateError that carries no code itself.
+    const aggregate = Object.assign(new Error("all attempts failed"), { errors: [withCode("ENETUNREACH")] });
+    expect(reasonOf(aggregate)).toBe("no-route");
+  });
+
+  it("reads the pooler's refusal of an un-namespaced user through the catch-all SQLSTATE", () => {
+    // This is the real production failure: the pooler ACCEPTS the connection and completes TLS,
+    // then rejects it FATAL under XX000 because the username carried no `.<project-ref>` suffix,
+    // so there is no tenant to route to. The code alone cannot tell it from any other internal
+    // error, and before this it collapsed to "unknown".
+    const refusal = withCode("XX000", "(ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)");
+    expect(reasonOf(refusal)).toBe("no-such-tenant");
+    expect(reasonOf(withCode("XX000", "Tenant or user not found"))).toBe("no-such-tenant");
+  });
+
+  it("falls back to the SQLSTATE, which is a class code and not a secret", () => {
+    // A refusal nobody has met yet is otherwise indistinguishable from a database that is down.
+    expect(reasonOf(withCode("57P03", "the database system is starting up"))).toBe("sqlstate-57P03");
+  });
+
+  it("will not let a driver's own code string ride out as a reason", () => {
+    // Only an exact five upper-case alphanumerics is a SQLSTATE; everything else is discarded.
+    expect(reasonOf(withCode("SOME_LONG_DRIVER_CODE"))).toBe("unknown");
+    expect(reasonOf(withCode("xx000"))).toBe("unknown");
+  });
+
+  it("still distinguishes a genuinely wrong password", () => {
+    expect(reasonOf(withCode("28P01"))).toBe("bad-password");
+  });
+
+  it("discards anything it does not recognise rather than passing a driver string through", () => {
+    // The safety property: an unmapped failure can never become the way the connection string
+    // escapes, however specific its message is.
+    const leaky = withCode("XX000", 'connection to "db.secret-ref.example:5432" as user "postgres" failed');
+    expect(reasonOf(leaky)).toBe("sqlstate-XX000");
+    expect(reasonOf("not an error at all")).toBe("unknown");
+  });
+});
+
+describe("whereOf", () => {
+  const url = process.env["DATABASE_URL"];
+  afterEach(() => {
+    if (url === undefined) delete process.env["DATABASE_URL"];
+    else process.env["DATABASE_URL"] = url;
+  });
+
+  it("reports the endpoint's shape and no part of its value", () => {
+    process.env["DATABASE_URL"] =
+      "postgresql://postgres:hunter2@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require";
+    const at = whereOf(Object.assign(new Error("nope"), { name: "error" }));
+    expect(at).toEqual({
+      name: "error",
+      scheme: "postgresql",
+      port: "5432",
+      params: ["sslmode"],
+      endpoint: "pooled",
+    });
+    // Nothing that identifies the database may appear, at any depth.
+    expect(JSON.stringify(at)).not.toMatch(/hunter2|postgres:|supabase|pooler\./);
+  });
+
+  it("says when the endpoint is the project's direct host instead of the pooled one", () => {
+    // The distinction an operator cannot otherwise see, and the one that decides whether a
+    // serverless runtime can dial it at all.
+    process.env["DATABASE_URL"] = "postgresql://u:p@db.ref.supabase.co:5432/postgres";
+    expect(whereOf(new Error("x"))).toMatchObject({ endpoint: "direct", params: [] });
+  });
+
+  it("says the variable is unset without inventing a shape for it", () => {
+    delete process.env["DATABASE_URL"];
+    expect(whereOf(new Error("x"))).toEqual({ name: "Error", url: "unset" });
+  });
+});
+
+/**
+ * A fresh app database has no `channel_store` table, so the very first request is the one that has
+ * to create it — and it runs inside the transaction `openDocument` has already opened.
+ *
+ * Postgres aborts a transaction at the first statement that errors and refuses everything after it
+ * with `25P02` until the block ends. So `select … for update` failing `42P01` does not just need
+ * catching: the transaction it failed in has to be unwound before the recovery DDL can run at all.
+ * Modelled here because that rule is the whole bug and a real Postgres is not available.
+ */
+function abortingRow(): { created: boolean; client(): Db } {
+  let exists = false;
+  let aborted = false;
+  const state = { exists: false };
+  const out = {
+    get created() {
+      return state.exists;
+    },
+    client(): Db {
+      return {
+        async query<R>(text: string): Promise<{ rows: R[] }> {
+          const sql = text.trim().toLowerCase();
+          const isUnwind = sql === "rollback" || sql === "commit" || sql.startsWith("rollback to savepoint");
+          if (aborted && !isUnwind) {
+            throw Object.assign(new Error("current transaction is aborted, commands ignored until end of transaction block"), {
+              name: "error",
+              code: "25P02",
+            });
+          }
+          if (isUnwind) aborted = false;
+          if (sql.startsWith("select") && !exists) {
+            aborted = true;
+            throw Object.assign(new Error(`relation "channel_store" does not exist`), { name: "error", code: "42P01" });
+          }
+          if (sql.startsWith("create table")) {
+            exists = true;
+            state.exists = true;
+          }
+          if (sql.startsWith("select")) return { rows: [{ state: emptyState() }] as R[] };
+          return { rows: [] };
+        },
+      };
+    },
+  };
+  return out;
+}
+
+describe("first request on a fresh app database", () => {
+  it("creates the store table instead of dying inside the aborted transaction", async () => {
+    // Before the savepoint this threw 25P02 and every /api/* route answered 503 forever: the
+    // database was reachable and healthy the whole time, and the app could never take its first
+    // write. Measured on the live `channel` app as `reason: "sqlstate-25P02"`.
+    const row = abortingRow();
+    const document = await openDocument(row.client());
+    expect(row.created).toBe(true);
+    await document.commit();
   });
 });
