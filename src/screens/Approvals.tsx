@@ -448,7 +448,7 @@ function AnswerField({ id, field, value, onChange }: {
       ) : (
         <div className="flex flex-wrap gap-2">
           {field.options.map((option) => (
-            <button key={option} type="button" className={`chip ${chosen.includes(option) ? "chip-via" : "chip-plain"}`}
+            <button key={option} type="button" className={`chip ${chosen.includes(option) ? "chip-chosen" : "chip-plain"}`}
               aria-pressed={chosen.includes(option)} onClick={() => pick(option)}>{option}</button>
           ))}
           {field.other !== false ? (

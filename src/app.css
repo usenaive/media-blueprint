@@ -423,6 +423,14 @@ body:has(dialog[open]) {
   color: var(--ink-2);
   font-weight: 500;
 }
+/* THE PICKED OPTION of a question the agent asked: it takes the action ink, as
+   the button that sends it does, so a chosen chip cannot be mistaken for one
+   that is merely listed. */
+.chip-chosen {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
+}
 /* On the human's ink bubble the same chip inverts its ground rather than its
    idea. */
 .chip-via-inverse {
