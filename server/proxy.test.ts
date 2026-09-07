@@ -20,12 +20,18 @@ describe("upstreamFor", () => {
    * every agent of every template is granted as `ask` — could be neither seen nor released from
    * this dashboard, only from a terminal holding the org key.
    */
-  it("maps the session list and one tool confirmation onto the platform's own routes", () => {
+  it("maps the session list, one tool confirmation and one answer onto the platform's own routes", () => {
     expect(upstreamFor("GET", "/api/sessions", null)).toEqual({ method: "GET", path: "/v1/sessions?limit=100" });
     expect(upstreamFor("POST", "/api/sessions/ses_abc123/tool_confirmations", null)).toEqual({
       method: "POST",
       path: "/v1/sessions/ses_abc123/tool_confirmations",
     });
+    // A question (`ask_operator`, canonical-spec §7) is answered on its own route, not decided.
+    expect(upstreamFor("POST", "/api/sessions/ses_abc123/answers", null)).toEqual({
+      method: "POST",
+      path: "/v1/sessions/ses_abc123/answers",
+    });
+    expect(upstreamFor("GET", "/api/sessions/ses_abc123/answers", null)).toBeNull();
     // Not a general session passthrough: nothing else under `/api/sessions` is routable.
     expect(upstreamFor("POST", "/api/sessions", null)).toBeNull();
     expect(upstreamFor("DELETE", "/api/sessions/ses_abc123", null)).toBeNull();

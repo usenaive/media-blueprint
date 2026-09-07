@@ -3,7 +3,7 @@
  * being asked to approve are put in front of them.
  */
 import { describe, expect, it } from "vitest";
-import { argRows, parked, type WireSession } from "./Approvals";
+import { argRows, keyOf, parked, trimmed, unanswered, type WireSession } from "./Approvals";
 
 const session = (over: Partial<WireSession> & Pick<WireSession, "id">): WireSession => ({
   agent_id: "agt_1",
@@ -89,5 +89,50 @@ describe("argRows", () => {
 
   it("has nothing to show for a call that takes no arguments", () => {
     expect(argRows({})).toEqual([]);
+  });
+});
+
+describe("a question", () => {
+  const question = {
+    prompt: "I have no generate_video this turn. Which video model may I use?",
+    fields: [{ key: "model", label: "Model", type: "choice" as const, options: ["alibaba/wan-3.0"], other: true }],
+  };
+
+  it("is carried as a question, so the card answers it rather than approving it", () => {
+    // `ask_operator` parks `awaiting_answer` with a `kind: "question"` row (canonical-spec §7.1).
+    const rows = parked(
+      [session({
+        id: "ses_q",
+        stop_reason: "awaiting_answer",
+        pending_actions: [{ kind: "question", tool_call_id: "tc_q", name: "ask_operator", args: question, question }],
+      })],
+      new Map(),
+    );
+    expect(rows[0]?.question).toEqual(question);
+    expect(parked([session({ id: "ses_t", pending_actions: [{ kind: "tool", ...call }] })], new Map())[0]).not.toHaveProperty("question");
+  });
+
+  it("is answered trimmed and whole, so a blank field is refused here and not by the platform", () => {
+    // The platform rejects a partial answer (§7.2); "   " must not round-trip a 400 for what the
+    // screen could have said before sending.
+    expect(trimmed(question.fields, { model: "  alibaba/wan-3.0 ", tags: ["a"] })).toEqual({ model: "alibaba/wan-3.0", tags: ["a"] });
+    expect(unanswered(question.fields, trimmed(question.fields, { model: "   " }))).toEqual(["Model"]);
+    expect(unanswered(question.fields, {})).toEqual(["Model"]);
+    expect(unanswered(question.fields, { model: "alibaba/wan-3.0" })).toEqual([]);
+  });
+
+  it("drops a blank 'other' entry from a multi-choice, alone or beside a listed option", () => {
+    // The free-text slot of a multi-select is one more array entry: `["   "]` is as unanswered as
+    // `"   "`, and `["tiktok", "   "]` goes out as `["tiktok"]`. Listed options are kept verbatim.
+    const other = [{ key: "where", label: "Where", type: "choice" as const, options: ["tiktok "], multiple: true, other: true }];
+    expect(unanswered(other, trimmed(other, { where: ["   "] }))).toEqual(["Where"]);
+    expect(trimmed(other, { where: ["tiktok ", "   "] })).toEqual({ where: ["tiktok "] });
+    expect(trimmed(other, { where: ["tiktok ", " shorts "] })).toEqual({ where: ["tiktok ", "shorts"] });
+  });
+
+  it("keeps two sessions' identical calls apart, since the call id alone does not", () => {
+    // `tool_call_id` is a hash of the name and arguments (§7.1): two producers asking the same
+    // question share it, and a card keyed on it alone would answer both at once.
+    expect(keyOf({ sessionId: "ses_a", toolCallId: "tc_1" })).not.toBe(keyOf({ sessionId: "ses_b", toolCallId: "tc_1" }));
   });
 });

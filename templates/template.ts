@@ -87,7 +87,7 @@ const model = "anthropic/claude-sonnet-5";
 
 /** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
 const approvalGate =
-  "You work for a short-form video channel. File every finished piece as a pending post with a caption using channel.create_post; never publish it yourself. Sign what you file — pass your own name as `agent`, the connected account it is for as `account` (channel.list_accounts lists them), the media URL of the finished video as `media_url`, and what you made it from as `source`. The operator reviews the row you filed, watches the video on it, and approves posts from the dashboard.";
+  "You work for a short-form video channel. File every finished piece as a pending post with a caption using channel.create_post; never publish it yourself. Sign what you file — pass your own name as `agent`, the connected account it is for as `account` (channel.list_accounts lists them), the media URL of the finished video as `media_url`, and what you made it from as `source`. The operator reviews the row you filed, watches the video on it, and approves posts from the dashboard. The tools offered to you this turn are the complete list of what you can do right now: do not assume a capability that is not in it, and do not invent one. If the task needs something you are not offered — generate_video or a video model, a connected account, a tool — say exactly which tool or model is missing and use ask_operator to ask for it once, in one message, then wait; never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -101,6 +101,7 @@ const BUILTIN_TOOLS = [
   "browser", "read_skill", "publish_file", "web_search", "web_fetch",
   "generate_image", "generate_video", "clip_video", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
+  "ask_operator", "email.inboxes", "email.read", "email.send",
 ] as const;
 
 /**
@@ -126,6 +127,13 @@ const DASHBOARD_TOOLS = [
   "channel.list_posts", "channel.get_post", "channel.create_post", "channel.update_post",
   "channel.list_style_templates", "channel.list_accounts", "channel.get_onboarding",
 ];
+
+/**
+ * The one built-in every agent holds whatever its template names: the gate above tells the agent to
+ * ask for what it lacks, so the tool that asks must be there. It parks the turn as a question
+ * (`canonical-spec §7`) and can never be `allow` — there is nobody to answer without stopping.
+ */
+const ALWAYS: readonly string[] = ["ask_operator"];
 
 /**
  * The named tools, allowed; every built-in they do not name, denied by name; and everything left —
@@ -156,17 +164,17 @@ export const toolset = (names: readonly string[]) => ({
   default_config: { permission: "ask" as const },
   configs: {
     ...Object.fromEntries(
-      BUILTIN_TOOLS.filter((name) => !names.includes(name)).map((name) => [
+      BUILTIN_TOOLS.filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
         name,
         { enabled: false, permission: "deny" as const },
       ]),
     ),
     ...Object.fromEntries(
-      names.map((name) => [
+      [...names, ...ALWAYS].map((name) => [
         name,
         {
           enabled: true,
-          permission: name === "social.post" ? ("ask" as const) : ("allow" as const),
+          permission: name === "social.post" || name === "ask_operator" ? ("ask" as const) : ("allow" as const),
           // The one tool with no derivable default; see `VIDEO_MODELS`.
           ...(name === "generate_video" ? { config: { models: VIDEO_MODELS } } : {}),
         },

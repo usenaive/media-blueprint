@@ -192,6 +192,17 @@ naive session confirm <session-id> --tool-call <id> --allow   # or --deny --reas
 So a post reaches an account by exactly two routes: you publish it yourself from the Posts
 screen, or you approve an agent's held `social.post` call.
 
+**An agent can also ask you something.** Every agent holds `ask_operator` (at `ask`, like
+everything outward), and its system prompt tells it that the tools offered in a turn are the
+complete list of what it can do — so when a fire needs something it was not given (no
+`generate_video` this turn, no video model, no connected account for the platform in the brief),
+it names exactly what is missing and asks you once, instead of narrating a video it never
+rendered. The session parks at `awaiting_answer` and the question lands on the same Approvals
+screen as a card with fields rather than an approve/reject pair; your answer goes back through
+`POST /v1/sessions/:id/answers`, and the agent carries on with it. Granting the missing tool or
+model is still your change to make in the template — an answer tells the agent, it does not
+change what it holds.
+
 ## 🛠 Building on top of it
 
 This is why the repository is open. The machine is the code in `src/` and `server/`; everything

@@ -131,6 +131,27 @@ describe("the crews", () => {
     }
   });
 
+  /**
+   * The gate tells every agent that the offered list is complete and to `ask_operator` for what it
+   * lacks — so every agent must hold that tool on purpose, not by falling through the default, and
+   * the built-ins it must not fall through to (the platform's own mailbox) are denied by name. The
+   * producer's case is the sharp one: a turn with no `generate_video` must ask, not narrate a video.
+   */
+  it("lets every agent ask the operator for what it lacks, and nothing else it was not named", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.system).toMatch(/complete list of what you can do right now/);
+        expect(agent.system).toMatch(/use ask_operator/);
+        expect(agent.tools?.configs["ask_operator"]).toEqual({ enabled: true, permission: "ask" });
+        for (const mailbox of ["email.inboxes", "email.read", "email.send"]) {
+          expect(agent.tools?.configs[mailbox]).toEqual({ enabled: false, permission: "deny" });
+        }
+      }
+    }
+    const producer = TEMPLATES.faceless.agents.find((agent) => agent.name === "producer");
+    expect(producer?.schedules?.[0]?.input).toMatch(/If generate_video is not among your tools.*ask_operator/);
+  });
+
   it("tells each agent to sign what it files, so an operator can read the row", () => {
     // A filed post used to arrive as "by mcp / unassigned" with no media: the queue's own screenshot
     // promises a named agent, a named account and a video, and nothing asked the agent for them.
