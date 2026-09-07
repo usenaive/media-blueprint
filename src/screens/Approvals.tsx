@@ -171,7 +171,9 @@ export function Approvals() {
   const [partial, setPartial] = useState(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [answers, setAnswers] = useState<Record<string, Answers>>({});
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<readonly string[]>([]);
+  const begin = (key: string) => setBusy((was) => [...was, key]);
+  const finish = (key: string) => setBusy((was) => was.filter((one) => one !== key));
   const [decided, setDecided] = useState<Record<string, Decided>>({});
 
   const load = () =>
@@ -206,14 +208,14 @@ export function Approvals() {
   const decide = (item: Parked, decision: "allow" | "deny") => {
     const key = keyOf(item);
     const reason = (reasons[key] ?? "").trim();
-    setBusy(key);
+    begin(key);
     apiSend<WireSession>("POST", `/sessions/${item.sessionId}/tool_confirmations`, {
       tool_call_id: item.toolCallId,
       decision,
       ...(reason === "" ? {} : { reason }),
     }).then(
       () => {
-        setBusy(null);
+        finish(key);
         setDecided((was) => ({
           ...was,
           [key]: {
@@ -229,7 +231,7 @@ export function Approvals() {
         // silence this screen was built to end. The decided row stays, saying what it did.
       },
       (err: unknown) => {
-        setBusy(null);
+        finish(key);
         setDecided((was) => ({
           ...was,
           [key]: { ok: false, text: `Nothing was decided — ${messageOf(err)}` },
@@ -247,14 +249,14 @@ export function Approvals() {
       setDecided((was) => ({ ...was, [key]: { ok: false, text: `Nothing was sent — still unanswered: ${missing.join(", ")}.` } }));
       return;
     }
-    setBusy(key);
+    begin(key);
     apiSend<WireSession>("POST", `/sessions/${item.sessionId}/answers`, { tool_call_id: item.toolCallId, answers: given }).then(
       () => {
-        setBusy(null);
+        finish(key);
         setDecided((was) => ({ ...was, [key]: { ok: true, text: `Answered. ${item.agent} picks up with your answer.` } }));
       },
       (err: unknown) => {
-        setBusy(null);
+        finish(key);
         setDecided((was) => ({ ...was, [key]: { ok: false, text: `Nothing was sent — ${messageOf(err)}` } }));
       },
     );
@@ -326,7 +328,7 @@ export function Approvals() {
                       </div>
                       {outcome ? <p className="mt-3 text-sm text-tone-fail">{outcome.text}</p> : null}
                       <div className="mt-3 flex items-center gap-2">
-                        <button type="button" className="btn btn-primary btn-sm" disabled={busy === key} onClick={() => answer(item, question)}>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={busy.includes(key)} onClick={() => answer(item, question)}>
                           <Check size={14} strokeWidth={1.75} /> Answer
                         </button>
                         <span className="text-xs text-ink-3">
@@ -389,7 +391,7 @@ export function Approvals() {
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={busy === key}
+                        disabled={busy.includes(key)}
                         onClick={() => decide(item, "allow")}
                       >
                         <Check size={14} strokeWidth={1.75} /> Approve
@@ -397,7 +399,7 @@ export function Approvals() {
                       <button
                         type="button"
                         className="btn btn-danger btn-sm"
-                        disabled={busy === key}
+                        disabled={busy.includes(key)}
                         onClick={() => decide(item, "deny")}
                       >
                         <X size={14} strokeWidth={1.75} /> Reject
