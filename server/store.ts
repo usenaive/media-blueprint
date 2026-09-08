@@ -96,6 +96,9 @@ export function openStore(file: string, template: MediaTemplate = ACTIVE): Store
   return openStoreOver(state, (next) => writeFileSync(file, JSON.stringify(next, null, 2)), template);
 }
 
+/** A post's title is its caption's first line: the hook, as the queue and the Posts screen print it. */
+const titleOf = (caption: string) => caption.split("\n")[0]!.slice(0, 60);
+
 /**
  * The store's behaviour over a state already in hand, with persistence injected. The file store
  * above is one caller; the deployed app's `api/mcp` is the other — a serverless request has no
@@ -114,7 +117,7 @@ export function openStoreOver(
     createPost(input) {
       const post: Post = {
         id: `post_${randomBytes(2).toString("hex")}`,
-        title: input.caption.split("\n")[0]!.slice(0, 60),
+        title: titleOf(input.caption),
         caption: input.caption,
         ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
         // No platform named: the largest short-form network this channel can actually publish to.
@@ -138,7 +141,10 @@ export function openStoreOver(
     updatePost(id, patch) {
       const post = state.posts.find((p) => p.id === id);
       if (!post) return null;
-      if (patch.caption !== undefined) post.caption = patch.caption;
+      if (patch.caption !== undefined) {
+        post.caption = patch.caption;
+        post.title = titleOf(patch.caption);
+      }
       if (patch.mediaUrl !== undefined) post.mediaUrl = patch.mediaUrl;
       if (patch.status !== undefined) post.status = patch.status;
       if (patch.status === "posted") {

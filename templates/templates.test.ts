@@ -145,12 +145,17 @@ describe("the crews", () => {
       for (const agent of template.agents) {
         // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
         // `pending_actions`; `allow` would publish straight past the operator. A role that does not
-        // publish does not hold the tool at all.
+        // publish is denied the tool BY NAME: an absent config would fall through to the `ask`
+        // default that exists for unnameable connection tools, and still offer it.
         if (PUBLISHERS[template.name]!.includes(agent.name)) {
           expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
         } else {
-          expect(agent.tools?.configs["social.post"]).toBeUndefined();
+          expect(agent.tools?.configs["social.post"]).toEqual({ enabled: false, permission: "deny" });
         }
+        // Same for the platform's other fixed-name account tool: named, or denied by name.
+        expect(agent.tools?.configs["social.accounts"]).toEqual(
+          toolsOf(template, agent.name).includes("social.accounts") ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
+        );
         const allowed = Object.entries(agent.tools?.configs ?? {})
           .filter(([, config]) => config.permission === "allow")
           .map(([name]) => name);

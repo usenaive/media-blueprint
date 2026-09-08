@@ -139,9 +139,11 @@ describe("naive.config", () => {
     for (const agent of project.agents) {
       // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
       // `pending_actions`; `allow` would publish straight past the operator. A desk role that never
-      // publishes does not hold the tool at all.
+      // publishes is denied the tool by name — never left to the `ask` default, which would offer it.
       const post = agent.tools?.configs["social.post"];
-      if (post !== undefined) expect(post).toEqual({ enabled: true, permission: "ask" });
+      expect(post).toEqual(
+        post?.enabled === true ? { enabled: true, permission: "ask" } : { enabled: false, permission: "deny" },
+      );
       // The only other tool that acts outward. Nothing else granted may run unattended by accident.
       const allowed = Object.entries(agent.tools?.configs ?? {})
         .filter(([, config]) => config.permission === "allow")

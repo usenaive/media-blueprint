@@ -105,6 +105,13 @@ const BUILTIN_TOOLS = [
 ] as const;
 
 /**
+ * The platform's own account tools — not built-ins, not connection tools. They have fixed names, so
+ * a role that does not list them is denied them by name like a built-in, rather than reaching them
+ * through the connections default below.
+ */
+const PLATFORM_TOOLS = ["social.accounts", "social.post"] as const;
+
+/**
  * The video models the producer may render with, best-first — and the reason this list exists.
  *
  * `generate_video` derives its default from the catalogue: the agent's first pinned model, or else
@@ -139,8 +146,9 @@ const DASHBOARD_TOOLS = [
 const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
 
 /**
- * The named tools, allowed; every built-in they do not name, denied by name; and everything left —
- * which can only be a tool from an account this channel connected — behind the operator.
+ * The named tools, allowed; every built-in and platform tool they do not name, denied by name; and
+ * everything left — which can only be a tool from an account this channel connected — behind the
+ * operator.
  *
  * `social.post` is granted as `ask` (canonical-spec §6): the turn parks with the call in
  * `session.pending_actions` until the operator decides on the Approvals screen. Granting it `allow`
@@ -167,7 +175,7 @@ export const toolset = (names: readonly string[]) => ({
   default_config: { permission: "ask" as const },
   configs: {
     ...Object.fromEntries(
-      BUILTIN_TOOLS.filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
+      [...BUILTIN_TOOLS, ...PLATFORM_TOOLS].filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
         name,
         { enabled: false, permission: "deny" as const },
       ]),
