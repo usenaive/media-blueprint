@@ -86,7 +86,7 @@ const budget = {
 const model = "anthropic/claude-sonnet-5";
 
 /** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
-const approvalGate =
+export const approvalGate =
   "You work for a short-form video channel. File every finished piece as a pending post with a caption using channel.create_post; never publish it yourself. Sign what you file — pass your own name as `agent`, the connected account it is for as `account` (channel.list_accounts lists them), the media URL of the finished video as `media_url`, and what you made it from as `source`. The operator reviews the row you filed, watches the video on it, and approves posts from the dashboard. The tools offered to you this turn are the complete list of what you can do right now: do not assume a capability that is not in it, and do not invent one. If the task needs a tool or model you are not offered — generate_video with a named video model, clip_video, generate_image — request it once with request_tools, naming the exact tool, permission, the model in config.models where one is needed, and the reason; then wait: approval adds it to your toolset from the next turn, a refusal is final for this task. If a tool you hold refuses for want of a model or a provider, request the model the same way rather than retrying. If the task needs a fact or a decision only the operator has — which account, which source video, whether to proceed — ask once with ask_operator, in one message, then wait. A connected account's tools are offered only once the operator has connected it to the channel identity; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
@@ -103,6 +103,13 @@ const BUILTIN_TOOLS = [
   "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
+
+/**
+ * The platform's own account tools — not built-ins, not connection tools. They have fixed names, so
+ * a role that does not list them is denied them by name like a built-in, rather than reaching them
+ * through the connections default below.
+ */
+const PLATFORM_TOOLS = ["social.accounts", "social.post"] as const;
 
 /**
  * The video models the producer may render with, best-first — and the reason this list exists.
@@ -139,8 +146,9 @@ const DASHBOARD_TOOLS = [
 const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
 
 /**
- * The named tools, allowed; every built-in they do not name, denied by name; and everything left —
- * which can only be a tool from an account this channel connected — behind the operator.
+ * The named tools, allowed; every built-in and platform tool they do not name, denied by name; and
+ * everything left — which can only be a tool from an account this channel connected — behind the
+ * operator.
  *
  * `social.post` is granted as `ask` (canonical-spec §6): the turn parks with the call in
  * `session.pending_actions` until the operator decides on the Approvals screen. Granting it `allow`
@@ -167,7 +175,7 @@ export const toolset = (names: readonly string[]) => ({
   default_config: { permission: "ask" as const },
   configs: {
     ...Object.fromEntries(
-      BUILTIN_TOOLS.filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
+      [...BUILTIN_TOOLS, ...PLATFORM_TOOLS].filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
         name,
         { enabled: false, permission: "deny" as const },
       ]),
@@ -234,21 +242,23 @@ export const schedule = (decl: { cron: string; input: string; budget_micro_usd: 
  * The channel manager's week, shared by both templates because the manager is.
  *
  * Three fires, and the cadence the landing copy already promises: the plan on Monday, the queue and
- * the comments every day. They are staggered around the specialist's morning fire below — the plan
- * is filed before the week's production starts, the queue is swept after the night's piece has
- * landed in it, and the comments are read at the end of the day.
+ * the comments every day. They are staggered around the desk's morning fires in each template — the
+ * plan is filed before the week's production starts, the queue is swept after the morning's piece
+ * has landed in it and been reviewed, and the comments are read at the end of the day. Comments are
+ * the manager's because no tool this machine can name reads them: they come, if at all, from a
+ * connected account's tools, which is why there is no separate community manager on either crew.
  */
 export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
     input:
-      "Plan the week. Read the channel profile and its niche (channel.get_onboarding), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per planned slot, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialist through the plan, not by publishing anything yourself.",
+      "Plan the week. Read the channel profile and its niche (channel.get_onboarding), what has posted and what is still queued (channel.list_posts) — the briefs already filed for this week are the pending rows with no media URL — and the looks available to produce in (channel.list_style_templates). Then set this week's plan: keep one brief per planned slot, and for a slot no brief covers file one with channel.create_post, naming the style template, the account it is for (channel.list_accounts) and the day it should go out; on a brief that does not fit the channel, say why in the first line of its caption (channel.update_post) so the operator can reject it. Brief the desk through the queue, not by publishing anything yourself.",
     budget_micro_usd: 2_000_000, // $2 — the widest read of the week, once a week.
   }),
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.",
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption with channel.update_post so the operator opens the dashboard to rows that are ready to approve — the platform, the account and the day are set when a row is filed and are not yours to change. Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.",
     budget_micro_usd: 1_000_000, // $1 — a read and a few patches.
   }),
   schedule({

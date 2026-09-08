@@ -53,8 +53,10 @@ describe("naive.config", () => {
         expect(declaration.identities.map((identity) => identity.name)).toContain(one.identity);
       }
     }
-    // The cadence the landing copy promises, on the crew that is actually running.
-    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(4);
+    // The cadence the landing copy promises, on the crew that is actually running: one fire on each
+    // of the five desk roles and three on the manager.
+    expect(project.agents).toHaveLength(6);
+    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(8);
   });
 
   it("declares the persona its agents act as, so a connected account is reachable from a turn", () => {
@@ -136,14 +138,18 @@ describe("naive.config", () => {
   it("grants social.post only through the approval queue, and nothing else outward", () => {
     for (const agent of project.agents) {
       // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
-      // `pending_actions`; `allow` would publish straight past the operator.
-      expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
+      // `pending_actions`; `allow` would publish straight past the operator. A desk role that never
+      // publishes is denied the tool by name — never left to the `ask` default, which would offer it.
+      const post = agent.tools?.configs["social.post"];
+      expect(post).toEqual(
+        post?.enabled === true ? { enabled: true, permission: "ask" } : { enabled: false, permission: "deny" },
+      );
       // The only other tool that acts outward. Nothing else granted may run unattended by accident.
       const allowed = Object.entries(agent.tools?.configs ?? {})
         .filter(([, config]) => config.permission === "allow")
         .map(([name]) => name);
       expect(allowed).not.toContain("social.post");
-      expect(allowed.filter((name) => name.startsWith("social."))).toEqual(["social.accounts"]);
+      expect(allowed.filter((name) => name.startsWith("social.")).every((name) => name === "social.accounts")).toBe(true);
     }
   });
 });

@@ -107,7 +107,9 @@ describe("openStore", () => {
     // platform's social API would refuse when the operator finally presses "Post now".
     expect(post.platform).toBe("x");
     expect(store.read().posts[0]).toBe(post);
-    expect(store.updatePost(post.id, { caption: "Rule three, then." })).toMatchObject({ caption: "Rule three, then.", status: "pending" });
+    // The title is the caption's first line, so a rewritten caption (the writers' whole job) retitles the row.
+    expect(store.updatePost(post.id, { caption: "Rule three, then.\nIt stings more." })).toMatchObject({ title: "Rule three, then.", caption: "Rule three, then.\nIt stings more.", status: "pending" });
+    expect(store.updatePost(post.id, { mediaUrl: "https://cdn.example/v2.mp4" })?.title).toBe("Rule three, then.");
     expect(openStore(file).read().posts[0]).toEqual(post);
     expect(store.createPost({ caption: "In the sky", platform: "bluesky", status: "ready" }).platform).toBe("bluesky");
   });
