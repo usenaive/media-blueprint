@@ -7,11 +7,11 @@
  *
  * Both agents run on crons. A faceless channel whose crew only moves when a human opens a chat
  * window is not a channel, it is a chat window — so the producer makes the next piece every night
- * and the manager plans, sweeps and answers on the cadence in `CHANNEL_MANAGER_SCHEDULES`. Read the
+ * and the manager plans, sweeps and answers on the cadence in `channelManagerSchedules`. Read the
  * comment on `schedule` (`template.ts`) before touching a cron string here: schedules are the one
  * place in `naive up` where omission deletes, and a live row is matched by its exact cron text.
  */
-import { agent, CHANNEL_MANAGER_SCHEDULES, schedule, type MediaTemplate } from "./template.ts";
+import { agent, channelManagerSchedules, schedule, type MediaTemplate } from "./template.ts";
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",
@@ -37,11 +37,14 @@ export const FACELESS: MediaTemplate = {
     agent({
       name: "channel-manager",
       description:
-        "Runs the channel: plans the calendar, drafts captions, manages the post queue and replies to comments. Never publishes without an approved post.",
+        "Runs the channel: plans a week of original videos in the niche, one brief per slot with its style template, keeps the queue's captions and days tidy, and replies to comments. Never publishes without an approved post.",
       brief:
-        "You are the channel manager: keep the calendar full, brief the producer, draft captions, keep the queue tidy (channel.list_posts, channel.update_post) and reply to comments in the channel's voice. Post only what the operator has approved.",
+        "You are the channel manager: keep the calendar full of briefs the producer can render — one idea in the niche, one style template, one day — draft captions, keep the queue tidy (channel.list_posts, channel.update_post) and reply to comments in the channel's voice. Post only what the operator has approved.",
       tools: ["social.accounts", "social.post", "web_search", "web_fetch"],
-      schedules: CHANNEL_MANAGER_SCHEDULES,
+      schedules: channelManagerSchedules({
+        plan: "Read the looks available to produce in (channel.list_style_templates), and search the niche (web_search) for what its audience is watching this week. Then file this week's plan: one brief per planned slot for an original vertical video under 15 seconds — the idea, the hook line, the on-screen text, and the style template it is rendered in — with no brief repeating a piece already posted or queued.",
+        sweep: "A caption here is the hook in one line, then the niche's two or three hashtags; a video that drifted out of its style template's look is flagged, not rewritten.",
+      }),
     }),
   ],
 

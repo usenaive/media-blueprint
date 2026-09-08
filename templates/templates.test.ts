@@ -244,6 +244,18 @@ describe("the channel's clock", () => {
     }
   });
 
+  it("plans in the template's own words, on the same crons, so switching patches and deletes nothing", () => {
+    const plan = (template: MediaTemplate) =>
+      schedulesOf(template, "channel-manager").find((one) => isWeekly(one.cron))!.input;
+    expect(plan(TEMPLATES.faceless)).toMatch(/style template/);
+    expect(plan(TEMPLATES.faceless)).not.toMatch(/source/i);
+    expect(plan(TEMPLATES.clipping)).toMatch(/source video/);
+    expect(plan(TEMPLATES.clipping)).not.toMatch(/style template/);
+    expect(schedulesOf(TEMPLATES.faceless, "channel-manager").map((one) => one.cron)).toEqual(
+      schedulesOf(TEMPLATES.clipping, "channel-manager").map((one) => one.cron),
+    );
+  });
+
   it("files the day's piece before the manager sweeps the queue it lands in", () => {
     for (const template of both) {
       const piece = schedulesOf(template, SPECIALIST[template.name]!)[0]!;

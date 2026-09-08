@@ -8,11 +8,11 @@
  *
  * Both agents run on crons, on the same cadence `faceless` does: the clipper cuts the next batch
  * every night — from the source the operator named and nowhere else — and the manager plans, sweeps
- * and answers on `CHANNEL_MANAGER_SCHEDULES`. Read the comment on `schedule` (`template.ts`) before
+ * and answers on `channelManagerSchedules`. Read the comment on `schedule` (`template.ts`) before
  * touching a cron string here: schedules are the one place in `naive up` where omission deletes,
  * and a live row is matched by its exact cron text.
  */
-import { agent, CHANNEL_MANAGER_SCHEDULES, schedule, type MediaTemplate } from "./template.ts";
+import { agent, channelManagerSchedules, schedule, type MediaTemplate } from "./template.ts";
 
 export const CLIPPING: MediaTemplate = {
   name: "clipping",
@@ -38,11 +38,14 @@ export const CLIPPING: MediaTemplate = {
     agent({
       name: "channel-manager",
       description:
-        "Runs the channel: plans the calendar, drafts captions, manages the post queue and replies to comments. Never publishes without an approved post.",
+        "Runs the channel: reads the source channel's catalogue, plans a week of clips by naming the videos worth cutting, keeps the queue's captions and credits tidy, and replies to comments. Never publishes without an approved post.",
       brief:
-        "You are the channel manager: keep the calendar full, point the clipper at the source videos worth cutting, draft captions, keep the queue tidy (channel.list_posts, channel.update_post) and reply to comments in the channel's voice. Post only what the operator has approved.",
+        "You are the channel manager: keep the calendar full by pointing the clipper at the source videos worth cutting — one named source video per brief, from the source channel the operator named and nowhere else — draft captions that credit the source, keep the queue tidy (channel.list_posts, channel.update_post) and reply to comments in the channel's voice. Post only what the operator has approved.",
       tools: ["social.accounts", "social.post", "web_search", "web_fetch"],
-      schedules: CHANNEL_MANAGER_SCHEDULES,
+      schedules: channelManagerSchedules({
+        plan: "Read the source channel the operator named (channel.get_onboarding) and look through its recent uploads and back catalogue (web_search, web_fetch) for the videos with moments worth cutting. Then file this week's plan: one brief per planned slot, each naming one source video by title and URL, the moment in it to cut and why it will hold a viewer, with no brief pointing at a video that already has clips filed against it. Point at nothing outside the named source.",
+        sweep: "A caption here is the clip's one idea in a line, then the source video and channel it was cut from, credited by name; a clip whose source is not the operator's named channel is flagged, not fixed.",
+      }),
     }),
   ],
 

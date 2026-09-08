@@ -231,24 +231,31 @@ export const schedule = (decl: { cron: string; input: string; budget_micro_usd: 
 });
 
 /**
- * The channel manager's week, shared by both templates because the manager is.
+ * The channel manager's week, shared by both templates because the manager is — the crons, the
+ * budgets and the shape of each fire. What differs is what the plan is a plan OF and what a swept
+ * caption has to carry, so each template hands in those words and gets its own three fires back.
  *
  * Three fires, and the cadence the landing copy already promises: the plan on Monday, the queue and
  * the comments every day. They are staggered around the specialist's morning fire below — the plan
  * is filed before the week's production starts, the queue is swept after the night's piece has
- * landed in it, and the comments are read at the end of the day.
+ * landed in it, and the comments are read at the end of the day. The cron strings are the same in
+ * both templates on purpose: `naive up` matches a live row by exact cron text, so switching template
+ * patches each fire's words and deletes nothing.
  */
-export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
+export const channelManagerSchedules = (words: {
+  /** What the Monday plan reads and what each brief in it names — the template's own sentences. */
+  plan: string;
+  /** What a swept caption must carry for this template's pieces, beyond a kind and a day. */
+  sweep: string;
+}): ScheduleDecl[] => [
   schedule({
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
-    input:
-      "Plan the week. Read the channel profile and its niche (channel.get_onboarding), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per planned slot, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialist through the plan, not by publishing anything yourself.",
+    input: `Plan the week. Read the channel profile and its niche (channel.get_onboarding) and what has posted and what is still queued (channel.list_posts). ${words.plan} Each brief names the account it is for (channel.list_accounts) and the day it should go out. Brief the specialist through the plan, not by publishing anything yourself.`,
     budget_micro_usd: 2_000_000, // $2 — the widest read of the week, once a week.
   }),
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
-    input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.",
+    input: `Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. ${words.sweep} Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.`,
     budget_micro_usd: 1_000_000, // $1 — a read and a few patches.
   }),
   schedule({
