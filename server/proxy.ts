@@ -41,6 +41,11 @@ export function upstreamFor(method: string, pathname: string, identityId: string
   if (method === "POST" && confirm) {
     return { method: "POST", path: `/v1/sessions/${confirm[1]}/tool_confirmations` };
   }
+  // A question (`ask_operator`, canonical-spec §7) is answered on its own route, never decided.
+  const answer = /^\/api\/sessions\/(ses_[\w-]+)\/answers$/.exec(pathname);
+  if (method === "POST" && answer) {
+    return { method: "POST", path: `/v1/sessions/${answer[1]}/answers` };
+  }
   // Segments are strictly [\w-]+ so `..` can never traverse out of the social subtree.
   const social = /^\/api\/social((?:\/[\w-]+)+)$/.exec(pathname);
   if (social) {

@@ -87,7 +87,7 @@ const model = "anthropic/claude-sonnet-5";
 
 /** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
 const approvalGate =
-  "You work for a short-form video channel. File every finished piece as a pending post with a caption using channel.create_post; never publish it yourself. Sign what you file — pass your own name as `agent`, the connected account it is for as `account` (channel.list_accounts lists them), the media URL of the finished video as `media_url`, and what you made it from as `source`. The operator reviews the row you filed, watches the video on it, and approves posts from the dashboard.";
+  "You work for a short-form video channel. File every finished piece as a pending post with a caption using channel.create_post; never publish it yourself. Sign what you file — pass your own name as `agent`, the connected account it is for as `account` (channel.list_accounts lists them), the media URL of the finished video as `media_url`, and what you made it from as `source`. The operator reviews the row you filed, watches the video on it, and approves posts from the dashboard. The tools offered to you this turn are the complete list of what you can do right now: do not assume a capability that is not in it, and do not invent one. If the task needs a tool or model you are not offered — generate_video with a named video model, clip_video, generate_image — request it once with request_tools, naming the exact tool, permission, the model in config.models where one is needed, and the reason; then wait: approval adds it to your toolset from the next turn, a refusal is final for this task. If a tool you hold refuses for want of a model or a provider, request the model the same way rather than retrying. If the task needs a fact or a decision only the operator has — which account, which source video, whether to proceed — ask once with ask_operator, in one message, then wait. A connected account's tools are offered only once the operator has connected it to the channel identity; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -101,6 +101,7 @@ const BUILTIN_TOOLS = [
   "browser", "read_skill", "publish_file", "web_search", "web_fetch",
   "generate_image", "generate_video", "clip_video", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
+  "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
 
 /**
@@ -126,6 +127,16 @@ const DASHBOARD_TOOLS = [
   "channel.list_posts", "channel.get_post", "channel.create_post", "channel.update_post",
   "channel.list_style_templates", "channel.list_accounts", "channel.get_onboarding",
 ];
+
+/**
+ * The two built-ins every agent holds whatever its template names: the gate above tells the agent
+ * to ask for what it lacks, so the tools that ask must be there. `ask_operator` parks the turn as a
+ * question (`canonical-spec §7.1`); `request_tools` parks it as a toolset change the operator
+ * approves, which mints a new agent version and re-pins the running session (§7.4) — the producer
+ * asked to render with a model this file does not pin gets it that way, not by an operator edit.
+ * Neither can be `allow`, and a session-wide grant never covers them.
+ */
+const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
 
 /**
  * The named tools, allowed; every built-in they do not name, denied by name; and everything left —
@@ -156,17 +167,17 @@ export const toolset = (names: readonly string[]) => ({
   default_config: { permission: "ask" as const },
   configs: {
     ...Object.fromEntries(
-      BUILTIN_TOOLS.filter((name) => !names.includes(name)).map((name) => [
+      BUILTIN_TOOLS.filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
         name,
         { enabled: false, permission: "deny" as const },
       ]),
     ),
     ...Object.fromEntries(
-      names.map((name) => [
+      [...names, ...ALWAYS].map((name) => [
         name,
         {
           enabled: true,
-          permission: name === "social.post" ? ("ask" as const) : ("allow" as const),
+          permission: name === "social.post" || ALWAYS.includes(name) ? ("ask" as const) : ("allow" as const),
           // The one tool with no derivable default; see `VIDEO_MODELS`.
           ...(name === "generate_video" ? { config: { models: VIDEO_MODELS } } : {}),
         },
@@ -243,7 +254,7 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 18 * * *", // Daily 18:00 — the comments, at the end of the channel's day.
     input:
-      "Read the comments on what this channel has posted today and on the pieces still gathering them, and reply in the channel's voice. Every reply acts on a connected account, so it stops at the operator's Approvals screen with its text in front of a person — write the reply you would stand behind, and leave the ones you would not.",
+      "Read the comments on what this channel has posted today and on the pieces still gathering them, and reply in the channel's voice. Comments are read and answered only through the tools of a connected account (channel.list_accounts says which exist); if no offered tool reads comments, say so in one line and stop — do not invent a comment or a reply. Every reply acts on a connected account, so it stops at the operator's Approvals screen with its text in front of a person — write the reply you would stand behind, and leave the ones you would not.",
     budget_micro_usd: 1_000_000, // $1 — a read and a handful of replies.
   }),
 ];

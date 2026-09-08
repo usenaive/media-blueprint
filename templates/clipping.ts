@@ -30,7 +30,7 @@ export const CLIPPING: MediaTemplate = {
         schedule({
           cron: "0 7 * * *", // Daily 07:00, channel time — the next cuts, before the manager's 08:00 queue sweep.
           input:
-            "Cut the next clips. Read the source channel the operator named (channel.get_onboarding) and the plan and queue (channel.list_posts), take the source video the channel manager pointed you at that has no clips filed against it yet, and cut the few most engaging vertical clips from it. File each as a pending post. Cut nothing from a source the operator has not named — if there is no named source with work left in it, file nothing and stop.",
+            "Cut the next clips. Read the source channel the operator named (channel.get_onboarding) and the plan and queue (channel.list_posts), take the source video the channel manager pointed you at that has no clips filed against it yet, and cut the few most engaging vertical clips from it. File each as a pending post. Cut nothing from a source the operator has not named — if there is no named source with work left in it, file nothing and stop. If clip_video is not among your tools, or it refuses for want of a provider, cut nothing and file nothing: request exactly what is missing with request_tools, once, then wait — if it is granted the tool is offered when you resume, so carry on; if it is refused, stop for tonight.",
           budget_micro_usd: 2_000_000, // $2 — one source video's worth of cuts. Well under the $6 ceiling: a clip is cut, not rendered, and nothing has measured one yet.
         }),
       ],
