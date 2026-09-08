@@ -17,8 +17,8 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 
 | Template | The channel it runs | Its crew | What it files |
 |---|---|---|---|
-| `faceless` | Generates original short-form video in one niche | `producer`, `channel-manager` | produced, multi-part |
-| `clipping` | Repurposes existing video in one niche | `clipper`, `channel-manager` | clips |
+| `faceless` | Generates original short-form video in one niche | `trend-researcher`, `scriptwriter`, `producer`, `qa-reviewer`, `analytics-reporter`, `channel-manager` | produced, multi-part |
+| `clipping` | Repurposes existing video in one niche | `source-scout`, `clipper`, `caption-writer`, `qa-reviewer`, `analytics-reporter`, `channel-manager` | clips |
 
 One repo carries both, so switching is an edit and a `naive up` — never a re-clone and never a
 new app. See [Switching template](#-switching-template).
@@ -34,25 +34,48 @@ flowchart LR
   repo["this repo<br/>naive.config.ts + templates/"]
   repo -->|naive up| plat["Naive platform"]
   plat --> app["channel app<br/>fullstack: /api/* and /mcp"]
-  plat --> spec["producer or clipper<br/>daily 07:00"]
+  plat --> res["trend-researcher or source-scout<br/>Sun 18:00"]
+  plat --> desk["the morning desk: writer, producer or clipper, qa-reviewer<br/>daily 06:00–07:40"]
+  plat --> rep["analytics-reporter<br/>Mon 08:30"]
   plat --> mgr["channel-manager<br/>daily 08:00 and 18:00, Mon 09:00"]
   plat --> idn["channel identity<br/>holds the connected accounts"]
 ```
 
 - **The dashboard app** (`channel`, fullstack) — this repo's built UI, hosted under your org,
   backed by a thin server that talks to the platform on your behalf.
-- **The template's agents**, each with a system prompt, a scoped tool policy, a daily budget
-  and its own crons:
-  - `channel-manager` — plans the calendar, drafts captions, manages the post queue, replies
-    to comments. Never publishes an unapproved post. Both templates declare it.
-  - `producer` (`faceless`) — creates original short videos from briefs using the channel's
-    style templates (`generate_video`, `generate_image`).
-  - `clipper` (`clipping`) — cuts the most engaging vertical clips out of the source channel
-    you named and files them as pending posts (`clip_video`).
+- **The template's agents** — a six-role desk per template, each role with its own system
+  prompt, a deny-by-default tool policy holding only what that role needs, a daily budget and
+  its own cron. Every hand-off is one queue row: the brief is filed once (`source`), and the
+  roles after it may change only the row's caption and media URL.
+  - `channel-manager` — plans the calendar, keeps the queue tidy, replies to comments through
+    a connected account's tools. Never publishes an unapproved post. Both templates declare it.
+  - `qa-reviewer` — the last read before yours: checks each piece's row against its brief and
+    the channel's voice, fixes the caption where words fix it, flags `NEEDS REWORK` where they
+    do not. Holds no platform tool beyond the queue. Both templates declare it.
+  - `analytics-reporter` — reads the week's views and likes per post, hook, look and account
+    (`channel.list_posts`, `social.accounts`, and whatever a connected account offers) and
+    reports what to make more of and what to stop, in one `ask_operator` message. Both
+    templates declare it.
+  - `trend-researcher` (`faceless`) — reads the web (`web_search`, `web_fetch`) for what the
+    niche is watching this week and files the week's briefs.
+  - `scriptwriter` (`faceless`) — turns each brief into the words of the piece: hook, beats,
+    closing line, hashtags.
+  - `producer` (`faceless`) — renders each scripted brief as an original short video in the
+    style template it names (`generate_video`, `generate_image`) and attaches it to the row.
+  - `source-scout` (`clipping`) — reads the source channel you named for the long-form videos
+    worth cutting this week and files each as a brief with the timestamps.
+  - `clipper` (`clipping`) — cuts the most engaging vertical clips out of each briefed source
+    video (`clip_video`) and files them as pending posts.
+  - `caption-writer` (`clipping`) — gives each cut clip its hook, caption, source credit and
+    hashtags.
+
+  There is no separate community manager: no tool this machine can name reads comments — they
+  come, if at all, from a connected account's tools — so the comments stay with the
+  `channel-manager`, behind your approval like every other outward call.
 - **Nine starter style templates** (reference image + prompt) covering the current
   high-performing short-form aesthetics — the blueprint's shipped catalogue, present from the
   first turn.
-- **The channel's crons** — the four fires below, so the channel works whether or not anyone
+- **The channel's crons** — the eight fires below, so the channel works whether or not anyone
   opens the dashboard.
 - **The channel identity** (`channel`) — the persona every agent and every schedule acts as,
   and the reason a connected account is reachable from a turn at all.
@@ -117,17 +140,24 @@ credentials.
 
 ## ⏰ The cadence
 
-Both templates provision the same four fires, all of them in the channel's own timezone
-(`CHANNEL_TIMEZONE` in [`templates/template.ts`](templates/template.ts) — one line, one edit)
-and all of them running as the `channel` identity, so a scheduled run reaches the same
-connected accounts a chat turn does.
+Both templates provision eight fires on the same clock, all of them in the channel's own
+timezone (`CHANNEL_TIMEZONE` in [`templates/template.ts`](templates/template.ts) — one line,
+one edit) and all of them running as the `channel` identity, so a scheduled run reaches the
+same connected accounts a chat turn does. The desk fires in pipeline order — each role reads
+what the one before it wrote to the queue row — and the manager's sweep comes last in the
+morning, so you open the dashboard to rows that are ready to approve.
 
 | When | Who | What it does |
 |---|---|---|
-| Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video, or the next batch of clips — and files it as a pending post |
-| Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve |
+| Sunday 18:00 | `trend-researcher` / `source-scout` | Files the week's briefs: what the niche is watching, or which source videos are worth cutting and where |
+| Daily 06:00 | `scriptwriter` (`faceless`) | Writes the day's script into each brief's caption — hook, beats, closing line, hashtags |
+| Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video attached to its brief, or the next batch of clips filed as pending posts |
+| Daily 07:20 | `caption-writer` (`clipping`) | Gives each cut clip its hook, caption, source credit and hashtags |
+| Daily 07:40 | `qa-reviewer` | Checks each piece's row against its brief and the channel's voice; fixes the caption or flags `NEEDS REWORK` |
+| Daily 08:00 | `channel-manager` | Sweeps the queue: fixes captions so you open the dashboard to rows that are ready to approve |
 | Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
-| Monday 09:00 | `channel-manager` | Plans the week and files the briefs the specialist produces against |
+| Monday 08:30 | `analytics-reporter` | Reports the week's numbers — what to make more of, what to stop, the one decision that is yours |
+| Monday 09:00 | `channel-manager` | Plans the week: keeps one brief per slot, fills the slots no brief covers, flags the ones that do not fit |
 
 Nothing a cron does escapes the queue: the fires file and tidy pending posts, and every publish
 and every reply still stops at your approval, exactly as it does when you brief an agent in
@@ -173,10 +203,11 @@ more, it grows there.
 
 Nothing goes out without your approval. Agents file posts as *pending* and cannot move them:
 the dashboard's MCP server has no approve, reject or publish tool. The platform's own
-`social.post` tool *is* granted to every agent — publishing an approved post is their job — but
-at permission `ask`, so an agent never runs it unattended: the call pauses the session
-(`stop_reason: awaiting_approval`, the session itself `idle`) and waits, listed in the
-session's pending actions, until you approve or reject it.
+`social.post` tool *is* granted to the roles that make or post a piece (`producer`, `clipper`,
+`channel-manager`) — publishing an approved post is their job; the desk roles around them hold no
+publish tool at all — but only at permission `ask`, so an agent never runs it unattended: the
+call pauses the session (`stop_reason: awaiting_approval`, the session itself `idle`) and waits,
+listed in the session's pending actions, until you approve or reject it.
 
 **The Approvals screen is where you answer that.** It lists every session of this channel
 holding a pending call, names the agent and the tool, renders the arguments the agent proposes
@@ -219,7 +250,7 @@ an edit plus a re-apply.
 | an agent's brief or its platform tools | the `agent({ … })` call in [`templates/faceless.ts`](templates/faceless.ts) or [`templates/clipping.ts`](templates/clipping.ts) | `naive up` |
 | add an agent to the crew | the `agents` array of that template, built with the shared `agent()` helper | `naive up` |
 | the model, budget or approval gate every agent shares | [`templates/template.ts`](templates/template.ts) | `naive up` |
-| when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
+| when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and each role's `schedule({ … })` | `naive up` |
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
 | the post kinds, the onboarding questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
 | the style library | [`seed/style-templates.ts`](seed/style-templates.ts) | `pnpm build && naive up` |
@@ -271,8 +302,8 @@ default at `ask`. A connection tool is therefore always offered and never runs u
 stops on the Approvals screen with its arguments in front of you, exactly like `social.post`.
 
 The one tool that can reach an account is the platform's own `social.post`, which is not part of
-this server. The shared toolset in [`templates/template.ts`](templates/template.ts) grants it to
-every agent at permission `ask`, so a call to it never runs unattended — it holds the session at
+this server. The shared toolset in [`templates/template.ts`](templates/template.ts) grants it,
+to every agent whose template lists it, at permission `ask`, so a call to it never runs unattended — it holds the session at
 `awaiting_approval` for your decision (above). The permission is decided there, by the
 blueprint, and not by whichever template happens to list the tool.
 
@@ -289,7 +320,8 @@ export const ACTIVE: MediaTemplate = TEMPLATES.clipping;   // was TEMPLATES.face
 
 Then `pnpm build && naive up`. The switch **widens and never narrows**:
 
-- agents the new template declares are **created**;
+- agents the new template declares are **created**; an agent both declare (`channel-manager`,
+  `qa-reviewer`, `analytics-reporter`) is **updated** in place to the new template's brief;
 - an agent only the old template declared is **reported and left running** — `naive.config.ts`
   hands `naive up` both templates, so the other crew is kept, and nothing is deleted by dropping
   a declaration. Retire one deliberately by adding its name to `removed`;

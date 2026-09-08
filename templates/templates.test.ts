@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { ONE_RENDER_MICRO_USD } from "./template.ts";
+import { ONE_RENDER_MICRO_USD, approvalGate } from "./template.ts";
 import type { MediaTemplate } from "./template.ts";
 
 const both = Object.values(TEMPLATES);
@@ -34,10 +34,66 @@ const toolsOf = (template: MediaTemplate, name: string) =>
     .filter(([, config]) => config.enabled !== false && config.permission !== "deny")
     .map(([tool]) => tool);
 
+/** The roles that publish — the only ones that hold `social.post`, and only ever at `ask`. */
+const PUBLISHERS: Record<string, string[]> = {
+  faceless: ["producer", "channel-manager"],
+  clipping: ["clipper", "channel-manager"],
+};
+
 describe("the crews", () => {
-  it("shares the channel manager and differs only in the specialist", () => {
-    expect(agentNames(TEMPLATES.faceless)).toEqual(["producer", "channel-manager"]);
-    expect(agentNames(TEMPLATES.clipping)).toEqual(["clipper", "channel-manager"]);
+  /**
+   * A full desk per template, in pipeline order, and the two names the live rows already carry
+   * (`producer`, `clipper`, `channel-manager`) kept — `naive up` matches agents by name, so renaming
+   * one orphans its sessions. The dashboard's template card counts what is in this array and
+   * nothing else.
+   */
+  it("runs a full desk on each template, in pipeline order, keeping the names the live rows carry", () => {
+    expect(agentNames(TEMPLATES.faceless)).toEqual([
+      "trend-researcher", "scriptwriter", "producer", "qa-reviewer", "analytics-reporter", "channel-manager",
+    ]);
+    expect(agentNames(TEMPLATES.clipping)).toEqual([
+      "source-scout", "clipper", "caption-writer", "qa-reviewer", "analytics-reporter", "channel-manager",
+    ]);
+    for (const template of both) {
+      expect(new Set(agentNames(template)).size).toBe(template.agents.length);
+      for (const agent of template.agents) {
+        expect(agent.name).toMatch(/^[a-z]+(-[a-z]+)*$/);
+        expect(agent.description?.trim().length).toBeGreaterThan(40);
+        // One role per agent, briefed in its own words: the text after the shared gate is its own.
+        expect(agent.system?.startsWith(`${approvalGate} You are the `)).toBe(true);
+      }
+      // No two agents of one template read the same brief.
+      const briefs = template.agents.map((agent) => agent.system?.slice(approvalGate.length));
+      expect(new Set(briefs).size).toBe(briefs.length);
+    }
+  });
+
+  /**
+   * Deny by default, per role. The desk roles hold no platform tool beyond the dashboard's: the
+   * researcher and the scout read the web, the reporter reads the accounts, and the writers and
+   * reviewers hold nothing but the queue they edit. Only the roles that make or post a piece hold a
+   * publish tool at all.
+   */
+  it("gives each role only the platform tools its job needs", () => {
+    const platformTools = (template: MediaTemplate, name: string) =>
+      toolsOf(template, name).filter((tool) => !tool.startsWith("channel.") && !["ask_operator", "request_tools"].includes(tool)).sort();
+    expect(platformTools(TEMPLATES.faceless, "trend-researcher")).toEqual(["web_fetch", "web_search"]);
+    expect(platformTools(TEMPLATES.faceless, "scriptwriter")).toEqual([]);
+    expect(platformTools(TEMPLATES.faceless, "producer")).toEqual(["generate_image", "generate_video", "social.accounts", "social.post"]);
+    expect(platformTools(TEMPLATES.faceless, "qa-reviewer")).toEqual([]);
+    expect(platformTools(TEMPLATES.faceless, "analytics-reporter")).toEqual(["social.accounts"]);
+    expect(platformTools(TEMPLATES.clipping, "source-scout")).toEqual(["web_fetch", "web_search"]);
+    expect(platformTools(TEMPLATES.clipping, "clipper")).toEqual(["clip_video", "social.accounts", "social.post"]);
+    expect(platformTools(TEMPLATES.clipping, "caption-writer")).toEqual([]);
+    expect(platformTools(TEMPLATES.clipping, "qa-reviewer")).toEqual([]);
+    expect(platformTools(TEMPLATES.clipping, "analytics-reporter")).toEqual(["social.accounts"]);
+    for (const template of both) {
+      expect(platformTools(template, "channel-manager")).toEqual(["social.accounts", "social.post", "web_fetch", "web_search"]);
+      for (const agent of template.agents) {
+        const holdsPost = agent.tools?.configs["social.post"]?.enabled === true;
+        expect(holdsPost).toBe(PUBLISHERS[template.name]!.includes(agent.name));
+      }
+    }
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
@@ -88,12 +144,17 @@ describe("the crews", () => {
     for (const template of both) {
       for (const agent of template.agents) {
         // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
-        // `pending_actions`; `allow` would publish straight past the operator.
-        expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
+        // `pending_actions`; `allow` would publish straight past the operator. A role that does not
+        // publish does not hold the tool at all.
+        if (PUBLISHERS[template.name]!.includes(agent.name)) {
+          expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
+        } else {
+          expect(agent.tools?.configs["social.post"]).toBeUndefined();
+        }
         const allowed = Object.entries(agent.tools?.configs ?? {})
           .filter(([, config]) => config.permission === "allow")
           .map(([name]) => name);
-        expect(allowed.filter((name) => name.startsWith("social."))).toEqual(["social.accounts"]);
+        expect(allowed.filter((name) => name.startsWith("social.")).every((name) => name === "social.accounts")).toBe(true);
       }
     }
   });
@@ -157,6 +218,42 @@ describe("the crews", () => {
     expect(clipper?.schedules?.[0]?.input).toMatch(/If clip_video is not among your tools.*request_tools/);
   });
 
+  /**
+   * The review bug on the sibling agency blueprint, kept out here: a role's own text — its brief
+   * and each of its fires — may name only what THIS template declares. A deliverable kind of the
+   * other template would send the agent filing work the store cannot hold; a tool the role does not
+   * hold would send it calling something the toolset denies. The shared gate is excluded because it
+   * names `clip_video` and `generate_video` on purpose, as the things to `request_tools` for.
+   */
+  it("names, in each role's own words, only the kinds this template declares and the tools that role holds", () => {
+    // Every platform tool a prompt could name as a tool. The sandbox's one-word names (`read`,
+    // `write`, `find`…) are left out: in prose they are verbs, and every crew denies them anyway.
+    const EVERY_TOOL = [
+      "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video",
+      "clip_video", "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
+      "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
+      "social.accounts", "social.post",
+    ];
+    const everyKind = both.flatMap((template) => template.kinds.map((kind) => kind.id));
+    for (const template of both) {
+      const declared = template.kinds.map((kind) => kind.id);
+      const foreign = everyKind.filter((kind) => !declared.includes(kind));
+      for (const agent of template.agents) {
+        expect(agent.system?.startsWith(approvalGate)).toBe(true);
+        const ownWords = [agent.system?.slice(approvalGate.length) ?? "", ...(agent.schedules ?? []).map((one) => one.input)];
+        const held = toolsOf(template, agent.name);
+        for (const text of ownWords) {
+          for (const kind of foreign) expect(text).not.toMatch(new RegExp(`\\b${kind}\\b`, "i"));
+          // `channel.<x>` must be one of the dashboard's own MCP tools, which every agent holds.
+          for (const [name] of text.matchAll(/\bchannel\.[a-z_]+/g)) expect(held).toContain(name);
+          for (const tool of EVERY_TOOL) {
+            if (new RegExp(`(^|[^a-z_.])${tool.replace(".", "\\.")}(?![a-z_])`).test(text)) expect(held).toContain(tool);
+          }
+        }
+      }
+    }
+  });
+
   it("tells each agent to sign what it files, so an operator can read the row", () => {
     // A filed post used to arrive as "by mcp / unassigned" with no media: the queue's own screenshot
     // promises a named agent, a named account and a video, and nothing asked the agent for them.
@@ -184,6 +281,11 @@ describe("the crews", () => {
 describe("the channel's clock", () => {
   /** Which agent of each template makes the pieces. The manager is shared; this one is not. */
   const SPECIALIST: Record<string, string> = { faceless: "producer", clipping: "clipper" };
+  /** The desk around the specialist, in the order it fires each morning and each week. */
+  const DESK: Record<string, { weekly: string[]; morning: string[] }> = {
+    faceless: { weekly: ["trend-researcher", "analytics-reporter"], morning: ["scriptwriter", "producer", "qa-reviewer"] },
+    clipping: { weekly: ["source-scout", "analytics-reporter"], morning: ["clipper", "caption-writer", "qa-reviewer"] },
+  };
 
   const schedulesOf = (template: MediaTemplate, name: string) =>
     template.agents.find((agent) => agent.name === name)?.schedules ?? [];
@@ -192,14 +294,16 @@ describe("the channel's clock", () => {
   );
 
   /**
-   * Every fire this repo declares: one on each specialist and three on each manager. Called by the
-   * tests below that assert a property of each schedule, because a `for` loop over a template that
-   * declares none passes — which is exactly the state this whole block exists to keep out.
+   * Every fire this repo declares: one on each of the five desk roles and three on each manager,
+   * per template. Called by the tests below that assert a property of each schedule, because a
+   * `for` loop over a template that declares none passes — which is exactly the state this whole
+   * block exists to keep out.
    */
-  const everyFireCounted = () => expect(everySchedule).toHaveLength(8);
+  const everyFireCounted = () => expect(everySchedule).toHaveLength(16);
 
   const fields = (cron: string) => cron.split(" ");
   const hourOf = (cron: string) => Number(fields(cron)[1]);
+  const minuteOfDay = (cron: string) => hourOf(cron) * 60 + Number(fields(cron)[0]);
   /** Fires every day: no day-of-month, month or day-of-week restriction. */
   const isDaily = (cron: string) => {
     const [, , dom, month, dow] = fields(cron);
@@ -218,8 +322,41 @@ describe("the channel's clock", () => {
         (agent) => [`${template.name}/${agent.name}`, (agent.schedules ?? []).length] as const,
       ),
     );
-    expect(counts).toHaveLength(4);
+    expect(counts).toHaveLength(12);
     expect(counts.filter(([, count]) => count === 0)).toEqual([]);
+  });
+
+  /**
+   * The desk is a pipeline over one queue row — brief, words, piece, review — and each role reads
+   * what the one before it wrote, so the order of the fires is the order of the work: the week's
+   * briefs land before the Monday plan, and each morning's roles fire in turn before the manager's
+   * 08:00 sweep hands the operator rows that are ready to approve.
+   */
+  it("fires the desk in pipeline order: briefs before the plan, and each morning's roles before the sweep", () => {
+    for (const template of both) {
+      const { weekly, morning } = DESK[template.name]!;
+      for (const name of [...weekly, ...morning]) expect(schedulesOf(template, name)).toHaveLength(1);
+      const plan = schedulesOf(template, "channel-manager").find((one) => isWeekly(one.cron))!;
+      const sweep = schedulesOf(template, "channel-manager").find(
+        (one) => isDaily(one.cron) && /queue/i.test(one.input),
+      )!;
+      // The week's briefs are filed the evening before the plan that keeps or fills them.
+      const [briefs, report] = weekly.map((name) => schedulesOf(template, name)[0]!);
+      expect(isWeekly(briefs!.cron)).toBe(true);
+      expect(fields(briefs!.cron)[4]).toBe(String((Number(fields(plan.cron)[4]) + 6) % 7));
+      // The report lands on the plan's morning, after the sweep and before the plan.
+      expect(isWeekly(report!.cron)).toBe(true);
+      expect(fields(report!.cron)[4]).toBe(fields(plan.cron)[4]);
+      expect(minuteOfDay(report!.cron)).toBeGreaterThan(minuteOfDay(sweep.cron));
+      expect(minuteOfDay(report!.cron)).toBeLessThan(minuteOfDay(plan.cron));
+      // The morning's roles are daily, strictly in order, and all before the sweep.
+      const minutes = morning.map((name) => schedulesOf(template, name)[0]!).map((one) => {
+        expect(isDaily(one.cron)).toBe(true);
+        return minuteOfDay(one.cron);
+      });
+      for (let i = 1; i < minutes.length; i++) expect(minutes[i]!).toBeGreaterThan(minutes[i - 1]!);
+      expect(minutes.at(-1)!).toBeLessThan(minuteOfDay(sweep.cron));
+    }
   });
 
   it("makes the next piece daily, on whichever agent this template's pieces come from", () => {
