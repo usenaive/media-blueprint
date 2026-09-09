@@ -88,12 +88,11 @@ export const TOOLS = [
     source: str("What it was made from: the brief, the source video, the style template"),
     status: str("pending (default) or ready"),
   }, ["caption"]) },
-  { name: "update_post", description: `Fix the caption or media URL of a pending or ready post. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
-    id: str("Post id"), caption: str("New caption"), media_url: str("New media URL"),
+  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
+    id: str("Post id"), title: str("New title"), caption: str("New caption"), media_url: str("New media URL"),
   }, ["id"]) },
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
-  { name: "get_onboarding", description: "The channel profile: what onboarding was asked and answered — its niche, and on a clipping channel the source channel it cuts from. Every value is null before onboarding.", inputSchema: obj({}, []) },
 ] as const;
 
 class ToolError extends Error {}
@@ -105,19 +104,38 @@ const need = (params: Record<string, unknown>, key: string): string => {
 const optional = (params: Record<string, unknown>, key: string): string | undefined =>
   typeof params[key] === "string" ? (params[key] as string) : undefined;
 
-/** Connected accounts from the platform when wired; otherwise the accounts the queue already names. */
+/**
+ * Connected accounts from the platform when wired and activated; otherwise the accounts the queue
+ * already names. A platform that refuses because social publishing is not activated yet — the
+ * usual state of a fresh install — is the second case, not an error: an agent told "unavailable"
+ * retries it until its budget is gone, while a list it can plan around is an answer.
+ *
+ * WHAT THAT MUST NOT DO IS FILL IN THE GAP WITH SOMETHING INVENTED. `res.ok` was the only success
+ * test, so a 401 from a revoked key, a 403 from a missing scope and a 500 from a broken upstream
+ * all fell through to this same list — handles typed into a caption by an agent, handed back as
+ * though the platform had confirmed them. An agent then briefs a post at an account nobody
+ * checked, and the operator reconnects one that was fine or never learns publishing is down.
+ * "No accounts connected" and "we could not ask" are different answers and are said differently.
+ */
 async function listAccounts(store: Store, config: ProxyConfig | null): Promise<unknown> {
   const upstream = config === null ? null : upstreamFor("GET", "/api/social/accounts", config.identityId);
-  if (config === null || upstream === null) {
-    // Only rows that actually name an account: a post filed with no destination is not evidence
-    // of an account existing, and listing one would invent a handle out of a blank field.
-    const named = store.read().posts.filter((p) => p.account !== undefined);
-    const seen = new Map(named.map((p) => [`${p.platform} ${p.account}`, { platform: p.platform, handle: p.account }]));
-    return [...seen.values()];
+  if (config !== null && upstream !== null) {
+    const res = await proxyFetch(config, upstream, null);
+    if (res.ok) return ((await res.json()) as { data?: unknown[] }).data ?? [];
+    // The one refusal that is an answer: `GET …/social/accounts` validates nothing else, so its
+    // only 400 is "social publishing is not activated for this identity" (canonical-spec §27).
+    if (res.status !== 400) {
+      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      throw new ToolError(
+        `could not read the connected accounts — the platform answered ${res.status}${body?.error?.message === undefined ? "" : `: ${body.error.message}`}. That is not an empty list: do not name an account, and tell the operator publishing could not be checked.`,
+      );
+    }
   }
-  const res = await proxyFetch(config, upstream, null);
-  if (!res.ok) throw new ToolError("accounts unavailable");
-  return ((await res.json()) as { data?: unknown[] }).data ?? [];
+  // Only rows that actually name an account: a post filed with no destination is not evidence
+  // of an account existing, and listing one would invent a handle out of a blank field.
+  const named = store.read().posts.filter((p) => p.account !== undefined);
+  const seen = new Map(named.map((p) => [`${p.platform} ${p.account}`, { platform: p.platform, handle: p.account }]));
+  return [...seen.values()];
 }
 
 async function callTool(name: string, params: Record<string, unknown>, store: Store, config: ProxyConfig | null): Promise<unknown> {
@@ -155,14 +173,12 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (post.status !== "pending" && post.status !== "ready") {
         throw new ToolError(`post is ${post.status}; only pending or ready posts can be edited`);
       }
-      return store.updatePost(id, { caption: optional(params, "caption"), mediaUrl: optional(params, "media_url") });
+      return store.updatePost(id, { title: optional(params, "title"), caption: optional(params, "caption"), mediaUrl: optional(params, "media_url") });
     }
     case "list_style_templates":
       return store.read().templates;
     case "list_accounts":
       return listAccounts(store, config);
-    case "get_onboarding":
-      return store.read().onboarding;
     default:
       throw new ToolError(`unknown tool: ${name}`);
   }

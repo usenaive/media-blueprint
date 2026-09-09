@@ -6,10 +6,14 @@
  * are the blueprint's and are shared. What may never differ is the way out — every agent of every
  * template publishes only through the operator's queue.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { ONE_RENDER_MICRO_USD } from "./template.ts";
-import type { MediaTemplate } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, words } from "./template.ts";
+import type { MediaTemplate, TemplateName } from "./template.ts";
+
+/** The four of the platform's twelve `naive/*` catalogue skills a media crew has a use for; no other ref is allowed here. */
+const CATALOGUE = ["naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/seo-content-brief"];
 
 const both = Object.values(TEMPLATES);
 const agentNames = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
@@ -35,9 +39,83 @@ const toolsOf = (template: MediaTemplate, name: string) =>
     .map(([tool]) => tool);
 
 describe("the crews", () => {
-  it("shares the channel manager and differs only in the specialist", () => {
-    expect(agentNames(TEMPLATES.faceless)).toEqual(["producer", "channel-manager"]);
-    expect(agentNames(TEMPLATES.clipping)).toEqual(["clipper", "channel-manager"]);
+  it("is a crew of five per template, sharing the channel manager and the analyst seat", () => {
+    expect(agentNames(TEMPLATES.faceless)).toEqual(["channel-manager", "producer", "trend-scout", "scriptwriter", "analyst"]);
+    expect(agentNames(TEMPLATES.clipping)).toEqual(["channel-manager", "clipper", "scout", "caption-editor", "analyst"]);
+  });
+
+  /**
+   * Plan §2.1/§2.4: a template is a crew a person chooses from, not a count of resources. Every
+   * seat says what it is for (`role`), opens its `system` with the shared preamble, stays inside the
+   * 150–400 words a person will actually read, and names only catalogue skills.
+   */
+  it("gives every seat a role, the shared preamble, a readable system and catalogue skills", () => {
+    expect(CONTEXT_PREAMBLE).toMatch(/^Read `project_context` before anything else; the answers there are the client's, not yours to invent\./);
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.role, agent.name).toMatch(/\S/);
+        expect(agent.description, agent.name).toMatch(/\S/);
+        const system = agent.system ?? "";
+        expect(system.startsWith(CONTEXT_PREAMBLE), agent.name).toBe(true);
+        expect(words(system), `${template.name}/${agent.name}`).toBeGreaterThanOrEqual(150);
+        expect(words(system), `${template.name}/${agent.name}`).toBeLessThanOrEqual(400);
+        for (const skill of agent.skills ?? []) expect(CATALOGUE).toContain(skill);
+        // A skill named is a skill it can read.
+        if ((agent.skills ?? []).length > 0) expect(toolsOf(template, agent.name)).toContain("read_skill");
+        expect(toolsOf(template, agent.name)).toContain("project_context");
+      }
+    }
+  });
+
+  it("requires only the seat the dashboard's Chat is wired to", () => {
+    for (const template of both) {
+      expect(template.agents.filter((agent) => agent.required === true).map((agent) => agent.name)).toEqual(["channel-manager"]);
+    }
+  });
+
+  /**
+   * Day one (plan §2.5). The apply opens one session per agent with `intake.message`, and every
+   * message is written to consume the setup answers rather than restate a hard-coded niche — the
+   * scout files the first five briefs for the niche, the writer scripts them, the analyst lays out
+   * the report, the manager writes the plan from the cadence answer.
+   */
+  it("opens day one on every seat, from the context and inside the per-task ceiling", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.intake?.message, agent.name).toMatch(/project_context/);
+        expect(agent.intake?.budget_micro_usd, agent.name).toBeGreaterThan(0);
+        expect(agent.intake?.budget_micro_usd, agent.name).toBeLessThanOrEqual(agent.budget.max_task_micro_usd);
+        expect(Number.isInteger(agent.intake?.budget_micro_usd)).toBe(true);
+      }
+      expect(template.agents.find((a) => a.name === "channel-manager")?.intake?.message).toMatch(/cadence/);
+      expect(template.agents.find((a) => a.name === "analyst")?.intake?.message).toMatch(/report/i);
+    }
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "trend-scout")?.intake?.message).toMatch(/five/);
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")?.intake?.message).toMatch(/hook/i);
+    expect(TEMPLATES.clipping.agents.find((a) => a.name === "scout")?.intake?.message).toMatch(/source channel\(s\).*first five/);
+  });
+
+  it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
+    // The seats downstream of the scout are told that, told not to invent the upstream work, and
+    // told which fire — in cron order — takes the first of it; and they are budgeted for set-up
+    // (every call holds its quote until the turn commits, so the cap is turns, not dollars), under
+    // the timer that does render.
+    const downstream: [MediaTemplate, string, RegExp][] = [
+      [TEMPLATES.faceless, "producer", /alongside yours.*Render nothing today.*07:00 fire/s],
+      [TEMPLATES.faceless, "scriptwriter", /alongside yours.*not yours to invent.*06:30 fire/s],
+      [TEMPLATES.clipping, "clipper", /alongside yours.*Cut nothing today.*07:00 fire/s],
+      [TEMPLATES.clipping, "caption-editor", /cuts nothing until its 07:00 fire.*07:30 fire/s],
+    ];
+    for (const [template, name, says] of downstream) {
+      const seat = template.agents.find((a) => a.name === name);
+      expect(seat?.intake?.message, name).toMatch(says);
+    }
+    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.clipping, "clipper"]] as const) {
+      const seat = template.agents.find((a) => a.name === name);
+      const timer = Math.max(...(seat?.schedules ?? []).map((s) => s.budget_micro_usd ?? 0));
+      expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(timer);
+      expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(ONE_RENDER_MICRO_USD * 4);
+    }
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
@@ -157,6 +235,32 @@ describe("the crews", () => {
     expect(clipper?.schedules?.[0]?.input).toMatch(/If clip_video is not among your tools.*request_tools/);
   });
 
+  /**
+   * A brief that names a tool the same file denies is an instruction the agent cannot follow: the
+   * clipping scout was told to watch its sources with `browser`, which every toolset here denies
+   * by name (the sandbox is denied on purpose — a content agent needs no machine, and denying it
+   * is what keeps a session from provisioning and billing one). The agent spends a turn asking for
+   * a tool the blueprint decided it may not have, or narrates the watch it could not do.
+   */
+  it("never tells an agent to use a tool its own toolset denies", () => {
+    // The built-ins whose names are identifiers rather than ordinary English: "read", "write",
+    // "edit", "find", "ls" and "apps" appear in every brief as words and mean nothing about tools.
+    const AMBIGUOUS = ["read", "write", "edit", "find", "ls", "apps"];
+    const offences: string[] = [];
+    for (const template of both) {
+      for (const agent of template.agents) {
+        for (const tool of BUILTIN_TOOLS) {
+          if (AMBIGUOUS.includes(tool)) continue;
+          if (!new RegExp(`\\b${tool.replace(".", "\\.")}\\b`).test(agent.system ?? "")) continue;
+          if (permissionFor(template, agent.name, tool) === "deny") {
+            offences.push(`${template.name}/${agent.name} is told to use ${tool}, which its toolset denies`);
+          }
+        }
+      }
+    }
+    expect(offences).toEqual([]);
+  });
+
   it("tells each agent to sign what it files, so an operator can read the row", () => {
     // A filed post used to arrive as "by mcp / unassigned" with no media: the queue's own screenshot
     // promises a named agent, a named account and a video, and nothing asked the agent for them.
@@ -192,11 +296,11 @@ describe("the channel's clock", () => {
   );
 
   /**
-   * Every fire this repo declares: one on each specialist and three on each manager. Called by the
-   * tests below that assert a property of each schedule, because a `for` loop over a template that
-   * declares none passes — which is exactly the state this whole block exists to keep out.
+   * Every fire this repo declares: one on each of the four specialists and three on each manager.
+   * Called by the tests below that assert a property of each schedule, because a `for` loop over a
+   * template that declares none passes — which is exactly the state this whole block exists to keep out.
    */
-  const everyFireCounted = () => expect(everySchedule).toHaveLength(8);
+  const everyFireCounted = () => expect(everySchedule).toHaveLength(14);
 
   const fields = (cron: string) => cron.split(" ");
   const hourOf = (cron: string) => Number(fields(cron)[1]);
@@ -218,7 +322,7 @@ describe("the channel's clock", () => {
         (agent) => [`${template.name}/${agent.name}`, (agent.schedules ?? []).length] as const,
       ),
     );
-    expect(counts).toHaveLength(4);
+    expect(counts).toHaveLength(10);
     expect(counts.filter(([, count]) => count === 0)).toEqual([]);
   });
 
@@ -358,9 +462,22 @@ describe("the data the screens read", () => {
     expect(TEMPLATES.clipping.kinds.map((kind) => kind.id)).toEqual(["clip"]);
   });
 
-  it("asks for a niche, and for a source channel only where there is one to cut from", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche"]);
-    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["niche", "sourceChannel"]);
+  /**
+   * Plan §4, rows 3–4: three questions per template, asked by the studio before anything is
+   * provisioned — the engine refuses a fourth. `choice` where the answers are a short list, `text`
+   * where they are the client's own words; and never a fourth spelling of the same question here.
+   */
+  it("asks exactly three setup questions per template, and no more anywhere", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["audience", "text"], ["cadence", "choice"]]);
+    expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["niche", "text"], ["cadence", "choice"]]);
+    for (const template of both) {
+      expect(template.questions).toHaveLength(3);
+      for (const question of template.questions) expect(question.label).toMatch(/\S/);
+      expect(new Set(template.questions.map((q) => q.key)).size).toBe(3);
+    }
+    // The cadence is one question, spelled once, because every plan and every timer is sized by it.
+    expect(TEMPLATES.faceless.questions[2]).toBe(TEMPLATES.clipping.questions[2]);
+    expect(TEMPLATES.faceless.questions[2]).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
   });
 
   it("prints its own words on every screen that has any", () => {
@@ -374,5 +491,70 @@ describe("the data the screens read", () => {
   it("is keyed by the name `defineProject({ template })` uses, and one of them is running", () => {
     for (const [key, template] of Object.entries(TEMPLATES)) expect(template.name).toBe(key);
     expect(both).toContain(ACTIVE);
+  });
+});
+
+/**
+ * The money, as the README prints it.
+ *
+ * Every figure in the README's crew tables and its day-one total is a dollar rendering of a
+ * `budget_micro_usd` in `templates/`, and every one of them was left behind when the budgets were
+ * raised — understating what the operator is signing up for by 5–12x on every line. A README that
+ * quotes a number the code does not hold is the one kind of documentation bug a reader cannot
+ * detect, so the numbers are read out of the declarations here rather than kept in step by hand.
+ */
+describe("the spend this blueprint declares", () => {
+  const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const usd = (micro: number) => micro / 1_000_000;
+  const dollars = (cell: string) => [...cell.matchAll(/\$([\d.]+)/g)].map((m) => Number(m[1]));
+  const intakes = (template: MediaTemplate) =>
+    template.agents.reduce((sum, one) => sum + (one.intake?.budget_micro_usd ?? 0), 0);
+
+  it("prints each seat's timers and day one at the budgets those fires actually carry", () => {
+    let current: MediaTemplate | undefined;
+    let rows = 0;
+    for (const line of README.split("\n")) {
+      const heading = /^#{2,3} +`?(faceless|clipping)`?$/.exec(line.trim());
+      if (line.startsWith("#")) current = heading ? TEMPLATES[heading[1] as TemplateName] : undefined;
+      const cells = line.split("|");
+      const named = /^`([\w-]+)`/.exec(cells[1]?.trim() ?? "");
+      if (current === undefined || cells.length < 8 || named === null) continue;
+      const agent = current.agents.find((one) => one.name === named[1]);
+      if (agent === undefined) continue;
+      rows += 1;
+      expect([current.name, agent.name, dollars(cells[5]!)]).toEqual([
+        current.name,
+        agent.name,
+        (agent.schedules ?? []).map((one) => usd(one.budget_micro_usd)),
+      ]);
+      expect([current.name, agent.name, dollars(cells[6]!)]).toEqual([
+        current.name,
+        agent.name,
+        [usd(agent.intake?.budget_micro_usd ?? 0)],
+      ]);
+    }
+    // Five seats per template, both tables read.
+    expect(rows).toBe(10);
+  });
+
+  it("prints a day-one total that is the sum of the day-one budgets", () => {
+    const said = /\(\$([\d.]+) on `faceless`, \$([\d.]+) on `clipping`\)/.exec(README);
+    expect(said).not.toBeNull();
+    expect([Number(said![1]), Number(said![2])]).toEqual([usd(intakes(TEMPLATES.faceless)), usd(intakes(TEMPLATES.clipping))]);
+  });
+
+  /**
+   * The comment above `budget` is the argument for the number, so a stale one argues for a
+   * ceiling that is not there — it justified $6/task and $20/day while the knob it sits on says
+   * $20 and $60.
+   */
+  it("argues for the ceilings it declares, in the comment that justifies them", () => {
+    const source = readFileSync(new URL("./template.ts", import.meta.url), "utf8");
+    const { budget } = TEMPLATES.faceless.agents[0]!;
+    const printed = [...source.matchAll(/\$([\d.]+)\/(task|day)/g)];
+    expect(printed.length).toBeGreaterThan(1);
+    for (const [, amount, unit] of printed) {
+      expect([unit, Number(amount)]).toEqual([unit, usd(unit === "task" ? budget.max_task_micro_usd : budget.cap_micro_usd)]);
+    }
   });
 });

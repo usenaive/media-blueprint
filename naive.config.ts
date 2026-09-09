@@ -8,7 +8,7 @@
  *
  * The blueprint is the machine — the screens, `/api/*`, `/mcp`, the store, the approval flow — and
  * it is shared by every template it carries. The template is data: the crew and its prompts, the
- * tool allow-lists, the post kinds, the onboarding questions and the words the queue prints
+ * tool allow-lists, the post kinds, the three setup questions and the words the queue prints
  * (`templates/`). Switching template is an edit of `ACTIVE` in `templates/index.ts` plus
  * `naive up`, on the same clone and the same app.
  *
@@ -31,7 +31,7 @@
  */
 import { defineProject } from "@usenaive-sdk/blueprints";
 import { CLIPPING_SEEDS, FACELESS_SEEDS } from "./seed/posts.ts";
-import { ACTIVE, CHANNEL_IDENTITY, TEMPLATES } from "./templates/index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
 
 /**
  * Every template this repo carries — all of them, not just the running one. The engine takes the
@@ -53,10 +53,18 @@ const templates = [
  * declaration itself — including the pair that chooses the machine and the crew that runs on it.
  */
 export const declaration = {
-  name: "media",
+  name: PROJECT_NAME,
   blueprint: "media",
   template: ACTIVE.name,
   templates,
+
+  /**
+   * The three things the studio asks before anything is provisioned (`canonical-spec §7.1`; the
+   * engine refuses a fourth). The answers land on the install and reach every agent through the
+   * built-in `project_context` tool (§31.8) — there is no other place they are asked, which is why
+   * the dashboard has no onboarding screen of its own.
+   */
+  questions: ACTIVE.questions,
 
   /**
    * The channel persona, and the whole reason a connected account is reachable from a turn.
@@ -79,6 +87,9 @@ export const declaration = {
       name: "channel",
       type: "fullstack" as const,
       description: "Media channel dashboard — post queue, style templates, accounts, analytics.",
+      // The crew files into this app's queue and the operator approves from it; a crew without it
+      // has nowhere to put its work, so the studio cannot untick it (`canonical-spec §31.2`).
+      required: true,
       deploy_dir: "dist",
       mcp: "/mcp",
       // The dashboard's server half fronts the platform for the browser, so the deployed process

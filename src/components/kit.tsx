@@ -25,8 +25,12 @@ const IMAGE = /\.(jpe?g|png|gif|webp|avif|svg)(\?|#|$)/i;
  * broken control — the honest answer to "we cannot tell what this is" is to say so and let the
  * operator open it.
  */
+/** A platform file id (`generate_video` files one) is watched through the dashboard's own `/api/files/:id`. */
+const FILE_ID = /^fil_\w+$/;
+
 export function MediaPreview({ src, label }: { src: string; label: string }) {
   const frame = "w-full rounded-md border border-line bg-surface-sunken";
+  if (FILE_ID.test(src)) return <video className={frame} src={`/api/files/${src}`} controls preload="metadata" playsInline />;
   if (VIDEO.test(src)) return <video className={frame} src={src} controls preload="metadata" playsInline />;
   if (IMAGE.test(src)) return <img className={`${frame} object-cover`} src={src} alt={label} />;
   return (

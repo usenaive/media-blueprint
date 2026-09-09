@@ -1,4 +1,4 @@
-import { BarChart3, Link2, ListVideo, MessageSquare, Plus, Settings2, ShieldQuestion } from "lucide-react";
+import { BarChart3, Home as HomeIcon, Link2, ListVideo, MessageSquare, Plus, Settings2, ShieldQuestion } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { apiGet } from "./api";
@@ -6,8 +6,10 @@ import type { ChannelAgent, Post } from "./data";
 import { ACTIVE } from "../templates";
 import { toRoster } from "./screens/Agents";
 import { parked, type WireSession } from "./screens/Approvals";
+import type { HomeContext } from "./screens/Home";
 
 const NAV = [
+  { to: "/", label: "Home", Icon: HomeIcon },
   { to: "/chat", label: "Chat", Icon: MessageSquare },
   { to: "/posts", label: "Posts", Icon: ListVideo },
   // An agent that has parked on an approval is blocked until a person answers, so the count that
@@ -32,7 +34,11 @@ export function Shell() {
   useEffect(() => {
     apiGet<Post[]>("/posts").then((posts) => setPending(posts.filter((p) => p.status === "pending").length), () => {});
     apiGet<{ data?: Parameters<typeof toRoster>[0] }>("/agents").then((page) => setAgents(toRoster(page.data ?? [])), () => {});
-    apiGet<{ niche?: string | null }>("/onboarding").then((row) => setNiche(row.niche ?? null), () => {});
+    // The channel is named after its niche — the studio's answer, held by the platform, not a local row.
+    apiGet<HomeContext>("/context").then((home) => {
+      const niche = home.context.answers.find((answer) => answer.key === "niche")?.value;
+      setNiche(typeof niche === "string" ? niche : null);
+    }, () => {});
     apiGet<{ data?: WireSession[] }>("/sessions").then((page) => setWaiting(parked(page.data ?? [], new Map()).length), () => {});
   }, []);
 
@@ -52,7 +58,7 @@ export function Shell() {
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-4">
           <div className="space-y-px">
             {NAV.map(({ to, label, Icon }) => (
-              <NavLink key={to} to={to} className="rail-row equip">
+              <NavLink key={to} to={to} end={to === "/"} className="rail-row equip">
                 {({ isActive }) => (
                   <>
                     <span className={`grid size-5 shrink-0 place-items-center ${isActive ? "text-ink" : "text-ink-2"}`}>

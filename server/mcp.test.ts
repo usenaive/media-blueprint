@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { authError, handleMcp, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { TEMPLATES } from "../templates/index.ts";
@@ -54,8 +54,11 @@ describe("mcp protocol", () => {
   it("lists the read-and-file tools and no approve/reject/post tool", async () => {
     const answer = (await handleMcp(rpc("tools/list"), freshStore(), null)) as { result: { tools: { name: string; description: string }[] } };
     const names = answer.result.tools.map((t) => t.name);
-    expect(names).toEqual(["list_posts", "get_post", "create_post", "update_post", "list_style_templates", "list_accounts", "get_onboarding"]);
+    expect(names).toEqual(["list_posts", "get_post", "create_post", "update_post", "list_style_templates", "list_accounts"]);
     expect(names).toEqual(TOOLS.map((t) => t.name));
+    // The setup answers reach an agent through the platform's own `project_context` tool, not a
+    // second copy served from this store.
+    expect(names).not.toContain("get_onboarding");
     expect(names.some((n) => /approve|reject|post_now|publish/.test(n))).toBe(false);
     expect(answer.result.tools.find((t) => t.name === "create_post")?.description).toMatch(/operator actions on the dashboard/);
   });
@@ -116,6 +119,11 @@ describe("mcp tools", () => {
       (await handleMcp(call("update_post", { id: "post_9f2a", caption: "Softer first line." }), store, null))!,
     );
     expect(edited).toMatchObject({ caption: "Softer first line.", status: "pending" });
+    // The caption-editor's whole job on a cut: the scout's working title goes, the publishable one stays.
+    const retitled = text<{ title: string; caption: string }>(
+      (await handleMcp(call("update_post", { id: "post_9f2a", title: "Rule two will sting" }), store, null))!,
+    );
+    expect(retitled).toMatchObject({ title: "Rule two will sting", caption: "Softer first line." });
     for (const id of ["post_5b5e", "post_3970"]) {
       const refused = (await handleMcp(call("update_post", { id, caption: "nope" }), store, null)) as CallResult;
       expect(refused.result.isError).toBe(true);
@@ -124,15 +132,54 @@ describe("mcp tools", () => {
     }
   });
 
-  it("reads posts by status, templates, accounts and the onboarding profile from the store", async () => {
+  it("reads posts by status, templates and accounts from the store", async () => {
     const store = freshStore();
-    store.setOnboarding({ niche: "stoicism" });
     expect(text<{ status: string }[]>((await handleMcp(call("list_posts", { status: "ready" }), store, null))!).every((p) => p.status === "ready")).toBe(true);
     expect(text<{ id: string }>((await handleMcp(call("get_post", { id: "post_9f2a" }), store, null))!).id).toBe("post_9f2a");
     expect(((await handleMcp(call("get_post", { id: "post_nope" }), store, null)) as CallResult).result.isError).toBe(true);
     expect(text<unknown[]>((await handleMcp(call("list_style_templates", {}), store, null))!).length).toBeGreaterThan(0);
     const accounts = text<{ platform: string; handle: string }[]>((await handleMcp(call("list_accounts", {}), store, null))!);
     expect(accounts).toContainEqual({ platform: "x", handle: "@dailystoic" });
-    expect(text<{ niche: string }>((await handleMcp(call("get_onboarding", {}), store, null))!)).toEqual({ niche: "stoicism" });
+  });
+
+  it("answers list_accounts from the queue, not with an error, when the platform refuses (social not activated)", async () => {
+    const store = freshStore();
+    const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: "idn_1", project: "media" };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: "validation_failed" } }), { status: 400 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const answer = (await handleMcp(call("list_accounts", {}), store, config)) as CallResult;
+      expect(answer.result.isError).not.toBe(true);
+      expect(text<{ platform: string; handle: string }[]>(answer)).toContainEqual({ platform: "x", handle: "@dailystoic" });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  /**
+   * "Fail soft" fell soft into invented data. `if (res.ok)` was the only success test, so a 401
+   * from a revoked key, a 403 from a missing scope and a 500 from a broken upstream all fell
+   * through to a list synthesised out of handles typed into the local queue — the agent was handed
+   * accounts nobody had checked were connected. A customer reconnects an account that was fine, or
+   * never learns publishing is broken. Only the platform's own "not activated yet" (400, the fresh
+   * install's state) is an empty answer; everything else is "we could not ask" and says so.
+   */
+  it("says it could not ask, rather than inventing accounts, when the platform did not answer", async () => {
+    for (const status of [401, 403, 500, 502]) {
+      const store = freshStore();
+      const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: "idn_1", project: "media" };
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "revoked" } }), { status })));
+      try {
+        const answer = (await handleMcp(call("list_accounts", {}), store, config)) as CallResult;
+        expect(answer.result.isError).toBe(true);
+        const said = answer.result.content[0]!.text;
+        expect(said).toContain(String(status));
+        expect(said).not.toContain("@dailystoic");
+        expect(said).toMatch(/could not/i);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
   });
 });

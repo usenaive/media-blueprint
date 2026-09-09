@@ -11,8 +11,26 @@ describe("upstreamFor", () => {
     });
   });
 
-  it("maps agents onto the org agent list", () => {
-    expect(upstreamFor("GET", "/api/agents", null)).toEqual({ method: "GET", path: "/v1/agents" });
+  it("streams a filed video's bytes by its file id, and nothing shaped otherwise", () => {
+    expect(upstreamFor("GET", "/api/files/fil_4pb4vm", null)).toEqual({
+      method: "GET",
+      path: "/v1/files/fil_4pb4vm?download=true",
+      raw: true,
+    });
+    expect(upstreamFor("GET", "/api/files/..%2Fsecret", null)).toBeNull();
+    expect(upstreamFor("DELETE", "/api/files/fil_4pb4vm", null)).toBeNull();
+  });
+
+  it("maps agents onto the org agent list, a full page at a time", () => {
+    expect(upstreamFor("GET", "/api/agents", null)).toEqual({ method: "GET", path: "/v1/agents?limit=100" });
+  });
+
+  it("passes the session filters the platform knows through, and drops the rest", () => {
+    const query = new URLSearchParams({ stop_reason: "awaiting_approval", agent_id: "agt_1", limit: "5", evil: "1" });
+    expect(upstreamFor("GET", "/api/sessions", null, query)).toEqual({
+      method: "GET",
+      path: "/v1/sessions?limit=100&agent_id=agt_1&stop_reason=awaiting_approval",
+    });
   });
 
   /**
@@ -68,12 +86,23 @@ describe("configFromEnv", () => {
   it("reads key, base url and identity, trimming the trailing slash", () => {
     expect(
       configFromEnv({ NAIVE_API_KEY: "k", NAIVE_API_URL: "http://up/", NAIVE_IDENTITY_ID: "idn_1" }),
-    ).toEqual({ apiKey: "k", baseUrl: "http://up", identityId: "idn_1" });
+    ).toEqual({ apiKey: "k", baseUrl: "http://up", identityId: "idn_1", project: "media" });
+  });
+
+  /**
+   * Measured on staging: the install is filed under the customer's slug and the dashboard asked for
+   * `project=media`, so the context lookup was a 404 on every deployed install. The platform writes
+   * the install's own project as `NAIVE_PROJECT`; the declaration's name is only the fallback for a
+   * laptop `naive up`, which files under it.
+   */
+  it("reads the install's project from NAIVE_PROJECT and falls back to the declaration's name", () => {
+    expect(configFromEnv({ NAIVE_API_KEY: "k", NAIVE_PROJECT: "ws12-staging-faceless" })?.project).toBe("ws12-staging-faceless");
+    expect(configFromEnv({ NAIVE_API_KEY: "k" })?.project).toBe("media");
   });
 });
 
 describe("proxyFetch", () => {
-  const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: null };
+  const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: null, project: "media" };
 
   it("attaches the key upstream only; the relayed body never contains it", async () => {
     let seen: { url: string; init: RequestInit } | null = null;

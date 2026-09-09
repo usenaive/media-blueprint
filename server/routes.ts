@@ -10,10 +10,9 @@
  * `ctx.store()`, and only by the routes that actually touch it.
  */
 import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } from "./mcp.ts";
-import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
-import type { ChannelProfile, Store } from "./store.ts";
+import { collect, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
+import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
-import { ACTIVE, type MediaTemplate } from "../templates/index.ts";
 
 export interface ApiRequest {
   /** Upper-case. */
@@ -31,8 +30,10 @@ export interface ApiReply {
   status: number;
   /** JSON-encoded by the adapter; `undefined` means an empty body. */
   body?: unknown;
-  /** Set only by `/api/chat/:sid/stream` — piped, not buffered. */
+  /** Set by `/api/chat/:sid/stream` and `/api/files/:id` — piped, not buffered. */
   stream?: Response;
+  /** With `stream`: an event stream (relay preamble) rather than a file's bytes. */
+  sse?: boolean;
   /** Set only by `/api/enter`, which answers with a cookie and a redirect and no body at all. */
   headers?: Record<string, string>;
 }
@@ -84,7 +85,7 @@ function cookieValue(header: string | undefined, name: string): string | undefin
 }
 
 /** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
-const KNOWN = [/^\/api\/posts$/, /^\/api\/templates$/, /^\/api\/onboarding$/, /^\/api\/agents$/, /^\/api\/chat$/, /^\/api\/sessions$/];
+const KNOWN = [/^\/api\/posts$/, /^\/api\/templates$/, /^\/api\/context$/, /^\/api\/agents$/, /^\/api\/deployments$/, /^\/api\/chat$/, /^\/api\/sessions$/];
 
 const parse = (body: string): Record<string, unknown> => {
   try {
@@ -121,6 +122,10 @@ async function chatAgentId(config: ProxyConfig): Promise<string | null> {
  * skipped the upstream call entirely and still answered 200 with the row flipped to `posted` and
  * a `postedAt`: a post that shipped nowhere, recorded as shipped, with no way to tell from the
  * dashboard. Nothing here reports success for a publish that did not happen.
+ *
+ * And the title, which is not the row's to insist on: it is cut from the caption, so a caption
+ * that opens on a blank line made it `""` and the platform refused the publish of an approved
+ * post. It is sent only when it says something.
  */
 async function postNow(store: Store, config: ProxyConfig | null, id: string): Promise<ApiReply> {
   const post = store.read().posts.find((p) => p.id === id);
@@ -140,47 +145,108 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
     upstream,
     JSON.stringify({
       content: post.caption,
-      title: post.title,
+      // A blank title is refused upstream (`title` is optional there, but not empty), and one can
+      // reach a row two ways: a caption whose lines are all blank, and an agent's `update_post`
+      // clearing it. Omitted, the platform cuts its own title from the content — a post the
+      // operator approved is not left permanently unpublishable over a field nobody typed.
+      ...(post.title.trim() === "" ? {} : { title: post.title }),
       platforms: [post.platform],
-      ...(post.mediaUrl === undefined ? {} : { media_urls: [post.mediaUrl] }),
+      ...(post.mediaUrl === undefined
+        ? {}
+        : /^fil_\w+$/.test(post.mediaUrl)
+          ? { file_ids: [post.mediaUrl] }
+          : { media_urls: [post.mediaUrl] }),
     }),
   );
-  if (!published.ok) return fail(502, "publish failed");
+  if (!published.ok) return fail(502, `publish failed: ${await upstreamReason(published)}`);
   return json(200, store.updatePost(post.id, { status: "posted" }));
 }
 
-/**
- * The onboarding answers, checked against the questions the running template actually asks —
- * `faceless` asks for a niche, `clipping` for a niche and the source channel it may cut from.
- * Returns the profile to persist, or the sentence to refuse with.
- *
- * `{"niche":123}` used to fall through a `typeof` check to `null` and erase the channel's niche —
- * a write that destroys the row it was asked to set is refused, not coerced — and a question the
- * template added was simply dropped on the floor.
- */
-export function channelProfile(body: Record<string, unknown>, template: MediaTemplate): ChannelProfile | string {
-  const profile: Record<string, string> = {};
-  for (const question of template.questions) {
-    const answer = body[question.key];
-    if (typeof answer !== "string" || answer.trim() === "") {
-      return `${question.label.toLowerCase()} must be a non-empty string`;
-    }
-    profile[question.key] = answer;
-  }
-  return profile as ChannelProfile;
+/** The platform's own sentence for a refused publish ("no connected account", a bad target), never a bare code. */
+async function upstreamReason(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return body?.error?.message ?? `the platform answered ${res.status}`;
 }
 
-/** The store-backed routes: the post queue, the style templates, the channel's onboarding state. */
+/** One line of an install report (`canonical-spec §31.2`); on `intake`, `id` is the session the apply opened. */
+export interface ReportLine {
+  name: string;
+  action: string;
+  id?: string;
+  reason?: string;
+}
+
+interface WireInstall {
+  id: string;
+  status: string;
+  report?: { agents?: ReportLine[]; intake?: ReportLine[] } | null;
+}
+
+/** An intake line with its session's state, read by id — or null when that read did not answer. */
+export interface DayOneLine extends ReportLine {
+  session: { status: string; stop_reason: string | null; waiting: boolean } | null;
+}
+
+/**
+ * What the dashboard home reads: the setup answers as the platform holds them, the `agt_` ids the
+ * install left standing (every platform figure on the home is cut to them), and the day-one lines.
+ */
+export interface HomeContext {
+  context: unknown;
+  team: { name: string; id: string }[];
+  day_one: DayOneLine[];
+}
+
+/**
+ * An intake session read by its own id. The install opened it on day one and a session list is the
+ * hundred most recent, so once the crons have run a while the list no longer holds it; the id does.
+ */
+async function dayOneLine(config: ProxyConfig, line: ReportLine): Promise<DayOneLine> {
+  if (line.action !== "created" || line.id === undefined) return { ...line, session: null };
+  const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${line.id}` }, null);
+  if (!res.ok) return { ...line, session: null };
+  const session = (await res.json()) as { status: string; stop_reason: string | null; pending_actions?: unknown[] };
+  return {
+    ...line,
+    session: { status: session.status, stop_reason: session.stop_reason, waiting: (session.pending_actions?.length ?? 0) > 0 },
+  };
+}
+
+/**
+ * `GET /api/context` — the project's setup answers, read from the platform and from nowhere else.
+ *
+ * The dashboard used to ask them itself, on a screen of its own, and keep them in its store; the
+ * studio now asks them once before the crew exists (`questions` in `naive.config.ts`) and the
+ * agents read them through `project_context`. Two hops because the spec has no `GET …/{id}` for
+ * an install: list this project's installs (most recently applied first), take the first that is
+ * `applied` — a pending or failed one has no context — and read `…/{id}/context` (§31.8). The
+ * report's `intake` lines ride along so the home can show which day-one sessions have finished.
+ */
+async function projectContext(config: ProxyConfig): Promise<ApiReply> {
+  const listed = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs?project=${encodeURIComponent(config.project)}` }, null);
+  if (!listed.ok) return json(listed.status, await listed.json());
+  const page = (await listed.json()) as { data?: WireInstall[] };
+  // The list is newest-applied first, so the first applied row is the one whose context is live.
+  const applied = (page.data ?? []).find((row) => row.status === "applied");
+  if (applied === undefined) return fail(404, "this project has no applied install yet");
+  const read = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs/${applied.id}/context` }, null);
+  const body = await read.json();
+  if (!read.ok) return json(read.status, body);
+  const reply: HomeContext = {
+    context: body,
+    team: (applied.report?.agents ?? [])
+      .filter((row) => row.action !== "refused" && row.action !== "deleted" && row.id !== undefined)
+      .map((row) => ({ name: row.name, id: row.id as string })),
+    day_one: await Promise.all((applied.report?.intake ?? []).map((row) => dayOneLine(config, row))),
+  };
+  return json(200, reply);
+}
+
+/** The store-backed routes: the post queue and the style templates. */
 async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply | null> {
   const { method, path } = req;
   if (method === "GET" && path === "/api/posts") return json(200, (await ctx.store()).read().posts);
   if (method === "GET" && path === "/api/templates") return json(200, (await ctx.store()).read().templates);
-  if (method === "GET" && path === "/api/onboarding") return json(200, (await ctx.store()).read().onboarding);
-  if (method === "PUT" && path === "/api/onboarding") {
-    const profile = channelProfile(parse(req.body), ACTIVE);
-    if (typeof profile === "string") return fail(400, profile);
-    return json(200, (await ctx.store()).setOnboarding(profile));
-  }
   const patch = /^\/api\/posts\/([\w-]+)$/.exec(path);
   if (patch) {
     if (method !== "PATCH") return fail(405, "method not allowed");
@@ -259,10 +325,13 @@ function enter(req: ApiRequest, ctx: ApiContext): ApiReply {
 /** Every route the dashboard serves, browser and agent alike. */
 export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<ApiReply> {
   if (req.path === "/mcp") {
+    // The store opens before the 405 so a bare GET answers 503 while the database is still
+    // unreachable: it is what the platform dials to decide the endpoint can serve its tools.
+    const store = await ctx.store();
     if (req.method !== "POST") return fail(405, "POST only");
     const refused = authError(ctx.mcpToken ?? null, req.headers.authorization);
     if (refused !== null) return json(401, refused);
-    const answer = await handleMcp(req.body, await ctx.store(), ctx.config);
+    const answer = await handleMcp(req.body, store, ctx.config);
     // A notification has no reply: 202 with no body, as the streamable-HTTP transport asks.
     return answer === null ? { status: 202 } : json(200, answer);
   }
@@ -277,6 +346,10 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
 
   if (ctx.config === null) return fail(503, NOT_CONFIGURED);
 
+  if (req.path === "/api/context") {
+    return req.method === "GET" ? projectContext(ctx.config) : fail(405, "method not allowed");
+  }
+
   if (req.path === "/api/chat") {
     if (req.method !== "POST") return fail(405, "method not allowed");
     const agent = await chatAgentId(ctx.config);
@@ -290,12 +363,17 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     return json(created.status, await created.json());
   }
 
-  const upstream = upstreamFor(req.method, req.path, ctx.config.identityId);
+  const upstream = upstreamFor(req.method, req.path, ctx.config.identityId, req.query);
   if (upstream === null) {
     return KNOWN.some((known) => known.test(req.path)) ? fail(405, "method not allowed") : fail(404, "no such route");
   }
+  if (req.path === "/api/agents" || req.path === "/api/deployments") {
+    const rows = await collect(ctx.config, upstream);
+    return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
+  }
   const body = req.method === "GET" ? null : req.body || "{}";
   const answer = await proxyFetch(ctx.config, upstream, body);
-  if (upstream.sse) return { status: answer.status, stream: answer };
+  if (upstream.sse) return { status: answer.status, stream: answer, sse: true };
+  if (upstream.raw) return answer.ok ? { status: answer.status, stream: answer } : fail(answer.status, "file unavailable");
   return json(answer.status, await answer.json());
 }

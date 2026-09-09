@@ -4,21 +4,18 @@
  */
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { channelProfile, handleRequest, type ApiContext, type ApiRequest } from "./routes.ts";
-import { ACTIVE, TEMPLATES } from "../templates/index.ts";
+import { handleRequest, type ApiContext, type ApiRequest } from "./routes.ts";
+import { TEMPLATES } from "../templates/index.ts";
 import { openStoreOver, seedState, type Store, type StoreState } from "./store.ts";
 import type { ProxyConfig } from "./proxy.ts";
 
-const CONFIG: ProxyConfig = { baseUrl: "https://api.test", apiKey: "sk_test", identityId: "idn_1" };
+const CONFIG: ProxyConfig = { baseUrl: "https://api.test", apiKey: "sk_test", identityId: "idn_1", project: "media" };
 
 /**
  * One template's demo queue, named rather than left to whichever template is running: these are
  * the machine's tests, and the row ids they move must say the same thing after a template switch.
  */
 const demoState = () => seedState(TEMPLATES.faceless);
-
-/** Answers to whatever the running template asks — the route validates against that template. */
-const ONBOARDING = Object.fromEntries(ACTIVE.questions.map((question) => [question.key, "stoicism"]));
 
 function ctxOver(state: StoreState, config: ProxyConfig | null = null, mcpToken?: string): ApiContext & { store(): Promise<Store> } {
   const store = openStoreOver(state, () => {});
@@ -44,27 +41,19 @@ const json = (body: unknown, status = 200) =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the store routes", () => {
-  it("serves the queue, the templates and the onboarding state, and saves a niche", async () => {
+  it("serves the queue and the templates", async () => {
     const ctx = ctxOver(demoState());
     expect((await handleRequest(req("GET", "/api/posts"), ctx)).status).toBe(200);
     expect(((await handleRequest(req("GET", "/api/posts"), ctx)).body as unknown[]).length).toBe(9);
     expect(((await handleRequest(req("GET", "/api/templates"), ctx)).body as unknown[]).length).toBeGreaterThan(0);
-    expect((await handleRequest(req("PUT", "/api/onboarding", JSON.stringify(ONBOARDING)), ctx)).body).toEqual(ONBOARDING);
-    expect((await handleRequest(req("GET", "/api/onboarding"), ctx)).body).toEqual(ONBOARDING);
   });
 
-  it("asks whatever the running template asks, and refuses an answer it did not get", () => {
-    // The route validated one hard-coded field, so a clipping channel — which cuts from a source
-    // the operator names — would have been onboarded with no source at all, silently.
-    expect(channelProfile({ niche: "stoicism" }, TEMPLATES.faceless)).toEqual({ niche: "stoicism" });
-    expect(channelProfile({ niche: "podcasts", sourceChannel: "@thepod" }, TEMPLATES.clipping)).toEqual({
-      niche: "podcasts",
-      sourceChannel: "@thepod",
-    });
-    expect(channelProfile({ niche: "podcasts" }, TEMPLATES.clipping)).toBe("source channel must be a non-empty string");
-    expect(channelProfile({ niche: 123 }, TEMPLATES.faceless)).toBe("niche must be a non-empty string");
-    // Answers to questions this template does not ask are not persisted onto the profile.
-    expect(channelProfile({ niche: "stoicism", sourceChannel: "@thepod" }, TEMPLATES.faceless)).toEqual({ niche: "stoicism" });
+  it("has no onboarding route: the studio asks the questions, once, before the crew exists", async () => {
+    // Two places to answer the same three questions is two answers. `PUT /api/onboarding` and its
+    // screen are gone; the answers live on the install and reach the dashboard via `/api/context`.
+    const ctx = ctxOver(demoState(), CONFIG);
+    expect(await handleRequest(req("GET", "/api/onboarding"), ctx)).toEqual({ status: 404, body: { error: "no such route" } });
+    expect(await handleRequest(req("PUT", "/api/onboarding", '{"niche":"x"}'), ctx)).toEqual({ status: 404, body: { error: "no such route" } });
   });
 
   it("moves a post, and says which of the two ways it refused", async () => {
@@ -81,10 +70,9 @@ describe("the store routes", () => {
     expect(moved.body).toMatchObject({ id: "post_9f2a", status: "approved" });
   });
 
-  it("refuses a status no screen would ever send, and a niche that is not one", async () => {
-    // Both of these persisted: `{"status":"garbage"}` wrote a post into a state no tab lists and no
-    // agent understands, and `{"niche":123}` fell through a `typeof` check to null and erased the
-    // channel's niche outright.
+  it("refuses a status no screen would ever send", async () => {
+    // This persisted: `{"status":"garbage"}` wrote a post into a state no tab lists and no agent
+    // understands.
     const state = demoState();
     const ctx = ctxOver(state);
     expect(await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"garbage"}'), ctx)).toEqual({
@@ -92,15 +80,6 @@ describe("the store routes", () => {
       body: { error: "status must be one of pending, ready, approved, posted, rejected" },
     });
     expect(state.posts.find((p) => p.id === "post_9f2a")?.status).toBe("pending");
-
-    await handleRequest(req("PUT", "/api/onboarding", JSON.stringify(ONBOARDING)), ctx);
-    for (const body of ['{"niche":123}', '{"niche":null}', '{"niche":"  "}', "{}"]) {
-      expect(await handleRequest(req("PUT", "/api/onboarding", body), ctx)).toEqual({
-        status: 400,
-        body: { error: "niche must be a non-empty string" },
-      });
-    }
-    expect(state.onboarding).toEqual(ONBOARDING);
   });
 
   it("answers 405 for a known path with the wrong method and 404 for an unknown one", async () => {
@@ -134,6 +113,21 @@ describe("post now", () => {
     });
   });
 
+  it("publishes a rendered video by its file id, which the platform signs itself", async () => {
+    const state = demoState();
+    const post = state.posts.find((p) => p.id === "post_4a6f")!;
+    post.mediaUrl = "fil_4pb4vmt1m862sf0r42tx0anjc9";
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
+
+    expect(reply.status).toBe(200);
+    const sent = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
+    expect(sent).toMatchObject({ file_ids: ["fil_4pb4vmt1m862sf0r42tx0anjc9"] });
+    expect(sent).not.toHaveProperty("media_urls");
+  });
+
   it("only ever names a platform the API accepts, and refuses a stored row that does not", async () => {
     // Every seeded and every agent-filed row targets one of the six networks the platform's social
     // API takes. A document written before that was true can still be in the app database, and it
@@ -161,7 +155,7 @@ describe("post now", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: { message: "nope" } }, 400)));
     const state = demoState();
     const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
-    expect(reply).toEqual({ status: 502, body: { error: "publish failed" } });
+    expect(reply).toEqual({ status: 502, body: { error: "publish failed: nope" } });
     expect(state.posts.find((p) => p.id === "post_4a6f")?.status).toBe("approved");
   });
 
@@ -203,6 +197,29 @@ describe("post now", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * A row whose title is blank was unpublishable, permanently. The title is cut from the caption
+   * (`store.createPost`), an `update_post` may blank it, and the platform's social API refuses
+   * `title: ""` (`title: z.string().trim().min(1).max(200).optional()`) — so "Post now" answered
+   * 502 on a post the operator had approved and nothing on the screen could fix it. The field is
+   * optional upstream and the platform cuts its own title from `content` when it is absent, so a
+   * blank one is omitted rather than sent.
+   */
+  it("publishes a post whose title is blank, by letting the platform cut its own", async () => {
+    const state = demoState();
+    const post = state.posts.find((p) => p.id === "post_4a6f")!;
+    post.title = "";
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
+
+    expect(reply.status).toBe(200);
+    const sent = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
+    expect(sent).not.toHaveProperty("title");
+    expect(sent).toMatchObject({ content: post.caption, platforms: ["x"] });
+  });
+
   it("404s an unknown post", async () => {
     expect(await handleRequest(req("POST", "/api/posts/post_nope/post-now"), ctxOver(demoState(), CONFIG))).toEqual({
       status: 404,
@@ -218,6 +235,12 @@ describe("/mcp is the first row of the same table, over the same store", () => {
     const refused = await handleRequest(req("POST", "/mcp", "{}", { authorization: "Bearer wrong" }), ctx);
     expect(refused.status).toBe(401);
     expect(JSON.stringify(refused.body)).toContain("missing or invalid bearer token");
+  });
+
+  it("lets a bare GET fail with the store while the database is unreachable", async () => {
+    const down = new Error("connect ECONNREFUSED");
+    const ctx: ApiContext = { ...ctxOver(demoState(), null, "tok"), store: () => Promise.reject(down) };
+    await expect(handleRequest(req("GET", "/mcp"), ctx)).rejects.toBe(down);
   });
 
   it("writes rows the browser routes then read back", async () => {
@@ -297,6 +320,102 @@ describe("the platform routes", () => {
     expect(reply).toEqual({ status: 202, body: { id: "ses_1" } });
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toEqual({ agent_id: "agt_1", message: "clip this" });
   });
+
+  /**
+   * The home's context card: the setup answers as the platform holds them (`canonical-spec §31.8`),
+   * read off this project's latest *applied* install — never a local row, never a pending apply.
+   */
+  it("reads the project context of the latest applied install, with its team and its day one read by session id", async () => {
+    // The intake sessions were opened on install day; a session list is the hundred most recent
+    // and stops holding them once the crons have run a while. The report names them by `ses_` id,
+    // and the team by `agt_` id — a refused seat has neither and is on neither list.
+    const context = { object: "project_context", project: "media", template: "faceless", answers: [{ key: "niche", label: "Niche", value: "Stoicism" }] };
+    const report = {
+      agents: [{ name: "trend-scout", action: "created", id: "agt_s" }, { name: "producer", action: "unchanged", id: "agt_p" }, { name: "analyst", action: "refused", reason: "no budget" }],
+      intake: [{ name: "trend-scout", action: "created", id: "ses_9" }, { name: "producer", action: "created", id: "ses_8" }, { name: "analyst", action: "refused", reason: "agent refused" }],
+    };
+    const installs = {
+      data: [
+        { id: "bpi_new", status: "pending", report: null },
+        { id: "bpi_live", status: "applied", report },
+        { id: "bpi_old", status: "applied", report: { intake: [] } },
+      ],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json(installs))
+      .mockResolvedValueOnce(json(context))
+      .mockResolvedValueOnce(json({ id: "ses_9", status: "completed", stop_reason: "end_turn", pending_actions: [] }))
+      .mockResolvedValueOnce(json({ error: { type: "api_error", code: "internal", message: "boom" } }, 500));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("GET", "/api/context"), ctxOver(demoState(), CONFIG));
+
+    expect(reply).toEqual({
+      status: 200,
+      body: {
+        context,
+        team: [{ name: "trend-scout", id: "agt_s" }, { name: "producer", id: "agt_p" }],
+        day_one: [
+          { name: "trend-scout", action: "created", id: "ses_9", session: { status: "completed", stop_reason: "end_turn", waiting: false } },
+          { name: "producer", action: "created", id: "ses_8", session: null },
+          { name: "analyst", action: "refused", reason: "agent refused", session: null },
+        ],
+      },
+    });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.test/v1/blueprints/installs?project=media",
+      "https://api.test/v1/blueprints/installs/bpi_live/context",
+      "https://api.test/v1/sessions/ses_9",
+      "https://api.test/v1/sessions/ses_8",
+    ]);
+  });
+
+  it("says so when the project has never been applied, and 503s by name without a key", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json({ data: [{ id: "bpi_1", status: "pending" }] })));
+    expect(await handleRequest(req("GET", "/api/context"), ctxOver(demoState(), CONFIG))).toEqual({
+      status: 404,
+      body: { error: "this project has no applied install yet" },
+    });
+    expect(await handleRequest(req("GET", "/api/context"), ctxOver(demoState()))).toEqual({
+      status: 503,
+      body: { error: "not configured — set NAIVE_API_KEY" },
+    });
+    expect(await handleRequest(req("POST", "/api/context"), ctxOver(demoState(), CONFIG))).toEqual({
+      status: 405,
+      body: { error: "method not allowed" },
+    });
+  });
+
+  it("assembles every page of the crew's timers, and fails the whole read rather than hand back a shorter list", async () => {
+    // "no timer armed" on an agent whose timer sat on the page that did not arrive is a lie the
+    // screen has no way to catch; a 502 it can show.
+    const timer = { id: "dep_1", agent_id: "agt_1", cron: "0 9 * * 1", next_run_at: "2026-09-14T13:00:00Z" };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ data: [timer], has_more: true, next_cursor: "dep_1" }))
+      .mockResolvedValueOnce(json({ data: [{ ...timer, id: "dep_2" }], has_more: false, next_cursor: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await handleRequest(req("GET", "/api/deployments"), ctxOver(demoState(), CONFIG))).toEqual({
+      status: 200,
+      body: { data: [timer, { ...timer, id: "dep_2" }], has_more: false, next_cursor: null },
+    });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.test/v1/deployments?limit=100",
+      "https://api.test/v1/deployments?limit=100&after=dep_1",
+    ]);
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(json({ data: [timer], has_more: true, next_cursor: "dep_1" }))
+      .mockResolvedValueOnce(json({ error: { type: "api_error", code: "internal", message: "boom" } }, 500)));
+    expect((await handleRequest(req("GET", "/api/agents"), ctxOver(demoState(), CONFIG))).status).toBe(502);
+  });
+
+  it("passes the session filters through, so the home counts the parked sessions and not the recent ones", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({ data: [], has_more: false }));
+    vi.stubGlobal("fetch", fetchMock);
+    const query = new URLSearchParams({ stop_reason: "awaiting_approval" });
+    expect((await handleRequest({ ...req("GET", "/api/sessions"), query }, ctxOver(demoState(), CONFIG))).status).toBe(200);
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/sessions?limit=100&stop_reason=awaiting_approval");
+  });
 });
 
 describe("every /api/* route is behind the operator's bearer", () => {
@@ -307,8 +426,8 @@ describe("every /api/* route is behind the operator's bearer", () => {
   const anyRoute: [string, string, string][] = [
     ["GET", "/api/posts", ""],
     ["GET", "/api/templates", ""],
-    ["GET", "/api/onboarding", ""],
-    ["PUT", "/api/onboarding", JSON.stringify(ONBOARDING)],
+    ["GET", "/api/context", ""],
+    ["GET", "/api/deployments", ""],
     ["PATCH", "/api/posts/post_9f2a", '{"status":"posted"}'],
     ["POST", "/api/posts/post_4a6f/post-now", ""],
     ["GET", "/api/agents", ""],

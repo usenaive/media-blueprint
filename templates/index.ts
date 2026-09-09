@@ -6,14 +6,23 @@
  * never narrows: `naive.config.ts` hands `naive up` BOTH templates, so the chosen one's agents are
  * created and an agent only the other declares is kept — reported by `up` and left running, since
  * `removed` names are the only tombstones and this config has none. The operator's own rows —
- * posts, accounts, the channel profile — are never touched.
+ * posts, accounts, the install's setup answers — are never touched.
+ *
+ * LEFT RUNNING IS NOT LEFT IDLE, and this is the one cost of the switch. `up` owns an agent's
+ * `schedules` through the template that declares it, and a kept agent is declared by neither, so
+ * it is reported `unchanged` and nothing on it is touched — its crons included. The replaced crew
+ * goes on firing daily, as the channel identity, each fire a billable session: three daily fires
+ * (up to $30/day of ceiling) switching `clipping` → `faceless`, two daily and one twice-weekly
+ * the other way. No declaration here can disarm them — `kept` carries names, not schedules — so
+ * the remedy is the operator's and it is `removed` in `naive.config.ts`, which deletes the agent
+ * rather than parking it. README, "Switching template", says it in the operator's words.
  */
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS } from "./faceless.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
-export type { MediaTemplate, OnboardingQuestion, PostKindDecl, TemplateName } from "./template.ts";
-export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE } from "./template.ts";
+export type { MediaTemplate, PostKindDecl, SetupQuestion, TemplateName } from "./template.ts";
+export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PROJECT_NAME } from "./template.ts";
 
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING };
 
