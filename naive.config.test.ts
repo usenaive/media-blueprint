@@ -53,8 +53,27 @@ describe("naive.config", () => {
         expect(declaration.identities.map((identity) => identity.name)).toContain(one.identity);
       }
     }
-    // The cadence the landing copy promises, on the crew that is actually running.
-    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(4);
+    // The cadence the landing copy promises, on the crew that is actually running: three fires on
+    // the manager and one on each of the four specialists.
+    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(7);
+  });
+
+  /**
+   * Plan §2.4/§4: the engine (0.4.0) carries `role`, `skills`, `intake`, `required` and the three
+   * setup questions through `defineProject` — read back off `project`, not the template, so a
+   * downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
+   */
+  it("hands `up` the crew's roles, skills, intakes and the three setup questions", () => {
+    expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
+    expect(project.questions).toHaveLength(3);
+    for (const agent of project.agents) {
+      expect(agent.role).toMatch(/\S/);
+      expect(agent.intake?.message).toMatch(/project_context/);
+      expect(agent.skills?.every((skill) => skill.startsWith("naive/"))).toBe(true);
+    }
+    expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
+    // The dashboard is the crew's queue and MCP endpoint: an install cannot untick it.
+    expect(project.apps[0]?.required).toBe(true);
   });
 
   it("declares the persona its agents act as, so a connected account is reachable from a turn", () => {

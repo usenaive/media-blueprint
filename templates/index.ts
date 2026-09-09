@@ -6,14 +6,14 @@
  * never narrows: `naive.config.ts` hands `naive up` BOTH templates, so the chosen one's agents are
  * created and an agent only the other declares is kept — reported by `up` and left running, since
  * `removed` names are the only tombstones and this config has none. The operator's own rows —
- * posts, accounts, the channel profile — are never touched.
+ * posts, accounts, the install's setup answers — are never touched.
  */
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS } from "./faceless.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
-export type { MediaTemplate, OnboardingQuestion, PostKindDecl, TemplateName } from "./template.ts";
-export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE } from "./template.ts";
+export type { MediaTemplate, PostKindDecl, SetupQuestion, TemplateName } from "./template.ts";
+export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PROJECT_NAME } from "./template.ts";
 
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING };
 

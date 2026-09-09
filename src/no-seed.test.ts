@@ -84,7 +84,7 @@ describe("no seed row reaches the shipped dashboard bundle", () => {
   });
 
   it("ships the templates themselves, which are what the screens read their words from", async () => {
-    // The blueprint's own data — crews, post kinds, onboarding questions, screen vocabulary. It
+    // The blueprint's own data — crews, post kinds, setup questions, screen vocabulary. It
     // carries no row anyone is meant to mistake for work, and the two checks above prove it.
     const { inputs } = await bundle({ file: "src/main.tsx" });
     expect(inputs).toContain("templates/index.ts");

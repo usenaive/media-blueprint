@@ -93,7 +93,6 @@ export const TOOLS = [
   }, ["id"]) },
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
-  { name: "get_onboarding", description: "The channel profile: what onboarding was asked and answered — its niche, and on a clipping channel the source channel it cuts from. Every value is null before onboarding.", inputSchema: obj({}, []) },
 ] as const;
 
 class ToolError extends Error {}
@@ -161,8 +160,6 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       return store.read().templates;
     case "list_accounts":
       return listAccounts(store, config);
-    case "get_onboarding":
-      return store.read().onboarding;
     default:
       throw new ToolError(`unknown tool: ${name}`);
   }

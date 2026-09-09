@@ -17,8 +17,14 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 
 | Template | The channel it runs | Its crew | What it files |
 |---|---|---|---|
-| `faceless` | Generates original short-form video in one niche | `producer`, `channel-manager` | produced, multi-part |
-| `clipping` | Repurposes existing video in one niche | `clipper`, `channel-manager` | clips |
+| `faceless` | Generates original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | produced, multi-part |
+| `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
+
+A template is a crew you choose, not a count of resources: before anything is provisioned the
+studio asks **three questions** (the niche, the tone and audience, the posting cadence), every
+agent reads the answers back through the platform's `project_context` tool, and each opens a
+**day-one** session that turns those answers into the channel's first briefs, scripts, clips,
+report and plan. See [The crew](#-the-crew).
 
 One repo carries both, so switching is an edit and a `naive up` — never a re-clone and never a
 new app. See [Switching template](#-switching-template).
@@ -34,32 +40,30 @@ flowchart LR
   repo["this repo<br/>naive.config.ts + templates/"]
   repo -->|naive up| plat["Naive platform"]
   plat --> app["channel app<br/>fullstack: /api/* and /mcp"]
-  plat --> spec["producer or clipper<br/>daily 07:00"]
+  plat --> ctx["install context<br/>niche · audience · cadence"]
+  plat --> spec["four specialists<br/>daily 06:00–07:30, Mon 07:30"]
   plat --> mgr["channel-manager<br/>daily 08:00 and 18:00, Mon 09:00"]
   plat --> idn["channel identity<br/>holds the connected accounts"]
 ```
 
 - **The dashboard app** (`channel`, fullstack) — this repo's built UI, hosted under your org,
   backed by a thin server that talks to the platform on your behalf.
-- **The template's agents**, each with a system prompt, a scoped tool policy, a daily budget
-  and its own crons:
-  - `channel-manager` — plans the calendar, drafts captions, manages the post queue, replies
-    to comments. Never publishes an unapproved post. Both templates declare it.
-  - `producer` (`faceless`) — creates original short videos from briefs using the channel's
-    style templates (`generate_video`, `generate_image`).
-  - `clipper` (`clipping`) — cuts the most engaging vertical clips out of the source channel
-    you named and files them as pending posts (`clip_video`).
+- **The template's crew of five** — each with a role, a system prompt that opens by reading the
+  install's context, a deny-by-default tool allow-list, the catalogue skills it works from, a
+  daily budget, its own crons and a day-one intake session. The roster is in
+  [The crew](#-the-crew).
 - **Nine starter style templates** (reference image + prompt) covering the current
   high-performing short-form aesthetics — the blueprint's shipped catalogue, present from the
   first turn.
-- **The channel's crons** — the four fires below, so the channel works whether or not anyone
+- **The channel's crons** — the seven fires below, so the channel works whether or not anyone
   opens the dashboard.
 - **The channel identity** (`channel`) — the persona every agent and every schedule acts as,
   and the reason a connected account is reachable from a turn at all.
 
-A freshly provisioned channel has **no posts and no channel profile**, and every screen shows
-its empty state until you or an agent files something. That is the truth about a new
-deployment: the dashboard never ships rows that pretend to be work someone did.
+A freshly provisioned channel has **no posts**, and every screen shows its empty state until
+you or an agent files something. That is the truth about a new deployment: the dashboard never
+ships rows that pretend to be work someone did — the first rows are the ones the day-one
+sessions file from your three answers.
 
 ## 🚀 Get started
 
@@ -115,19 +119,89 @@ channel to anyone who finds the URL.
 `/mcp` is untouched by all of this: the organization's agents authenticate there with their own
 credentials.
 
+## 👥 The crew
+
+Every agent's `system` opens with the same paragraph — *read `project_context` before anything
+else; the answers there are the client's, not yours to invent* — and closes with the approval
+gate. Between them is the seat's own brief, 150–400 words. Every agent also holds the
+dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, and the two doors to
+you (`ask_operator`, `request_tools`, both `ask`); the **Tools** column lists what is granted on
+top of that. Money is integer micro-USD in the declarations; it is printed in dollars here.
+
+### `faceless`
+
+| Agent | Role | Tools | Skills | Timers (channel time) | Day one |
+|---|---|---|---|---|---|
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($2) · daily 08:00 queue sweep ($1) · daily 18:00 comments ($1) | Writes the channel plan from the cadence answer — slots per week, days, kinds, accounts — and files it as a brief ($2) |
+| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($6) | Picks the style templates for the niche and renders the first scripted brief ($6) |
+| `trend-scout` | Trends & briefs | `web_search`, `web_fetch` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($1.50) | Researches the niche and files the channel's **first five briefs** ($1.50) |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($1) | Drafts three hooks per brief, picks one, writes the script and caption ($1) |
+| `analyst` | Performance | — | — | Mon 07:30 report ($1.50) | Sets up the weekly report skeleton for this niche and cadence ($1) |
+
+### `clipping`
+
+| Agent | Role | Tools | Skills | Timers (channel time) | Day one |
+|---|---|---|---|---|---|
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($2) · daily 08:00 queue sweep ($1) · daily 18:00 comments ($1) | Writes the channel plan from the cadence answer and files it as a brief ($2) |
+| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($2) | Cuts the first two clips from the scout's briefs; cuts nothing from a source the context does not name ($2) |
+| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($1) | Goes through the named sources and files the **first five moments** worth cutting ($1) |
+| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($1) | Titles and captions the morning's clips and files the channel's caption style ($1) |
+| `analyst` | Performance | — | — | Mon 07:30 report ($1.50) | Sets up the weekly report skeleton by source and clip ($1) |
+
+Only the `channel-manager` is `required` — it is the seat the dashboard's Chat talks to. Every
+other seat can be left unticked when the template is installed, and its crons and intake are
+then never armed. The `channel` app is `required` too: it is the crew's queue and MCP endpoint.
+
+### The three questions
+
+The studio asks these before anything exists, and the engine refuses a template with a fourth.
+There is no onboarding screen in the dashboard: one place to ask, one place the answers live.
+
+| Template | 1 | 2 | 3 |
+|---|---|---|---|
+| `faceless` | **Niche** — a choice of six, or your own | **Tone and audience, in one line** — text | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Source channel(s) you hold the rights to** — text | **Niche / audience** — text | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+
+The answers are the install's project context. Each agent reads them through the platform's
+read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
+shows them as they are.
+
+### Day one
+
+The apply that creates the crew opens one session per agent with its `intake.message`, each
+written to consume the answers: the scout files the first five briefs for *your* niche, the
+scriptwriter hooks and scripts them, the producer renders the first one, the analyst lays out the
+report, and the manager writes the plan from *your* cadence. Day one costs at most the sum of
+the intake budgets ($11.50 on `faceless`, $7 on `clipping`), and everything it makes lands in the
+queue as pending — nothing is published. The Home screen tracks each intake session until it
+finishes.
+
+### The skills
+
+Four of the platform's `naive/*` catalogue skills are referenced, read at session start with
+`read_skill`: `naive/short-video-hooks` (the first three seconds), `naive/clip-selection`
+(which moment to cut and where), `naive/caption-writing` (the caption in the channel's voice)
+and `naive/seo-content-brief` (a brief the writer can work from). An agent with no skill is not
+granted `read_skill`.
+
 ## ⏰ The cadence
 
-Both templates provision the same four fires, all of them in the channel's own timezone
+Both templates provision seven fires, all of them in the channel's own timezone
 (`CHANNEL_TIMEZONE` in [`templates/template.ts`](templates/template.ts) — one line, one edit)
 and all of them running as the `channel` identity, so a scheduled run reaches the same
-connected accounts a chat turn does.
+connected accounts a chat turn does. Each fire carries its own `budget_micro_usd`, inside the
+agent's per-task ceiling.
 
 | When | Who | What it does |
 |---|---|---|
+| Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named sources |
+| Daily 06:30 | `scriptwriter` (`faceless`) | Hooks, scripts and captions every brief that has none |
 | Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video, or the next batch of clips — and files it as a pending post |
+| Daily 07:30 | `caption-editor` (`clipping`) | Titles and captions the morning's cuts |
+| Monday 07:30 | `analyst` | Last week's numbers, before the plan |
 | Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve |
 | Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
-| Monday 09:00 | `channel-manager` | Plans the week and files the briefs the specialist produces against |
+| Monday 09:00 | `channel-manager` | Plans the week at the cadence you chose, one brief per slot |
 
 Nothing a cron does escapes the queue: the fires file and tidy pending posts, and every publish
 and every reply still stops at your approval, exactly as it does when you brief an agent in
@@ -163,7 +237,7 @@ more, it grows there.
 
 | Screen | What it does |
 |---|---|
-| Onboarding | Answer what the running template asks — a niche, plus the source channel on `clipping` — in a short conversation; the answers persist |
+| Home | The project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
 | Chat | Talk to the channel manager — brief it, ask for clips or productions, adjust the plan |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
@@ -221,7 +295,8 @@ an edit plus a re-apply.
 | the model, budget or approval gate every agent shares | [`templates/template.ts`](templates/template.ts) | `naive up` |
 | when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
-| the post kinds, the onboarding questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
+| the post kinds, the three setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
+| a seat's role, skills or day-one intake | `role`, `skills`, `intake` in its `agent({ … })` call | `naive up` |
 | the style library | [`seed/style-templates.ts`](seed/style-templates.ts) | `pnpm build && naive up` |
 | the dashboard's screens | [`src/screens/`](src/screens) | `pnpm build && naive up` |
 | a new MCP tool for agents to call | [`server/mcp.ts`](server/mcp.ts) and [`server/routes.ts`](server/routes.ts) | `pnpm build && naive up` |
@@ -256,7 +331,10 @@ sends it with every call. Without that token the endpoint answers `401`.
 | `list_posts {status?}`, `get_post {id}` | Inspect the queue |
 | `create_post {caption, media_url?, platform?, agent?, account?, source?, status?}` | File a finished piece as *pending* (or *ready*), signed: who filed it, which account it is for, what it was made from |
 | `update_post {id, caption?, media_url?}` | Fix a pending or ready post; approved and posted ones are yours |
-| `list_style_templates`, `list_accounts`, `get_onboarding` | The style library, the connected accounts, the channel profile |
+| `list_style_templates`, `list_accounts` | The style library, the connected accounts |
+
+The setup answers are not a tool of this server: the platform offers every agent of the crew its
+own read-only `project_context`, so there is one copy of them.
 
 This server publishes nothing: there is no approve, reject or post tool in it, and every tool
 description says so. Each `channel.*` tool is allowed by name.
@@ -279,7 +357,7 @@ blueprint, and not by whichever template happens to list the tool.
 ## 🔁 Switching template
 
 A template is data ([`templates/`](templates)): the crew and its prompts, the tool allow-lists,
-the post kinds it files, the questions onboarding asks and the words the queue prints. Nothing
+the post kinds it files, the three questions the studio asks and the words the queue prints. Nothing
 about the machine changes with it — same screens, same routes, same `/mcp`, same app.
 
 ```ts
@@ -293,7 +371,7 @@ Then `pnpm build && naive up`. The switch **widens and never narrows**:
 - an agent only the old template declared is **reported and left running** — `naive.config.ts`
   hands `naive up` both templates, so the other crew is kept, and nothing is deleted by dropping
   a declaration. Retire one deliberately by adding its name to `removed`;
-- your own rows are untouched: the posts, the accounts, the channel profile, the app, its URL,
+- your own rows are untouched: the posts, the accounts, the install's answers, the app, its URL,
   its database and its MCP token.
 
 The dashboard's Channel settings screen names the template that is running.
@@ -345,6 +423,7 @@ export default defineProject({
   name: "media",
   blueprint: "media",
   template: ACTIVE.name,                 // chosen in templates/index.ts
+  questions: ACTIVE.questions,           // the three the studio asks before anything exists
   templates: [                           // every template this repo carries
     { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
     { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },
@@ -354,6 +433,7 @@ export default defineProject({
     {
       name: "channel",
       type: "fullstack",
+      required: true,                    // the crew's queue and MCP endpoint
       deploy_dir: "dist",
       mcp: "/mcp",
       env: {
@@ -381,7 +461,9 @@ The config can declare more than this template uses:
 | Key | What it provisions |
 |---|---|
 | `apps[]` | `name`, `type`, `description`, `deploy_dir`, `mcp` (the path of the app's own MCP endpoint; fullstack only), and `env` — literals, `{ from_env }` or `{ generate: true }`, written as the app's secrets |
-| `agents[]` | `model`, `budget`, `system`, `tools`, `skills`, `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
+| `questions[]` | the setup questions (`text` or `choice`); at most three when a `template` is set |
+| `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `intake`, `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
+| `agents[].intake` | `message` and `budget_micro_usd` of the session the apply opens on day one |
 | `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |
 | `skills[]` | markdown files pushed by slug, versioned by content |
 | `identities[]` | personas agents and schedules act as |

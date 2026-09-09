@@ -1,6 +1,6 @@
 /**
- * The dashboard's local file store: posts, style templates and onboarding
- * state persist as one JSON file under `data/`. Deliberately the least
+ * The dashboard's local file store: posts and style templates persist as one
+ * JSON file under `data/`. Deliberately the least
  * storage that works — the upgrade path is the platform app database
  * (`POST /v1/apps/:id/db/query`), noted in the README.
  */
@@ -9,27 +9,20 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStatus } from "../seed/posts.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
-import { ACTIVE, type MediaTemplate, type OnboardingQuestion, type TemplateName } from "../templates/index.ts";
+import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
 
 /** The demo rows of each template; a deployment starts empty, so these are `pnpm serve` only. */
 const SEEDS: Record<TemplateName, Post[]> = { faceless: FACELESS_SEEDS, clipping: CLIPPING_SEEDS };
 
 /**
- * What onboarding asked and the operator answered: one key per question the template asks
- * (`templates/`), so `clipping` carries the source channel `faceless` never has. It is the
- * operator's own row — switching template never rewrites it.
+ * The setup answers are deliberately NOT here. The studio asks them once, before the crew exists
+ * (`questions` in `naive.config.ts`), the platform holds them on the install, and both the agents
+ * (`project_context`) and the dashboard (`GET /api/context`) read them from there.
  */
-export type ChannelProfile = { [key in OnboardingQuestion["key"]]?: string | null };
-
-/** A profile with every question the template asks present and none of them answered. */
-export const blankProfile = (template: MediaTemplate = ACTIVE): ChannelProfile =>
-  Object.fromEntries(template.questions.map((question) => [question.key, null])) as ChannelProfile;
-
 export interface StoreState {
   posts: Post[];
   /** The style-template catalogue (`seed/style-templates.ts`), not the blueprint's templates. */
   templates: StyleTemplateSeed[];
-  onboarding: ChannelProfile;
 }
 
 /**
@@ -59,13 +52,11 @@ export interface Store {
   read(): StoreState;
   createPost(input: NewPostInput): Post;
   updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "caption" | "mediaUrl">>): Post | null;
-  setOnboarding(profile: ChannelProfile): StoreState["onboarding"];
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
   posts: structuredClone(SEEDS[template.name]),
   templates: [...STYLE_TEMPLATE_SEEDS],
-  onboarding: blankProfile(template),
 });
 
 /**
@@ -74,10 +65,9 @@ const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
  * The style templates stay — they are the blueprint's shipped catalogue of presets, offered to the
  * producer agent from the first turn, not rows pretending to be anyone's work.
  */
-const emptyState = (template: MediaTemplate = ACTIVE): StoreState => ({
+const emptyState = (): StoreState => ({
   posts: [],
   templates: [...STYLE_TEMPLATE_SEEDS],
-  onboarding: blankProfile(template),
 });
 
 /** `seedState` is the local file store's first run only (`pnpm serve`); `emptyState` is the deployment. */
@@ -149,11 +139,6 @@ export function openStoreOver(
       if (patch.status === "rejected") post.rejectedReason = patch.rejectedReason ?? "Rejected by you";
       save();
       return post;
-    },
-    setOnboarding(profile) {
-      state.onboarding = profile;
-      save();
-      return state.onboarding;
     },
   };
 }

@@ -54,8 +54,11 @@ describe("mcp protocol", () => {
   it("lists the read-and-file tools and no approve/reject/post tool", async () => {
     const answer = (await handleMcp(rpc("tools/list"), freshStore(), null)) as { result: { tools: { name: string; description: string }[] } };
     const names = answer.result.tools.map((t) => t.name);
-    expect(names).toEqual(["list_posts", "get_post", "create_post", "update_post", "list_style_templates", "list_accounts", "get_onboarding"]);
+    expect(names).toEqual(["list_posts", "get_post", "create_post", "update_post", "list_style_templates", "list_accounts"]);
     expect(names).toEqual(TOOLS.map((t) => t.name));
+    // The setup answers reach an agent through the platform's own `project_context` tool, not a
+    // second copy served from this store.
+    expect(names).not.toContain("get_onboarding");
     expect(names.some((n) => /approve|reject|post_now|publish/.test(n))).toBe(false);
     expect(answer.result.tools.find((t) => t.name === "create_post")?.description).toMatch(/operator actions on the dashboard/);
   });
@@ -124,15 +127,13 @@ describe("mcp tools", () => {
     }
   });
 
-  it("reads posts by status, templates, accounts and the onboarding profile from the store", async () => {
+  it("reads posts by status, templates and accounts from the store", async () => {
     const store = freshStore();
-    store.setOnboarding({ niche: "stoicism" });
     expect(text<{ status: string }[]>((await handleMcp(call("list_posts", { status: "ready" }), store, null))!).every((p) => p.status === "ready")).toBe(true);
     expect(text<{ id: string }>((await handleMcp(call("get_post", { id: "post_9f2a" }), store, null))!).id).toBe("post_9f2a");
     expect(((await handleMcp(call("get_post", { id: "post_nope" }), store, null)) as CallResult).result.isError).toBe(true);
     expect(text<unknown[]>((await handleMcp(call("list_style_templates", {}), store, null))!).length).toBeGreaterThan(0);
     const accounts = text<{ platform: string; handle: string }[]>((await handleMcp(call("list_accounts", {}), store, null))!);
     expect(accounts).toContainEqual({ platform: "x", handle: "@dailystoic" });
-    expect(text<{ niche: string }>((await handleMcp(call("get_onboarding", {}), store, null))!)).toEqual({ niche: "stoicism" });
   });
 });

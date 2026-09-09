@@ -4,9 +4,9 @@
  * The **blueprint** is the machine: the screens, `/api/*`, `/mcp`, the store and its row lock, the
  * operator bearer, build and deploy, the approval flow. It is one repository and it is shared.
  * A **template** is DATA: the crew and its prompts, the tool allow-lists, the kinds of post it
- * files, the questions onboarding asks and the words the queue prints. Both templates this repo
- * carries live in `templates/`, so switching is an edit of `ACTIVE` (`templates/index.ts`) plus
- * `naive up` — never a re-clone, never a new app.
+ * files, the three setup questions the studio asks before anything is provisioned, and the words
+ * the queue prints. Both templates this repo carries live in `templates/`, so switching is an edit
+ * of `ACTIVE` (`templates/index.ts`) plus `naive up` — never a re-clone, never a new app.
  *
  * Two things are deliberately NOT in here. The demo rows a template seeds are in `seed/posts.ts`,
  * because the screens import this module and no demo row may ever reach the shipped bundle
@@ -14,26 +14,34 @@
  * MCP tools are below rather than in each template: they are the machine's, and a template that
  * could restate them could quietly drop the gate.
  */
-import type { AgentDecl, ScheduleDecl } from "@usenaive-sdk/blueprints";
+import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import type { PostKind } from "../seed/posts.ts";
 
 export type TemplateName = "faceless" | "clipping";
+
+/** The project `naive.config.ts` declares — the word the platform stamps on this app and its installs. */
+export const PROJECT_NAME = "media";
+
+/**
+ * One setup question, in the platform's own `QuestionField` shape (`canonical-spec §7.1`): the
+ * studio asks it before the crew is provisioned, the answer lands on the install, and every agent
+ * reads it back through `project_context`. The engine refuses a template with more than three.
+ */
+export type SetupQuestion = NonNullable<DefineInput["questions"]>[number];
+
+/** The third question of both templates: how often the channel posts, which sizes every plan and every timer. */
+export const CADENCE_QUESTION: SetupQuestion = {
+  key: "cadence",
+  label: "Posting cadence",
+  type: "choice",
+  options: ["daily", "3× a week", "weekly"],
+  other: false,
+};
 
 /** One kind of post a template's crew files. `id` is what a row carries; the label is what a screen prints. */
 export interface PostKindDecl {
   id: PostKind;
   label: string;
-}
-
-/** One question onboarding asks. Faceless asks for a niche; clipping asks for a niche and a source channel. */
-export interface OnboardingQuestion {
-  /** The key it is persisted under on the channel profile, and sent to `PUT /api/onboarding`. */
-  key: "niche" | "sourceChannel";
-  /** Names the answer, in the screen and in the refusal when it is missing. */
-  label: string;
-  placeholder: string;
-  /** One-click answers; typing your own is always allowed. */
-  options: string[];
 }
 
 export interface MediaTemplate {
@@ -45,13 +53,12 @@ export interface MediaTemplate {
   agents: AgentDecl[];
   /** What this crew files; the first is what a post filed over MCP with no kind stated becomes. */
   kinds: [PostKindDecl, ...PostKindDecl[]];
-  questions: [OnboardingQuestion, ...OnboardingQuestion[]];
+  /** Exactly three (§4 of the plan): the studio asks them once, before anything exists. */
+  questions: [SetupQuestion, SetupQuestion, SetupQuestion];
   /** Every word a screen prints that changes with the template. */
   words: {
     queueSubtitle: string;
     queueEmpty: string;
-    onboardingTitle: string;
-    onboardingBlurb: string;
   };
 }
 
@@ -85,9 +92,17 @@ const budget = {
 
 const model = "anthropic/claude-sonnet-5";
 
+/**
+ * The paragraph every template agent's `system` opens with (plan §2.4). The setup answers — niche,
+ * audience, cadence, the sources — are the client's; the tool is how they are read, and the one
+ * place they are true.
+ */
+export const CONTEXT_PREAMBLE =
+  "Read `project_context` before anything else; the answers there are the client's, not yours to invent. Every brief, script, clip, caption and plan you make is for the niche, the audience and the cadence written there — when an answer is missing, ask the operator rather than filling it in.";
+
 /** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
 const approvalGate =
-  "You work for a short-form video channel. File every finished piece as a pending post with a caption using channel.create_post; never publish it yourself. Sign what you file — pass your own name as `agent`, the connected account it is for as `account` (channel.list_accounts lists them), the media URL of the finished video as `media_url`, and what you made it from as `source`. The operator reviews the row you filed, watches the video on it, and approves posts from the dashboard. The tools offered to you this turn are the complete list of what you can do right now: do not assume a capability that is not in it, and do not invent one. If the task needs a tool or model you are not offered — generate_video with a named video model, clip_video, generate_image — request it once with request_tools, naming the exact tool, permission, the model in config.models where one is needed, and the reason; then wait: approval adds it to your toolset from the next turn, a refusal is final for this task. If a tool you hold refuses for want of a model or a provider, request the model the same way rather than retrying. If the task needs a fact or a decision only the operator has — which account, which source video, whether to proceed — ask once with ask_operator, in one message, then wait. A connected account's tools are offered only once the operator has connected it to the channel identity; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
+  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file — your name as `agent`, the connected account as `account` (channel.list_accounts), the video as `media_url`, what you made it from as `source`. A brief is a pending post with no media yet. The operator reviews every row and approves from the dashboard. The tools offered this turn are the complete list of what you can do right now: do not assume or invent a capability. If the task needs a tool or model you are not offered, request it once with request_tools — exact tool, permission, the model in config.models where needed, and why — then wait; a refusal is final for this task. If it needs a fact or decision only the operator has, ask once with ask_operator, then wait. A connected account's tools appear only once the operator connects it; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -98,7 +113,7 @@ const approvalGate =
  */
 const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
-  "browser", "read_skill", "publish_file", "web_search", "web_fetch",
+  "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
@@ -125,8 +140,22 @@ export const CHANNEL_IDENTITY = "channel";
 /** The dashboard's own MCP tools (`server/mcp.ts`) — file and inspect, never approve or publish. They are the blueprint's, so every crew gets them. */
 const DASHBOARD_TOOLS = [
   "channel.list_posts", "channel.get_post", "channel.create_post", "channel.update_post",
-  "channel.list_style_templates", "channel.list_accounts", "channel.get_onboarding",
+  "channel.list_style_templates", "channel.list_accounts",
 ];
+
+/**
+ * Read-only and offered by the platform only to an agent whose metadata names a project with an
+ * applied install (`canonical-spec §31.8`) — which every agent of this crew is. Granted `allow`
+ * to every agent because the preamble tells every agent to call it first.
+ */
+const CONTEXT_TOOL = "project_context";
+
+/**
+ * Held by every agent of every template, so the publish rule is the blueprint's and not a
+ * template's to drop: `social.accounts` to know where a post is for, `social.post` behind `ask` so
+ * the one outward act always stops at the Approvals screen (see `toolset`).
+ */
+const SOCIAL: readonly string[] = ["social.accounts", "social.post"];
 
 /**
  * The two built-ins every agent holds whatever its template names: the gate above tells the agent
@@ -242,7 +271,7 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
     input:
-      "Plan the week. Read the channel profile and its niche (channel.get_onboarding), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per planned slot, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialist through the plan, not by publishing anything yourself.",
+      "Plan the week. Read the channel's niche, audience and cadence (project_context), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialists through the plan, not by publishing anything yourself.",
     budget_micro_usd: 2_000_000, // $2 — the widest read of the week, once a week.
   }),
   schedule({
@@ -259,14 +288,29 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   }),
 ];
 
-/** One agent of a template: its own brief and platform tools, over the shared gate, model and budget. */
+/** A word count of the kind the plan's 150–400-word bound on a `system` is checked against. */
+export const words = (text: string): number => text.split(/\s+/).filter(Boolean).length;
+
+/**
+ * One agent of a template: its role, its own brief, its skills and platform tools, over the shared
+ * preamble, gate, model and budget. The `system` is preamble → brief → gate, so what the agent is
+ * for is read before the rules it is bound by.
+ */
 export const agent = (decl: {
   name: string;
+  /** Two or three words for the studio's roster: what seat this is. */
+  role: string;
   description: string;
-  /** Appended to the approval gate to make the system prompt. */
+  /** The agent's own part of the system prompt, between the preamble and the gate. */
   brief: string;
-  /** The platform tools this agent may call; the dashboard's own are added for it. */
+  /** The platform tools this agent may call; the dashboard's own and `project_context` are added for it. */
   tools: string[];
+  /** `naive/<slug>` refs into the platform's skill catalogue; read with `read_skill`. */
+  skills: string[];
+  /** The first session, opened by the apply that creates this agent (`canonical-spec §31.4`). */
+  intake: { message: string; budget_micro_usd: number };
+  /** Only where the template cannot run without this seat — the studio cannot untick it. */
+  required?: boolean;
   /**
    * The crons this agent fires on, owned as a complete set — see `schedule` above, where the
    * ownership rule and the exact-cron-string matching are written out. An agent with none does
@@ -275,11 +319,15 @@ export const agent = (decl: {
   schedules: ScheduleDecl[];
 }): AgentDecl => ({
   name: decl.name,
+  role: decl.role,
+  ...(decl.required === undefined ? {} : { required: decl.required }),
   model,
   budget,
   description: decl.description,
-  system: `${approvalGate} ${decl.brief}`,
-  tools: toolset([...decl.tools, ...DASHBOARD_TOOLS]),
+  system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
+  tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...DASHBOARD_TOOLS]),
+  skills: decl.skills,
+  intake: decl.intake,
   /**
    * The persona this agent acts as, and the reason it can act on a connected account at all: the
    * platform resolves a turn's connection tools along `session → agent → identity → connected
@@ -290,3 +338,27 @@ export const agent = (decl: {
   identity: CHANNEL_IDENTITY,
   schedules: decl.schedules,
 });
+
+/**
+ * The channel manager, shared by both templates because the manager is: the seat the dashboard's
+ * Chat talks to (`server/routes.ts` looks it up by this name), so it is the one `required` agent —
+ * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
+ * names the rest of the crew in the brief, which is the only line that differs between templates.
+ */
+export const channelManager = (specialists: string): AgentDecl =>
+  agent({
+    name: "channel-manager",
+    role: "Channel lead",
+    required: true,
+    description:
+      "Runs the channel: plans the week from the cadence answer, briefs the crew, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
+    brief: `You are the channel manager, and the person the operator talks to in Chat. You keep the calendar full at the cadence the context names — daily, three times a week or weekly — and no fuller: a plan with more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and you never do their work for them. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows that are ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption anything you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel, for the audience the context describes. When the operator asks for something in Chat, answer with what the queue actually holds, and route the work to the seat it belongs to.`,
+    tools: ["web_search", "web_fetch", "send_to_agent", "list_agents"],
+    skills: ["naive/caption-writing"],
+    intake: {
+      message:
+        "Day one. Read project_context — the niche, the tone and audience, and the posting cadence — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, `source` \"channel plan\", so the operator can read it and the crew can work to it. If no account is connected yet, say so in the plan rather than naming one.",
+      budget_micro_usd: 2_000_000,
+    },
+    schedules: CHANNEL_MANAGER_SCHEDULES,
+  });

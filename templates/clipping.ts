@@ -1,48 +1,116 @@
 /**
- * `clipping` — a channel that repurposes existing video in one niche.
+ * `clipping` — a channel that repurposes existing video: the best moments out of sources the
+ * operator holds the rights to, cut vertical and captioned.
  *
- * The clipper cuts source video the operator has the rights to (`clip_video`) and the channel
- * manager runs the calendar and the queue. It asks for one thing `faceless` does not: the source
- * channel to cut from. That difference is this file's, not the Onboarding screen's — the screen
- * asks whatever the active template's `questions` list.
+ * Five seats. The scout watches the named sources for new episodes and moments and files each
+ * worth cutting as a brief; the clipper cuts (`clip_video`); the caption-editor writes the caption,
+ * title and hashtags on every clip; the analyst reports weekly; the channel manager plans the week
+ * from the cadence answer and keeps the queue and the comments. Nothing here is code: swap this
+ * template for `faceless` and the same screens, routes and store serve the other crew.
  *
- * Both agents run on crons, on the same cadence `faceless` does: the clipper cuts the next batch
- * every night — from the source the operator named and nowhere else — and the manager plans, sweeps
- * and answers on `CHANNEL_MANAGER_SCHEDULES`. Read the comment on `schedule` (`template.ts`) before
- * touching a cron string here: schedules are the one place in `naive up` where omission deletes,
- * and a live row is matched by its exact cron text.
+ * The rights question is the first one asked and the one rule every seat repeats: nothing is cut
+ * from a source the context does not name. Read the comment on `schedule` (`template.ts`) before
+ * touching a cron string here.
  */
-import { agent, CHANNEL_MANAGER_SCHEDULES, schedule, type MediaTemplate } from "./template.ts";
+import { agent, CADENCE_QUESTION, channelManager, schedule, type MediaTemplate } from "./template.ts";
 
 export const CLIPPING: MediaTemplate = {
   name: "clipping",
   description: "Repurposes existing video in one niche: cuts the best moments out of a source channel and captions them.",
 
   agents: [
+    channelManager("the scout, the clipper and the caption-editor"),
     agent({
       name: "clipper",
+      role: "Clip production",
       description:
-        "Cuts the most engaging vertical clips out of the channel's source videos, captions them, and files them as pending posts.",
+        "Cuts the most engaging vertical clips out of the sources the channel holds rights to and files each for approval. Never cuts from a source the context does not name.",
       brief:
-        "You are the clipper: from each source video the operator provides, cut the few most engaging vertical clips (hook in the first second, one idea per clip, under 60 seconds). Never cut from a source the operator has not named.",
-      tools: ["clip_video", "social.accounts", "social.post"],
+        "You are the clipper. The scout files the moments worth cutting as briefs — pending posts with no media naming the source video, the timestamp and why it lands — and you cut them: one idea per clip, the hook in the first second, under sixty seconds, vertical (clip_video, `naive/clip-selection`). Cut only from the sources named in the context; a clip from anywhere else is a rights problem the operator has to answer for, so if a brief names a source the context does not, leave it and say so. Attach each finished clip to its brief's row with channel.update_post and leave the caption to the caption-editor. Work the oldest brief first and stop when the queue holds as many uncaptioned clips as the cadence needs — a queue the operator has not caught up with does not need another clip in it.",
+      tools: ["clip_video"],
+      skills: ["naive/clip-selection"],
+      intake: {
+        message:
+          "Day one. Read project_context for the source channel(s) the operator holds rights to, the niche and the cadence. Read the queue (channel.list_posts): if the scout has filed briefs from a named source, cut the first two clips and attach each to its brief's row. If no brief is filed yet, cut nothing — never pick a source yourself — and say in one line what you are waiting for.",
+        budget_micro_usd: 2_000_000,
+      },
       schedules: [
         schedule({
-          cron: "0 7 * * *", // Daily 07:00, channel time — the next cuts, before the manager's 08:00 queue sweep.
+          cron: "0 7 * * *", // Daily 07:00, channel time — the next cuts, before the caption-editor's 07:30 pass and the manager's 08:00 sweep.
           input:
-            "Cut the next clips. Read the source channel the operator named (channel.get_onboarding) and the plan and queue (channel.list_posts), take the source video the channel manager pointed you at that has no clips filed against it yet, and cut the few most engaging vertical clips from it. File each as a pending post. Cut nothing from a source the operator has not named — if there is no named source with work left in it, file nothing and stop. If clip_video is not among your tools, or it refuses for want of a provider, cut nothing and file nothing: request exactly what is missing with request_tools, once, then wait — if it is granted the tool is offered when you resume, so carry on; if it is refused, stop for tonight.",
-          budget_micro_usd: 2_000_000, // $2 — one source video's worth of cuts. Well under the $6 ceiling: a clip is cut, not rendered, and nothing has measured one yet.
+            "Cut the next clips. Read the named sources (project_context) and the queue (channel.list_posts), take the scout's briefs that have no clip against them yet, and cut each from its named source. Attach every clip to its brief's row. Cut nothing from a source the context does not name — if there is no brief from a named source, file nothing and stop. If clip_video is not among your tools, or it refuses for want of a provider, cut nothing: request exactly what is missing with request_tools, once, then wait — if it is granted carry on; if it is refused, stop for tonight.",
+          budget_micro_usd: 2_000_000, // $2 — one fire's cuts. Well under the $6 ceiling: a clip is cut, not rendered, and nothing has measured one yet.
         }),
       ],
     }),
     agent({
-      name: "channel-manager",
+      name: "scout",
+      role: "Source watch",
       description:
-        "Runs the channel: plans the calendar, drafts captions, manages the post queue and replies to comments. Never publishes without an approved post.",
+        "Watches the channel's named source channels for new episodes and the moments in them worth cutting, and files each as a brief for the clipper.",
       brief:
-        "You are the channel manager: keep the calendar full, point the clipper at the source videos worth cutting, draft captions, keep the queue tidy (channel.list_posts, channel.update_post) and reply to comments in the channel's voice. Post only what the operator has approved.",
-      tools: ["social.accounts", "social.post", "web_search", "web_fetch"],
-      schedules: CHANNEL_MANAGER_SCHEDULES,
+        "You are the scout. You watch the sources the context names — and only those — for new episodes and for the moments inside them that will stand alone as a short: a claim, a turn, a laugh, a play (web_fetch, browser, `naive/clip-selection`). Each moment you pick becomes a brief: a pending post with no media whose caption names the source video, the timestamp range, the one idea in it and why it will land for this audience, with `source` naming the episode. File as many as the cadence needs until the next fire and no more; the clipper cuts the oldest first. Never file from a source the context does not name, and never restate a moment already queued or posted (channel.list_posts). You do not cut and you do not caption.",
+      tools: ["web_search", "web_fetch"],
+      skills: ["naive/clip-selection"],
+      intake: {
+        message:
+          "Day one. Read project_context for the source channel(s) the operator holds rights to, the niche and the cadence. Go through the most recent episodes of each named source and file the first five moments worth cutting as briefs (channel.create_post, no media): source video, timestamp range, the one idea, why it lands for this audience. If the context names no source you can reach, say so and stop — do not go looking for another.",
+        budget_micro_usd: 1_000_000,
+      },
+      schedules: [
+        schedule({
+          cron: "0 6 * * *", // Daily 06:00 — new episodes and moments, before the clipper's 07:00 cuts.
+          input:
+            "Watch the sources. Read project_context and the queue (channel.list_posts), check each named source for new episodes since the last fire, and file the moments worth cutting as briefs — source video, timestamp range, the one idea, why it lands. Only from named sources; nothing already queued.",
+          budget_micro_usd: 1_000_000, // $1 — a read of the sources and a few filings.
+        }),
+      ],
+    }),
+    agent({
+      name: "caption-editor",
+      role: "Captions & titles",
+      description:
+        "Writes the caption, title and hashtags on every clip in the queue, in the channel's voice, before the operator reviews it.",
+      brief:
+        "You are the caption-editor. Every clip in the queue that still carries the scout's working brief as its caption gets a publishable one from you: a title that says the one idea, a caption in the tone the context asks for that gives the moment a reason to be watched, and hashtags the audience actually follows (`naive/caption-writing`, `naive/short-video-hooks`). Credit the source where the operator's rights ask for it. Write it into the clip's row with channel.update_post; keep the source and the agent that filed it. Write for the niche and audience in the context, in their words, and never in a general voice. You do not pick moments and you do not cut — the scout and the clipper do.",
+      tools: ["web_search"],
+      skills: ["naive/caption-writing", "naive/short-video-hooks"],
+      intake: {
+        message:
+          "Day one. Read project_context for the niche, the audience and the sources. Read the queue (channel.list_posts): write a publishable title, caption and hashtags into every clip that has media and still carries its working brief (channel.update_post). Then write the channel's caption style in five lines — voice, length, hashtag set, credit line, what never to say — and file it as a pending post with no media, `source` \"caption style\", so the crew works to one voice.",
+        budget_micro_usd: 1_000_000,
+      },
+      schedules: [
+        schedule({
+          cron: "30 7 * * *", // Daily 07:30 — captions on the morning's cuts, before the manager's 08:00 sweep.
+          input:
+            "Caption the cuts. Read project_context, then every clip in the queue with media and no publishable caption yet (channel.list_posts); write title, caption and hashtags into each with channel.update_post, in the channel's voice, for its audience. Nothing to caption means nothing to do.",
+          budget_micro_usd: 1_000_000, // $1 — a read and a few rewrites.
+        }),
+      ],
+    }),
+    agent({
+      name: "analyst",
+      role: "Performance",
+      description:
+        "Reports weekly on what the channel posted, by source and by clip, and tells the crew which sources and moments to cut more and less of.",
+      brief:
+        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: which sources the clips came from, which moments and caption styles moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the crew read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week — a source to watch closer, a kind of moment to stop cutting. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
+      tools: [],
+      skills: [],
+      intake: {
+        message:
+          "Day one. Read project_context for the sources, the niche and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the sources it cuts from, the metrics you will read per clip and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the crew can read what it will be measured against.",
+        budget_micro_usd: 1_000_000,
+      },
+      schedules: [
+        schedule({
+          cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
+          input:
+            "Write the weekly report. Read project_context and what posted in the last seven days (channel.list_posts, plus the connected account's metrics where offered); per source and per clip, say what went out and what it did, and name the two changes for next week. File it as a pending post with no media.",
+          budget_micro_usd: 1_500_000, // $1.50 — a read of the week and one report.
+        }),
+      ],
     }),
   ],
 
@@ -50,31 +118,22 @@ export const CLIPPING: MediaTemplate = {
 
   questions: [
     {
-      key: "niche",
-      label: "Niche",
-      placeholder: "Or describe your own niche…",
-      options: [
-        "Podcast highlights",
-        "Interview moments",
-        "Sports plays",
-        "Comedy sets",
-        "Conference talks",
-        "Livestream best-of",
-      ],
+      key: "sources",
+      label: "Source channel(s) you hold the rights to",
+      type: "text",
+      placeholder: "Channel or playlist URLs, one per line — nothing is cut from anywhere else",
     },
     {
-      key: "sourceChannel",
-      label: "Source channel",
-      placeholder: "The channel or playlist you have the rights to cut from",
-      options: [],
+      key: "niche",
+      label: "Niche / audience",
+      type: "text",
+      placeholder: "e.g. podcast highlights for founders who skip the full episode",
     },
+    CADENCE_QUESTION,
   ],
 
   words: {
     queueSubtitle: "Every clip the clipper cut from your source channel, on its way to your accounts.",
-    queueEmpty: "Point the clipper at a source video in Chat and each cut lands here for review.",
-    onboardingTitle: "What should this channel clip, and from where?",
-    onboardingBlurb:
-      "Name the niche and the source channel you have the rights to cut from, and I'll draft the channel: the agents, a posting calendar and a first pass at the source. You can change all of it later.",
+    queueEmpty: "Point the scout at a source video in Chat and each cut lands here for review.",
   },
 };

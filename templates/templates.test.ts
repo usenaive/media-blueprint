@@ -8,8 +8,11 @@
  */
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { ONE_RENDER_MICRO_USD } from "./template.ts";
+import { CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, words } from "./template.ts";
 import type { MediaTemplate } from "./template.ts";
+
+/** The four of the platform's twelve `naive/*` catalogue skills a media crew has a use for; no other ref is allowed here. */
+const CATALOGUE = ["naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/seo-content-brief"];
 
 const both = Object.values(TEMPLATES);
 const agentNames = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
@@ -35,9 +38,60 @@ const toolsOf = (template: MediaTemplate, name: string) =>
     .map(([tool]) => tool);
 
 describe("the crews", () => {
-  it("shares the channel manager and differs only in the specialist", () => {
-    expect(agentNames(TEMPLATES.faceless)).toEqual(["producer", "channel-manager"]);
-    expect(agentNames(TEMPLATES.clipping)).toEqual(["clipper", "channel-manager"]);
+  it("is a crew of five per template, sharing the channel manager and the analyst seat", () => {
+    expect(agentNames(TEMPLATES.faceless)).toEqual(["channel-manager", "producer", "trend-scout", "scriptwriter", "analyst"]);
+    expect(agentNames(TEMPLATES.clipping)).toEqual(["channel-manager", "clipper", "scout", "caption-editor", "analyst"]);
+  });
+
+  /**
+   * Plan §2.1/§2.4: a template is a crew a person chooses from, not a count of resources. Every
+   * seat says what it is for (`role`), opens its `system` with the shared preamble, stays inside the
+   * 150–400 words a person will actually read, and names only catalogue skills.
+   */
+  it("gives every seat a role, the shared preamble, a readable system and catalogue skills", () => {
+    expect(CONTEXT_PREAMBLE).toMatch(/^Read `project_context` before anything else; the answers there are the client's, not yours to invent\./);
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.role, agent.name).toMatch(/\S/);
+        expect(agent.description, agent.name).toMatch(/\S/);
+        const system = agent.system ?? "";
+        expect(system.startsWith(CONTEXT_PREAMBLE), agent.name).toBe(true);
+        expect(words(system), `${template.name}/${agent.name}`).toBeGreaterThanOrEqual(150);
+        expect(words(system), `${template.name}/${agent.name}`).toBeLessThanOrEqual(400);
+        for (const skill of agent.skills ?? []) expect(CATALOGUE).toContain(skill);
+        // A skill named is a skill it can read.
+        if ((agent.skills ?? []).length > 0) expect(toolsOf(template, agent.name)).toContain("read_skill");
+        expect(toolsOf(template, agent.name)).toContain("project_context");
+      }
+    }
+  });
+
+  it("requires only the seat the dashboard's Chat is wired to", () => {
+    for (const template of both) {
+      expect(template.agents.filter((agent) => agent.required === true).map((agent) => agent.name)).toEqual(["channel-manager"]);
+    }
+  });
+
+  /**
+   * Day one (plan §2.5). The apply opens one session per agent with `intake.message`, and every
+   * message is written to consume the setup answers rather than restate a hard-coded niche — the
+   * scout files the first five briefs for the niche, the writer scripts them, the analyst lays out
+   * the report, the manager writes the plan from the cadence answer.
+   */
+  it("opens day one on every seat, from the context and inside the per-task ceiling", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.intake?.message, agent.name).toMatch(/project_context/);
+        expect(agent.intake?.budget_micro_usd, agent.name).toBeGreaterThan(0);
+        expect(agent.intake?.budget_micro_usd, agent.name).toBeLessThanOrEqual(agent.budget.max_task_micro_usd);
+        expect(Number.isInteger(agent.intake?.budget_micro_usd)).toBe(true);
+      }
+      expect(template.agents.find((a) => a.name === "channel-manager")?.intake?.message).toMatch(/cadence/);
+      expect(template.agents.find((a) => a.name === "analyst")?.intake?.message).toMatch(/report/i);
+    }
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "trend-scout")?.intake?.message).toMatch(/five/);
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")?.intake?.message).toMatch(/hook/i);
+    expect(TEMPLATES.clipping.agents.find((a) => a.name === "scout")?.intake?.message).toMatch(/source channel\(s\).*first five/);
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
@@ -192,11 +246,11 @@ describe("the channel's clock", () => {
   );
 
   /**
-   * Every fire this repo declares: one on each specialist and three on each manager. Called by the
-   * tests below that assert a property of each schedule, because a `for` loop over a template that
-   * declares none passes — which is exactly the state this whole block exists to keep out.
+   * Every fire this repo declares: one on each of the four specialists and three on each manager.
+   * Called by the tests below that assert a property of each schedule, because a `for` loop over a
+   * template that declares none passes — which is exactly the state this whole block exists to keep out.
    */
-  const everyFireCounted = () => expect(everySchedule).toHaveLength(8);
+  const everyFireCounted = () => expect(everySchedule).toHaveLength(14);
 
   const fields = (cron: string) => cron.split(" ");
   const hourOf = (cron: string) => Number(fields(cron)[1]);
@@ -218,7 +272,7 @@ describe("the channel's clock", () => {
         (agent) => [`${template.name}/${agent.name}`, (agent.schedules ?? []).length] as const,
       ),
     );
-    expect(counts).toHaveLength(4);
+    expect(counts).toHaveLength(10);
     expect(counts.filter(([, count]) => count === 0)).toEqual([]);
   });
 
@@ -358,9 +412,22 @@ describe("the data the screens read", () => {
     expect(TEMPLATES.clipping.kinds.map((kind) => kind.id)).toEqual(["clip"]);
   });
 
-  it("asks for a niche, and for a source channel only where there is one to cut from", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche"]);
-    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["niche", "sourceChannel"]);
+  /**
+   * Plan §4, rows 3–4: three questions per template, asked by the studio before anything is
+   * provisioned — the engine refuses a fourth. `choice` where the answers are a short list, `text`
+   * where they are the client's own words; and never a fourth spelling of the same question here.
+   */
+  it("asks exactly three setup questions per template, and no more anywhere", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["audience", "text"], ["cadence", "choice"]]);
+    expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["niche", "text"], ["cadence", "choice"]]);
+    for (const template of both) {
+      expect(template.questions).toHaveLength(3);
+      for (const question of template.questions) expect(question.label).toMatch(/\S/);
+      expect(new Set(template.questions.map((q) => q.key)).size).toBe(3);
+    }
+    // The cadence is one question, spelled once, because every plan and every timer is sized by it.
+    expect(TEMPLATES.faceless.questions[2]).toBe(TEMPLATES.clipping.questions[2]);
+    expect(TEMPLATES.faceless.questions[2]).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
   });
 
   it("prints its own words on every screen that has any", () => {

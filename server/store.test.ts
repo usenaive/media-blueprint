@@ -1,10 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FACELESS_SEEDS } from "../seed/posts";
 import { ACTIVE, TEMPLATES } from "../templates/index.ts";
-import { blankProfile, emptyState, openStore, openStoreOver, seedState } from "./store";
+import { emptyState, openStore, openStoreOver, seedState } from "./store";
 
 const dirs: string[] = [];
 const storeFile = () => {
@@ -22,21 +22,20 @@ describe("emptyState", () => {
     // present nine invented posts as the operator's own queue; the presets stay because they are
     // the blueprint's shipped catalogue, offered to the producer from its first turn.
     expect(emptyState().posts).toEqual([]);
-    expect(emptyState().onboarding).toEqual(blankProfile());
     expect(emptyState().templates).toEqual(seedState().templates);
     expect(emptyState().templates.length).toBeGreaterThan(0);
+  });
+
+  it("holds no setup answers: those are the install's, read through the platform", () => {
+    // The store used to carry an `onboarding` profile the dashboard asked for on a screen of its
+    // own. The studio asks the template's questions before the crew exists, so a second copy here
+    // could only ever disagree with the one the agents read via `project_context`.
+    expect(Object.keys(emptyState())).toEqual(["posts", "templates"]);
+    expect(Object.keys(seedState(TEMPLATES.clipping))).toEqual(["posts", "templates"]);
   });
 });
 
 describe("the template's own state", () => {
-  it("asks each template's own questions, and only those", () => {
-    // A clipping channel has a source it may cut from; a faceless one has nothing to cut. The
-    // profile is shaped by the running template, not by one hard-coded field.
-    expect(blankProfile(TEMPLATES.faceless)).toEqual({ niche: null });
-    expect(blankProfile(TEMPLATES.clipping)).toEqual({ niche: null, sourceChannel: null });
-    expect(emptyState(TEMPLATES.clipping).onboarding).toEqual({ niche: null, sourceChannel: null });
-  });
-
   it("seeds the demo queue of the template that is running, not of the other one", () => {
     expect(seedState(TEMPLATES.faceless).posts).toEqual(FACELESS_SEEDS);
     expect(seedState(TEMPLATES.clipping).posts.every((post) => post.kind === "clip")).toBe(true);
@@ -68,18 +67,17 @@ describe("the template's own state", () => {
     // Hard-coded `clip` before: a faceless channel, which cuts nothing, filed every agent's work
     // as a clip.
     const filed = (template = ACTIVE) =>
-      openStoreOver(emptyState(template), () => {}, template).createPost({ caption: "One line.", status: "pending" });
+      openStoreOver(emptyState(), () => {}, template).createPost({ caption: "One line.", status: "pending" });
     expect(filed(TEMPLATES.faceless).kind).toBe("produced");
     expect(filed(TEMPLATES.clipping).kind).toBe("clip");
   });
 });
 
 describe("openStore", () => {
-  it("seeds posts, templates and onboarding on first run", () => {
+  it("seeds posts and templates on first run", () => {
     const store = openStore(storeFile());
     expect(store.read().posts).toEqual(seedState(ACTIVE).posts);
     expect(store.read().templates.length).toBeGreaterThan(0);
-    expect(store.read().onboarding).toEqual(blankProfile(ACTIVE));
   });
 
   it("persists the posts lifecycle across reopen", () => {
@@ -112,11 +110,7 @@ describe("openStore", () => {
     expect(store.createPost({ caption: "In the sky", platform: "bluesky", status: "ready" }).platform).toBe("bluesky");
   });
 
-  it("returns null for an unknown post and persists the channel profile", () => {
-    const file = storeFile();
-    const store = openStore(file);
-    expect(store.updatePost("post_nope", { status: "approved" })).toBeNull();
-    store.setOnboarding({ niche: "stoicism" });
-    expect((JSON.parse(readFileSync(file, "utf8")) as { onboarding: { niche: string } }).onboarding.niche).toBe("stoicism");
+  it("returns null for an unknown post", () => {
+    expect(openStore(storeFile()).updatePost("post_nope", { status: "approved" })).toBeNull();
   });
 });

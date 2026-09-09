@@ -24,6 +24,8 @@ export function upstreamFor(method: string, pathname: string, identityId: string
     return { method: "GET", path: `/v1/sessions/${stream[1]}/stream`, sse: true };
   }
   if (method === "GET" && pathname === "/api/agents") return { method: "GET", path: "/v1/agents" };
+  // The crew's timers, for the home's "next fire" — every cron `naive up` armed, with its `next_run_at`.
+  if (method === "GET" && pathname === "/api/deployments") return { method: "GET", path: "/v1/deployments?limit=100" };
   /**
    * The approval queue's two routes.
    *

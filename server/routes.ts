@@ -11,9 +11,9 @@
  */
 import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } from "./mcp.ts";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
-import type { ChannelProfile, Store } from "./store.ts";
+import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
-import { ACTIVE, type MediaTemplate } from "../templates/index.ts";
+import { PROJECT_NAME } from "../templates/index.ts";
 
 export interface ApiRequest {
   /** Upper-case. */
@@ -84,7 +84,7 @@ function cookieValue(header: string | undefined, name: string): string | undefin
 }
 
 /** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
-const KNOWN = [/^\/api\/posts$/, /^\/api\/templates$/, /^\/api\/onboarding$/, /^\/api\/agents$/, /^\/api\/chat$/, /^\/api\/sessions$/];
+const KNOWN = [/^\/api\/posts$/, /^\/api\/templates$/, /^\/api\/context$/, /^\/api\/agents$/, /^\/api\/deployments$/, /^\/api\/chat$/, /^\/api\/sessions$/];
 
 const parse = (body: string): Record<string, unknown> => {
   try {
@@ -149,38 +149,54 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
   return json(200, store.updatePost(post.id, { status: "posted" }));
 }
 
-/**
- * The onboarding answers, checked against the questions the running template actually asks —
- * `faceless` asks for a niche, `clipping` for a niche and the source channel it may cut from.
- * Returns the profile to persist, or the sentence to refuse with.
- *
- * `{"niche":123}` used to fall through a `typeof` check to `null` and erase the channel's niche —
- * a write that destroys the row it was asked to set is refused, not coerced — and a question the
- * template added was simply dropped on the floor.
- */
-export function channelProfile(body: Record<string, unknown>, template: MediaTemplate): ChannelProfile | string {
-  const profile: Record<string, string> = {};
-  for (const question of template.questions) {
-    const answer = body[question.key];
-    if (typeof answer !== "string" || answer.trim() === "") {
-      return `${question.label.toLowerCase()} must be a non-empty string`;
-    }
-    profile[question.key] = answer;
-  }
-  return profile as ChannelProfile;
+/** One line of an install report (`canonical-spec §31.2`); on `intake`, `id` is the session the apply opened. */
+export interface IntakeLine {
+  name: string;
+  action: string;
+  id?: string;
 }
 
-/** The store-backed routes: the post queue, the style templates, the channel's onboarding state. */
+interface WireInstall {
+  id: string;
+  status: string;
+  report?: { intake?: IntakeLine[] } | null;
+}
+
+/** What the dashboard home reads: the setup answers as the platform holds them, plus the day-one sessions. */
+export interface HomeContext {
+  context: unknown;
+  day_one: IntakeLine[];
+}
+
+/**
+ * `GET /api/context` — the project's setup answers, read from the platform and from nowhere else.
+ *
+ * The dashboard used to ask them itself, on a screen of its own, and keep them in its store; the
+ * studio now asks them once before the crew exists (`questions` in `naive.config.ts`) and the
+ * agents read them through `project_context`. Two hops because the spec has no `GET …/{id}` for
+ * an install: list this project's installs (most recently applied first), take the first that is
+ * `applied` — a pending or failed one has no context — and read `…/{id}/context` (§31.8). The
+ * report's `intake` lines ride along so the home can show which day-one sessions have finished.
+ */
+async function projectContext(config: ProxyConfig): Promise<ApiReply> {
+  const listed = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs?project=${encodeURIComponent(PROJECT_NAME)}` }, null);
+  if (!listed.ok) return json(listed.status, await listed.json());
+  const page = (await listed.json()) as { data?: WireInstall[] };
+  // The list is newest-applied first, so the first applied row is the one whose context is live.
+  const applied = (page.data ?? []).find((row) => row.status === "applied");
+  if (applied === undefined) return fail(404, "this project has no applied install yet");
+  const read = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs/${applied.id}/context` }, null);
+  const body = await read.json();
+  if (!read.ok) return json(read.status, body);
+  const reply: HomeContext = { context: body, day_one: applied.report?.intake ?? [] };
+  return json(200, reply);
+}
+
+/** The store-backed routes: the post queue and the style templates. */
 async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply | null> {
   const { method, path } = req;
   if (method === "GET" && path === "/api/posts") return json(200, (await ctx.store()).read().posts);
   if (method === "GET" && path === "/api/templates") return json(200, (await ctx.store()).read().templates);
-  if (method === "GET" && path === "/api/onboarding") return json(200, (await ctx.store()).read().onboarding);
-  if (method === "PUT" && path === "/api/onboarding") {
-    const profile = channelProfile(parse(req.body), ACTIVE);
-    if (typeof profile === "string") return fail(400, profile);
-    return json(200, (await ctx.store()).setOnboarding(profile));
-  }
   const patch = /^\/api\/posts\/([\w-]+)$/.exec(path);
   if (patch) {
     if (method !== "PATCH") return fail(405, "method not allowed");
@@ -276,6 +292,10 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   if (stored !== null) return stored;
 
   if (ctx.config === null) return fail(503, NOT_CONFIGURED);
+
+  if (req.path === "/api/context") {
+    return req.method === "GET" ? projectContext(ctx.config) : fail(405, "method not allowed");
+  }
 
   if (req.path === "/api/chat") {
     if (req.method !== "POST") return fail(405, "method not allowed");
