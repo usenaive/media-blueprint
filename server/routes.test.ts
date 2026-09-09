@@ -199,6 +199,12 @@ describe("/mcp is the first row of the same table, over the same store", () => {
     expect(JSON.stringify(refused.body)).toContain("missing or invalid bearer token");
   });
 
+  it("lets a bare GET fail with the store while the database is unreachable", async () => {
+    const down = new Error("connect ECONNREFUSED");
+    const ctx: ApiContext = { ...ctxOver(demoState(), null, "tok"), store: () => Promise.reject(down) };
+    await expect(handleRequest(req("GET", "/mcp"), ctx)).rejects.toBe(down);
+  });
+
   it("writes rows the browser routes then read back", async () => {
     const ctx = ctxOver(demoState(), null, "tok");
     const call = {

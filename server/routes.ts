@@ -305,10 +305,13 @@ function enter(req: ApiRequest, ctx: ApiContext): ApiReply {
 /** Every route the dashboard serves, browser and agent alike. */
 export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<ApiReply> {
   if (req.path === "/mcp") {
+    // The store opens before the 405 so a bare GET answers 503 while the database is still
+    // unreachable: it is what the platform dials to decide the endpoint can serve its tools.
+    const store = await ctx.store();
     if (req.method !== "POST") return fail(405, "POST only");
     const refused = authError(ctx.mcpToken ?? null, req.headers.authorization);
     if (refused !== null) return json(401, refused);
-    const answer = await handleMcp(req.body, await ctx.store(), ctx.config);
+    const answer = await handleMcp(req.body, store, ctx.config);
     // A notification has no reply: 202 with no body, as the streamable-HTTP transport asks.
     return answer === null ? { status: 202 } : json(200, answer);
   }
