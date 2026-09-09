@@ -13,7 +13,6 @@ import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } fro
 import { collect, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
-import { PROJECT_NAME } from "../templates/index.ts";
 
 export interface ApiRequest {
   /** Upper-case. */
@@ -204,7 +203,7 @@ async function dayOneLine(config: ProxyConfig, line: ReportLine): Promise<DayOne
  * report's `intake` lines ride along so the home can show which day-one sessions have finished.
  */
 async function projectContext(config: ProxyConfig): Promise<ApiReply> {
-  const listed = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs?project=${encodeURIComponent(PROJECT_NAME)}` }, null);
+  const listed = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs?project=${encodeURIComponent(config.project)}` }, null);
   if (!listed.ok) return json(listed.status, await listed.json());
   const page = (await listed.json()) as { data?: WireInstall[] };
   // The list is newest-applied first, so the first applied row is the one whose context is live.

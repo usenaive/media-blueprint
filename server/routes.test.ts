@@ -9,7 +9,7 @@ import { TEMPLATES } from "../templates/index.ts";
 import { openStoreOver, seedState, type Store, type StoreState } from "./store.ts";
 import type { ProxyConfig } from "./proxy.ts";
 
-const CONFIG: ProxyConfig = { baseUrl: "https://api.test", apiKey: "sk_test", identityId: "idn_1" };
+const CONFIG: ProxyConfig = { baseUrl: "https://api.test", apiKey: "sk_test", identityId: "idn_1", project: "media" };
 
 /**
  * One template's demo queue, named rather than left to whichever template is running: these are
