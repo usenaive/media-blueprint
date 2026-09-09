@@ -155,7 +155,7 @@ describe("post now", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: { message: "nope" } }, 400)));
     const state = demoState();
     const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
-    expect(reply).toEqual({ status: 502, body: { error: "publish failed" } });
+    expect(reply).toEqual({ status: 502, body: { error: "publish failed: nope" } });
     expect(state.posts.find((p) => p.id === "post_4a6f")?.status).toBe("approved");
   });
 

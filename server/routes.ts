@@ -150,8 +150,14 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
           : { media_urls: [post.mediaUrl] }),
     }),
   );
-  if (!published.ok) return fail(502, "publish failed");
+  if (!published.ok) return fail(502, `publish failed: ${await upstreamReason(published)}`);
   return json(200, store.updatePost(post.id, { status: "posted" }));
+}
+
+/** The platform's own sentence for a refused publish ("no connected account", a bad target), never a bare code. */
+async function upstreamReason(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return body?.error?.message ?? `the platform answered ${res.status}`;
 }
 
 /** One line of an install report (`canonical-spec §31.2`); on `intake`, `id` is the session the apply opened. */
