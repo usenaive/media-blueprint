@@ -55,8 +55,8 @@ export const dayOne = (lines: HomeContext["day_one"]) =>
     const state =
       line.action !== "created" ? line.action
       : line.session === null ? "unknown"
-      : line.session.status === "completed" ? "finished"
       : line.session.waiting ? "waiting for you"
+      : line.session.stop_reason === "end_turn" || line.session.status === "completed" ? "finished"
       : line.session.stop_reason ?? line.session.status;
     return { name: line.name, state, done: state === "finished" };
   });

@@ -23,7 +23,7 @@ describe("nextFireOf", () => {
 describe("dayOne", () => {
   it("reads each intake line off the session the server read by id, or the report's own word", () => {
     const lines = [
-      { name: "trend-scout", action: "created", id: "ses_1", session: { status: "completed", stop_reason: "end_turn", waiting: false } },
+      { name: "trend-scout", action: "created", id: "ses_1", session: { status: "idle", stop_reason: "end_turn", waiting: false } },
       { name: "scriptwriter", action: "created", id: "ses_2", session: { status: "idle", stop_reason: "awaiting_approval", waiting: true } },
       { name: "producer", action: "created", id: "ses_3", session: { status: "running", stop_reason: null, waiting: false } },
       { name: "channel-manager", action: "created", id: "ses_4", session: { status: "idle", stop_reason: "budget_exhausted", waiting: false } },
