@@ -102,7 +102,10 @@ export function Posts() {
                   <span className="truncate font-medium">{p.title}</span>
                   <StatusChip status={p.status} />
                 </div>
-                <div className="mt-0.5 truncate text-sm text-ink-2">{p.caption}</div>
+                <details className="mt-0.5 text-sm text-ink-2">
+                  <summary className="cursor-pointer truncate">{p.caption}</summary>
+                  <div className="mt-1 whitespace-pre-wrap">{p.caption}</div>
+                </details>
                 {/* Who filed it, what from, and where it is going — the three things an agent-filed
                     row was missing while the same row printed "by mcp · unassigned". A field the
                     agent did not fill in is named as missing rather than dressed as an answer. */}

@@ -71,8 +71,12 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
   // `/api/enter` answers with a cookie and a `location` and nothing else; every other route sets none.
   const extra = reply.headers ?? {};
   if (reply.stream) {
-    res.writeHead(reply.status, { "content-type": "text/event-stream", "cache-control": "no-cache" });
-    res.write("retry: 3000\n\n");
+    if (reply.sse) {
+      res.writeHead(reply.status, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      res.write("retry: 3000\n\n");
+    } else {
+      res.writeHead(reply.status, { "content-type": reply.stream.headers.get("content-type") ?? "application/octet-stream" });
+    }
     if (reply.stream.body === null) return void res.end();
     const reader = reply.stream.body.getReader();
     for (let next = await reader.read(); !next.done; next = await reader.read()) res.write(next.value);

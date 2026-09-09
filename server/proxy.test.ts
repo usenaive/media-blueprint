@@ -11,6 +11,16 @@ describe("upstreamFor", () => {
     });
   });
 
+  it("streams a filed video's bytes by its file id, and nothing shaped otherwise", () => {
+    expect(upstreamFor("GET", "/api/files/fil_4pb4vm", null)).toEqual({
+      method: "GET",
+      path: "/v1/files/fil_4pb4vm?download=true",
+      raw: true,
+    });
+    expect(upstreamFor("GET", "/api/files/..%2Fsecret", null)).toBeNull();
+    expect(upstreamFor("DELETE", "/api/files/fil_4pb4vm", null)).toBeNull();
+  });
+
   it("maps agents onto the org agent list, a full page at a time", () => {
     expect(upstreamFor("GET", "/api/agents", null)).toEqual({ method: "GET", path: "/v1/agents?limit=100" });
   });

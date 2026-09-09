@@ -113,6 +113,21 @@ describe("post now", () => {
     });
   });
 
+  it("publishes a rendered video by its file id, which the platform signs itself", async () => {
+    const state = demoState();
+    const post = state.posts.find((p) => p.id === "post_4a6f")!;
+    post.mediaUrl = "fil_4pb4vmt1m862sf0r42tx0anjc9";
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
+
+    expect(reply.status).toBe(200);
+    const sent = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
+    expect(sent).toMatchObject({ file_ids: ["fil_4pb4vmt1m862sf0r42tx0anjc9"] });
+    expect(sent).not.toHaveProperty("media_urls");
+  });
+
   it("only ever names a platform the API accepts, and refuses a stored row that does not", async () => {
     // Every seeded and every agent-filed row targets one of the six networks the platform's social
     // API takes. A document written before that was true can still be in the app database, and it

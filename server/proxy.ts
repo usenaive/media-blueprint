@@ -12,6 +12,8 @@ export interface Upstream {
   path: string;
   /** True for the session event relay — the response is piped, not buffered. */
   sse?: boolean;
+  /** Piped as-is with the upstream's content type — a file's bytes, not JSON. */
+  raw?: boolean;
 }
 
 /**
@@ -58,6 +60,10 @@ export function upstreamFor(method: string, pathname: string, identityId: string
   if (method === "POST" && answer) {
     return { method: "POST", path: `/v1/sessions/${answer[1]}/answers` };
   }
+  // A rendered video is filed by its platform file id; the bytes stream through here under the
+  // app's own key so the operator can watch what they are approving.
+  const file = /^\/api\/files\/(fil_\w+)$/.exec(pathname);
+  if (method === "GET" && file) return { method: "GET", path: `/v1/files/${file[1]}?download=true`, raw: true };
   // Segments are strictly [\w-]+ so `..` can never traverse out of the social subtree.
   const social = /^\/api\/social((?:\/[\w-]+)+)$/.exec(pathname);
   if (social) {

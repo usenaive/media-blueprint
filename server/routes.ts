@@ -30,8 +30,10 @@ export interface ApiReply {
   status: number;
   /** JSON-encoded by the adapter; `undefined` means an empty body. */
   body?: unknown;
-  /** Set only by `/api/chat/:sid/stream` — piped, not buffered. */
+  /** Set by `/api/chat/:sid/stream` and `/api/files/:id` — piped, not buffered. */
   stream?: Response;
+  /** With `stream`: an event stream (relay preamble) rather than a file's bytes. */
+  sse?: boolean;
   /** Set only by `/api/enter`, which answers with a cookie and a redirect and no body at all. */
   headers?: Record<string, string>;
 }
@@ -141,7 +143,11 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
       content: post.caption,
       title: post.title,
       platforms: [post.platform],
-      ...(post.mediaUrl === undefined ? {} : { media_urls: [post.mediaUrl] }),
+      ...(post.mediaUrl === undefined
+        ? {}
+        : /^fil_\w+$/.test(post.mediaUrl)
+          ? { file_ids: [post.mediaUrl] }
+          : { media_urls: [post.mediaUrl] }),
     }),
   );
   if (!published.ok) return fail(502, "publish failed");
@@ -353,6 +359,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
   const body = req.method === "GET" ? null : req.body || "{}";
   const answer = await proxyFetch(ctx.config, upstream, body);
-  if (upstream.sse) return { status: answer.status, stream: answer };
+  if (upstream.sse) return { status: answer.status, stream: answer, sse: true };
+  if (upstream.raw) return answer.ok ? { status: answer.status, stream: answer } : fail(answer.status, "file unavailable");
   return json(answer.status, await answer.json());
 }

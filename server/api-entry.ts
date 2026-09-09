@@ -336,10 +336,14 @@ export default async function handler(req: Request, res: Response): Promise<void
 
     if (reply.stream) {
       res.status(reply.status);
-      res.setHeader("content-type", "text/event-stream");
-      res.setHeader("cache-control", "no-cache");
-      // The browser's EventSource reconnects cheaply when this function hits its duration ceiling.
-      res.write("retry: 3000\n\n");
+      if (reply.sse) {
+        res.setHeader("content-type", "text/event-stream");
+        res.setHeader("cache-control", "no-cache");
+        // The browser's EventSource reconnects cheaply when this function hits its duration ceiling.
+        res.write("retry: 3000\n\n");
+      } else {
+        res.setHeader("content-type", reply.stream.headers.get("content-type") ?? "application/octet-stream");
+      }
       const body = reply.stream.body;
       if (body === null) return res.end();
       const reader = body.getReader();
