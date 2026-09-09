@@ -68,7 +68,7 @@ export const queueCounts = (posts: readonly Post[]): [PostStatus, number][] =>
 /** Why the context card is empty, in the operator's words: no key is one sentence, no install another. */
 export const contextAbsence = (error: unknown): string =>
   error instanceof ApiError && error.status === 404
-    ? "Not set up yet — the studio asks the channel's three questions when it installs the crew."
+    ? "Not set up yet — the studio asks the channel's three questions when it installs the team."
     : messageOf(error);
 
 const ROLES = new Map(ACTIVE.agents.map((agent) => [agent.name, agent.role ?? ""]));
@@ -147,7 +147,7 @@ export function Home() {
             {progress.length > 0 ? <span className="rail-count ml-2">{progress.filter((row) => row.done).length}/{progress.length}</span> : null}
           </div>
           {progress.length === 0 ? (
-            <div className="text-sm text-ink-3">{home === null ? "Nothing to show until the crew is installed." : "This install opened no first sessions."}</div>
+            <div className="text-sm text-ink-3">{home === null ? "Nothing to show until the team is installed." : "This install opened no first sessions."}</div>
           ) : (
             <ul className="space-y-1.5">
               {progress.map((row) => (

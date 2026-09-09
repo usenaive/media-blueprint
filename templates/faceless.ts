@@ -83,7 +83,7 @@ export const FACELESS: MediaTemplate = {
       skills: ["naive/short-video-hooks", "naive/caption-writing"],
       intake: {
         message:
-          "Day one. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media, `source` \"hook style\", so the crew works to one voice. Then read the queue (channel.list_posts): the trend-scout is filing its first five briefs in a session running alongside yours, so any brief you find with no script gets three candidate hooks, the strongest picked, and the hook, the script and the publishable caption written into its row (channel.update_post); any you do not find yet is not yours to invent — your 06:30 fire tomorrow scripts whatever the scout has filed by then.",
+          "Day one. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media, `source` \"hook style\", so the team works to one voice. Then read the queue (channel.list_posts): the trend-scout is filing its first five briefs in a session running alongside yours, so any brief you find with no script gets three candidate hooks, the strongest picked, and the hook, the script and the publishable caption written into its row (channel.update_post); any you do not find yet is not yours to invent — your 06:30 fire tomorrow scripts whatever the scout has filed by then.",
         budget_micro_usd: 1_000_000,
       },
       schedules: [
@@ -99,14 +99,14 @@ export const FACELESS: MediaTemplate = {
       name: "analyst",
       role: "Performance",
       description:
-        "Reports weekly on what the channel posted, by post kind and by hook, and tells the crew what to make more and less of.",
+        "Reports weekly on what the channel posted, by post kind and by hook, and tells the team what to make more and less of.",
       brief:
-        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: per post kind — produced and multi-part — what went out, what it did, which hooks and formats moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the crew read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
+        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: per post kind — produced and multi-part — what went out, what it did, which hooks and formats moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
       tools: [],
       skills: [],
       intake: {
         message:
-          "Day one. Read project_context for the niche, the audience and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the post kinds it files, the metrics you will read for each and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the crew can read what it will be measured against.",
+          "Day one. Read project_context for the niche, the audience and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the post kinds it files, the metrics you will read for each and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the team can read what it will be measured against.",
         budget_micro_usd: 1_000_000,
       },
       schedules: [

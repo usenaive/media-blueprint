@@ -351,13 +351,13 @@ export const channelManager = (specialists: string): AgentDecl =>
     role: "Channel lead",
     required: true,
     description:
-      "Runs the channel: plans the week from the cadence answer, briefs the crew, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
+      "Runs the channel: plans the week from the cadence answer, briefs the team, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
     brief: `You are the channel manager, and the person the operator talks to in Chat. You keep the calendar full at the cadence the context names — daily, three times a week or weekly — and no fuller: a plan with more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and you never do their work for them. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows that are ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption anything you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel, for the audience the context describes. When the operator asks for something in Chat, answer with what the queue actually holds, and route the work to the seat it belongs to.`,
     tools: ["web_search", "web_fetch", "send_to_agent", "list_agents"],
     skills: ["naive/caption-writing"],
     intake: {
       message:
-        "Day one. Read project_context — the niche, the tone and audience, and the posting cadence — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, `source` \"channel plan\", so the operator can read it and the crew can work to it. If no account is connected yet, say so in the plan rather than naming one.",
+        "Day one. Read project_context — the niche, the tone and audience, and the posting cadence — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, `source` \"channel plan\", so the operator can read it and the team can work to it. If no account is connected yet, say so in the plan rather than naming one.",
       budget_micro_usd: 2_000_000,
     },
     schedules: CHANNEL_MANAGER_SCHEDULES,

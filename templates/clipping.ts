@@ -82,7 +82,7 @@ export const CLIPPING: MediaTemplate = {
       skills: ["naive/caption-writing", "naive/short-video-hooks"],
       intake: {
         message:
-          "Day one. Read project_context for the niche, the audience and the sources. Write the channel's caption style in five lines — voice, length, hashtag set, credit line, what never to say — and file it as a pending post with no media, `source` \"caption style\", so the crew works to one voice. Then read the queue (channel.list_posts): the clipper cuts nothing until its 07:00 fire tomorrow, so any clip you find with media and a working brief gets a publishable title, caption and hashtags written into its row (channel.update_post), and a queue with none is the expected day one — your 07:30 fire captions the morning's cuts.",
+          "Day one. Read project_context for the niche, the audience and the sources. Write the channel's caption style in five lines — voice, length, hashtag set, credit line, what never to say — and file it as a pending post with no media, `source` \"caption style\", so the team works to one voice. Then read the queue (channel.list_posts): the clipper cuts nothing until its 07:00 fire tomorrow, so any clip you find with media and a working brief gets a publishable title, caption and hashtags written into its row (channel.update_post), and a queue with none is the expected day one — your 07:30 fire captions the morning's cuts.",
         budget_micro_usd: 1_000_000,
       },
       schedules: [
@@ -98,14 +98,14 @@ export const CLIPPING: MediaTemplate = {
       name: "analyst",
       role: "Performance",
       description:
-        "Reports weekly on what the channel posted, by source and by clip, and tells the crew which sources and moments to cut more and less of.",
+        "Reports weekly on what the channel posted, by source and by clip, and tells the team which sources and moments to cut more and less of.",
       brief:
-        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: which sources the clips came from, which moments and caption styles moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the crew read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week — a source to watch closer, a kind of moment to stop cutting. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
+        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: which sources the clips came from, which moments and caption styles moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week — a source to watch closer, a kind of moment to stop cutting. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
       tools: [],
       skills: [],
       intake: {
         message:
-          "Day one. Read project_context for the sources, the niche and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the sources it cuts from, the metrics you will read per clip and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the crew can read what it will be measured against.",
+          "Day one. Read project_context for the sources, the niche and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the sources it cuts from, the metrics you will read per clip and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the team can read what it will be measured against.",
         budget_micro_usd: 1_000_000,
       },
       schedules: [
