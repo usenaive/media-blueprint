@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { authError, handleMcp, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { TEMPLATES } from "../templates/index.ts";
@@ -140,5 +140,20 @@ describe("mcp tools", () => {
     expect(text<unknown[]>((await handleMcp(call("list_style_templates", {}), store, null))!).length).toBeGreaterThan(0);
     const accounts = text<{ platform: string; handle: string }[]>((await handleMcp(call("list_accounts", {}), store, null))!);
     expect(accounts).toContainEqual({ platform: "x", handle: "@dailystoic" });
+  });
+
+  it("answers list_accounts from the queue, not with an error, when the platform refuses (social not activated)", async () => {
+    const store = freshStore();
+    const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: "idn_1", project: "media" };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: "validation_failed" } }), { status: 400 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const answer = (await handleMcp(call("list_accounts", {}), store, config)) as CallResult;
+      expect(answer.result.isError).not.toBe(true);
+      expect(text<{ platform: string; handle: string }[]>(answer)).toContainEqual({ platform: "x", handle: "@dailystoic" });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

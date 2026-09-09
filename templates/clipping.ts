@@ -37,7 +37,7 @@ export const CLIPPING: MediaTemplate = {
       intake: {
         message:
           "Day one is set-up, not a cut. The scout is opening its own first session alongside yours right now, so the queue you read may hold no brief yet — that is not a signal to pick a source yourself, and it is not a signal to wait. Read project_context for the source channel(s) the operator holds rights to, the niche and the cadence, and confirm you can reach each named source; then check that the tools you cut with are among yours, and if one is not, request exactly it with request_tools, once. File what you found as a pending post with no media, `source` \"clipper check\": which sources you can reach, which you cannot, and what is missing. Cut nothing today: your 07:00 fire tomorrow takes the scout's first briefs, after its 06:00 has run.",
-        budget_micro_usd: 3_000_000,
+        budget_micro_usd: 8_000_000,
       },
       schedules: [
         schedule({

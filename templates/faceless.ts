@@ -38,7 +38,7 @@ export const FACELESS: MediaTemplate = {
       intake: {
         message:
           "Day one is set-up, not a render. The trend-scout and the scriptwriter are opening their own first sessions alongside yours right now, so the queue you read may still hold no brief and no script — that is not a signal to make one up, and it is not a signal to wait. Read project_context for the niche, the tone and the audience, then the style templates (channel.list_style_templates). Choose the one or two templates whose look fits the tone answer and file the choice as a pending post with no media, `source` \"style choice\", one line on why for each. Then check that generate_video is among your tools; if it is not, request exactly it with request_tools, once. Render nothing today: your 07:00 fire tomorrow takes the first scripted brief, after the scout's 06:00 and the scriptwriter's 06:30 have run.",
-        budget_micro_usd: 3_000_000,
+        budget_micro_usd: 8_000_000,
       },
       schedules: [
         schedule({

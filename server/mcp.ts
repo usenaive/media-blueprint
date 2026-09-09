@@ -104,19 +104,23 @@ const need = (params: Record<string, unknown>, key: string): string => {
 const optional = (params: Record<string, unknown>, key: string): string | undefined =>
   typeof params[key] === "string" ? (params[key] as string) : undefined;
 
-/** Connected accounts from the platform when wired; otherwise the accounts the queue already names. */
+/**
+ * Connected accounts from the platform when wired and activated; otherwise the accounts the queue
+ * already names. A platform that refuses (social publishing not activated yet, the usual state of a
+ * fresh install) is the second case, not an error: an agent told "unavailable" retries it until its
+ * budget is gone, while an empty list is an answer it can plan around.
+ */
 async function listAccounts(store: Store, config: ProxyConfig | null): Promise<unknown> {
   const upstream = config === null ? null : upstreamFor("GET", "/api/social/accounts", config.identityId);
-  if (config === null || upstream === null) {
-    // Only rows that actually name an account: a post filed with no destination is not evidence
-    // of an account existing, and listing one would invent a handle out of a blank field.
-    const named = store.read().posts.filter((p) => p.account !== undefined);
-    const seen = new Map(named.map((p) => [`${p.platform} ${p.account}`, { platform: p.platform, handle: p.account }]));
-    return [...seen.values()];
+  if (config !== null && upstream !== null) {
+    const res = await proxyFetch(config, upstream, null);
+    if (res.ok) return ((await res.json()) as { data?: unknown[] }).data ?? [];
   }
-  const res = await proxyFetch(config, upstream, null);
-  if (!res.ok) throw new ToolError("accounts unavailable");
-  return ((await res.json()) as { data?: unknown[] }).data ?? [];
+  // Only rows that actually name an account: a post filed with no destination is not evidence
+  // of an account existing, and listing one would invent a handle out of a blank field.
+  const named = store.read().posts.filter((p) => p.account !== undefined);
+  const seen = new Map(named.map((p) => [`${p.platform} ${p.account}`, { platform: p.platform, handle: p.account }]));
+  return [...seen.values()];
 }
 
 async function callTool(name: string, params: Record<string, unknown>, store: Store, config: ProxyConfig | null): Promise<unknown> {

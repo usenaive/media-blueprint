@@ -96,8 +96,9 @@ describe("the crews", () => {
 
   it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
     // The seats downstream of the scout are told that, told not to invent the upstream work, and
-    // told which fire — in cron order — takes the first of it; and they are budgeted for set-up,
-    // not for a render or a cut that has nothing to work from.
+    // told which fire — in cron order — takes the first of it; and they are budgeted for set-up
+    // (every call holds its quote until the turn commits, so the cap is turns, not dollars), under
+    // the timer that does render.
     const downstream: [MediaTemplate, string, RegExp][] = [
       [TEMPLATES.faceless, "producer", /alongside yours.*Render nothing today.*07:00 fire/s],
       [TEMPLATES.faceless, "scriptwriter", /alongside yours.*not yours to invent.*06:30 fire/s],
@@ -108,8 +109,12 @@ describe("the crews", () => {
       const seat = template.agents.find((a) => a.name === name);
       expect(seat?.intake?.message, name).toMatch(says);
     }
-    expect(TEMPLATES.faceless.agents.find((a) => a.name === "producer")?.intake?.budget_micro_usd).toBeLessThan(ONE_RENDER_MICRO_USD);
-    expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.intake?.budget_micro_usd).toBeLessThan(ONE_RENDER_MICRO_USD);
+    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.clipping, "clipper"]] as const) {
+      const seat = template.agents.find((a) => a.name === name);
+      const timer = Math.max(...(seat?.schedules ?? []).map((s) => s.budget_micro_usd ?? 0));
+      expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(timer);
+      expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(ONE_RENDER_MICRO_USD * 4);
+    }
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
