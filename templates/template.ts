@@ -85,7 +85,7 @@ export const ONE_RENDER_MICRO_USD = 3_320_000;
  * three sweeps, and room for one retry. Retune per channel after the first week.
  */
 const budget = {
-  cap_micro_usd: 20_000_000, // $20/day
+  cap_micro_usd: 30_000_000, // $30/day
   max_task_micro_usd: 6_000_000, // $6/task — one ~$3.32 render plus the turns that brief and file it.
   period: "day",
 } as const;
@@ -272,19 +272,19 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
     input:
       "Plan the week. Read the channel's niche, audience and cadence (project_context), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialists through the plan, not by publishing anything yourself.",
-    budget_micro_usd: 2_000_000, // $2 — the widest read of the week, once a week.
+    budget_micro_usd: 4_000_000, // $4 — the widest read of the week, once a week.
   }),
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
       "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.",
-    budget_micro_usd: 1_000_000, // $1 — a read and a few patches.
+    budget_micro_usd: 4_000_000, // $4 — a read and a few patches.
   }),
   schedule({
     cron: "0 18 * * *", // Daily 18:00 — the comments, at the end of the channel's day.
     input:
       "Read the comments on what this channel has posted today and on the pieces still gathering them, and reply in the channel's voice. Comments are read and answered only through the tools of a connected account (channel.list_accounts says which exist); if no offered tool reads comments, say so in one line and stop — do not invent a comment or a reply. Every reply acts on a connected account, so it stops at the operator's Approvals screen with its text in front of a person — write the reply you would stand behind, and leave the ones you would not.",
-    budget_micro_usd: 1_000_000, // $1 — a read and a handful of replies.
+    budget_micro_usd: 4_000_000, // $4 — a read and a handful of replies.
   }),
 ];
 
@@ -358,7 +358,7 @@ export const channelManager = (specialists: string): AgentDecl =>
     intake: {
       message:
         "Day one. Read project_context — the niche, the tone and audience, and the posting cadence — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, `source` \"channel plan\", so the operator can read it and the team can work to it. If no account is connected yet, say so in the plan rather than naming one.",
-      budget_micro_usd: 2_000_000,
+      budget_micro_usd: 6_000_000,
     },
     schedules: CHANNEL_MANAGER_SCHEDULES,
   });

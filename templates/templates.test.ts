@@ -109,7 +109,7 @@ describe("the crews", () => {
       expect(seat?.intake?.message, name).toMatch(says);
     }
     expect(TEMPLATES.faceless.agents.find((a) => a.name === "producer")?.intake?.budget_micro_usd).toBeLessThan(ONE_RENDER_MICRO_USD);
-    expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.intake?.budget_micro_usd).toBeLessThan(2_000_000);
+    expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.intake?.budget_micro_usd).toBeLessThan(ONE_RENDER_MICRO_USD);
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
