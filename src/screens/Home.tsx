@@ -102,7 +102,7 @@ export function Home() {
   const agents = useRead<Listed<Parameters<typeof toRoster>[0][number]>>("/agents");
   const timers = useRead<Listed<WireDeployment>>("/deployments");
   const approvals = useRead<Listed<WireSession>>("/sessions?stop_reason=awaiting_approval");
-  const questions = useRead<Listed<WireSession>>("/sessions?stop_reason=awaiting_input");
+  const questions = useRead<Listed<WireSession>>("/sessions?stop_reason=awaiting_answer");
 
   useEffect(() => {
     apiGet<HomeContext>("/context").then(setHome, (err: unknown) => setAbsence(contextAbsence(err)));
