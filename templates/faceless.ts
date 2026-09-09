@@ -45,7 +45,7 @@ export const FACELESS: MediaTemplate = {
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
           input:
             "Make the next piece. Read the niche and tone (project_context) and the queue (channel.list_posts), take the next brief that has a script and no video against it yet, and produce one original vertical video in the style template that brief names (channel.list_style_templates). Attach it to the brief's row with the publishable caption. If every scripted brief already has a piece filed against it, file nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
-          budget_micro_usd: 6_000_000, // $6 — one generated video, the agent's per-task ceiling.
+          budget_micro_usd: 10_000_000, // $10 — one generated video plus the turns that brief and file it.
         }),
       ],
     }),
@@ -61,14 +61,14 @@ export const FACELESS: MediaTemplate = {
       intake: {
         message:
           "Day one. Read project_context for the niche, the audience and the cadence. Research what is moving in that niche right now and file the channel's first five briefs as pending posts (channel.create_post, no media, `source` naming where each came from): topic, format, why now, hook direction, style template. Skip anything already in the queue. These five are what the scriptwriter drafts hooks for today.",
-        budget_micro_usd: 6_000_000,
+        budget_micro_usd: 20_000_000,
       },
       schedules: [
         schedule({
           cron: "0 6 * * 1,4", // Monday and Thursday 06:00 — the week's briefs, and a mid-week refill.
           input:
             "Scout the niche. Read project_context and the queue (channel.list_posts), research what is moving in the niche this week, and file as many new briefs as the cadence needs until the next fire — each a pending post with no media naming topic, format, why now, hook direction and style template. Nothing already queued or posted.",
-          budget_micro_usd: 4_000_000, // $4 — a read of the niche and a handful of filings.
+          budget_micro_usd: 10_000_000, // $10 — a read of the niche and a handful of filings.
         }),
       ],
     }),
@@ -84,14 +84,14 @@ export const FACELESS: MediaTemplate = {
       intake: {
         message:
           "Day one. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media, `source` \"hook style\", so the team works to one voice. Then read the queue (channel.list_posts): the trend-scout is filing its first five briefs in a session running alongside yours, so any brief you find with no script gets three candidate hooks, the strongest picked, and the hook, the script and the publishable caption written into its row (channel.update_post); any you do not find yet is not yours to invent — your 06:30 fire tomorrow scripts whatever the scout has filed by then.",
-        budget_micro_usd: 6_000_000,
+        budget_micro_usd: 20_000_000,
       },
       schedules: [
         schedule({
           cron: "30 6 * * *", // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render.
           input:
             "Script the queue. Read project_context, then every brief with no script yet (channel.list_posts); write hook, script and publishable caption into each with channel.update_post, in the channel's tone, for its audience. Nothing to script means nothing to do.",
-          budget_micro_usd: 4_000_000, // $4 — a read and a few rewrites.
+          budget_micro_usd: 10_000_000, // $10 — a read and a few rewrites.
         }),
       ],
     }),
@@ -107,14 +107,14 @@ export const FACELESS: MediaTemplate = {
       intake: {
         message:
           "Day one. Read project_context for the niche, the audience and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the post kinds it files, the metrics you will read for each and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the team can read what it will be measured against.",
-        budget_micro_usd: 6_000_000,
+        budget_micro_usd: 20_000_000,
       },
       schedules: [
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
           input:
             "Write the weekly report. Read project_context and what posted in the last seven days (channel.list_posts, plus the connected account's metrics where offered); per post kind and per hook, say what went out and what it did, and name the two changes for next week. File it as a pending post with no media.",
-          budget_micro_usd: 4_000_000, // $4 — a read of the week and one report.
+          budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
         }),
       ],
     }),

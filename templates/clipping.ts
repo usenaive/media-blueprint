@@ -44,7 +44,7 @@ export const CLIPPING: MediaTemplate = {
           cron: "0 7 * * *", // Daily 07:00, channel time — the next cuts, before the caption-editor's 07:30 pass and the manager's 08:00 sweep.
           input:
             "Cut the next clips. Read the named sources (project_context) and the queue (channel.list_posts), take the scout's briefs that have no clip against them yet, and cut each from its named source. Attach every clip to its brief's row. Cut nothing from a source the context does not name — if there is no brief from a named source, file nothing and stop. If clip_video is not among your tools, or it refuses for want of a provider, cut nothing: request exactly what is missing with request_tools, once, then wait — if it is granted carry on; if it is refused, stop for tonight.",
-          budget_micro_usd: 4_000_000, // $4 — one fire's cuts. Well under the $6 ceiling: a clip is cut, not rendered, and nothing has measured one yet.
+          budget_micro_usd: 10_000_000, // $10 — one fire's cuts: a clip is cut, not rendered, and nothing has measured one yet.
         }),
       ],
     }),
@@ -60,14 +60,14 @@ export const CLIPPING: MediaTemplate = {
       intake: {
         message:
           "Day one. Read project_context for the source channel(s) the operator holds rights to, the niche and the cadence. Go through the most recent episodes of each named source and file the first five moments worth cutting as briefs (channel.create_post, no media): source video, timestamp range, the one idea, why it lands for this audience. If the context names no source you can reach, say so and stop — do not go looking for another.",
-        budget_micro_usd: 6_000_000,
+        budget_micro_usd: 20_000_000,
       },
       schedules: [
         schedule({
           cron: "0 6 * * *", // Daily 06:00 — new episodes and moments, before the clipper's 07:00 cuts.
           input:
             "Watch the sources. Read project_context and the queue (channel.list_posts), check each named source for new episodes since the last fire, and file the moments worth cutting as briefs — source video, timestamp range, the one idea, why it lands. Only from named sources; nothing already queued.",
-          budget_micro_usd: 4_000_000, // $4 — a read of the sources and a few filings.
+          budget_micro_usd: 10_000_000, // $10 — a read of the sources and a few filings.
         }),
       ],
     }),
@@ -83,14 +83,14 @@ export const CLIPPING: MediaTemplate = {
       intake: {
         message:
           "Day one. Read project_context for the niche, the audience and the sources. Write the channel's caption style in five lines — voice, length, hashtag set, credit line, what never to say — and file it as a pending post with no media, `source` \"caption style\", so the team works to one voice. Then read the queue (channel.list_posts): the clipper cuts nothing until its 07:00 fire tomorrow, so any clip you find with media and a working brief gets a publishable title, caption and hashtags written into its row (channel.update_post), and a queue with none is the expected day one — your 07:30 fire captions the morning's cuts.",
-        budget_micro_usd: 6_000_000,
+        budget_micro_usd: 20_000_000,
       },
       schedules: [
         schedule({
           cron: "30 7 * * *", // Daily 07:30 — captions on the morning's cuts, before the manager's 08:00 sweep.
           input:
             "Caption the cuts. Read project_context, then every clip in the queue with media and no publishable caption yet (channel.list_posts); write title, caption and hashtags into each with channel.update_post, in the channel's voice, for its audience. Nothing to caption means nothing to do.",
-          budget_micro_usd: 4_000_000, // $4 — a read and a few rewrites.
+          budget_micro_usd: 10_000_000, // $10 — a read and a few rewrites.
         }),
       ],
     }),
@@ -106,14 +106,14 @@ export const CLIPPING: MediaTemplate = {
       intake: {
         message:
           "Day one. Read project_context for the sources, the niche and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the sources it cuts from, the metrics you will read per clip and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the team can read what it will be measured against.",
-        budget_micro_usd: 6_000_000,
+        budget_micro_usd: 20_000_000,
       },
       schedules: [
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
           input:
             "Write the weekly report. Read project_context and what posted in the last seven days (channel.list_posts, plus the connected account's metrics where offered); per source and per clip, say what went out and what it did, and name the two changes for next week. File it as a pending post with no media.",
-          budget_micro_usd: 4_000_000, // $4 — a read of the week and one report.
+          budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
         }),
       ],
     }),
