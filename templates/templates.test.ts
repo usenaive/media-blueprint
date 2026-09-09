@@ -6,10 +6,11 @@
  * are the blueprint's and are shared. What may never differ is the way out — every agent of every
  * template publishes only through the operator's queue.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, words } from "./template.ts";
-import type { MediaTemplate } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, words } from "./template.ts";
+import type { MediaTemplate, TemplateName } from "./template.ts";
 
 /** The four of the platform's twelve `naive/*` catalogue skills a media crew has a use for; no other ref is allowed here. */
 const CATALOGUE = ["naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/seo-content-brief"];
@@ -232,6 +233,32 @@ describe("the crews", () => {
     expect(producer?.schedules?.[0]?.input).toMatch(/If generate_video is not among your tools.*request_tools.*config\.models/);
     const clipper = TEMPLATES.clipping.agents.find((agent) => agent.name === "clipper");
     expect(clipper?.schedules?.[0]?.input).toMatch(/If clip_video is not among your tools.*request_tools/);
+  });
+
+  /**
+   * A brief that names a tool the same file denies is an instruction the agent cannot follow: the
+   * clipping scout was told to watch its sources with `browser`, which every toolset here denies
+   * by name (the sandbox is denied on purpose — a content agent needs no machine, and denying it
+   * is what keeps a session from provisioning and billing one). The agent spends a turn asking for
+   * a tool the blueprint decided it may not have, or narrates the watch it could not do.
+   */
+  it("never tells an agent to use a tool its own toolset denies", () => {
+    // The built-ins whose names are identifiers rather than ordinary English: "read", "write",
+    // "edit", "find", "ls" and "apps" appear in every brief as words and mean nothing about tools.
+    const AMBIGUOUS = ["read", "write", "edit", "find", "ls", "apps"];
+    const offences: string[] = [];
+    for (const template of both) {
+      for (const agent of template.agents) {
+        for (const tool of BUILTIN_TOOLS) {
+          if (AMBIGUOUS.includes(tool)) continue;
+          if (!new RegExp(`\\b${tool.replace(".", "\\.")}\\b`).test(agent.system ?? "")) continue;
+          if (permissionFor(template, agent.name, tool) === "deny") {
+            offences.push(`${template.name}/${agent.name} is told to use ${tool}, which its toolset denies`);
+          }
+        }
+      }
+    }
+    expect(offences).toEqual([]);
   });
 
   it("tells each agent to sign what it files, so an operator can read the row", () => {
@@ -464,5 +491,70 @@ describe("the data the screens read", () => {
   it("is keyed by the name `defineProject({ template })` uses, and one of them is running", () => {
     for (const [key, template] of Object.entries(TEMPLATES)) expect(template.name).toBe(key);
     expect(both).toContain(ACTIVE);
+  });
+});
+
+/**
+ * The money, as the README prints it.
+ *
+ * Every figure in the README's crew tables and its day-one total is a dollar rendering of a
+ * `budget_micro_usd` in `templates/`, and every one of them was left behind when the budgets were
+ * raised — understating what the operator is signing up for by 5–12x on every line. A README that
+ * quotes a number the code does not hold is the one kind of documentation bug a reader cannot
+ * detect, so the numbers are read out of the declarations here rather than kept in step by hand.
+ */
+describe("the spend this blueprint declares", () => {
+  const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const usd = (micro: number) => micro / 1_000_000;
+  const dollars = (cell: string) => [...cell.matchAll(/\$([\d.]+)/g)].map((m) => Number(m[1]));
+  const intakes = (template: MediaTemplate) =>
+    template.agents.reduce((sum, one) => sum + (one.intake?.budget_micro_usd ?? 0), 0);
+
+  it("prints each seat's timers and day one at the budgets those fires actually carry", () => {
+    let current: MediaTemplate | undefined;
+    let rows = 0;
+    for (const line of README.split("\n")) {
+      const heading = /^#{2,3} +`?(faceless|clipping)`?$/.exec(line.trim());
+      if (line.startsWith("#")) current = heading ? TEMPLATES[heading[1] as TemplateName] : undefined;
+      const cells = line.split("|");
+      const named = /^`([\w-]+)`/.exec(cells[1]?.trim() ?? "");
+      if (current === undefined || cells.length < 8 || named === null) continue;
+      const agent = current.agents.find((one) => one.name === named[1]);
+      if (agent === undefined) continue;
+      rows += 1;
+      expect([current.name, agent.name, dollars(cells[5]!)]).toEqual([
+        current.name,
+        agent.name,
+        (agent.schedules ?? []).map((one) => usd(one.budget_micro_usd)),
+      ]);
+      expect([current.name, agent.name, dollars(cells[6]!)]).toEqual([
+        current.name,
+        agent.name,
+        [usd(agent.intake?.budget_micro_usd ?? 0)],
+      ]);
+    }
+    // Five seats per template, both tables read.
+    expect(rows).toBe(10);
+  });
+
+  it("prints a day-one total that is the sum of the day-one budgets", () => {
+    const said = /\(\$([\d.]+) on `faceless`, \$([\d.]+) on `clipping`\)/.exec(README);
+    expect(said).not.toBeNull();
+    expect([Number(said![1]), Number(said![2])]).toEqual([usd(intakes(TEMPLATES.faceless)), usd(intakes(TEMPLATES.clipping))]);
+  });
+
+  /**
+   * The comment above `budget` is the argument for the number, so a stale one argues for a
+   * ceiling that is not there — it justified $6/task and $20/day while the knob it sits on says
+   * $20 and $60.
+   */
+  it("argues for the ceilings it declares, in the comment that justifies them", () => {
+    const source = readFileSync(new URL("./template.ts", import.meta.url), "utf8");
+    const { budget } = TEMPLATES.faceless.agents[0]!;
+    const printed = [...source.matchAll(/\$([\d.]+)\/(task|day)/g)];
+    expect(printed.length).toBeGreaterThan(1);
+    for (const [, amount, unit] of printed) {
+      expect([unit, Number(amount)]).toEqual([unit, usd(unit === "task" ? budget.max_task_micro_usd : budget.cap_micro_usd)]);
+    }
   });
 });

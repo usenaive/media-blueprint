@@ -126,27 +126,31 @@ else; the answers there are the client's, not yours to invent* — and closes wi
 gate. Between them is the seat's own brief, 150–400 words. Every agent also holds the
 dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, and the two doors to
 you (`ask_operator`, `request_tools`, both `ask`); the **Tools** column lists what is granted on
-top of that. Money is integer micro-USD in the declarations; it is printed in dollars here.
+top of that. Every seat carries the same ceilings — **$20 a task and $60 a day, per agent** —
+sized so one render of the length the producer is briefed for fits inside a single task
+(`ONE_RENDER_MICRO_USD` in [`templates/template.ts`](templates/template.ts)); each timer and each
+day one below carries its own budget inside them. Money is integer micro-USD in the declarations;
+it is printed in dollars here.
 
 ### `faceless`
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($2) · daily 08:00 queue sweep ($1) · daily 18:00 comments ($1) | Writes the channel plan from the cadence answer — slots per week, days, kinds, accounts — and files it as a brief ($2) |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($6) | Picks the style templates for the niche and renders the first scripted brief ($6) |
-| `trend-scout` | Trends & briefs | `web_search`, `web_fetch` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($1.50) | Researches the niche and files the channel's **first five briefs** ($1.50) |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($1) | Drafts three hooks per brief, picks one, writes the script and caption ($1) |
-| `analyst` | Performance | — | — | Mon 07:30 report ($1.50) | Sets up the weekly report skeleton for this niche and cadence ($1) |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer — slots per week, days, kinds, accounts — and files it as a brief ($20) |
+| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | Picks the style templates for the niche and renders the first scripted brief ($8) |
+| `trend-scout` | Trends & briefs | `web_search`, `web_fetch` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | Researches the niche and files the channel's **first five briefs** ($20) |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | Drafts three hooks per brief, picks one, writes the script and caption ($20) |
+| `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton for this niche and cadence ($20) |
 
 ### `clipping`
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($2) · daily 08:00 queue sweep ($1) · daily 18:00 comments ($1) | Writes the channel plan from the cadence answer and files it as a brief ($2) |
-| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($2) | Cuts the first two clips from the scout's briefs; cuts nothing from a source the context does not name ($2) |
-| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($1) | Goes through the named sources and files the **first five moments** worth cutting ($1) |
-| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($1) | Titles and captions the morning's clips and files the channel's caption style ($1) |
-| `analyst` | Performance | — | — | Mon 07:30 report ($1.50) | Sets up the weekly report skeleton by source and clip ($1) |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer and files it as a brief ($20) |
+| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | Cuts the first two clips from the scout's briefs; cuts nothing from a source the context does not name ($8) |
+| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | Goes through the named sources and files the **first five moments** worth cutting ($20) |
+| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($10) | Titles and captions the morning's clips and files the channel's caption style ($20) |
+| `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton by source and clip ($20) |
 
 Only the `channel-manager` is `required` — it is the seat the dashboard's Chat talks to. Every
 other seat can be left unticked when the template is installed, and its crons and intake are
@@ -172,7 +176,7 @@ The apply that creates the crew opens one session per agent with its `intake.mes
 written to consume the answers: the scout files the first five briefs for *your* niche, the
 scriptwriter hooks and scripts them, the producer renders the first one, the analyst lays out the
 report, and the manager writes the plan from *your* cadence. Day one costs at most the sum of
-the intake budgets ($11.50 on `faceless`, $7 on `clipping`), and everything it makes lands in the
+the intake budgets ($88 on `faceless`, $88 on `clipping`), and everything it makes lands in the
 queue as pending — nothing is published. The Home screen tracks each intake session until it
 finishes.
 
@@ -375,6 +379,27 @@ Then `pnpm build && naive up`. The switch **widens and never narrows**:
   its database and its MCP token.
 
 The dashboard's Channel settings screen names the template that is running.
+
+**"Left running" means still firing, and still billing.** `naive up` owns an agent's `schedules`
+only through the template that declares it, and a kept agent is declared by neither — `up` reports
+it `unchanged` and touches nothing on it, its deployments included. So the crew you switched away
+from keeps its timers: every morning, on the channel's clock, as the `channel` identity, each fire
+opening a real billable session against its own budget and filing into the same queue as the new
+crew. Switching `clipping` → `faceless` leaves the clipper (daily 07:00), the scout (daily 06:00)
+and the caption-editor (daily 07:30) armed — up to **$30 a day** of ceiling for a crew you
+replaced. `faceless` → `clipping` leaves the producer (daily 07:00) and the scriptwriter (daily
+06:30), plus the trend-scout on Mondays and Thursdays — up to **$20 a day and $20 a week**. The
+`channel-manager` and the `analyst` are declared by both templates, so they are never kept: they
+are patched into the new crew.
+
+Nothing in this repository can disarm them. Only the chosen template's agents are reconciled;
+`kept` carries names and no schedules; and the platform's one lever is `removed`, which deletes
+the agent outright rather than parking it. **So decide about the old crew in the same sitting as
+the switch:** add each stranded name to `removed` in `naive.config.ts` and `naive up` again — which
+deletes those agents and their crons — or keep them on purpose, knowing what they cost. A third
+option (a kept agent's schedules disabled rather than left armed, so a switch stops paying for the
+crew it replaced without destroying its history) would be a change to the platform's blueprint
+engine, not to this repo.
 
 **Editing a cron has one sharp edge.** Schedules are the only place in `naive up` where dropping
 a declaration deletes: an agent's `schedules` are owned as a complete set and matched to live

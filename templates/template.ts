@@ -81,8 +81,11 @@ export const ONE_RENDER_MICRO_USD = 3_320_000;
  * calls draw on the same ceiling. At $2 the very first production session on production spent the
  * money, blew the ceiling and parked with the video already rendered.
  *
- * $6/task is one render with ~1.8x of headroom; $20/day is the producer's daily fire, the manager's
- * three sweeps, and room for one retry. Retune per channel after the first week.
+ * $20/task is one render with ~6x of headroom, and it is what every seat carries: the budget is the
+ * blueprint's, not a template's, so no crew can quietly hold a ceiling its flagship action cannot
+ * clear. $60/day is per AGENT, not per channel — it holds the manager's three fires ($30 of
+ * ceiling between them) or the specialist's daily $10 render with room for the retries a failed
+ * one costs. Retune per channel after the first week.
  */
 const budget = {
   cap_micro_usd: 60_000_000, // $60/day
@@ -111,7 +114,7 @@ const approvalGate =
  * standalone and imports no workspace package at runtime. It is the list of names a toolset can
  * *enumerate* — which is exactly what the grant below turns on.
  */
-const BUILTIN_TOOLS = [
+export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "apps",
