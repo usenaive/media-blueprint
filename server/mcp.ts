@@ -106,15 +106,30 @@ const optional = (params: Record<string, unknown>, key: string): string | undefi
 
 /**
  * Connected accounts from the platform when wired and activated; otherwise the accounts the queue
- * already names. A platform that refuses (social publishing not activated yet, the usual state of a
- * fresh install) is the second case, not an error: an agent told "unavailable" retries it until its
- * budget is gone, while an empty list is an answer it can plan around.
+ * already names. A platform that refuses because social publishing is not activated yet — the
+ * usual state of a fresh install — is the second case, not an error: an agent told "unavailable"
+ * retries it until its budget is gone, while a list it can plan around is an answer.
+ *
+ * WHAT THAT MUST NOT DO IS FILL IN THE GAP WITH SOMETHING INVENTED. `res.ok` was the only success
+ * test, so a 401 from a revoked key, a 403 from a missing scope and a 500 from a broken upstream
+ * all fell through to this same list — handles typed into a caption by an agent, handed back as
+ * though the platform had confirmed them. An agent then briefs a post at an account nobody
+ * checked, and the operator reconnects one that was fine or never learns publishing is down.
+ * "No accounts connected" and "we could not ask" are different answers and are said differently.
  */
 async function listAccounts(store: Store, config: ProxyConfig | null): Promise<unknown> {
   const upstream = config === null ? null : upstreamFor("GET", "/api/social/accounts", config.identityId);
   if (config !== null && upstream !== null) {
     const res = await proxyFetch(config, upstream, null);
     if (res.ok) return ((await res.json()) as { data?: unknown[] }).data ?? [];
+    // The one refusal that is an answer: `GET …/social/accounts` validates nothing else, so its
+    // only 400 is "social publishing is not activated for this identity" (canonical-spec §27).
+    if (res.status !== 400) {
+      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      throw new ToolError(
+        `could not read the connected accounts — the platform answered ${res.status}${body?.error?.message === undefined ? "" : `: ${body.error.message}`}. That is not an empty list: do not name an account, and tell the operator publishing could not be checked.`,
+      );
+    }
   }
   // Only rows that actually name an account: a post filed with no destination is not evidence
   // of an account existing, and listing one would invent a handle out of a blank field.
