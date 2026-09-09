@@ -197,6 +197,29 @@ describe("post now", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * A row whose title is blank was unpublishable, permanently. The title is cut from the caption
+   * (`store.createPost`), an `update_post` may blank it, and the platform's social API refuses
+   * `title: ""` (`title: z.string().trim().min(1).max(200).optional()`) — so "Post now" answered
+   * 502 on a post the operator had approved and nothing on the screen could fix it. The field is
+   * optional upstream and the platform cuts its own title from `content` when it is absent, so a
+   * blank one is omitted rather than sent.
+   */
+  it("publishes a post whose title is blank, by letting the platform cut its own", async () => {
+    const state = demoState();
+    const post = state.posts.find((p) => p.id === "post_4a6f")!;
+    post.title = "";
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
+
+    expect(reply.status).toBe(200);
+    const sent = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
+    expect(sent).not.toHaveProperty("title");
+    expect(sent).toMatchObject({ content: post.caption, platforms: ["x"] });
+  });
+
   it("404s an unknown post", async () => {
     expect(await handleRequest(req("POST", "/api/posts/post_nope/post-now"), ctxOver(demoState(), CONFIG))).toEqual({
       status: 404,

@@ -92,6 +92,18 @@ export function openStore(file: string, template: MediaTemplate = ACTIVE): Store
  * durable disk, so it loads the document from the app database, runs exactly this logic, and writes
  * it back. One implementation is why `pnpm serve` and the deployment behave identically.
  */
+/**
+ * The row's title, cut from the caption the agent wrote — the tool takes no title of its own.
+ *
+ * The cut used to be `caption.split("\n")[0]`, which is `""` for a caption that opens on a blank
+ * line: a hook set off from its body, or a model's own leading newline. The platform's social API
+ * takes an optional title and refuses an empty one, so those rows could be approved and never
+ * published. The first line with something on it is the title; a caption with nothing on any line
+ * has no title to cut, and the publish route lets the platform cut its own from the content.
+ */
+const titleFrom = (caption: string): string =>
+  (caption.split("\n").map((line) => line.trim()).find((line) => line !== "") ?? "").slice(0, 60);
+
 export function openStoreOver(
   state: StoreState,
   persist: (state: StoreState) => void,
@@ -104,7 +116,7 @@ export function openStoreOver(
     createPost(input) {
       const post: Post = {
         id: `post_${randomBytes(2).toString("hex")}`,
-        title: input.caption.split("\n")[0]!.slice(0, 60),
+        title: titleFrom(input.caption),
         caption: input.caption,
         ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
         // No platform named: the largest short-form network this channel can actually publish to.

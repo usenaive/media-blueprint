@@ -115,3 +115,20 @@ describe("openStore", () => {
     expect(openStore(storeFile()).updatePost("post_nope", { status: "approved" })).toBeNull();
   });
 });
+
+describe("the title a filed post carries", () => {
+  /**
+   * The title is derived, never given: `create_post` takes a caption and the row's title is cut
+   * from it. A caption that opens on a blank line — a hook set off from the body, a leading
+   * newline out of a model's own formatting — made that cut `""`, and the platform's social API
+   * refuses an empty title (`title: z.string().trim().min(1)`), so the post could be approved and
+   * never published. The first line with something on it is the title.
+   */
+  it("cuts the title from the first line that has something on it", () => {
+    const store = openStoreOver(emptyState(), () => {});
+    expect(store.createPost({ caption: "\nRule two will sting.\nAnd the rest.", status: "pending" }).title).toBe("Rule two will sting.");
+    expect(store.createPost({ caption: "   \n\t\n  Amor fati.  ", status: "pending" }).title).toBe("Amor fati.");
+    expect(store.createPost({ caption: "Straight in.\nsecond", status: "pending" }).title).toBe("Straight in.");
+    expect(store.createPost({ caption: "\n" + "x".repeat(80), status: "pending" }).title).toBe("x".repeat(60));
+  });
+});

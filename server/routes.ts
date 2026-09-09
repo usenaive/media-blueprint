@@ -122,6 +122,10 @@ async function chatAgentId(config: ProxyConfig): Promise<string | null> {
  * skipped the upstream call entirely and still answered 200 with the row flipped to `posted` and
  * a `postedAt`: a post that shipped nowhere, recorded as shipped, with no way to tell from the
  * dashboard. Nothing here reports success for a publish that did not happen.
+ *
+ * And the title, which is not the row's to insist on: it is cut from the caption, so a caption
+ * that opens on a blank line made it `""` and the platform refused the publish of an approved
+ * post. It is sent only when it says something.
  */
 async function postNow(store: Store, config: ProxyConfig | null, id: string): Promise<ApiReply> {
   const post = store.read().posts.find((p) => p.id === id);
@@ -141,7 +145,11 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
     upstream,
     JSON.stringify({
       content: post.caption,
-      title: post.title,
+      // A blank title is refused upstream (`title` is optional there, but not empty), and one can
+      // reach a row two ways: a caption whose lines are all blank, and an agent's `update_post`
+      // clearing it. Omitted, the platform cuts its own title from the content — a post the
+      // operator approved is not left permanently unpublishable over a field nobody typed.
+      ...(post.title.trim() === "" ? {} : { title: post.title }),
       platforms: [post.platform],
       ...(post.mediaUrl === undefined
         ? {}
