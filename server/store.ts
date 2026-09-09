@@ -51,7 +51,7 @@ export interface NewPostInput {
 export interface Store {
   read(): StoreState;
   createPost(input: NewPostInput): Post;
-  updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "caption" | "mediaUrl">>): Post | null;
+  updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl">>): Post | null;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
@@ -128,6 +128,7 @@ export function openStoreOver(
     updatePost(id, patch) {
       const post = state.posts.find((p) => p.id === id);
       if (!post) return null;
+      if (patch.title !== undefined) post.title = patch.title;
       if (patch.caption !== undefined) post.caption = patch.caption;
       if (patch.mediaUrl !== undefined) post.mediaUrl = patch.mediaUrl;
       if (patch.status !== undefined) post.status = patch.status;

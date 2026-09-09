@@ -12,6 +12,11 @@
  * a human opens a chat window is not a channel, it is a chat window. Read the comment on `schedule`
  * (`template.ts`) before touching a cron string here: schedules are the one place in `naive up`
  * where omission deletes, and a live row is matched by its exact cron text.
+ *
+ * The apply opens every intake at once — declaration order is not execution order — so day one is
+ * ordered by what each seat can do alone: the scout files briefs, the analyst its skeleton, and the
+ * scriptwriter and producer set themselves up without touching a brief. The first scripts and the
+ * first render belong to the crons, which do run in order: 06:00 briefs, 06:30 scripts, 07:00 render.
  */
 import { agent, CADENCE_QUESTION, channelManager, schedule, type MediaTemplate } from "./template.ts";
 
@@ -32,8 +37,8 @@ export const FACELESS: MediaTemplate = {
       skills: ["naive/short-video-hooks"],
       intake: {
         message:
-          "Day one. Read project_context for the niche, the tone and the audience, then read the style templates (channel.list_style_templates) and the queue (channel.list_posts). Choose the one or two templates whose look fits the tone answer and say why in one line each. If a brief with a script and no video is already in the queue, render it as your first piece and attach it to its row; if none is, render nothing — the scriptwriter's hooks come first, and a video without a script is a guess about the channel.",
-        budget_micro_usd: 6_000_000,
+          "Day one is set-up, not a render. The trend-scout and the scriptwriter are opening their own first sessions alongside yours right now, so the queue you read may still hold no brief and no script — that is not a signal to make one up, and it is not a signal to wait. Read project_context for the niche, the tone and the audience, then the style templates (channel.list_style_templates). Choose the one or two templates whose look fits the tone answer and file the choice as a pending post with no media, `source` \"style choice\", one line on why for each. Then check that generate_video is among your tools; if it is not, request exactly it with request_tools, once. Render nothing today: your 07:00 fire tomorrow takes the first scripted brief, after the scout's 06:00 and the scriptwriter's 06:30 have run.",
+        budget_micro_usd: 1_000_000,
       },
       schedules: [
         schedule({
@@ -78,7 +83,7 @@ export const FACELESS: MediaTemplate = {
       skills: ["naive/short-video-hooks", "naive/caption-writing"],
       intake: {
         message:
-          "Day one. Read project_context for the niche, the tone and the audience. Then read the queue (channel.list_posts): for every brief with no script, draft three candidate hooks, pick the strongest, and write the hook, the script and the publishable caption into the row (channel.update_post). If the trend-scout has not filed its five briefs yet, wait for them rather than inventing topics.",
+          "Day one. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media, `source` \"hook style\", so the crew works to one voice. Then read the queue (channel.list_posts): the trend-scout is filing its first five briefs in a session running alongside yours, so any brief you find with no script gets three candidate hooks, the strongest picked, and the hook, the script and the publishable caption written into its row (channel.update_post); any you do not find yet is not yours to invent — your 06:30 fire tomorrow scripts whatever the scout has filed by then.",
         budget_micro_usd: 1_000_000,
       },
       schedules: [

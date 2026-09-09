@@ -94,6 +94,24 @@ describe("the crews", () => {
     expect(TEMPLATES.clipping.agents.find((a) => a.name === "scout")?.intake?.message).toMatch(/source channel\(s\).*first five/);
   });
 
+  it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
+    // The seats downstream of the scout are told that, told not to invent the upstream work, and
+    // told which fire — in cron order — takes the first of it; and they are budgeted for set-up,
+    // not for a render or a cut that has nothing to work from.
+    const downstream: [MediaTemplate, string, RegExp][] = [
+      [TEMPLATES.faceless, "producer", /alongside yours.*Render nothing today.*07:00 fire/s],
+      [TEMPLATES.faceless, "scriptwriter", /alongside yours.*not yours to invent.*06:30 fire/s],
+      [TEMPLATES.clipping, "clipper", /alongside yours.*Cut nothing today.*07:00 fire/s],
+      [TEMPLATES.clipping, "caption-editor", /cuts nothing until its 07:00 fire.*07:30 fire/s],
+    ];
+    for (const [template, name, says] of downstream) {
+      const seat = template.agents.find((a) => a.name === name);
+      expect(seat?.intake?.message, name).toMatch(says);
+    }
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "producer")?.intake?.budget_micro_usd).toBeLessThan(ONE_RENDER_MICRO_USD);
+    expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.intake?.budget_micro_usd).toBeLessThan(2_000_000);
+  });
+
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
     expect(toolsOf(TEMPLATES.faceless, "producer")).toEqual(
       expect.arrayContaining(["generate_video", "generate_image"]),

@@ -11,6 +11,11 @@
  * The rights question is the first one asked and the one rule every seat repeats: nothing is cut
  * from a source the context does not name. Read the comment on `schedule` (`template.ts`) before
  * touching a cron string here.
+ *
+ * The apply opens every intake at once — declaration order is not execution order — so day one is
+ * ordered by what each seat can do alone: the scout files briefs, the analyst its skeleton, the
+ * caption-editor its style, and the clipper checks its tools. The first cuts and the first captions
+ * belong to the crons, which do run in order: 06:00 briefs, 07:00 cuts, 07:30 captions.
  */
 import { agent, CADENCE_QUESTION, channelManager, schedule, type MediaTemplate } from "./template.ts";
 
@@ -31,8 +36,8 @@ export const CLIPPING: MediaTemplate = {
       skills: ["naive/clip-selection"],
       intake: {
         message:
-          "Day one. Read project_context for the source channel(s) the operator holds rights to, the niche and the cadence. Read the queue (channel.list_posts): if the scout has filed briefs from a named source, cut the first two clips and attach each to its brief's row. If no brief is filed yet, cut nothing — never pick a source yourself — and say in one line what you are waiting for.",
-        budget_micro_usd: 2_000_000,
+          "Day one is set-up, not a cut. The scout is opening its own first session alongside yours right now, so the queue you read may hold no brief yet — that is not a signal to pick a source yourself, and it is not a signal to wait. Read project_context for the source channel(s) the operator holds rights to, the niche and the cadence, and confirm you can reach each named source; then check that the tools you cut with are among yours, and if one is not, request exactly it with request_tools, once. File what you found as a pending post with no media, `source` \"clipper check\": which sources you can reach, which you cannot, and what is missing. Cut nothing today: your 07:00 fire tomorrow takes the scout's first briefs, after its 06:00 has run.",
+        budget_micro_usd: 1_000_000,
       },
       schedules: [
         schedule({
@@ -77,7 +82,7 @@ export const CLIPPING: MediaTemplate = {
       skills: ["naive/caption-writing", "naive/short-video-hooks"],
       intake: {
         message:
-          "Day one. Read project_context for the niche, the audience and the sources. Read the queue (channel.list_posts): write a publishable title, caption and hashtags into every clip that has media and still carries its working brief (channel.update_post). Then write the channel's caption style in five lines — voice, length, hashtag set, credit line, what never to say — and file it as a pending post with no media, `source` \"caption style\", so the crew works to one voice.",
+          "Day one. Read project_context for the niche, the audience and the sources. Write the channel's caption style in five lines — voice, length, hashtag set, credit line, what never to say — and file it as a pending post with no media, `source` \"caption style\", so the crew works to one voice. Then read the queue (channel.list_posts): the clipper cuts nothing until its 07:00 fire tomorrow, so any clip you find with media and a working brief gets a publishable title, caption and hashtags written into its row (channel.update_post), and a queue with none is the expected day one — your 07:30 fire captions the morning's cuts.",
         budget_micro_usd: 1_000_000,
       },
       schedules: [

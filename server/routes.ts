@@ -10,7 +10,7 @@
  * `ctx.store()`, and only by the routes that actually touch it.
  */
 import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } from "./mcp.ts";
-import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
+import { collect, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
 import { PROJECT_NAME } from "../templates/index.ts";
@@ -150,22 +150,47 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
 }
 
 /** One line of an install report (`canonical-spec §31.2`); on `intake`, `id` is the session the apply opened. */
-export interface IntakeLine {
+export interface ReportLine {
   name: string;
   action: string;
   id?: string;
+  reason?: string;
 }
 
 interface WireInstall {
   id: string;
   status: string;
-  report?: { intake?: IntakeLine[] } | null;
+  report?: { agents?: ReportLine[]; intake?: ReportLine[] } | null;
 }
 
-/** What the dashboard home reads: the setup answers as the platform holds them, plus the day-one sessions. */
+/** An intake line with its session's state, read by id — or null when that read did not answer. */
+export interface DayOneLine extends ReportLine {
+  session: { status: string; stop_reason: string | null; waiting: boolean } | null;
+}
+
+/**
+ * What the dashboard home reads: the setup answers as the platform holds them, the `agt_` ids the
+ * install left standing (every platform figure on the home is cut to them), and the day-one lines.
+ */
 export interface HomeContext {
   context: unknown;
-  day_one: IntakeLine[];
+  team: { name: string; id: string }[];
+  day_one: DayOneLine[];
+}
+
+/**
+ * An intake session read by its own id. The install opened it on day one and a session list is the
+ * hundred most recent, so once the crons have run a while the list no longer holds it; the id does.
+ */
+async function dayOneLine(config: ProxyConfig, line: ReportLine): Promise<DayOneLine> {
+  if (line.action !== "created" || line.id === undefined) return { ...line, session: null };
+  const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${line.id}` }, null);
+  if (!res.ok) return { ...line, session: null };
+  const session = (await res.json()) as { status: string; stop_reason: string | null; pending_actions?: unknown[] };
+  return {
+    ...line,
+    session: { status: session.status, stop_reason: session.stop_reason, waiting: (session.pending_actions?.length ?? 0) > 0 },
+  };
 }
 
 /**
@@ -188,7 +213,13 @@ async function projectContext(config: ProxyConfig): Promise<ApiReply> {
   const read = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs/${applied.id}/context` }, null);
   const body = await read.json();
   if (!read.ok) return json(read.status, body);
-  const reply: HomeContext = { context: body, day_one: applied.report?.intake ?? [] };
+  const reply: HomeContext = {
+    context: body,
+    team: (applied.report?.agents ?? [])
+      .filter((row) => row.action !== "refused" && row.action !== "deleted" && row.id !== undefined)
+      .map((row) => ({ name: row.name, id: row.id as string })),
+    day_one: await Promise.all((applied.report?.intake ?? []).map((row) => dayOneLine(config, row))),
+  };
   return json(200, reply);
 }
 
@@ -310,9 +341,13 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     return json(created.status, await created.json());
   }
 
-  const upstream = upstreamFor(req.method, req.path, ctx.config.identityId);
+  const upstream = upstreamFor(req.method, req.path, ctx.config.identityId, req.query);
   if (upstream === null) {
     return KNOWN.some((known) => known.test(req.path)) ? fail(405, "method not allowed") : fail(404, "no such route");
+  }
+  if (req.path === "/api/agents" || req.path === "/api/deployments") {
+    const rows = await collect(ctx.config, upstream);
+    return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
   }
   const body = req.method === "GET" ? null : req.body || "{}";
   const answer = await proxyFetch(ctx.config, upstream, body);

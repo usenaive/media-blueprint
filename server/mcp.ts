@@ -88,8 +88,8 @@ export const TOOLS = [
     source: str("What it was made from: the brief, the source video, the style template"),
     status: str("pending (default) or ready"),
   }, ["caption"]) },
-  { name: "update_post", description: `Fix the caption or media URL of a pending or ready post. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
-    id: str("Post id"), caption: str("New caption"), media_url: str("New media URL"),
+  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
+    id: str("Post id"), title: str("New title"), caption: str("New caption"), media_url: str("New media URL"),
   }, ["id"]) },
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
@@ -154,7 +154,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (post.status !== "pending" && post.status !== "ready") {
         throw new ToolError(`post is ${post.status}; only pending or ready posts can be edited`);
       }
-      return store.updatePost(id, { caption: optional(params, "caption"), mediaUrl: optional(params, "media_url") });
+      return store.updatePost(id, { title: optional(params, "title"), caption: optional(params, "caption"), mediaUrl: optional(params, "media_url") });
     }
     case "list_style_templates":
       return store.read().templates;

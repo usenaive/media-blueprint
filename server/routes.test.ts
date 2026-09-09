@@ -281,23 +281,49 @@ describe("the platform routes", () => {
    * The home's context card: the setup answers as the platform holds them (`canonical-spec §31.8`),
    * read off this project's latest *applied* install — never a local row, never a pending apply.
    */
-  it("reads the project context of the latest applied install, with its day-one intake lines", async () => {
+  it("reads the project context of the latest applied install, with its team and its day one read by session id", async () => {
+    // The intake sessions were opened on install day; a session list is the hundred most recent
+    // and stops holding them once the crons have run a while. The report names them by `ses_` id,
+    // and the team by `agt_` id — a refused seat has neither and is on neither list.
     const context = { object: "project_context", project: "media", template: "faceless", answers: [{ key: "niche", label: "Niche", value: "Stoicism" }] };
+    const report = {
+      agents: [{ name: "trend-scout", action: "created", id: "agt_s" }, { name: "producer", action: "unchanged", id: "agt_p" }, { name: "analyst", action: "refused", reason: "no budget" }],
+      intake: [{ name: "trend-scout", action: "created", id: "ses_9" }, { name: "producer", action: "created", id: "ses_8" }, { name: "analyst", action: "refused", reason: "agent refused" }],
+    };
     const installs = {
       data: [
         { id: "bpi_new", status: "pending", report: null },
-        { id: "bpi_live", status: "applied", report: { intake: [{ name: "trend-scout", action: "created", id: "ses_9" }] } },
+        { id: "bpi_live", status: "applied", report },
         { id: "bpi_old", status: "applied", report: { intake: [] } },
       ],
     };
-    const fetchMock = vi.fn().mockResolvedValueOnce(json(installs)).mockResolvedValueOnce(json(context));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json(installs))
+      .mockResolvedValueOnce(json(context))
+      .mockResolvedValueOnce(json({ id: "ses_9", status: "completed", stop_reason: "end_turn", pending_actions: [] }))
+      .mockResolvedValueOnce(json({ error: { type: "api_error", code: "internal", message: "boom" } }, 500));
     vi.stubGlobal("fetch", fetchMock);
 
     const reply = await handleRequest(req("GET", "/api/context"), ctxOver(demoState(), CONFIG));
 
-    expect(reply).toEqual({ status: 200, body: { context, day_one: [{ name: "trend-scout", action: "created", id: "ses_9" }] } });
-    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/blueprints/installs?project=media");
-    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/v1/blueprints/installs/bpi_live/context");
+    expect(reply).toEqual({
+      status: 200,
+      body: {
+        context,
+        team: [{ name: "trend-scout", id: "agt_s" }, { name: "producer", id: "agt_p" }],
+        day_one: [
+          { name: "trend-scout", action: "created", id: "ses_9", session: { status: "completed", stop_reason: "end_turn", waiting: false } },
+          { name: "producer", action: "created", id: "ses_8", session: null },
+          { name: "analyst", action: "refused", reason: "agent refused", session: null },
+        ],
+      },
+    });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.test/v1/blueprints/installs?project=media",
+      "https://api.test/v1/blueprints/installs/bpi_live/context",
+      "https://api.test/v1/sessions/ses_9",
+      "https://api.test/v1/sessions/ses_8",
+    ]);
   });
 
   it("says so when the project has never been applied, and 503s by name without a key", async () => {
@@ -316,12 +342,35 @@ describe("the platform routes", () => {
     });
   });
 
-  it("proxies the crew's timers so the home can print each agent's next fire", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(json({ data: [{ id: "dep_1", agent_id: "agt_1", cron: "0 9 * * 1", next_run_at: "2026-09-14T13:00:00Z" }] }));
+  it("assembles every page of the crew's timers, and fails the whole read rather than hand back a shorter list", async () => {
+    // "no timer armed" on an agent whose timer sat on the page that did not arrive is a lie the
+    // screen has no way to catch; a 502 it can show.
+    const timer = { id: "dep_1", agent_id: "agt_1", cron: "0 9 * * 1", next_run_at: "2026-09-14T13:00:00Z" };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ data: [timer], has_more: true, next_cursor: "dep_1" }))
+      .mockResolvedValueOnce(json({ data: [{ ...timer, id: "dep_2" }], has_more: false, next_cursor: null }));
     vi.stubGlobal("fetch", fetchMock);
-    const reply = await handleRequest(req("GET", "/api/deployments"), ctxOver(demoState(), CONFIG));
-    expect(reply.status).toBe(200);
-    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/deployments?limit=100");
+    expect(await handleRequest(req("GET", "/api/deployments"), ctxOver(demoState(), CONFIG))).toEqual({
+      status: 200,
+      body: { data: [timer, { ...timer, id: "dep_2" }], has_more: false, next_cursor: null },
+    });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.test/v1/deployments?limit=100",
+      "https://api.test/v1/deployments?limit=100&after=dep_1",
+    ]);
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(json({ data: [timer], has_more: true, next_cursor: "dep_1" }))
+      .mockResolvedValueOnce(json({ error: { type: "api_error", code: "internal", message: "boom" } }, 500)));
+    expect((await handleRequest(req("GET", "/api/agents"), ctxOver(demoState(), CONFIG))).status).toBe(502);
+  });
+
+  it("passes the session filters through, so the home counts the parked sessions and not the recent ones", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({ data: [], has_more: false }));
+    vi.stubGlobal("fetch", fetchMock);
+    const query = new URLSearchParams({ stop_reason: "awaiting_approval" });
+    expect((await handleRequest({ ...req("GET", "/api/sessions"), query }, ctxOver(demoState(), CONFIG))).status).toBe(200);
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/sessions?limit=100&stop_reason=awaiting_approval");
   });
 });
 

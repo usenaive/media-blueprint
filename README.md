@@ -330,7 +330,7 @@ sends it with every call. Without that token the endpoint answers `401`.
 |---|---|
 | `list_posts {status?}`, `get_post {id}` | Inspect the queue |
 | `create_post {caption, media_url?, platform?, agent?, account?, source?, status?}` | File a finished piece as *pending* (or *ready*), signed: who filed it, which account it is for, what it was made from |
-| `update_post {id, caption?, media_url?}` | Fix a pending or ready post; approved and posted ones are yours |
+| `update_post {id, title?, caption?, media_url?}` | Fix a pending or ready post; approved and posted ones are yours |
 | `list_style_templates`, `list_accounts` | The style library, the connected accounts |
 
 The setup answers are not a tool of this server: the platform offers every agent of the crew its

@@ -17,14 +17,15 @@ export interface Upstream {
  * Social routes hang off the channel persona, so they need its `idn_` id;
  * without one they are unroutable and return null (the caller answers 503).
  */
-export function upstreamFor(method: string, pathname: string, identityId: string | null): Upstream | null {
+export function upstreamFor(method: string, pathname: string, identityId: string | null, query?: URLSearchParams): Upstream | null {
   if (method === "POST" && pathname === "/api/chat") return { method: "POST", path: "/v1/sessions" };
   const stream = /^\/api\/chat\/(ses_[\w-]+)\/stream$/.exec(pathname);
   if (method === "GET" && stream) {
     return { method: "GET", path: `/v1/sessions/${stream[1]}/stream`, sse: true };
   }
-  if (method === "GET" && pathname === "/api/agents") return { method: "GET", path: "/v1/agents" };
-  // The crew's timers, for the home's "next fire" — every cron `naive up` armed, with its `next_run_at`.
+  // The roster and the timers are read whole (`collect` follows the cursor): a page of either
+  // would show an agent as having no timer when its timer sat on the page that was not read.
+  if (method === "GET" && pathname === "/api/agents") return { method: "GET", path: "/v1/agents?limit=100" };
   if (method === "GET" && pathname === "/api/deployments") return { method: "GET", path: "/v1/deployments?limit=100" };
   /**
    * The approval queue's two routes.
@@ -38,7 +39,14 @@ export function upstreamFor(method: string, pathname: string, identityId: string
    * parked session is often not the most recent one, and the screen says when it is showing a page
    * rather than the whole list.
    */
-  if (method === "GET" && pathname === "/api/sessions") return { method: "GET", path: "/v1/sessions?limit=100" };
+  if (method === "GET" && pathname === "/api/sessions") {
+    const params = new URLSearchParams({ limit: "100" });
+    for (const name of SESSION_FILTERS) {
+      const value = query?.get(name);
+      if (value) params.set(name, value);
+    }
+    return { method: "GET", path: `/v1/sessions?${params}` };
+  }
   const confirm = /^\/api\/sessions\/(ses_[\w-]+)\/tool_confirmations$/.exec(pathname);
   if (method === "POST" && confirm) {
     return { method: "POST", path: `/v1/sessions/${confirm[1]}/tool_confirmations` };
@@ -56,6 +64,9 @@ export function upstreamFor(method: string, pathname: string, identityId: string
   }
   return null;
 }
+
+/** The list filters the platform's `GET /v1/sessions` takes (`canonical-spec §5`); anything else is dropped. */
+const SESSION_FILTERS = ["agent_id", "status", "stop_reason"] as const;
 
 export interface ProxyConfig {
   baseUrl: string;
@@ -93,4 +104,22 @@ export async function proxyFetch(
     },
     ...(body === null ? {} : { body }),
   });
+}
+
+/**
+ * Every row of a cursor-paginated platform list, or null when any page failed — a list cut short
+ * by a failed page would read as a shorter roster, and nothing downstream could tell.
+ */
+export async function collect<T>(config: ProxyConfig, upstream: Upstream, fetchImpl: typeof fetch = fetch): Promise<T[] | null> {
+  const all: T[] = [];
+  let after: string | null = null;
+  for (;;) {
+    const path = after === null ? upstream.path : `${upstream.path}&after=${encodeURIComponent(after)}`;
+    const res = await proxyFetch(config, { method: "GET", path }, null, fetchImpl);
+    if (!res.ok) return null;
+    const page = (await res.json()) as { data?: T[]; has_more?: boolean; next_cursor?: string | null };
+    all.push(...(page.data ?? []));
+    if (page.has_more !== true || !page.next_cursor) return all;
+    after = page.next_cursor;
+  }
 }

@@ -119,6 +119,11 @@ describe("mcp tools", () => {
       (await handleMcp(call("update_post", { id: "post_9f2a", caption: "Softer first line." }), store, null))!,
     );
     expect(edited).toMatchObject({ caption: "Softer first line.", status: "pending" });
+    // The caption-editor's whole job on a cut: the scout's working title goes, the publishable one stays.
+    const retitled = text<{ title: string; caption: string }>(
+      (await handleMcp(call("update_post", { id: "post_9f2a", title: "Rule two will sting" }), store, null))!,
+    );
+    expect(retitled).toMatchObject({ title: "Rule two will sting", caption: "Softer first line." });
     for (const id of ["post_5b5e", "post_3970"]) {
       const refused = (await handleMcp(call("update_post", { id, caption: "nope" }), store, null)) as CallResult;
       expect(refused.result.isError).toBe(true);

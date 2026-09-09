@@ -11,8 +11,16 @@ describe("upstreamFor", () => {
     });
   });
 
-  it("maps agents onto the org agent list", () => {
-    expect(upstreamFor("GET", "/api/agents", null)).toEqual({ method: "GET", path: "/v1/agents" });
+  it("maps agents onto the org agent list, a full page at a time", () => {
+    expect(upstreamFor("GET", "/api/agents", null)).toEqual({ method: "GET", path: "/v1/agents?limit=100" });
+  });
+
+  it("passes the session filters the platform knows through, and drops the rest", () => {
+    const query = new URLSearchParams({ stop_reason: "awaiting_approval", agent_id: "agt_1", limit: "5", evil: "1" });
+    expect(upstreamFor("GET", "/api/sessions", null, query)).toEqual({
+      method: "GET",
+      path: "/v1/sessions?limit=100&agent_id=agt_1&stop_reason=awaiting_approval",
+    });
   });
 
   /**
