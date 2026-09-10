@@ -184,9 +184,18 @@ stay as the fallback, picking up by stage whatever a handoff did not carry; wher
 timer overlap, a seat claims a row first (`scripting`, `rendering`, with `expected_stage` on
 `update_post`), so one session gets it and the other is refused before spending. Day one costs at
 most the sum of the intake budgets ($76 on `faceless`, $88 on `clipping`) plus the handoff
-sessions, each inside the receiving seat's $20 task ceiling, and everything it makes lands in the
-queue as pending — nothing is published. The Home screen tracks each intake session until it
+sessions, each inside the receiving seat's $20 task ceiling — an intake budget is a **one-time
+ceiling on that one session**, not a recurring allowance; the recurring cap is the agent's own
+`budget.cap_micro_usd` above. Everything day one makes lands in the queue as pending — nothing is
+published. The Home screen tracks each intake session until it
 finishes.
+
+**All five sessions open at the same moment**, so a seat downstream of another reads a queue that
+is still being filled. That is the install, not a fault: every day-one message ends with the same
+paragraph (`DAY_ONE_ORDER` in [`templates/template.ts`](templates/template.ts)) telling the seat
+so, telling it not to wait and not to report the emptiness as a finding, and pointing the chained
+work at the handoff that names its rows — or, where no seat hands on, at the crons, which run in
+order, hours apart, upstream seat first.
 
 ### The skills
 
@@ -239,11 +248,19 @@ Brainrot absurdist.
 ## 📮 Where a post can go
 
 A post names one of the networks the platform can publish to — **bluesky, facebook, linkedin,
-mastodon, threads, x** — and nothing else is offered anywhere in the dashboard or in
-`create_post`. Vertical-video-only networks are absent because a post to one is refused
-upstream, and a "Post now" button that returns an error is worse than a button that is not
-there. The list lives in one place, [`seed/posts.ts`](seed/posts.ts); when the platform accepts
-more, it grows there.
+mastodon, threads, tiktok, x** — and nothing else is offered anywhere in the dashboard or in
+`create_post`. The list lives in one place, [`seed/posts.ts`](seed/posts.ts); when the platform
+accepts more, it grows there.
+
+**Where *this* channel posts is the template's**, not a default buried in the server: `platform`
+in [`templates/faceless.ts`](templates/faceless.ts) / [`templates/clipping.ts`](templates/clipping.ts)
+is what a post filed with no destination becomes, and both crews are set to **tiktok** because
+vertical short-form video is what they make. Change that one line, run `naive up`, and every post
+filed after it targets somewhere else; an agent can still name a different network per post, and
+the channel manager can retarget a row before you approve it.
+
+TikTok publishes video and refuses text, so an approved row with no video attached is refused
+here, by name, rather than at the button — a brief is exactly that row.
 
 ## 🖥 Operating the channel
 
@@ -342,7 +359,7 @@ sends it with every call. Without that token the endpoint answers `401`.
 |---|---|
 | `list_posts {status?}`, `get_post {id}` | Inspect the queue |
 | `create_post {caption, media_url?, platform?, agent?, account?, source?, status?}` | File a finished piece as *pending* (or *ready*), signed: who filed it, which account it is for, what it was made from |
-| `update_post {id, title?, caption?, media_url?}` | Fix a pending or ready post; approved and posted ones are yours |
+| `update_post {id, title?, caption?, media_url?, platform?}` | Fix or retarget a pending or ready post; approved and posted ones are yours |
 | `list_style_templates`, `list_accounts` | The style library, the connected accounts |
 
 The setup answers are not a tool of this server: the platform offers every agent of the crew its

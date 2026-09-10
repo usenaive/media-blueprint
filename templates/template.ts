@@ -15,7 +15,7 @@
  * could restate them could quietly drop the gate.
  */
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
-import type { PostKind } from "../seed/posts.ts";
+import type { PostKind, PostPlatform } from "../seed/posts.ts";
 
 export type TemplateName = "faceless" | "clipping";
 
@@ -53,6 +53,18 @@ export interface MediaTemplate {
   agents: AgentDecl[];
   /** What this crew files; the first is what a post filed over MCP with no kind stated becomes. */
   kinds: [PostKindDecl, ...PostKindDecl[]];
+  /**
+   * WHERE THIS CHANNEL POSTS, and the one thing about a post that was nobody's to decide.
+   *
+   * `channel.create_post` takes a `platform`, and in production not one of the nine rows the crew
+   * filed carried one: every filing fell through to a constant in `server/mcp.ts` that read `"x"`,
+   * so a channel of vertical video queued nine text-network posts and the operator could not
+   * retarget them either. The target belongs with the rest of what a template is — the crew, the
+   * kinds, the words — so switching template switches it, and an operator who wants another
+   * network edits this one line and runs `naive up`. An agent may still name a different
+   * `POST_PLATFORMS` entry per post; this is what a post that names none becomes.
+   */
+  platform: PostPlatform;
   /** Exactly three (§4 of the plan): the studio asks them once, before anything exists. */
   questions: [SetupQuestion, SetupQuestion, SetupQuestion];
   /** Every word a screen prints that changes with the template. */
@@ -103,9 +115,28 @@ const model = "anthropic/claude-sonnet-5";
 export const CONTEXT_PREAMBLE =
   "Read `project_context` before anything else; the answers there are the client's, not yours to invent. Every brief, script, clip, caption and plan you make is for the niche, the audience and the cadence written there — when an answer is missing, ask the operator rather than filling it in.";
 
+/**
+ * The sentence every day-one message ends with, and the race it is the answer to.
+ *
+ * `naive up` opens one intake session per created agent, all of them together in a single
+ * `eachInFlight` after every other write (`packages/blueprints/src/up.ts`), and `intake` carries no
+ * ordering knob. So on day one the downstream seats read a queue the upstream ones are still
+ * filling: in production the scriptwriter's first session read `channel.list_posts -> "[]"` and
+ * filed *"the trend-scout hasn't filed any briefs yet in its parallel session"* as its finding,
+ * while the scout was filing five briefs in the same minute. The channel's real order is not the
+ * intakes': it is the handoff a seat sends after it has filed (`trigger_agent`, `handoffs` on the
+ * seat — canonical-spec §46), naming the rows, and where no seat hands on, the crons', which fire
+ * hours apart in dependency order.
+ *
+ * It is appended by `agent()` below rather than written into each message, for the same reason the
+ * approval gate is: a rule every seat needs is a rule no seat can be written without.
+ */
+export const DAY_ONE_ORDER =
+  "One last thing about today, and it is about today only. The install opens every seat's first session at the same moment, so the queue you read may hold nothing another seat is about to file. An empty or half-filled queue right now is the install's doing and not a finding: do not report it as one, do not wait for anyone, and do not invent the work you cannot see. Work that needs another seat's output reaches you by name — a handoff naming its rows, in a session of your own — or on your next cron fire, upstream seat first, hours apart; never from today's queue. File what you can make alone, hand on exactly what your message says to hand on, and say plainly what you left for the timers.";
+
 /** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
 const approvalGate =
-  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file — your name as `agent`, the connected account as `account` (channel.list_accounts), the video as `media_url`, what you made it from as `source`. A brief is a pending post with no media yet. The operator reviews every row and approves from the dashboard. The tools offered this turn are the complete list of what you can do right now: do not assume or invent a capability. If the task needs a tool or model you are not offered, request it once with request_tools — exact tool, permission, the model in config.models where needed, and why — then wait; a refusal is final for this task. If it needs a fact or decision only the operator has, ask once with ask_operator, then wait. A connected account's tools appear only once the operator connects it; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
+  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file — your name as `agent`, the connected account as `account` (channel.list_accounts), the video as `media_url`, what you made it from as `source`, the network as `platform`. A brief is a pending post with no media yet. The operator reviews every row and approves from the dashboard. The tools offered this turn are the complete list of what you can do right now: do not assume or invent a capability. If the task needs a tool or model you are not offered, request it once with request_tools — exact tool, permission, the model in config.models where needed, and why — then wait; a refusal is final for this task. If it needs a fact or decision only the operator has, ask once with ask_operator, then wait. A connected account's tools appear only once the operator connects it; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -340,7 +371,9 @@ export const agent = (decl: {
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
   tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
-  intake: decl.intake,
+  // Preamble → brief → gate for the standing prompt; message → order for the one-off. Composed here
+  // so a new seat cannot be written without either.
+  intake: { ...decl.intake, message: `${decl.intake.message} ${DAY_ONE_ORDER}` },
   ...(decl.handoffs === undefined ? {} : { handoffs: decl.handoffs }),
   /**
    * The persona this agent acts as, and the reason it can act on a connected account at all: the

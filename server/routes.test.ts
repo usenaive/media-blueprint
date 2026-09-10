@@ -8,6 +8,7 @@ import { handleRequest, type ApiContext, type ApiRequest } from "./routes.ts";
 import { TEMPLATES } from "../templates/index.ts";
 import { openStoreOver, seedState, type Store, type StoreState } from "./store.ts";
 import type { ProxyConfig } from "./proxy.ts";
+import { POST_PLATFORMS } from "../seed/posts.ts";
 
 const CONFIG: ProxyConfig = { baseUrl: "https://api.test", apiKey: "sk_test", identityId: "idn_1", project: "media" };
 
@@ -77,9 +78,28 @@ describe("the store routes", () => {
     const ctx = ctxOver(state);
     expect(await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"garbage"}'), ctx)).toEqual({
       status: 400,
-      body: { error: "status must be one of pending, ready, approved, posted, rejected" },
+      body: { error: "status must be one of pending, ready, approved, rejected" },
     });
     expect(state.posts.find((p) => p.id === "post_9f2a")?.status).toBe("pending");
+  });
+
+  /**
+   * #4 — the guard `postNow` enforces, walked around by its neighbour.
+   *
+   * MEASURED IN PRODUCTION, 2026-09-09: `PATCH /api/posts/{id} -d '{"status":"posted"}'` answered
+   * `HTTP 200 "status":"posted"` on a `pending` row nothing had published — one hop, no upstream
+   * call, and the store stamped `postedAt` on it. `postNow` refuses exactly that with a 409 and
+   * publishes for real before it writes the word. `posted` is that route's to write and no other's.
+   */
+  it("refuses to write `posted`: a row is posted by publishing it, not by naming it", async () => {
+    const state = demoState();
+    const ctx = ctxOver(state);
+    const refused = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"posted"}'), ctx);
+    expect(refused.status).toBe(409);
+    expect((refused.body as { error: string }).error).toMatch(/post-now/);
+    const row = state.posts.find((p) => p.id === "post_9f2a")!;
+    expect(row.status).toBe("pending");
+    expect(row.postedAt).toBeUndefined();
   });
 
   it("answers 405 for a known path with the wrong method and 404 for an unknown one", async () => {
@@ -128,15 +148,35 @@ describe("post now", () => {
     expect(sent).not.toHaveProperty("media_urls");
   });
 
+  it("refuses to publish a text-only row to a network that takes only media", async () => {
+    // TikTok is now the channel's target, and TikTok publishes video, not text: the platform
+    // refuses `tiktok` on a post carrying no `media_urls` and no `file_ids`. A brief — a pending
+    // row with no video yet — is exactly that post, so the refusal is said here, in the channel's
+    // own words, rather than discovered by pressing a button and reading a 502.
+    const state = demoState();
+    const brief = { ...state.posts[0]!, id: "post_brief", platform: "tiktok" as const, status: "approved" as const };
+    delete (brief as { mediaUrl?: string }).mediaUrl;
+    state.posts.push(brief);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("POST", "/api/posts/post_brief/post-now"), ctxOver(state, CONFIG));
+
+    expect(reply.status).toBe(400);
+    expect((reply.body as { error: string }).error).toMatch(/tiktok publishes video, not text/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(state.posts.find((p) => p.id === "post_brief")?.status).toBe("approved");
+  });
+
   it("only ever names a platform the API accepts, and refuses a stored row that does not", async () => {
-    // Every seeded and every agent-filed row targets one of the six networks the platform's social
-    // API takes. A document written before that was true can still be in the app database, and it
-    // must be refused here with a sentence rather than published into a 400 the operator cannot read.
+    // Every seeded and every agent-filed row targets one of the networks the platform's social API
+    // takes. A document written before that was true can still be in the app database, and it must
+    // be refused here with a sentence rather than published into a 400 the operator cannot read.
     const state = demoState();
     for (const post of state.posts) {
-      expect(["bluesky", "facebook", "linkedin", "mastodon", "threads", "x"]).toContain(post.platform);
+      expect(POST_PLATFORMS as readonly string[]).toContain(post.platform);
     }
-    const legacy = { ...state.posts[0]!, id: "post_old", platform: "tiktok" as never, status: "approved" as const };
+    const legacy = { ...state.posts[0]!, id: "post_old", platform: "youtube" as never, status: "approved" as const };
     state.posts.push(legacy);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -145,7 +185,7 @@ describe("post now", () => {
 
     expect(reply).toEqual({
       status: 400,
-      body: { error: "this channel cannot publish to tiktok — retarget the post first" },
+      body: { error: "this channel cannot publish to youtube — retarget the post first" },
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(state.posts.find((p) => p.id === "post_old")?.status).toBe("approved");

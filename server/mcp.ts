@@ -13,6 +13,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, type PostPlatform, type PostStage } from "../seed/posts.ts";
+import { ACTIVE } from "../templates/index.ts";
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -71,8 +72,14 @@ const str = (description: string) => ({ type: "string", description }) as const;
 
 const OPERATOR_ONLY = "Approving, rejecting and publishing are operator actions on the dashboard; no tool does them.";
 
-/** What a post with no stated destination gets — see `store.createPost`. */
-const DEFAULT_PLATFORM = "x";
+/**
+ * Where this channel posts, declared with the rest of the template (`templates/template.ts`) and
+ * read here only to say it on the tool. It was a constant `"x"` in this file, so every post the
+ * crew filed went to a text network whatever the channel was for. The store applies it (a post with
+ * no stated destination gets it there, in one place); this names it to the agent, because a default
+ * nothing tells the crew about is a default the crew never chooses against.
+ */
+const CHANNEL_PLATFORM = ACTIVE.platform;
 
 const STAGES = POST_STAGES.join("|");
 
@@ -85,15 +92,16 @@ export const TOOLS = [
   { name: "create_post", description: `File a finished piece into the queue for the operator to review. Lands as pending unless status is ready. Say who you are, which account it is for and what it was made from — the operator approves the row, and an unsigned one tells them nothing. ${OPERATOR_ONLY}`, inputSchema: obj({
     caption: str("The caption, hashtags included"),
     media_url: str("URL of the finished clip or video — it is published with the post, and the operator watches it here before approving"),
-    platform: str(`Where it should go: ${POST_PLATFORMS.join("|")} (default ${DEFAULT_PLATFORM}). These are the only networks this channel can publish to.`),
+    platform: str(`Where it should go: ${POST_PLATFORMS.join("|")}. This channel posts to ${CHANNEL_PLATFORM}, which is what a post that names none becomes; name another only when the piece is genuinely for it. These are the only networks this channel can publish to.`),
     agent: str("Your own name, as the roster lists it — who filed this"),
     account: str("The connected account this is for, from list_accounts"),
     source: str("What it was made from: the brief, the source video, the style template"),
     stage: str(`How far along the piece is: ${STAGES}. Leave unset for a note (a plan, a report) that no seat takes further.`),
     status: str("pending (default) or ready"),
   }, ["caption"]) },
-  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post, or move it to the next stage. To claim a row before working on it, move it to scripting or rendering with expected_stage set to the stage it should still be at: the call is refused if another session got there first, and a refusal means the row is not yours. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "update_post", description: `Fix the title, caption, media URL or target network of a pending or ready post, or move it to the next stage. To claim a row before working on it, move it to scripting or rendering with expected_stage set to the stage it should still be at: the call is refused if another session got there first, and a refusal means the row is not yours. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
     id: str("Post id"), title: str("New title"), caption: str("New caption"), media_url: str("New media URL"),
+    platform: str(`Retarget the post: ${POST_PLATFORMS.join("|")}`),
     stage: str(`The stage the piece has reached: ${STAGES}`),
     expected_stage: str(`The stage the row must still be at for this update to apply (${STAGES}); refused otherwise.`),
   }, ["id"]) },
@@ -167,10 +175,11 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
     case "create_post": {
       const status = optional(params, "status") ?? "pending";
       if (status !== "pending" && status !== "ready") throw new ToolError("status must be pending or ready");
-      const platform = optional(params, "platform") ?? DEFAULT_PLATFORM;
+      const platform = optional(params, "platform");
       // Refused here rather than at publish time: a post filed for a network the platform cannot
       // publish to is a post the operator can only ever discover is undeliverable by pressing send.
-      if (!(POST_PLATFORMS as readonly string[]).includes(platform)) {
+      // Absent is not refused — the store stamps the channel's own target on it.
+      if (platform !== undefined && !(POST_PLATFORMS as readonly string[]).includes(platform)) {
         throw new ToolError(`platform must be one of ${POST_PLATFORMS.join(", ")}`);
       }
       return store.createPost({
@@ -180,7 +189,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         account: optional(params, "account"),
         source: optional(params, "source"),
         stage: stageOf(params),
-        platform: platform as PostPlatform,
+        ...(platform === undefined ? {} : { platform: platform as PostPlatform }),
         status,
       });
     }
@@ -190,6 +199,10 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (!post) throw new ToolError("no such post");
       if (post.status !== "pending" && post.status !== "ready") {
         throw new ToolError(`post is ${post.status}; only pending or ready posts can be edited`);
+      }
+      const target = optional(params, "platform");
+      if (target !== undefined && !(POST_PLATFORMS as readonly string[]).includes(target)) {
+        throw new ToolError(`platform must be one of ${POST_PLATFORMS.join(", ")}`);
       }
       // The whole call runs under the store's lock, so this read-then-write is the atomic claim.
       const expected = stageOf(params, "expected_stage");
@@ -201,6 +214,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         caption: optional(params, "caption"),
         mediaUrl: optional(params, "media_url"),
         stage: stageOf(params),
+        ...(target === undefined ? {} : { platform: target as PostPlatform }),
       });
     }
     case "list_style_templates":

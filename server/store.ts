@@ -53,7 +53,7 @@ export interface NewPostInput {
 export interface Store {
   read(): StoreState;
   createPost(input: NewPostInput): Post;
-  updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "stage">>): Post | null;
+  updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "platform" | "stage">>): Post | null;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
@@ -121,8 +121,10 @@ export function openStoreOver(
         title: titleFrom(input.caption),
         caption: input.caption,
         ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
-        // No platform named: the largest short-form network this channel can actually publish to.
-        platform: input.platform ?? "x",
+        // No platform named: the network this template declares the channel posts to. It was the
+        // constant `"x"`, which is how a channel of vertical video filed nine posts to a text
+        // network — the target is the channel's, not this file's (`templates/template.ts`).
+        platform: input.platform ?? template.platform,
         // Only what the caller actually said. The row used to be stamped `agent: "mcp"`,
         // `account: "unassigned"` and `duration: "—"` whatever it knew, so every agent-filed post
         // printed the transport's name, a placeholder handle and an em dash where its running time
@@ -146,6 +148,9 @@ export function openStoreOver(
       if (patch.title !== undefined) post.title = patch.title;
       if (patch.caption !== undefined) post.caption = patch.caption;
       if (patch.mediaUrl !== undefined) post.mediaUrl = patch.mediaUrl;
+      // Retargeting. `postNow` refuses a row it cannot publish with "retarget the post first", and
+      // until this line there was nowhere in the dashboard or in `/mcp` that could do it.
+      if (patch.platform !== undefined) post.platform = patch.platform;
       if (patch.stage !== undefined) {
         post.stage = patch.stage;
         post.stageAt = new Date().toISOString();

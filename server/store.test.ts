@@ -101,9 +101,9 @@ describe("openStore", () => {
     const post = store.createPost({ caption: "Rule two will sting.\n#stoicism", mediaUrl: "https://cdn.example/clip.mp4", status: "pending" });
     expect(post.id).toMatch(/^post_[0-9a-f]{4}$/);
     expect(post).toMatchObject({ title: "Rule two will sting.", status: "pending", mediaUrl: "https://cdn.example/clip.mp4" });
-    // Filed with no destination: a network this channel can actually publish to, never one the
-    // platform's social API would refuse when the operator finally presses "Post now".
-    expect(post.platform).toBe("x");
+    // Filed with no destination: the network the running template says this channel posts to —
+    // not a constant, which is how a channel of vertical video filed every row to a text network.
+    expect(post.platform).toBe(ACTIVE.platform);
     expect(store.read().posts[0]).toBe(post);
     expect(store.updatePost(post.id, { caption: "Rule three, then." })).toMatchObject({ caption: "Rule three, then.", status: "pending" });
     expect(store.updatePost(post.id, { title: "Rule three" })).toMatchObject({ title: "Rule three", caption: "Rule three, then." });

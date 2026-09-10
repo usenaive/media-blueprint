@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { authError, handleMcp, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { TEMPLATES } from "../templates/index.ts";
+import { POST_PLATFORMS } from "../seed/posts.ts";
 
 const dirs: string[] = [];
 const freshStore = (): Store => {
@@ -89,6 +90,43 @@ describe("mcp tools", () => {
     expect(store.read().posts.some((p) => p.caption === "Sneaky")).toBe(false);
   });
 
+  /**
+   * #5 — the whole reason this channel could not post to TikTok, and it was entirely this repo's.
+   *
+   * MEASURED IN PRODUCTION, 2026-09-09: all nine rows the crew filed carried `"platform":"x"`. No
+   * agent ever named a target, so every filing fell back to a constant in this file; and `tiktok`
+   * was not in `POST_PLATFORMS` at all, so an agent that DID name it was refused and the operator
+   * could not retarget the row either. The platform publishes to TikTok fine. The target is the
+   * channel's — declared on the template it runs — and an agent may still name another.
+   */
+  it("files for the channel's own network, and takes TikTok when an agent names it", async () => {
+    const store = freshStore();
+    const defaulted = text<{ platform: string }>(
+      (await handleMcp(call("create_post", { caption: "No target named." }), store, null))!,
+    );
+    expect(defaulted.platform).toBe(TEMPLATES.faceless.platform);
+    expect(defaulted.platform).toBe("tiktok");
+
+    const named = text<{ platform: string }>(
+      (await handleMcp(
+        call("create_post", { caption: "For TikTok.", platform: "tiktok", media_url: "https://cdn.example/v.mp4" }),
+        store,
+        null,
+      ))!,
+    );
+    expect(named.platform).toBe("tiktok");
+    expect(POST_PLATFORMS as readonly string[]).toContain("tiktok");
+
+    // And the crew is told, on the tool itself, where this channel posts — a default nothing names
+    // is a default nothing chooses.
+    const listed = (await handleMcp(rpc("tools/list"), store, null)) as {
+      result: { tools: { name: string; inputSchema: { properties: Record<string, { description: string }> } }[] };
+    };
+    expect(listed.result.tools.find((t) => t.name === "create_post")?.inputSchema.properties["platform"]?.description).toMatch(
+      /This channel posts to tiktok/,
+    );
+  });
+
   it("create_post carries the agent's signature through to the row the operator reads", async () => {
     // The tool took a caption and a media URL and nothing else, so the queue could not say who
     // filed a post, which account it was for, or what it was made from — the three things the
@@ -111,6 +149,25 @@ describe("mcp tools", () => {
       account: "@dailystoic",
       source: "Brief: three stoic rules",
     });
+  });
+
+  /**
+   * The other half of #5. `postNow` refuses a row whose network this channel cannot reach with
+   * "retarget the post first" — and nothing anywhere could retarget one: `update_post` took a
+   * title, a caption and a media URL, `PATCH /api/posts/:id` takes a status, and no screen offers
+   * the field. An instruction with no mechanism behind it is not an instruction.
+   */
+  it("update_post retargets a row, which is what `retarget the post first` asks for", async () => {
+    const store = freshStore();
+    const moved = text<{ platform: string }>(
+      (await handleMcp(call("update_post", { id: "post_9f2a", platform: "tiktok" }), store, null))!,
+    );
+    expect(moved.platform).toBe("tiktok");
+    expect(store.read().posts.find((p) => p.id === "post_9f2a")?.platform).toBe("tiktok");
+
+    const refused = (await handleMcp(call("update_post", { id: "post_9f2a", platform: "myspace" }), store, null)) as CallResult;
+    expect(refused.result.isError).toBe(true);
+    expect(store.read().posts.find((p) => p.id === "post_9f2a")?.platform).toBe("tiktok");
   });
 
   it("update_post edits pending/ready posts and refuses approved and posted ones", async () => {

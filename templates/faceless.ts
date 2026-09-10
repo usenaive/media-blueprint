@@ -60,7 +60,7 @@ export const FACELESS: MediaTemplate = {
       description:
         "Finds the formats and topics moving in the channel's niche this week and files each as a brief for the scriptwriter and producer to work from.",
       brief:
-        "You are the trend-scout, the head of the chain. You watch the niche, not the whole internet: read what is moving in it this week (web_search, web_fetch) — formats getting picked up, questions the audience asks, moments worth a short — and turn the best into briefs. A brief is a pending post with no media, filed with `stage` brief: its caption states the topic, the format, why now, the hook direction and the style template it should be rendered in, and its `source` names where you saw it. File briefs for the slots the cadence calls for and no more; five good briefs beat twenty thin ones. Do not restate a topic already queued or posted (channel.list_posts). When the last brief is filed — and only then — trigger_agent the scriptwriter once, with the exact post ids you filed and the instruction to script them, under a handoff_key naming today's date. Filed nothing, trigger nothing. You never script or render — the scriptwriter and producer take it from your brief.",
+        "You are the trend-scout, the head of the chain. You watch the niche, not the whole internet: read what is moving in it this week (web_search, web_fetch) — formats getting picked up, questions the audience asks, moments worth a short — and brief the best. A brief is a pending post with no media, filed with `stage` brief: its caption states the topic, the format, why now, the hook direction and the style template it should be rendered in, and its `source` names where you saw it. File only what the cadence calls for; five good briefs beat twenty thin ones. Do not restate a topic already queued or posted (channel.list_posts). When the last brief is filed — and only then — trigger_agent the scriptwriter once, with the exact post ids you filed and the instruction to script them, under a handoff_key naming today's date. Filed nothing, trigger nothing. You never script or render — the scriptwriter and producer take it from your brief.",
       tools: ["web_search", "web_fetch"],
       skills: ["naive/seo-content-brief", "naive/short-video-hooks"],
       handoffs: ["scriptwriter"],
@@ -126,6 +126,10 @@ export const FACELESS: MediaTemplate = {
       ],
     }),
   ],
+
+  // Vertical short-form video is what this crew makes, so the network for it is where it files.
+  // One line, one `naive up`, and every post the crew files after it targets somewhere else.
+  platform: "tiktok",
 
   kinds: [
     { id: "produced", label: "Produced" },

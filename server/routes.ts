@@ -12,7 +12,10 @@
 import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } from "./mcp.ts";
 import { collect, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
-import { POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
+import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
+
+/** The statuses the operator's screens move a row between; `posted` is `postNow`'s to write. */
+const PATCHABLE = POST_STATUSES.filter((status) => status !== "posted");
 
 export interface ApiRequest {
   /** Upper-case. */
@@ -136,6 +139,13 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
   if (!(POST_PLATFORMS as readonly string[]).includes(post.platform)) {
     return fail(400, `this channel cannot publish to ${post.platform} — retarget the post first`);
   }
+  // The other way an approved row is undeliverable, and the one the channel's own target makes
+  // routine: a brief is a row with no video yet, and the networks in `POST_MEDIA_PLATFORMS` refuse
+  // a post carrying no media at all. Said here, naming what is missing, rather than relayed as the
+  // platform's 400 after the operator pressed the button.
+  if (POST_MEDIA_PLATFORMS.includes(post.platform) && post.mediaUrl === undefined) {
+    return fail(400, `${post.platform} publishes video, not text — attach the finished video to this post first`);
+  }
   const upstream = config === null ? null : upstreamFor("POST", "/api/social/posts", config.identityId);
   if (config === null || upstream === null) {
     return fail(503, "publishing is not configured on this deployment — nothing was published");
@@ -252,10 +262,18 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
     if (method !== "PATCH") return fail(405, "method not allowed");
     const body = parse(req.body) as { status?: PostStatus; rejectedReason?: string };
     if (!body.status) return fail(400, "status is required");
+    // `posted` is not one of them, and this is the whole of defect #4. `postNow` below refuses to
+    // publish anything that is not `approved` and writes the word only after the platform accepted
+    // the post — and this route wrote the same word on any row, in one hop, with nothing published
+    // and `postedAt` stamped on it by the store. A guard its neighbour ignores is not a guard, so
+    // the word is that route's alone and this one says which route owns it.
+    if (body.status === "posted") {
+      return fail(409, "a post becomes posted by being published — POST /api/posts/:id/post-now");
+    }
     // Any string persisted before this: a post could be PATCHed into a state no tab lists, no
     // agent understands and no screen can move it out of.
-    if (!(POST_STATUSES as readonly string[]).includes(body.status)) {
-      return fail(400, `status must be one of ${POST_STATUSES.join(", ")}`);
+    if (!(PATCHABLE as readonly string[]).includes(body.status)) {
+      return fail(400, `status must be one of ${PATCHABLE.join(", ")}`);
     }
     const updated = (await ctx.store()).updatePost(patch[1]!, {
       status: body.status,
