@@ -120,6 +120,10 @@ export const FACELESS: MediaTemplate = {
     }),
   ],
 
+  // Vertical short-form video is what this crew makes, so the network for it is where it files.
+  // One line, one `naive up`, and every post the crew files after it targets somewhere else.
+  platform: "tiktok",
+
   kinds: [
     { id: "produced", label: "Produced" },
     { id: "multi", label: "Multi-part" },

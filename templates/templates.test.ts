@@ -9,7 +9,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, words } from "./template.ts";
+import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 /** The four of the platform's twelve `naive/*` catalogue skills a media crew has a use for; no other ref is allowed here. */
@@ -116,6 +117,44 @@ describe("the crews", () => {
       expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(timer);
       expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(ONE_RENDER_MICRO_USD * 4);
     }
+  });
+
+  /**
+   * #6 — day one produced nothing, because the five intakes race each other.
+   *
+   * MEASURED IN PRODUCTION, 2026-09-09: the scriptwriter's day-one session read
+   * `channel.list_posts -> "[]"` and filed *"the trend-scout hasn't filed any briefs yet in its
+   * parallel session"* as its finding — while the trend-scout was filing five briefs in the same
+   * minute. `up` opens every intake at once (`packages/blueprints/src/up.ts`: one `eachInFlight`
+   * over the crew, after every write) and there is no ordering knob on `intake`. Only the crons run
+   * in order. Each message said a piece of that in its own words, and the one seat that was told
+   * still reported the emptiness as a result; so it is said once, to every seat of every template,
+   * by the same helper that composes the system prompt — not left to whoever writes the next seat.
+   */
+  it("tells every seat, in one place, that an empty day-one queue is not a finding", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        expect(agent.intake?.message, agent.name).toContain(DAY_ONE_ORDER);
+      }
+    }
+    expect(DAY_ONE_ORDER).toMatch(/not a finding/i);
+    // And it names where the ordered work actually happens, so "wait" is never the answer.
+    expect(DAY_ONE_ORDER).toMatch(/cron/i);
+  });
+
+  /**
+   * #5 — where this channel posts is the channel's, and it was a constant in `server/mcp.ts`.
+   *
+   * Both crews render vertical short-form video, and the network for that is the one the queue
+   * could not name at all. It is declared here, with the rest of what a template is, so switching
+   * template switches the target and the studio's own `naive up` is the only edit.
+   */
+  it("declares the network its crew files for, and it is one the queue can publish to", () => {
+    for (const template of both) {
+      expect(POST_PLATFORMS as readonly string[], template.name).toContain(template.platform);
+    }
+    expect(TEMPLATES.faceless.platform).toBe("tiktok");
+    expect(TEMPLATES.clipping.platform).toBe("tiktok");
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {

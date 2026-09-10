@@ -21,13 +21,26 @@ export type PostStatus = (typeof POST_STATUSES)[number];
 
 /**
  * The targets a post can name — deliberately exactly the set the platform's social API accepts for
- * a published post. Vertical-video-only networks are not in it: offering one would mean a "Post
- * now" that is refused upstream, so the dashboard never names a destination it cannot reach.
- * Kept as a literal, not imported: a blueprint is cloned standalone and depends on no workspace
- * package at runtime. When the platform's enum grows, this list is the one place to grow with it.
+ * a published post. Kept as a literal, not imported: a blueprint is cloned standalone and depends
+ * on no workspace package at runtime. When the platform's enum grows, this list is the one place
+ * to grow with it.
+ *
+ * `tiktok` was missing, and it was the one that mattered. This blueprint's whole product is
+ * vertical short-form video — the producer renders 1080x1920 — and the network for that could not
+ * be filed for, defaulted to or retargeted at from anywhere in the dashboard. The reason written
+ * here for leaving it out ("a post to one is refused upstream") was half a fact: the platform
+ * takes `tiktok` (`packages/core/src/schema/social.ts`), and refuses it only on a post carrying no
+ * media at all. That is the rule below, said in the one place a publish reads it.
  */
-export const POST_PLATFORMS = ["bluesky", "facebook", "linkedin", "mastodon", "threads", "x"] as const;
+export const POST_PLATFORMS = ["bluesky", "facebook", "linkedin", "mastodon", "threads", "tiktok", "x"] as const;
 export type PostPlatform = (typeof POST_PLATFORMS)[number];
+
+/**
+ * The targets that publish media and refuse text. A brief is a row with no video yet, so a channel
+ * whose target is one of these can hold an approved row that the platform would refuse: it is
+ * refused here instead, in a sentence naming what is missing, rather than at the button.
+ */
+export const POST_MEDIA_PLATFORMS: readonly PostPlatform[] = ["tiktok"];
 
 /**
  * Every kind of post any template of this blueprint files: `faceless` produces and files
