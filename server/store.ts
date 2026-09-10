@@ -130,7 +130,7 @@ export function openStoreOver(
         ...(input.agent === undefined ? {} : { agent: input.agent }),
         ...(input.account === undefined ? {} : { account: input.account }),
         ...(input.source === undefined ? {} : { source: input.source }),
-        ...(input.stage === undefined ? {} : { stage: input.stage }),
+        ...(input.stage === undefined ? {} : { stage: input.stage, stageAt: new Date().toISOString() }),
         // The kind is the template's first, not a constant: a `faceless` channel files what its
         // producer made, a `clipping` channel files a cut. The row is read by the same screens.
         kind: template.kinds[0].id,
@@ -146,7 +146,10 @@ export function openStoreOver(
       if (patch.title !== undefined) post.title = patch.title;
       if (patch.caption !== undefined) post.caption = patch.caption;
       if (patch.mediaUrl !== undefined) post.mediaUrl = patch.mediaUrl;
-      if (patch.stage !== undefined) post.stage = patch.stage;
+      if (patch.stage !== undefined) {
+        post.stage = patch.stage;
+        post.stageAt = new Date().toISOString();
+      }
       if (patch.status !== undefined) post.status = patch.status;
       if (patch.status === "posted") {
         post.postedAt = "just now";

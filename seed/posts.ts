@@ -39,12 +39,16 @@ export type PostKind = (typeof POST_KINDS)[number];
 
 /**
  * Where a piece in the making stands, as data the next seat can filter on: brief (a topic, no
- * script) → scripted (hook, script and caption written into the row) → rendered (media attached).
- * A row with no stage is a note — a plan, a report, a style choice — and belongs to no pipeline.
- * The seat that moves a row forward also names it to the next seat (`trigger_agent`), so the stage
- * is what the timers reconcile against, not what the day depends on.
+ * script) → scripting → scripted (hook, script and caption written into the row) → rendering →
+ * rendered (media attached). The two `-ing` stages are claims: a seat moves a row onto one with
+ * `expected_stage` set to the stage before it, atomically under the store's row lock, so a handoff
+ * session and the cron that overlaps it cannot both script or render the same row — one claim wins
+ * and the other is refused before it spends anything. A row with no stage is a note — a plan, a
+ * report, a style choice — and belongs to no pipeline. The seat that moves a row forward also names
+ * it to the next seat (`trigger_agent`), so the stage is what the timers reconcile against, not
+ * what the day depends on.
  */
-export const POST_STAGES = ["brief", "scripted", "rendered"] as const;
+export const POST_STAGES = ["brief", "scripting", "scripted", "rendering", "rendered"] as const;
 export type PostStage = (typeof POST_STAGES)[number];
 
 export interface Post {
@@ -68,6 +72,8 @@ export interface Post {
   kind: PostKind;
   /** How far along a piece is; absent on a row that is not a piece. */
   stage?: PostStage;
+  /** When `stage` last changed (ISO 8601), so a claim a dead session left behind can be aged out. */
+  stageAt?: string;
   /** The finished piece's running time, when it is known. */
   duration?: string;
   scheduledFor?: string;

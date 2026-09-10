@@ -123,7 +123,10 @@ describe("openStore", () => {
     expect(store.updatePost(brief.id, { status: "approved" })).toMatchObject({ stage: "rendered", status: "approved" });
     const reopened = openStore(file).read().posts;
     expect(reopened.find((p) => p.id === brief.id)?.stage).toBe("rendered");
+    // Each move stamps when it happened, so a claim a dead session left can be aged out; a note has none.
+    expect(Date.parse(reopened.find((p) => p.id === brief.id)?.stageAt ?? "")).toBeGreaterThan(Date.now() - 60_000);
     expect(reopened.find((p) => p.id === note.id)).not.toHaveProperty("stage");
+    expect(reopened.find((p) => p.id === note.id)).not.toHaveProperty("stageAt");
     // The demo rows predate the field and stay readable without it.
     for (const seeded of reopened.filter((p) => p.id !== brief.id && p.id !== note.id)) expect(seeded.stage).toBeUndefined();
   });

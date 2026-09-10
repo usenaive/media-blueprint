@@ -19,7 +19,9 @@
  * `stage: brief` and names their ids to the scriptwriter, who writes into those rows, moves them to
  * `scripted` and names them to the producer, who renders and moves them to `rendered`. The crons are
  * the fallback — 06:00 briefs, 06:30 scripts, 07:00 render — and pick up, by stage, whatever a
- * handoff did not carry.
+ * handoff did not carry. A handoff and a cron can overlap, so a seat claims a row before it spends
+ * on it (`scripting` / `rendering`, with `expected_stage`): the claim is one locked write, one
+ * session wins it, and the other is refused before the work — not after the render.
  */
 import { agent, CADENCE_QUESTION, channelManager, schedule, type MediaTemplate } from "./template.ts";
 
@@ -35,7 +37,7 @@ export const FACELESS: MediaTemplate = {
       description:
         "Renders each scripted brief into one original vertical video in the style template it names. Files the finished piece for approval; never publishes.",
       brief:
-        "You are the producer. Your work is the render: take a scripted row — one the scriptwriter named to you in a handoff, or else the next with `stage` scripted and no video (channel.list_posts, stage scripted) — and produce one original vertical video, under fifteen seconds, in the style template it names (channel.list_style_templates). Stay inside that template's look — its reference image and prompt are the channel's identity, and a piece that drifts from them is a piece for another channel. The first three seconds carry the scriptwriter's hook; render for it. When the video is done, attach it to the row with channel.update_post: `media_url`, the publishable caption the scriptwriter wrote, and `stage` rendered. One piece per session: a queue the operator has not caught up with does not need another video in it, so the rest of a handoff's rows wait for your 07:00 fires, and if no scripted row lacks a video, file nothing and stop. You are the end of the chain; you trigger nobody.",
+        "You are the producer. Your work is the render: take a scripted row — one the scriptwriter named to you in a handoff, or else the next at `stage` scripted (channel.list_posts, stage scripted) — and claim it before you spend anything: channel.update_post with stage rendering and expected_stage scripted. A refusal means another session has it; take the next row, or stop if there is none. Then produce one original vertical video, under fifteen seconds, in the style template the row names (channel.list_style_templates). Stay inside that template's look — its reference image and prompt are the channel's identity. The first three seconds carry the scriptwriter's hook; render for it. When the video is done, attach it to the row with channel.update_post: `media_url`, the publishable caption the scriptwriter wrote, and `stage` rendered. One piece per session: the rest of a handoff's rows wait for your 07:00 fires, and if nothing is at scripted, file nothing and stop. You are the end of the chain; you trigger nobody.",
       tools: ["generate_video", "generate_image"],
       skills: ["naive/short-video-hooks"],
       intake: {
@@ -47,7 +49,7 @@ export const FACELESS: MediaTemplate = {
         schedule({
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
           input:
-            "Make the next piece. Read the niche and tone (project_context) and the scripted rows (channel.list_posts with stage scripted), take the next one with no video against it yet, and produce one original vertical video in the style template that row names (channel.list_style_templates). Attach it to the row with channel.update_post — media_url, the publishable caption, stage rendered. If no scripted row lacks a video, file nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
+            "Make the next piece. Read the niche and tone (project_context) and the scripted rows (channel.list_posts with stage scripted); claim the next one — channel.update_post, stage rendering, expected_stage scripted; refused means it is not yours, take the next — and produce one original vertical video in the style template that row names (channel.list_style_templates). Attach it to the row with channel.update_post — media_url, the publishable caption, stage rendered. If nothing is at scripted, file nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
           budget_micro_usd: 10_000_000, // $10 — one generated video plus the turns that brief and file it.
         }),
       ],
@@ -82,20 +84,20 @@ export const FACELESS: MediaTemplate = {
       description:
         "Writes the hook, the script and the publishable caption for every brief before the producer renders it.",
       brief:
-        "You are the scriptwriter. Briefs reach you two ways: named by id in a handoff from the trend-scout, or found at `stage` brief on your 06:30 fire (channel.list_posts, stage brief). Each gets from you a hook that lands in the first three seconds, a script for a piece under fifteen seconds in the tone the channel asked for, and the caption with hashtags that will go out with it (`naive/short-video-hooks`, `naive/caption-writing`). Write them into the brief's row with channel.update_post — caption and `stage` scripted — so the producer renders from one place, keeping the brief's topic, format and style template. Write for the audience named in the context, in its words, and never for a general one. When the last row you were given is scripted, trigger_agent the producer once with those ids and the instruction to render, under the handoff_key you were handed or today's date; scripted nothing, trigger nothing. You do not render and you do not file new topics — the trend-scout finds them, the producer makes them.",
+        "You are the scriptwriter. Briefs reach you two ways: named by id in a handoff from the trend-scout, or at `stage` brief on your 06:30 fire (channel.list_posts, stage brief). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row. Each row you claimed gets a hook that lands in the first three seconds, a script for a piece under fifteen seconds in the channel's tone, and the caption with hashtags that goes out with it (`naive/short-video-hooks`, `naive/caption-writing`), written into the row with channel.update_post — caption and `stage` scripted — keeping the brief's topic, format and style template. Write for the audience the context names, in its words, never for a general one. When the last row you claimed is scripted, trigger_agent the producer once with those ids and the instruction to render, under the handoff_key you were handed or today's date; claimed nothing, trigger nothing. You neither render nor file new topics — the trend-scout finds them, the producer makes them.",
       tools: ["web_search", "web_fetch"],
       skills: ["naive/short-video-hooks", "naive/caption-writing"],
       handoffs: ["producer"],
       intake: {
         message:
-          "Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, `source` \"hook style\", so the team works to one voice. Do not read the queue for briefs and do not invent one: the trend-scout's first five reach you as a handoff naming their ids, in a session of your own, and that is where you script them — three candidate hooks each, the strongest picked, hook, script and caption written into the row with stage scripted, then one trigger_agent to the producer with the ids. Stop here.",
+          "Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, `source` \"hook style\", so the team works to one voice. Do not read the queue for briefs and do not invent one: the trend-scout's first five reach you as a handoff naming their ids, in a session of your own, and that is where you script them — each claimed first (stage scripting, expected_stage brief), three candidate hooks, the strongest picked, hook, script and caption written into the row with stage scripted, then one trigger_agent to the producer with the ids. Stop here.",
         budget_micro_usd: 8_000_000,
       },
       schedules: [
         schedule({
           cron: "30 6 * * *", // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render.
           input:
-            "Script what the handoffs missed. Read project_context, then every row still at stage brief (channel.list_posts, stage brief); write hook, script and publishable caption into each with channel.update_post, stage scripted, in the channel's tone, for its audience. Then trigger_agent the producer once with the ids you scripted, handoff_key scripts-<today's date>. Nothing at stage brief means nothing to do, and no trigger.",
+            "Script what the handoffs missed. Read project_context, then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused — and write hook, script and publishable caption into it with channel.update_post, stage scripted, in the channel's tone, for its audience. Then trigger_agent the producer once with the ids you scripted, handoff_key scripts-<today's date>. Nothing claimed means nothing to do, and no trigger.",
           budget_micro_usd: 10_000_000, // $10 — a read and a few rewrites.
         }),
       ],

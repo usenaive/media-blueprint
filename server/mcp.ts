@@ -92,9 +92,10 @@ export const TOOLS = [
     stage: str(`How far along the piece is: ${STAGES}. Leave unset for a note (a plan, a report) that no seat takes further.`),
     status: str("pending (default) or ready"),
   }, ["caption"]) },
-  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post, or move it to the next stage. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post, or move it to the next stage. To claim a row before working on it, move it to scripting or rendering with expected_stage set to the stage it should still be at: the call is refused if another session got there first, and a refusal means the row is not yours. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
     id: str("Post id"), title: str("New title"), caption: str("New caption"), media_url: str("New media URL"),
     stage: str(`The stage the piece has reached: ${STAGES}`),
+    expected_stage: str(`The stage the row must still be at for this update to apply (${STAGES}); refused otherwise.`),
   }, ["id"]) },
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
@@ -109,10 +110,10 @@ const need = (params: Record<string, unknown>, key: string): string => {
 const optional = (params: Record<string, unknown>, key: string): string | undefined =>
   typeof params[key] === "string" ? (params[key] as string) : undefined;
 /** The `stage` a caller named, refused rather than persisted when it is not one the queue knows. */
-const stageOf = (params: Record<string, unknown>): PostStage | undefined => {
-  const stage = optional(params, "stage");
+const stageOf = (params: Record<string, unknown>, key = "stage"): PostStage | undefined => {
+  const stage = optional(params, key);
   if (stage === undefined) return undefined;
-  if (!(POST_STAGES as readonly string[]).includes(stage)) throw new ToolError(`stage must be one of ${POST_STAGES.join(", ")}`);
+  if (!(POST_STAGES as readonly string[]).includes(stage)) throw new ToolError(`${key} must be one of ${POST_STAGES.join(", ")}`);
   return stage as PostStage;
 };
 
@@ -189,6 +190,11 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (!post) throw new ToolError("no such post");
       if (post.status !== "pending" && post.status !== "ready") {
         throw new ToolError(`post is ${post.status}; only pending or ready posts can be edited`);
+      }
+      // The whole call runs under the store's lock, so this read-then-write is the atomic claim.
+      const expected = stageOf(params, "expected_stage");
+      if (expected !== undefined && post.stage !== expected) {
+        throw new ToolError(`post is at stage ${post.stage ?? "none"}, not ${expected}; another session has it`);
       }
       return store.updatePost(id, {
         title: optional(params, "title"),

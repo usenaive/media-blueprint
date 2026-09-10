@@ -180,7 +180,9 @@ another's work; on `faceless` the pieces move by **handoff** instead. Each brief
 `stage` — `brief` → `scripted` → `rendered` — and when the scout has filed its five it triggers
 the scriptwriter with their ids (`trigger_agent`, the `handoffs` line on the seat); the
 scriptwriter writes into those rows and triggers the producer, who renders the first. The timers
-stay as the fallback, picking up by stage whatever a handoff did not carry. Day one costs at
+stay as the fallback, picking up by stage whatever a handoff did not carry; where a handoff and a
+timer overlap, a seat claims a row first (`scripting`, `rendering`, with `expected_stage` on
+`update_post`), so one session gets it and the other is refused before spending. Day one costs at
 most the sum of the intake budgets ($76 on `faceless`, $88 on `clipping`) plus the handoff
 sessions, each inside the receiving seat's $20 task ceiling, and everything it makes lands in the
 queue as pending — nothing is published. The Home screen tracks each intake session until it

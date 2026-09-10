@@ -162,10 +162,50 @@ describe("mcp tools", () => {
     for (const bad of [call("create_post", { caption: "x", stage: "done" }), call("update_post", { id: brief.id, stage: "published" }), call("list_posts", { stage: "nope" })]) {
       const refused = (await handleMcp(bad, store, null)) as CallResult;
       expect(refused.result.isError).toBe(true);
-      expect(refused.result.content[0]!.text).toMatch(/stage must be one of brief, scripted, rendered/);
+      expect(refused.result.content[0]!.text).toMatch(/stage must be one of brief, scripting, scripted, rendering, rendered/);
     }
     expect(TOOLS.find((t) => t.name === "list_posts")?.inputSchema.properties).toHaveProperty("stage");
     expect(TOOLS.find((t) => t.name === "update_post")?.inputSchema.properties).toHaveProperty("stage");
+  });
+
+  /**
+   * The claim. A stage records progress, not ownership: a handoff session and the cron that fires
+   * beside it both list the same `brief`, and without this both would script it and both would
+   * trigger a producer — two renders for one post. `expected_stage` makes the move to `scripting`
+   * (or `rendering`) a compare-and-set under the store's lock: the first caller gets the row, the
+   * second is refused and told so, and a claimed row is no longer in the `brief` list the cron reads.
+   */
+  it("lets one session claim a row with expected_stage and refuses the second", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>(
+      (await handleMcp(call("create_post", { caption: "Why the Stoics slept on the floor", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    const handoff = text<{ stage?: string; stageAt?: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, stage: "scripting", expected_stage: "brief" }), store, null))!,
+    );
+    expect(handoff.stage).toBe("scripting");
+    const { stageAt } = handoff;
+    expect(stageAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(text<unknown[]>((await handleMcp(call("list_posts", { stage: "brief" }), store, null))!)).toEqual([]);
+
+    const cron = (await handleMcp(call("update_post", { id: brief.id, stage: "scripting", expected_stage: "brief" }), store, null)) as CallResult;
+    expect(cron.result.isError).toBe(true);
+    expect(cron.result.content[0]!.text).toMatch(/post is at stage scripting, not brief; another session has it/);
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "scripting", stageAt });
+
+    // The winner's later writes still land, guarded or not; a wrong guard on a plain edit is refused too.
+    expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: brief.id, caption: "Hook: the floor.", stage: "scripted", expected_stage: "scripting" }), store, null))!).stage).toBe("scripted");
+    const stale = (await handleMcp(call("update_post", { id: brief.id, caption: "late", expected_stage: "brief" }), store, null)) as CallResult;
+    expect(stale.result.isError).toBe(true);
+    expect(store.read().posts.find((p) => p.id === brief.id)?.caption).toBe("Hook: the floor.");
+
+    // A note has no stage to compare against, and a guard the queue does not know is refused as such.
+    const note = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Channel plan", agent: "channel-manager" }), store, null))!);
+    const onNote = (await handleMcp(call("update_post", { id: note.id, stage: "scripting", expected_stage: "brief" }), store, null)) as CallResult;
+    expect(onNote.result.content[0]!.text).toMatch(/post is at stage none, not brief/);
+    const bad = (await handleMcp(call("update_post", { id: brief.id, expected_stage: "claimed" }), store, null)) as CallResult;
+    expect(bad.result.content[0]!.text).toMatch(/expected_stage must be one of/);
+    expect(TOOLS.find((t) => t.name === "update_post")?.inputSchema.properties).toHaveProperty("expected_stage");
   });
 
   it("reads posts by status, templates and accounts from the store", async () => {

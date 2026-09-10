@@ -283,7 +283,7 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Approve, reject and publish are the operator's — never yours.",
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Approve, reject and publish are the operator's — never yours.",
     budget_micro_usd: 10_000_000, // $10 — a read and a few patches.
   }),
   schedule({
