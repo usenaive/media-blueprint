@@ -71,7 +71,7 @@ export type PostKind = (typeof POST_KINDS)[number];
  * session and the cron that overlaps it cannot both script or render the same row — one claim wins
  * and the other is refused before it spends anything. A row with no stage is a note — a plan, a
  * report, a style choice — and belongs to no pipeline. The seat that moves a row forward also names
- * it to the next seat (`trigger_agent`), so the stage is what the timers reconcile against, not
+ * it to the next seat (`send_to_agent`, `wait: false`), so the stage is what the timers reconcile against, not
  * what the day depends on.
  */
 export const POST_STAGES = ["brief", "scripting", "scripted", "rendering", "rendered"] as const;

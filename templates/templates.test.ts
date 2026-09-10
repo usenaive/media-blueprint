@@ -121,12 +121,12 @@ describe("the crews", () => {
   /**
    * The chain that replaced the race. Five intakes opening at once each read the others' empty
    * output — the scriptwriter wrote "the scout has filed no briefs" in the minute the scout filed
-   * five — so day one is now ordered by what a seat hands on after it has filed (`trigger_agent`,
-   * canonical-spec §46), not by what it finds. Each seat may name exactly the next one; the producer
+   * five — so day one is now ordered by what a seat hands on after it has filed (`send_to_agent` with
+   * `wait: false`, canonical-spec §28.15), not by what it finds. Each seat may name exactly the next one; the producer
    * is the end; the timers reconcile by `stage` for whatever a handoff did not carry.
    */
   it("orders the faceless pipeline as a chain of handoffs: scout → scriptwriter → producer, and nobody else", () => {
-    // `false`, never omitted: the platform's default is anyone in the organization (§46.2).
+    // `false`, never omitted: the platform's default is anyone in the organization (§28.12).
     const chain: Record<string, string[] | false> = {
       "trend-scout": ["scriptwriter"],
       scriptwriter: ["producer"],
@@ -137,7 +137,7 @@ describe("the crews", () => {
     for (const agent of TEMPLATES.faceless.agents) {
       expect(agent.handoffs, agent.name).toEqual(chain[agent.name]);
       // The grant the engine compiles from `handoffs` (§31.7), so the declaration reads whole.
-      for (const tool of ["trigger_agent", "agent_search"]) {
+      for (const tool of ["send_to_agent", "list_agents"]) {
         expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual(
           chain[agent.name] === false ? { enabled: false, permission: "deny" } : { enabled: true, permission: "allow" },
         );
@@ -145,14 +145,14 @@ describe("the crews", () => {
     }
     const seat = (name: string) => TEMPLATES.faceless.agents.find((a) => a.name === name);
     // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.
-    expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, trigger_agent the scriptwriter once.*post ids.*handoff_key/s);
-    expect(seat("trend-scout")?.system).toMatch(/only then.*trigger_agent the scriptwriter once.*Filed nothing, trigger nothing/s);
+    expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, send_to_agent the scriptwriter once — wait false.*post ids.*handoff_key/s);
+    expect(seat("trend-scout")?.system).toMatch(/only then.*send_to_agent the scriptwriter once, wait false.*Filed nothing, hand on nothing/s);
     // The next two claim a row (`expected_stage`) before they spend on it, so a handoff and the cron
     // that overlaps it cannot both script or render the same piece, and hand on only what they claimed.
-    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*`stage` scripted.*trigger_agent the producer once.*claimed nothing, trigger nothing/s);
-    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*stage rendering and expected_stage scripted.*`stage` rendered.*you trigger nobody/s);
+    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*`stage` scripted.*send_to_agent the producer once, wait false.*claimed nothing, hand on nothing/s);
+    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*stage rendering and expected_stage scripted.*`stage` rendered.*you hand on to nobody/s);
     // The timers are the fallback, by stage, claim the same way, and no seat's intake is told another intake is running.
-    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*trigger_agent the producer/s);
+    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*send_to_agent the producer once, wait false/s);
     expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendering, expected_stage scripted.*stage rendered/s);
     // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that finds it.
     expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage/s);

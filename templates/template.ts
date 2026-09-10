@@ -239,9 +239,9 @@ export const CONTEXT_PREAMBLE =
  * filling: in production the scriptwriter's first session read `channel.list_posts -> "[]"` and
  * filed *"the trend-scout hasn't filed any briefs yet in its parallel session"* as its finding,
  * while the scout was filing five briefs in the same minute. The channel's real order is not the
- * intakes': it is the handoff a seat sends after it has filed (`trigger_agent`, `handoffs` on the
- * seat — canonical-spec §46), naming the rows, and where no seat hands on, the crons', which fire
- * hours apart in dependency order.
+ * intakes': it is the handoff a seat sends after it has filed (`send_to_agent` with `wait: false`,
+ * `handoffs` on the seat — canonical-spec §28.15), naming the rows, and where no seat hands on, the
+ * crons', which fire hours apart in dependency order.
  *
  * It is appended by `agent()` below rather than written into each message, for the same reason the
  * approval gate is: a rule every seat needs is a rule no seat can be written without.
@@ -264,7 +264,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "apps",
-  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write", "trigger_agent", "agent_search",
+  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
 
@@ -364,7 +364,7 @@ export const toolset = (names: readonly string[], handoffs: readonly string[] = 
     // The grant `agents[].handoffs` compiles to on the platform (`canonical-spec §31.7`), written here
     // too so the declaration reads whole: `allow`, because a handoff runs with nobody watching.
     ...(handoffs.length > 0
-      ? { trigger_agent: { enabled: true, permission: "allow" as const }, agent_search: { enabled: true, permission: "allow" as const } }
+      ? { send_to_agent: { enabled: true, permission: "allow" as const }, list_agents: { enabled: true, permission: "allow" as const } }
       : {}),
   },
 });
@@ -466,12 +466,12 @@ export const agent = (decl: {
   /** Only where the template cannot run without this seat — the studio cannot untick it. */
   required?: boolean;
   /**
-   * The seats this one may start a session on with `trigger_agent`, once its own work is filed
-   * (`canonical-spec §46`). Day one is ordered by these, not by the crons: the scout files briefs
-   * and names them to the writer, the writer scripts them and names them to the producer. Each name
-   * must be an agent of the same template; `naive up` refuses one that is not. A seat that declares
-   * none hands to nobody (`handoffs: false` on the wire, §46.2): the platform's default is anyone in
-   * the organization, and this channel's order is exactly the chain written here.
+   * The seats this one may hand on to with `send_to_agent` (`wait: false`), once its own work is
+   * filed (`canonical-spec §28.12, §28.15`). Day one is ordered by these, not by the crons: the scout
+   * files briefs and names them to the writer, the writer scripts them and names them to the
+   * producer. Each name must be an agent of the same template; `naive up` refuses one that is not. A
+   * seat that declares none hands to nobody (`handoffs: false` on the wire): the platform's default
+   * is anyone in the organization, and this channel's order is exactly the chain written here.
    */
   handoffs?: string[];
   /**
@@ -532,7 +532,7 @@ export const channelManager = (
     description:
       "Runs the channel: plans the week from the cadence answer, briefs the team, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
     brief: `You are the channel manager, and the person the operator talks to in Chat. You keep the calendar full at the cadence the context names — daily, three times a week or weekly — and no fuller: a plan with more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and you never do their work for them. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows that are ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption anything you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel, for the audience the context describes. When the operator asks for something in Chat, answer with what the queue actually holds, and route the work to the seat it belongs to.`,
-    tools: ["web_search", "web_fetch", "send_to_agent", "list_agents"],
+    tools: ["web_search", "web_fetch"],
     skills: ["naive/caption-writing"],
     intake: {
       message:

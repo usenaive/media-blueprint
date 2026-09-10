@@ -214,10 +214,11 @@ written to consume the answers: the scout files the first five briefs for *your*
 analyst lays out the report, the manager writes the plan from *your* cadence, and the
 scriptwriter and producer set themselves up. The intakes open at once, so none of them reads
 another's work; on `faceless` the pieces move by **handoff** instead. Each brief carries a
-`stage` — `brief` → `scripted` → `rendered` — and when the scout has filed its five it triggers
-the scriptwriter with their ids (`trigger_agent`, the `handoffs` line on the seat — a seat without
-one hands to nobody, `handoffs: false`, rather than the platform's default of anyone); the
-scriptwriter writes into those rows and triggers the producer, who renders the first. The timers
+`stage` — `brief` → `scripted` → `rendered` — and when the scout has filed its five it hands on to
+the scriptwriter with their ids (`send_to_agent` with `wait: false`; the `handoffs` line on the seat
+says who it may hand to — a seat without one hands to nobody, `handoffs: false`, rather than the
+platform's default of anyone); the scriptwriter writes into those rows and hands on to the
+producer, who renders the first. The timers
 stay as the fallback, picking up by stage whatever a handoff did not carry; where a handoff and a
 timer overlap, a seat claims a row first (`scripting`, `rendering`, with `expected_stage` on
 `update_post`), so one session gets it and the other is refused before spending. Day one costs at
