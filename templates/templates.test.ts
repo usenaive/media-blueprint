@@ -126,21 +126,22 @@ describe("the crews", () => {
    * is the end; the timers reconcile by `stage` for whatever a handoff did not carry.
    */
   it("orders the faceless pipeline as a chain of handoffs: scout → scriptwriter → producer, and nobody else", () => {
-    const chain: Record<string, string[] | undefined> = {
+    // `false`, never omitted: the platform's default is anyone in the organization (§46.2).
+    const chain: Record<string, string[] | false> = {
       "trend-scout": ["scriptwriter"],
       scriptwriter: ["producer"],
-      producer: undefined,
-      analyst: undefined,
-      "channel-manager": undefined,
+      producer: false,
+      analyst: false,
+      "channel-manager": false,
     };
     for (const agent of TEMPLATES.faceless.agents) {
       expect(agent.handoffs, agent.name).toEqual(chain[agent.name]);
       // The grant the engine compiles from `handoffs` (§31.7), so the declaration reads whole.
-      expect(agent.tools?.configs["trigger_agent"], agent.name).toEqual(
-        chain[agent.name] === undefined
-          ? { enabled: false, permission: "deny" }
-          : { enabled: true, permission: "allow", config: { targets: chain[agent.name] } },
-      );
+      for (const tool of ["trigger_agent", "agent_search"]) {
+        expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual(
+          chain[agent.name] === false ? { enabled: false, permission: "deny" } : { enabled: true, permission: "allow" },
+        );
+      }
     }
     const seat = (name: string) => TEMPLATES.faceless.agents.find((a) => a.name === name);
     // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.

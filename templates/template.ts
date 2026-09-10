@@ -264,7 +264,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "apps",
-  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write", "trigger_agent",
+  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write", "trigger_agent", "agent_search",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
 
@@ -361,9 +361,11 @@ export const toolset = (names: readonly string[], handoffs: readonly string[] = 
         },
       ]),
     ),
-    // What `agents[].handoffs` compiles to on the platform (`canonical-spec §31.7`), written here too
-    // so the declaration reads whole: `allow`, because a handoff runs with nobody watching.
-    ...(handoffs.length > 0 ? { trigger_agent: { enabled: true, permission: "allow" as const, config: { targets: [...handoffs] } } } : {}),
+    // The grant `agents[].handoffs` compiles to on the platform (`canonical-spec §31.7`), written here
+    // too so the declaration reads whole: `allow`, because a handoff runs with nobody watching.
+    ...(handoffs.length > 0
+      ? { trigger_agent: { enabled: true, permission: "allow" as const }, agent_search: { enabled: true, permission: "allow" as const } }
+      : {}),
   },
 });
 
@@ -467,7 +469,9 @@ export const agent = (decl: {
    * The seats this one may start a session on with `trigger_agent`, once its own work is filed
    * (`canonical-spec §46`). Day one is ordered by these, not by the crons: the scout files briefs
    * and names them to the writer, the writer scripts them and names them to the producer. Each name
-   * must be an agent of the same template; `naive up` refuses one that is not.
+   * must be an agent of the same template; `naive up` refuses one that is not. A seat that declares
+   * none hands to nobody (`handoffs: false` on the wire, §46.2): the platform's default is anyone in
+   * the organization, and this channel's order is exactly the chain written here.
    */
   handoffs?: string[];
   /**
@@ -489,7 +493,7 @@ export const agent = (decl: {
   // Preamble → brief → gate for the standing prompt; message → order for the one-off. Composed here
   // so a new seat cannot be written without either.
   intake: { ...decl.intake, message: `${decl.intake.message} ${DAY_ONE_ORDER}` },
-  ...(decl.handoffs === undefined ? {} : { handoffs: decl.handoffs }),
+  handoffs: decl.handoffs ?? false,
   /**
    * The persona this agent acts as, and the reason it can act on a connected account at all: the
    * platform resolves a turn's connection tools along `session → agent → identity → connected
