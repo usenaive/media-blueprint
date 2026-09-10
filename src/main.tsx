@@ -3,6 +3,7 @@ import "./app.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
+import { Gate } from "./Gate";
 import { Shell } from "./Shell";
 import { Accounts } from "./screens/Accounts";
 import { Approvals } from "./screens/Approvals";
@@ -30,8 +31,12 @@ const router = createBrowserRouter([
   },
 ]);
 
+// The gate asks `/api/session` first and mounts the router — and so the first gated fetch — only
+// once the answer is "signed in" (`src/Gate.tsx`).
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <Gate>
+      <RouterProvider router={router} />
+    </Gate>
   </StrictMode>,
 );

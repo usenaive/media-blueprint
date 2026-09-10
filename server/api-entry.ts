@@ -330,6 +330,9 @@ export default async function handler(req: Request, res: Response): Promise<void
       config,
       mcpToken: process.env["VETTA_MCP_TOKEN"],
       dashboardToken: process.env["DASHBOARD_TOKEN"],
+      dashboardPassword: process.env["DASHBOARD_PASSWORD"],
+      studioUrl: process.env["NAIVE_STUDIO_URL"],
+      appId: process.env["NAIVE_APP_ID"],
       local: false,
     });
 

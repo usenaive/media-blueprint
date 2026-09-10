@@ -37,7 +37,7 @@ export interface ApiReply {
   stream?: Response;
   /** With `stream`: an event stream (relay preamble) rather than a file's bytes. */
   sse?: boolean;
-  /** Set only by `/api/enter`, which answers with a cookie and a redirect and no body at all. */
+  /** Set only by `/api/enter`, which answers with a cookie (on success) and a redirect and no body at all. */
   headers?: Record<string, string>;
 }
 
@@ -48,6 +48,11 @@ export interface ApiContext {
   mcpToken: string | undefined;
   /** The operator's bearer for `/api/*` (`DASHBOARD_TOKEN`). Undefined closes the whole surface. */
   dashboardToken: string | undefined;
+  /** The operator's own way through `/api/enter` (`DASHBOARD_PASSWORD`). Undefined refuses every password. */
+  dashboardPassword: string | undefined;
+  /** The studio that installed this app (`NAIVE_STUDIO_URL`) and the app's own id (`NAIVE_APP_ID`): together, the link the gate offers. */
+  studioUrl: string | undefined;
+  appId: string | undefined;
   /** True on `pnpm serve` / `pnpm dev`. False in the deployed function. */
   local: boolean;
 }
@@ -59,6 +64,8 @@ const NOT_CONFIGURED = "not configured — set NAIVE_API_KEY";
 const NO_DASHBOARD_TOKEN = "not configured — set DASHBOARD_TOKEN on this app";
 /** Said to a browser that arrived on its own. There is nothing for it to type; there is a button. */
 const CLOSED = "this dashboard is opened from the studio that installed it";
+/** Where a refused form post lands: the gate, which reads the flag and says so. The reason travels in nothing else. */
+const DENIED = "/?entry=denied";
 
 /**
  * THE OPERATOR'S SESSION, AND WHY IT IS A COOKIE AND NOT A THING THEY HOLD.
@@ -314,12 +321,14 @@ function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
 }
 
 /**
- * `POST /api/enter` — the one door through the gate, and the only route that runs before it.
+ * `POST /api/enter` — the one door through the gate, and one of the two routes that run before it
+ * (`/api/session` is the other, and it only looks).
  *
- * It takes a ticket, not a token (`mcp.ts`), and it answers with a cookie and a redirect and no
- * body: there is nothing here for a person to read, copy or lose. A bad or stale ticket gets 403
- * and no hint about why — the difference between "wrong" and "expired" is a probing oracle, and the
- * remedy for both is the same single click.
+ * It takes a ticket, not a token (`mcp.ts`) — or, since the platform started generating one, the
+ * operator's dashboard password (`enterWithPassword`) — and it answers with a cookie and a redirect
+ * and no body: there is nothing here for a person to read, copy or lose. A bad or stale ticket gets
+ * 403 and no hint about why — the difference between "wrong" and "expired" is a probing oracle, and
+ * the remedy for both is the same single click.
  *
  * The form that posts here is served by the studio on a different origin, so this is a cross-site
  * top-level navigation: no CORS applies to it, `SameSite=Lax` still permits SETTING the cookie on
@@ -328,8 +337,35 @@ function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
 function enter(req: ApiRequest, ctx: ApiContext): ApiReply {
   if (req.method !== "POST") return fail(405, "method not allowed");
   if (!ctx.dashboardToken) return fail(503, NO_DASHBOARD_TOKEN);
-  const ticket = String(parse(req.body)["ticket"] ?? new URLSearchParams(req.body).get("ticket") ?? "");
+  const password = field(req.body, "password");
+  if (password !== undefined) return enterWithPassword(req, ctx, password);
+  const ticket = field(req.body, "ticket") ?? "";
   if (!ticketMatches(ctx.dashboardToken, ticket, Date.now())) return fail(403, `this link did not check out — ${CLOSED}`);
+  return signedIn(ctx);
+}
+
+/**
+ * The second credential `/api/enter` takes: the operator's own `DASHBOARD_PASSWORD`, typed into the
+ * gate the SPA renders (`src/Gate.tsx`) by a browser that reached this URL without the studio.
+ *
+ * The platform generates the password and shows it in the studio's Access panel; this route only
+ * ever compares it, in constant time, and answers with the same cookie the ticket buys — the two
+ * doors open onto one session. Unset means there is no second door: every password is refused, and
+ * `/api/session` says so up front (`password_enabled`) so the gate never draws a field for it.
+ *
+ * A refused FORM post is sent back to the gate with `entry=denied` rather than answered with JSON a
+ * person would be left reading; a refused JSON post gets the 403 a script expects. The form is the
+ * gate's own, same-origin, so the redirect lands on the screen that made it. The ticket path above
+ * is untouched by any of this.
+ */
+function enterWithPassword(req: ApiRequest, ctx: ApiContext, password: string): ApiReply {
+  if (ctx.dashboardPassword && secretMatches(ctx.dashboardPassword, password)) return signedIn(ctx);
+  if (isForm(req)) return { status: 303, headers: { location: DENIED } };
+  return fail(403, ctx.dashboardPassword ? `this password did not check out — ${CLOSED}` : `no dashboard password is set on this app — ${CLOSED}`);
+}
+
+/** The session, minted: the cookie and the redirect home, identical for either credential. */
+function signedIn(ctx: ApiContext): ApiReply {
   const secure = ctx.local ? "" : "; Secure";
   return {
     status: 303,
@@ -338,6 +374,37 @@ function enter(req: ApiRequest, ctx: ApiContext): ApiReply {
       "set-cookie": `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=${COOKIE_MAX_AGE}`,
     },
   };
+}
+
+/**
+ * One field of an `/api/enter` body, whichever way it arrived: JSON from a script, a form from the
+ * browser — or a form the host already parsed and the adapter re-encoded as JSON (`api-entry.ts`),
+ * which is why the content type is not what decides how the body is read.
+ */
+function field(body: string, name: string): string | undefined {
+  const parsed = parse(body)[name];
+  if (parsed !== undefined && parsed !== null) return String(parsed);
+  return new URLSearchParams(body).get(name) ?? undefined;
+}
+
+/** Whether the browser posted a form — the one caller a redirect is for. */
+const isForm = (req: ApiRequest): boolean =>
+  (req.headers["content-type"] ?? "").toLowerCase().includes("application/x-www-form-urlencoded");
+
+/**
+ * `GET /api/session` — what the gate reads before it draws anything, and the only other route in
+ * front of `dashboardAuth`. It sets no cookie and answers the same question the gate asks (cookie or
+ * bearer), plus the two doors a signed-out browser can be shown: the studio's `/open` for this
+ * app, when the platform told us where the studio is, and whether a password is set at all.
+ * Neither value is a secret; the password itself is in no response this server makes.
+ */
+function session(req: ApiRequest, ctx: ApiContext): ApiReply {
+  if (req.method !== "GET") return fail(405, "method not allowed");
+  return json(200, {
+    authenticated: dashboardAuth(req, ctx) === null,
+    studio_url: ctx.studioUrl && ctx.appId ? `${ctx.studioUrl.replace(/\/+$/, "")}/apps/${ctx.appId}/open` : null,
+    password_enabled: Boolean(ctx.dashboardPassword),
+  });
 }
 
 /** Every route the dashboard serves, browser and agent alike. */
@@ -355,6 +422,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
 
   if (req.path === "/api/enter") return enter(req, ctx);
+  if (req.path === "/api/session") return session(req, ctx);
 
   const refused = dashboardAuth(req, ctx);
   if (refused !== null) return refused;

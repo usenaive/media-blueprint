@@ -22,6 +22,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const config = configFromEnv(process.env);
 const mcpToken = process.env["VETTA_MCP_TOKEN"];
 const dashboardToken = process.env["DASHBOARD_TOKEN"];
+// All three are the platform's to set; a laptop has none, and the loopback bypass below needs none.
+const dashboardPassword = process.env["DASHBOARD_PASSWORD"];
+const studioUrl = process.env["NAIVE_STUDIO_URL"];
+const appId = process.env["NAIVE_APP_ID"];
 const store = openStore(join(root, "data", "store.json"));
 
 const MIME: Record<string, string> = {
@@ -66,6 +70,9 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
     config,
     mcpToken,
     dashboardToken,
+    dashboardPassword,
+    studioUrl,
+    appId,
     local: isLoopback(req.socket.remoteAddress),
   });
   // `/api/enter` answers with a cookie and a `location` and nothing else; every other route sets none.

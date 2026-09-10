@@ -125,6 +125,13 @@ describe("naive.config", () => {
     expect(project.apps[0]?.env?.["DASHBOARD_TOKEN"]).toEqual({ generate: true });
   });
 
+  it("declares a generated dashboard password beside the token: the operator's own way through the gate", () => {
+    // The token is never shown to anyone; the password exists to be shown — in the studio's Access
+    // panel — and typed into the gate by a browser that arrived without the studio's handoff. Same
+    // `{generate: true}`: the platform shapes the value, and a later apply leaves it where it is.
+    expect(project.apps[0]?.env?.["DASHBOARD_PASSWORD"]).toEqual({ generate: true });
+  });
+
   /**
    * The platform's own two values are the platform's to write (`canonical-spec §29.7`).
    *
@@ -139,6 +146,7 @@ describe("naive.config", () => {
     expect(project.apps[0]?.env).toEqual({
       NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
       DASHBOARD_TOKEN: { generate: true },
+      DASHBOARD_PASSWORD: { generate: true },
     });
   });
 
