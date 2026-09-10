@@ -128,7 +128,7 @@ describe("post now", () => {
     expect(sent).toEqual({
       content: "Love what happens. All of it.",
       title: "Amor fati in 40 seconds",
-      platforms: ["x"],
+      platforms: ["youtube"],
       media_urls: ["https://cdn.test/amor-fati.mp4"],
     });
   });
@@ -176,7 +176,10 @@ describe("post now", () => {
     for (const post of state.posts) {
       expect(POST_PLATFORMS as readonly string[]).toContain(post.platform);
     }
-    const legacy = { ...state.posts[0]!, id: "post_old", platform: "youtube" as never, status: "approved" as const };
+    // `x` is the shape of that row exactly: it was a valid target until `POST_PLATFORMS` was
+    // narrowed to the networks that take video, and a document written then is still in the
+    // database. The narrowing is safe precisely because this line refuses it with a remedy.
+    const legacy = { ...state.posts[0]!, id: "post_old", platform: "x" as never, status: "approved" as const };
     state.posts.push(legacy);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -185,7 +188,7 @@ describe("post now", () => {
 
     expect(reply).toEqual({
       status: 400,
-      body: { error: "this channel cannot publish to youtube — retarget the post first" },
+      body: { error: "this channel cannot publish to x — retarget the post first" },
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(state.posts.find((p) => p.id === "post_old")?.status).toBe("approved");
@@ -194,6 +197,9 @@ describe("post now", () => {
   it("does not mark a post posted when the publish was refused", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: { message: "nope" } }, 400)));
     const state = demoState();
+    // Every network this channel targets publishes video and refuses text, so a row reaches the
+    // upstream call at all only once it carries the finished piece.
+    state.posts.find((p) => p.id === "post_4a6f")!.mediaUrl = "https://cdn.test/amor-fati.mp4";
     const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
     expect(reply).toEqual({ status: 502, body: { error: "publish failed: nope" } });
     expect(state.posts.find((p) => p.id === "post_4a6f")?.status).toBe("approved");
@@ -225,6 +231,7 @@ describe("post now", () => {
     vi.stubGlobal("fetch", fetchMock);
     for (const config of [null, { ...CONFIG, identityId: null }]) {
       const state = demoState();
+      state.posts.find((p) => p.id === "post_4a6f")!.mediaUrl = "https://cdn.test/amor-fati.mp4";
       const reply = await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, config));
       expect(reply).toEqual({
         status: 503,
@@ -249,6 +256,7 @@ describe("post now", () => {
     const state = demoState();
     const post = state.posts.find((p) => p.id === "post_4a6f")!;
     post.title = "";
+    post.mediaUrl = "https://cdn.test/amor-fati.mp4";
     const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -257,7 +265,7 @@ describe("post now", () => {
     expect(reply.status).toBe(200);
     const sent = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
     expect(sent).not.toHaveProperty("title");
-    expect(sent).toMatchObject({ content: post.caption, platforms: ["x"] });
+    expect(sent).toMatchObject({ content: post.caption, platforms: ["youtube"] });
   });
 
   it("404s an unknown post", async () => {
@@ -287,13 +295,13 @@ describe("/mcp is the first row of the same table, over the same store", () => {
     const ctx = ctxOver(demoState(), null, "tok");
     const call = {
       jsonrpc: "2.0", id: 1, method: "tools/call",
-      params: { name: "create_post", arguments: { caption: "New cut", media_url: "https://cdn.test/c.mp4", platform: "threads" } },
+      params: { name: "create_post", arguments: { caption: "New cut", media_url: "https://cdn.test/c.mp4", platform: "instagram" } },
     };
     const answer = await handleRequest(req("POST", "/mcp", JSON.stringify(call), { authorization: "Bearer tok" }), ctx);
     expect(answer.status).toBe(200);
 
     const posts = (await handleRequest(req("GET", "/api/posts"), ctx)).body as { caption: string; platform: string }[];
-    expect(posts[0]).toMatchObject({ caption: "New cut", platform: "threads" });
+    expect(posts[0]).toMatchObject({ caption: "New cut", platform: "instagram" });
   });
 
   it("answers a notification 202 with no body", async () => {

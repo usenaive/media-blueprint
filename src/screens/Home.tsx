@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import { ACTIVE } from "../../templates";
 import { apiGet, ApiError, messageOf } from "../api";
-import { PageHeader, STATUS_LABEL } from "../components/kit";
+import { ConnectLine, PageHeader, STATUS_LABEL } from "../components/kit";
 import type { Post, PostStatus } from "../data";
 import { toRoster } from "./Agents";
 import { parked, type WireSession } from "./Approvals";
@@ -120,6 +120,9 @@ export function Home() {
   return (
     <div className="pane-in">
       <PageHeader title="Home" subtitle={ACTIVE.description} />
+
+      {/* Before the queue, the cards and the roster: can this channel publish what it is making? */}
+      <ConnectLine />
 
       <div className="mb-6 grid grid-cols-2 gap-3">
         <section className="panel p-4">

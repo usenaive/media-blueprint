@@ -20,27 +20,40 @@ export const POST_STATUSES = ["pending", "ready", "approved", "posted", "rejecte
 export type PostStatus = (typeof POST_STATUSES)[number];
 
 /**
- * The targets a post can name — deliberately exactly the set the platform's social API accepts for
- * a published post. Kept as a literal, not imported: a blueprint is cloned standalone and depends
- * on no workspace package at runtime. When the platform's enum grows, this list is the one place
- * to grow with it.
+ * The targets a post can name, and the reason there are only three of them.
  *
- * `tiktok` was missing, and it was the one that mattered. This blueprint's whole product is
- * vertical short-form video — the producer renders 1080x1920 — and the network for that could not
- * be filed for, defaulted to or retargeted at from anywhere in the dashboard. The reason written
- * here for leaving it out ("a post to one is refused upstream") was half a fact: the platform
- * takes `tiktok` (`packages/core/src/schema/social.ts`), and refuses it only on a post carrying no
- * media at all. That is the rule below, said in the one place a publish reads it.
+ * Kept as a literal, not imported: a blueprint is cloned standalone and depends on no workspace
+ * package at runtime. It is a SUBSET of what the platform's social API accepts, chosen for what
+ * this blueprint actually makes.
+ *
+ * *** EVERY POST THIS CHANNEL FILES IS A VIDEO. *** The producer renders 1080x1920 and the clipper
+ * cuts one; there is no other product, and there is no link, thread or article anywhere in this
+ * repo. So the honest set is the networks that take a vertical video — which is exactly the
+ * platform's own video-capable enum (`SOCIAL_MEDIA_PLATFORMS`, `packages/core/src/schema/social.ts`).
+ *
+ * The list this replaces was close to backwards: it admitted `bluesky`, `facebook`, `linkedin`,
+ * `mastodon`, `threads` and `x` — six networks that accept the caption and drop the video, so a
+ * "published" post shipped a line of text and left the render behind — and it excluded `youtube`
+ * and `instagram`, two of the three that take the work. A customer connecting YouTube, which is
+ * the first thing anyone installing a Shorts channel does, could not file a post for it, could not
+ * default to it and could not retarget a row at it from anywhere in the dashboard.
+ *
+ * Narrowing is safe by construction: `postNow` already checks a row's platform against this list
+ * and refuses with "retarget the post first", so a document written before the narrowing is
+ * refused with a sentence and a remedy rather than a 400 from upstream. Widening it again — a
+ * channel that one day posts something other than a video — is this one line.
  */
-export const POST_PLATFORMS = ["bluesky", "facebook", "linkedin", "mastodon", "threads", "tiktok", "x"] as const;
+export const POST_PLATFORMS = ["instagram", "tiktok", "youtube"] as const;
 export type PostPlatform = (typeof POST_PLATFORMS)[number];
 
 /**
- * The targets that publish media and refuse text. A brief is a row with no video yet, so a channel
- * whose target is one of these can hold an approved row that the platform would refuse: it is
- * refused here instead, in a sentence naming what is missing, rather than at the button.
+ * The targets that publish media and refuse text — which, now that the list above is the video
+ * networks, is all of them. A brief is a row with no video yet, so an approved brief is a row the
+ * platform would refuse: it is refused here instead, in a sentence naming what is missing, rather
+ * than at the button. Kept as its own name because it answers a different question ("would this
+ * publish without media?") and a future non-video target would make the two lists differ again.
  */
-export const POST_MEDIA_PLATFORMS: readonly PostPlatform[] = ["tiktok"];
+export const POST_MEDIA_PLATFORMS: readonly PostPlatform[] = POST_PLATFORMS;
 
 /**
  * Every kind of post any template of this blueprint files: `faceless` produces and files
@@ -98,23 +111,23 @@ export interface Post {
 
 /** The `faceless` demo queue: original video the producer made, in one niche. */
 export const FACELESS_SEEDS: Post[] = [
-  { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "x", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:41" },
-  { id: "post_8e1b", title: "Marcus Aurelius on mornings", caption: "The 5am debate, settled 1,900 years ago.", platform: "threads", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:58" },
-  { id: "post_7d3c", title: "Why comfort is a trap", caption: "Seneca said it better than any podcast.", platform: "bluesky", account: "@dailystoic.bsky.social", status: "ready", agent: "producer", kind: "produced", duration: "0:36" },
-  { id: "post_6c4d", title: "Dichotomy of control, animated", caption: "Part 1 of 3 — the only flowchart you need.", platform: "x", account: "@dailystoic", status: "ready", agent: "producer", kind: "multi", duration: "0:52" },
-  { id: "post_5b5e", title: "Epictetus was a slave first", caption: "The origin story they skip.", platform: "linkedin", account: "Stoic Daily", status: "approved", agent: "producer", kind: "produced", duration: "1:04", scheduledFor: "Tomorrow 09:00" },
-  { id: "post_4a6f", title: "Amor fati in 40 seconds", caption: "Love what happens. All of it.", platform: "x", account: "@dailystoic", status: "approved", agent: "producer", kind: "produced", duration: "0:40", scheduledFor: "Fri 18:30" },
-  { id: "post_3970", title: "The obstacle is the way", caption: "Ryan Holiday's favourite line, sourced.", platform: "x", account: "@dailystoic", status: "posted", agent: "producer", kind: "multi", duration: "0:44", postedAt: "2d ago", views: 48_211, likes: 5_804 },
-  { id: "post_2881", title: "Memento mori, gently", caption: "A calmer take on the skull emoji.", platform: "threads", account: "@dailystoic", status: "posted", agent: "producer", kind: "produced", duration: "0:49", postedAt: "4d ago", views: 21_930, likes: 2_112 },
-  { id: "post_1792", title: "Cold showers are not stoicism", caption: "Hot take, ancient sources.", platform: "bluesky", account: "@dailystoic.bsky.social", status: "rejected", agent: "producer", kind: "produced", duration: "0:38", rejectedReason: "Caption reads as engagement bait — soften the first line." },
+  { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "youtube", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:41" },
+  { id: "post_8e1b", title: "Marcus Aurelius on mornings", caption: "The 5am debate, settled 1,900 years ago.", platform: "instagram", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:58" },
+  { id: "post_7d3c", title: "Why comfort is a trap", caption: "Seneca said it better than any podcast.", platform: "tiktok", account: "@dailystoic", status: "ready", agent: "producer", kind: "produced", duration: "0:36" },
+  { id: "post_6c4d", title: "Dichotomy of control, animated", caption: "Part 1 of 3 — the only flowchart you need.", platform: "youtube", account: "@dailystoic", status: "ready", agent: "producer", kind: "multi", duration: "0:52" },
+  { id: "post_5b5e", title: "Epictetus was a slave first", caption: "The origin story they skip.", platform: "youtube", account: "@dailystoic", status: "approved", agent: "producer", kind: "produced", duration: "1:04", scheduledFor: "Tomorrow 09:00" },
+  { id: "post_4a6f", title: "Amor fati in 40 seconds", caption: "Love what happens. All of it.", platform: "youtube", account: "@dailystoic", status: "approved", agent: "producer", kind: "produced", duration: "0:40", scheduledFor: "Fri 18:30" },
+  { id: "post_3970", title: "The obstacle is the way", caption: "Ryan Holiday's favourite line, sourced.", platform: "youtube", account: "@dailystoic", status: "posted", agent: "producer", kind: "multi", duration: "0:44", postedAt: "2d ago", views: 48_211, likes: 5_804 },
+  { id: "post_2881", title: "Memento mori, gently", caption: "A calmer take on the skull emoji.", platform: "instagram", account: "@dailystoic", status: "posted", agent: "producer", kind: "produced", duration: "0:49", postedAt: "4d ago", views: 21_930, likes: 2_112 },
+  { id: "post_1792", title: "Cold showers are not stoicism", caption: "Hot take, ancient sources.", platform: "tiktok", account: "@dailystoic", status: "rejected", agent: "producer", kind: "produced", duration: "0:38", rejectedReason: "Caption reads as engagement bait — soften the first line." },
 ];
 
 /** The `clipping` demo queue: cuts the clipper took out of the channel's source videos. */
 export const CLIPPING_SEEDS: Post[] = [
-  { id: "post_c1a4", title: "The 90-second answer that ended the debate", caption: "He had one shot and took it. #podcast", platform: "x", account: "@longformcuts", status: "pending", agent: "clipper", kind: "clip", duration: "0:47" },
-  { id: "post_c2b5", title: "\"Say that again, slowly\"", caption: "The pause is the whole clip.", platform: "threads", account: "@longformcuts", status: "pending", agent: "clipper", kind: "clip", duration: "0:33" },
-  { id: "post_c3c6", title: "The question nobody asks a founder", caption: "Cut from episode 214.", platform: "bluesky", account: "@longformcuts.bsky.social", status: "ready", agent: "clipper", kind: "clip", duration: "0:52" },
-  { id: "post_c4d7", title: "Two minutes that explain the whole book", caption: "Timestamps in the replies.", platform: "linkedin", account: "Longform Cuts", status: "approved", agent: "clipper", kind: "clip", duration: "1:12", scheduledFor: "Tomorrow 09:00" },
-  { id: "post_c5e8", title: "He changed his mind live on air", caption: "Rare. Worth 40 seconds.", platform: "x", account: "@longformcuts", status: "posted", agent: "clipper", kind: "clip", duration: "0:40", postedAt: "2d ago", views: 31_402, likes: 3_118 },
-  { id: "post_c6f9", title: "The cold open everyone quoted", caption: "First thing said, best thing said.", platform: "threads", account: "@longformcuts", status: "rejected", agent: "clipper", kind: "clip", duration: "0:29", rejectedReason: "We do not have clearance for this source yet." },
+  { id: "post_c1a4", title: "The 90-second answer that ended the debate", caption: "He had one shot and took it. #podcast", platform: "youtube", account: "@longformcuts", status: "pending", agent: "clipper", kind: "clip", duration: "0:47" },
+  { id: "post_c2b5", title: "\"Say that again, slowly\"", caption: "The pause is the whole clip.", platform: "instagram", account: "@longformcuts", status: "pending", agent: "clipper", kind: "clip", duration: "0:33" },
+  { id: "post_c3c6", title: "The question nobody asks a founder", caption: "Cut from episode 214.", platform: "tiktok", account: "@longformcuts", status: "ready", agent: "clipper", kind: "clip", duration: "0:52" },
+  { id: "post_c4d7", title: "Two minutes that explain the whole book", caption: "Timestamps in the replies.", platform: "youtube", account: "@longformcuts", status: "approved", agent: "clipper", kind: "clip", duration: "1:12", scheduledFor: "Tomorrow 09:00" },
+  { id: "post_c5e8", title: "He changed his mind live on air", caption: "Rare. Worth 40 seconds.", platform: "youtube", account: "@longformcuts", status: "posted", agent: "clipper", kind: "clip", duration: "0:40", postedAt: "2d ago", views: 31_402, likes: 3_118 },
+  { id: "post_c6f9", title: "The cold open everyone quoted", caption: "First thing said, best thing said.", platform: "instagram", account: "@longformcuts", status: "rejected", agent: "clipper", kind: "clip", duration: "0:29", rejectedReason: "We do not have clearance for this source yet." },
 ];

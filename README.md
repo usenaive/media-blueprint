@@ -21,7 +21,7 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 | `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **three questions** (the niche, the tone and audience, the posting cadence), every
+studio asks **three questions** (what the channel is about, **where it posts**, and how often), every
 agent reads the answers back through the platform's `project_context` tool, and each opens a
 **day-one** session that turns those answers into the channel's first briefs, scripts, clips,
 report and plan. See [The crew](#-the-crew).
@@ -158,17 +158,54 @@ then never armed. The `channel` app is `required` too: it is the crew's queue an
 
 ### The three questions
 
-The studio asks these before anything exists, and the engine refuses a template with a fourth.
-There is no onboarding screen in the dashboard: one place to ask, one place the answers live.
+The studio asks these before anything exists, and the engine refuses a template with a fourth — in
+its own words, *"a template asks at most 3 before anything is provisioned — a fourth belongs to the
+crew's first conversation"*. There is no onboarding screen in the dashboard: one place to ask, one
+place the answers live.
 
 | Template | 1 | 2 | 3 |
 |---|---|---|---|
-| `faceless` | **Niche** — a choice of six, or your own | **Tone and audience, in one line** — text | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Source channel(s) you hold the rights to** — text | **Niche / audience** — text | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Source channel(s) you hold the rights to** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+
+The middle one is the same question on both templates, and it is the one this channel cannot run
+without: **it decides the network every post the crew files is aimed at**. It used to be a constant
+in the code — a line an operator was expected to edit and re-deploy — so every install of this
+blueprint filed for the same network whoever installed it and whatever they had connected.
+
+Three is a budget, so asking that one meant not asking another. The slot came from *"tone and
+audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager now asks for it
+with `ask_operator` in its day-one session, which is exactly where the engine's refusal says a
+fourth question belongs. Nothing was dropped — it moved from the form to the conversation.
 
 The answers are the install's project context. Each agent reads them through the platform's
 read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
 shows them as they are.
+
+### …and the one thing the questions cannot do for you
+
+**Picking a network is not connecting an account.** The setup answer tells the crew where to file;
+publishing needs an account connected to the channel's identity, and that is one click on the
+**Accounts** screen (it opens the platform's own hosted connect portal — the dashboard builds no
+OAuth flow of its own). Until it is done, the queue fills and nothing in it can go out.
+
+So the dashboard says so, on **Home** and on **Posts**, above everything else:
+
+> This channel posts to YouTube Shorts, and no YouTube Shorts account is connected yet — nothing
+> here can publish until you connect one on Accounts.
+
+It reads the network from your own answer and the accounts from the platform, and it distinguishes
+*"no account connected"* from *"we could not check"* — being told to reconnect an account that is
+already fine is how a warning gets ignored. Once the right account is connected the line goes quiet
+and names the handle.
+
+**The crew keeps filing while nothing is connected, on purpose.** A queue is a review surface, not
+a publish action: refusing to file would throw away a render that has already been paid for (~$3.32
+each, see [What it costs](#-what-it-costs)), and every day-one session opens minutes after the
+install, before anyone has had a chance to connect anything — so refusing would mean an empty first
+day and five intake budgets spent on nothing. What is not acceptable is filing *silently*, which is
+what the line above fixes. Publishing still refuses honestly at the button, and the channel
+manager's first plan opens by saying whether an account is connected.
 
 ### Day one
 
@@ -247,26 +284,34 @@ Brainrot absurdist.
 
 ## 📮 Where a post can go
 
-A post names one of the networks the platform can publish to — **bluesky, facebook, linkedin,
-mastodon, threads, tiktok, x** — and nothing else is offered anywhere in the dashboard or in
-`create_post`. The list lives in one place, [`seed/posts.ts`](seed/posts.ts); when the platform
-accepts more, it grows there.
+A post names one of the three networks that take a vertical video — **instagram, tiktok,
+youtube** — and nothing else is offered anywhere in the dashboard or in `create_post`. The list
+lives in one place, [`seed/posts.ts`](seed/posts.ts).
 
-**Where *this* channel posts is the template's**, not a default buried in the server: `platform`
-in [`templates/faceless.ts`](templates/faceless.ts) / [`templates/clipping.ts`](templates/clipping.ts)
-is what a post filed with no destination becomes, and both crews are set to **tiktok** because
-vertical short-form video is what they make. Change that one line, run `naive up`, and every post
-filed after it targets somewhere else; an agent can still name a different network per post, and
-the channel manager can retarget a row before you approve it.
+It is a deliberate subset of what the platform's social API accepts, and it is the honest one for
+this blueprint: **every post this crew files is a video.** The producer renders 1080x1920 and the
+clipper cuts one; there is no link, thread or article anywhere in this repo. A text network takes
+the caption and drops the render, so a "published" post there ships a line of text and leaves the
+work behind. The list this replaced admitted six of those and excluded `youtube` and `instagram` —
+two of the three that take the work.
 
-TikTok publishes video and refuses text, so an approved row with no video attached is refused
-here, by name, rather than at the button — a brief is exactly that row.
+**Where *this* channel posts is yours**, answered in setup (see [The three
+questions](#the-three-questions)) and read back by everything that stamps a target: the store's
+default, the `create_post` tool description the crew reads before filing, and the line on Home and
+Posts. `platform` on the template is now only the fallback for an install with no usable answer,
+and it is the question's own first option so the two cannot disagree. An agent can still name a
+different network per post, and the channel manager can retarget a row before you approve it.
+
+All three publish video and refuse text, so an approved row with no video attached is refused here,
+by name, rather than at the button — a brief is exactly that row. And a row targeting a network no
+longer on the list (a document written before it was narrowed) is refused with *"retarget the post
+first"*, which `channel.update_post` can do.
 
 ## 🖥 Operating the channel
 
 | Screen | What it does |
 |---|---|
-| Home | The project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
+| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
 | Chat | Talk to the channel manager — brief it, ask for clips or productions, adjust the plan |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
@@ -325,6 +370,7 @@ an edit plus a re-apply.
 | when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
 | the post kinds, the three setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
+| where the channel posts | **you answer it in the studio** — no edit, no deploy | nothing |
 | a seat's role, skills or day-one intake | `role`, `skills`, `intake` in its `agent({ … })` call | `naive up` |
 | the style library | [`seed/style-templates.ts`](seed/style-templates.ts) | `pnpm build && naive up` |
 | the dashboard's screens | [`src/screens/`](src/screens) | `pnpm build && naive up` |
@@ -473,7 +519,7 @@ export default defineProject({
   name: "media",
   blueprint: "media",
   template: ACTIVE.name,                 // chosen in templates/index.ts
-  questions: ACTIVE.questions,           // the three the studio asks before anything exists
+  questions: ACTIVE.questions,           // the three the studio asks: subject, network, cadence
   templates: [                           // every template this repo carries
     { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
     { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },

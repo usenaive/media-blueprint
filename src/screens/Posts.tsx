@@ -1,7 +1,7 @@
 import { Check, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiGet, apiSend, messageOf } from "../api";
-import { PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
+import { ConnectLine, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
 import type { Post, PostStatus } from "../data";
 import { ACTIVE } from "../../templates";
 
@@ -68,6 +68,9 @@ export function Posts() {
         subtitle={ACTIVE.words.queueSubtitle}
         actions={error ? <span className="chip chip-fail">{error}</span> : null}
       />
+
+      {/* The queue is aimed at one network. This says which, and whether it can be reached. */}
+      <ConnectLine />
 
       <div className="seg mb-4 w-fit" role="tablist">
         {TABS.map(({ key, label }) => (

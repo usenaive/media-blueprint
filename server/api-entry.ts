@@ -15,9 +15,11 @@
  * it starts by replacing this file's queries.
  */
 import { Client } from "pg";
+import { channelPlatform } from "./channel.ts";
 import { configFromEnv } from "./proxy.ts";
 import { handleRequest, type ApiRequest } from "./routes.ts";
 import { emptyState, openStoreOver, type Store, type StoreState } from "./store.ts";
+import type { PostPlatform } from "../seed/posts.ts";
 
 const TABLE = "channel_store";
 const ROW = "singleton";
@@ -136,7 +138,7 @@ export interface Document {
  * both end the transaction, and until one of them does, every other invocation waiting on the row
  * is blocked, which is precisely the serialisation this store needs and did not have.
  */
-export async function openDocument(client: Db): Promise<Document> {
+export async function openDocument(client: Db, defaultPlatform?: PostPlatform): Promise<Document> {
   await client.query("begin");
   let state: StoreState;
   try {
@@ -146,9 +148,11 @@ export async function openDocument(client: Db): Promise<Document> {
     throw error;
   }
   let dirty = false;
+  // `defaultPlatform` is the customer's setup answer, read once per warm instance
+  // (`server/channel.ts`): the network a row whose caller named none is filed for.
   const store = openStoreOver(state, () => {
     dirty = true;
-  });
+  }, undefined, defaultPlatform);
   return {
     store,
     async commit() {
@@ -305,6 +309,7 @@ interface Open {
 
 export default async function handler(req: Request, res: Response): Promise<void> {
   const request = requestOf(req);
+  const config = configFromEnv(process.env);
   const open: Open = { down: false };
 
   try {
@@ -315,14 +320,14 @@ export default async function handler(req: Request, res: Response): Promise<void
         try {
           const client = await connect();
           open.client = client;
-          open.document = await openDocument(client);
+          open.document = await openDocument(client, await channelPlatform(config));
         } catch (error) {
           open.down = true;
           throw error;
         }
         return open.document.store;
       },
-      config: configFromEnv(process.env),
+      config,
       mcpToken: process.env["VETTA_MCP_TOKEN"],
       dashboardToken: process.env["DASHBOARD_TOKEN"],
       local: false,

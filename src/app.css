@@ -1447,6 +1447,31 @@ input[type="submit"]:disabled,
 .dot-warn { background: var(--tone-fault); }
 .dot-fail { background: var(--tone-fail); }
 
+/* ── THE CONNECT LINE ──────────────────────────────────────────────────────
+ *
+ * One sentence above the queue: where this channel posts, and whether an
+ * account is connected for it. Drawn as a hairline row rather than a filled
+ * card, like `.absence` — it is a state of the channel, not a notification —
+ * and it takes the fault tone only when the channel genuinely cannot publish,
+ * so an operator who has finished setting up sees a quiet line and not a badge.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.connect-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+.connect-line-warn {
+  border-color: color-mix(in srgb, var(--tone-fault) 40%, var(--line));
+  background: color-mix(in srgb, var(--tone-fault) 6%, var(--surface));
+  color: var(--ink);
+}
+
 /* A blinking caret for the streaming transcript. */
 @keyframes caret-blink {
   0%, 45% { opacity: 1; }

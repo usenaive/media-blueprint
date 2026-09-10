@@ -59,10 +59,17 @@ export const declaration = {
   templates,
 
   /**
-   * The three things the studio asks before anything is provisioned (`canonical-spec §7.1`; the
-   * engine refuses a fourth). The answers land on the install and reach every agent through the
-   * built-in `project_context` tool (§31.8) — there is no other place they are asked, which is why
-   * the dashboard has no onboarding screen of its own.
+   * The three things the studio asks before anything is provisioned (`canonical-spec §7.1`): what
+   * the channel is about, WHERE IT POSTS, and how often. The answers land on the install and reach
+   * every agent through the built-in `project_context` tool (§31.8) — there is no other place they
+   * are asked, which is why the dashboard has no onboarding screen of its own.
+   *
+   * The engine refuses a fourth, and it is not a style rule — `parseProject` in
+   * `@usenaive-sdk/blueprints@0.4.0` throws "a template asks at most 3 before anything is
+   * provisioned" for any project that names a template, which this one always does. So the middle
+   * slot is spent on the network deliberately: a channel that does not know where it posts fills a
+   * queue nothing can publish, while the question it displaced is asked by the channel manager in
+   * its first session (`templates/template.ts`, `channelManager`).
    */
   questions: ACTIVE.questions,
 

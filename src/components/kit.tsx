@@ -1,5 +1,8 @@
-import type { ReactNode } from "react";
-import type { PostStatus } from "../data";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink } from "react-router";
+import { connectNotice, channelPlatformOf, type ContextAnswers } from "../connect";
+import { apiGet, fetchAccounts, messageOf } from "../api";
+import type { Account, PostStatus } from "../data";
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
@@ -85,6 +88,55 @@ export function PlatformChip({ platform, account }: { platform: string; account?
       {platform}
       {account ? <span className="text-ink-3"> · {account}</span> : null}
     </span>
+  );
+}
+
+/**
+ * *** THE LINE THAT SAYS WHETHER THIS CHANNEL CAN PUBLISH AT ALL. ***
+ *
+ * One sentence, at the top of the two screens an operator opens first: which network this channel
+ * posts to (their own setup answer), whether an account is connected for it, and where to connect
+ * one. Before it, the answer to "have I finished setting this up?" was not on any screen — the
+ * queue filled with rows for a network nobody had connected and the first refusal arrived at the
+ * publish button.
+ *
+ * It reads both facts itself rather than taking them as props, because it belongs on screens that
+ * share no state; both reads are cheap and both already existed. A read that has not answered, or
+ * that failed, says so — it never reports "not connected" on the strength of a read that did not
+ * happen (`connectNotice`).
+ *
+ * There is no new OAuth here and there must not be: connecting is the platform's own hosted portal,
+ * reached from Accounts, which is where the button already is.
+ */
+export function ConnectLine() {
+  const [context, setContext] = useState<ContextAnswers | null>(null);
+  const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    // The channel's network is the setup answer; before it answers, the running template's own
+    // fallback is used, which is the same resolution the server makes.
+    apiGet<{ context?: ContextAnswers }>("/context").then(
+      (home) => { if (live && home.context) setContext(home.context); },
+      () => {},
+    );
+    fetchAccounts().then(
+      (rows) => { if (live) setAccounts(rows); },
+      (err: unknown) => { if (live) setError(messageOf(err)); },
+    );
+    return () => { live = false; };
+  }, []);
+
+  const notice = connectNotice({ platform: channelPlatformOf(context), accounts, error });
+  return (
+    <div className={`connect-line mb-4 ${notice.tone === "warn" ? "connect-line-warn" : ""}`}>
+      <span className={`dot ${notice.tone === "ok" ? "dot-ok" : notice.tone === "warn" ? "dot-warn" : "dot-idle"}`} aria-hidden />
+      <span className="flex-1">{notice.text}</span>
+      <NavLink to="/accounts" className="btn btn-ghost btn-sm shrink-0">
+        {notice.tone === "ok" ? "Accounts" : "Connect an account"}
+      </NavLink>
+    </div>
   );
 }
 

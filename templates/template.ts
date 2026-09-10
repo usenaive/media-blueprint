@@ -4,7 +4,7 @@
  * The **blueprint** is the machine: the screens, `/api/*`, `/mcp`, the store and its row lock, the
  * operator bearer, build and deploy, the approval flow. It is one repository and it is shared.
  * A **template** is DATA: the crew and its prompts, the tool allow-lists, the kinds of post it
- * files, the three setup questions the studio asks before anything is provisioned, and the words
+ * files, the setup questions the studio asks before anything is provisioned, and the words
  * the queue prints. Both templates this repo carries live in `templates/`, so switching is an edit
  * of `ACTIVE` (`templates/index.ts`) plus `naive up` — never a re-clone, never a new app.
  *
@@ -25,17 +25,117 @@ export const PROJECT_NAME = "media";
 /**
  * One setup question, in the platform's own `QuestionField` shape (`canonical-spec §7.1`): the
  * studio asks it before the crew is provisioned, the answer lands on the install, and every agent
- * reads it back through `project_context`. The engine refuses a template with more than three.
+ * reads it back through `project_context`.
+ *
+ * *** THERE ARE THREE OF THEM, AND THE LIMIT IS REAL. MEASURED, NOT ASSUMED. ***
+ *
+ * `defineProject` refuses a fourth outright, and it is worth having the sentence here because the
+ * schema does not show it: `questions` is `z.array(QuestionFieldSchema)` with no bound, and the
+ * cap is a separate check in `parseProject`, applied only when the project names a `template` —
+ * which this one always does. Run against `@usenaive-sdk/blueprints@0.4.0`, the version this repo
+ * pins and `naive up` runs, a four-question declaration comes back:
+ *
+ *     template "faceless" asks 4 questions, but a template asks at most 3 before anything is
+ *     provisioned — a fourth belongs to the crew's first conversation
+ *
+ * So the three slots are a budget, and spending one is choosing what NOT to ask. `PLATFORM_QUESTION`
+ * below took a slot from `audience` on `faceless` and from `niche` on `clipping`, because a channel
+ * that does not know where it posts fills a queue nothing can publish, while tone and audience are
+ * one sentence the channel manager asks for in its first session — which is the home the engine's
+ * own refusal names for them. Both displaced questions are asked there (`channelManager`), so
+ * nothing was dropped; it moved to the conversation instead of the form.
  */
 export type SetupQuestion = NonNullable<DefineInput["questions"]>[number];
 
-/** The third question of both templates: how often the channel posts, which sizes every plan and every timer. */
+/** How often the channel posts, which sizes every plan and every timer. Shared: one cadence, spelled once. */
 export const CADENCE_QUESTION: SetupQuestion = {
   key: "cadence",
   label: "Posting cadence",
   type: "choice",
   options: ["daily", "3× a week", "weekly"],
   other: false,
+};
+
+/** The key the platform stores the network answer under, and the one name every reader of it uses. */
+export const PLATFORM_ANSWER_KEY = "platform";
+
+/**
+ * The networks a customer may pick from, and what each one is called in front of them.
+ *
+ * The option is the customer's word ("YouTube Shorts"), the platform is the wire's
+ * (`POST_PLATFORMS`). They are paired here rather than in two lists because the studio stores a
+ * `choice` answer as the option string it showed, so the only thing that can turn an answer back
+ * into a target is this table. First is the default an install falls back to when it has no
+ * answer at all.
+ */
+export const PLATFORM_CHOICES: readonly { option: string; platform: PostPlatform }[] = [
+  { option: "YouTube Shorts", platform: "youtube" },
+  { option: "TikTok", platform: "tiktok" },
+  { option: "Instagram Reels", platform: "instagram" },
+];
+
+/**
+ * *** WHERE THIS CHANNEL POSTS, ASKED OF THE PERSON WHOSE CHANNEL IT IS. ***
+ *
+ * It was a constant. `templates/faceless.ts` and `templates/clipping.ts` each carried
+ * `platform: "tiktok"`, and the docstring on `MediaTemplate.platform` said the remedy out loud:
+ * "an operator who wants another network edits this one line and runs `naive up`". That is not an
+ * onboarding flow, it is a patch — and the customer this blueprint is for is connecting a YouTube
+ * account, not editing TypeScript. The channel's target is the one fact about a channel that only
+ * its owner knows, so it is asked in the studio with the niche, the audience and the cadence, and
+ * every post the crew files reads the answer.
+ *
+ * `other: false` deliberately: a network typed in free text is a network nothing can publish to,
+ * and the refusal would arrive at the publish button weeks later.
+ */
+export const PLATFORM_QUESTION: SetupQuestion = {
+  key: PLATFORM_ANSWER_KEY,
+  label: "Where should this channel post?",
+  type: "choice",
+  options: PLATFORM_CHOICES.map((choice) => choice.option),
+  other: false,
+  help: "Pick the app your videos go out on. Picking it is not the same as connecting it — after setup, open Accounts and connect the account you post from, or the team will fill a queue that cannot publish.",
+};
+
+/** What a customer saw this network called; the raw id for anything not on the list. */
+export const labelOf = (platform: PostPlatform): string =>
+  PLATFORM_CHOICES.find((choice) => choice.platform === platform)?.option ?? platform;
+
+/**
+ * One answer, turned into a target — or null when it is not one of ours.
+ *
+ * Both spellings are accepted, because both occur: the studio hands back the option string it
+ * showed ("YouTube Shorts"), and an answer edited by hand or seeded by a script is as likely to
+ * be the bare id ("youtube"). Case and surrounding space are the customer's, not the wire's.
+ */
+export const platformOf = (answer: unknown): PostPlatform | null => {
+  if (typeof answer !== "string") return null;
+  const said = answer.trim().toLowerCase();
+  if (said === "") return null;
+  const choice = PLATFORM_CHOICES.find(
+    (one) => one.option.toLowerCase() === said || one.platform === said,
+  );
+  return choice?.platform ?? null;
+};
+
+/**
+ * The channel's network as the customer answered it, or `fallback` when they did not.
+ *
+ * Takes either the whole `project_context` body (`{ template, answers, updated_at }`) or the bare
+ * answers array, because the server reads the first and the browser is handed the same object. It
+ * NEVER guesses: an answer naming something this blueprint cannot publish to is not "close
+ * enough", it is no answer, and the caller's own default is more honest than a network nobody
+ * chose. This is the one place the answer is interpreted, so the store, `/mcp` and the screens
+ * cannot disagree about where the channel posts.
+ */
+export const platformFromAnswers = (context: unknown, fallback: PostPlatform): PostPlatform => {
+  const answers = Array.isArray(context)
+    ? context
+    : ((context as { answers?: unknown } | null | undefined)?.answers ?? []);
+  if (!Array.isArray(answers)) return fallback;
+  const answer = (answers as { key?: unknown; value?: unknown }[]).find((row) => row?.key === PLATFORM_ANSWER_KEY);
+  const value = Array.isArray(answer?.value) ? answer.value[0] : answer?.value;
+  return platformOf(value) ?? fallback;
 };
 
 /** One kind of post a template's crew files. `id` is what a row carries; the label is what a screen prints. */
@@ -54,18 +154,33 @@ export interface MediaTemplate {
   /** What this crew files; the first is what a post filed over MCP with no kind stated becomes. */
   kinds: [PostKindDecl, ...PostKindDecl[]];
   /**
-   * WHERE THIS CHANNEL POSTS, and the one thing about a post that was nobody's to decide.
+   * THE FALLBACK TARGET — and it is a fallback now, which is the whole point.
    *
-   * `channel.create_post` takes a `platform`, and in production not one of the nine rows the crew
-   * filed carried one: every filing fell through to a constant in `server/mcp.ts` that read `"x"`,
-   * so a channel of vertical video queued nine text-network posts and the operator could not
-   * retarget them either. The target belongs with the rest of what a template is — the crew, the
-   * kinds, the words — so switching template switches it, and an operator who wants another
-   * network edits this one line and runs `naive up`. An agent may still name a different
-   * `POST_PLATFORMS` entry per post; this is what a post that names none becomes.
+   * This line used to decide where a channel posts. `channel.create_post` takes a `platform`, and
+   * in production not one of the nine rows the crew filed carried one: every filing fell through
+   * to a constant, so a channel of vertical video queued nine posts at a network nobody had
+   * chosen or connected. Moving the constant from `server/mcp.ts` to here made it the template's
+   * constant instead of the machine's; it was still a constant, and the remedy this comment used
+   * to offer — "edit this one line and run `naive up`" — is a patch, not an onboarding flow.
+   *
+   * `PLATFORM_QUESTION` now asks the customer, and `platformFromAnswers` is what a post is filed
+   * for. This value is what an install that has no answer falls back to: a fresh clone before the
+   * studio has asked anything, an install whose context cannot be read right now, an answer naming
+   * a network this blueprint cannot publish to. It is the first option of the question, so the
+   * fallback and the default a customer sees pre-selected are the same network.
+   *
+   * An agent may still name a different `POST_PLATFORMS` entry per post.
    */
   platform: PostPlatform;
-  /** Exactly three (§4 of the plan): the studio asks them once, before anything exists. */
+  /**
+   * The questions the studio asks once, before anything exists — three, because the engine refuses
+   * a fourth on a project that names a template (the refusal is quoted on `SetupQuestion` above,
+   * and `naive.config.test.ts` holds it to that count). The tuple is the type-level half of that
+   * budget: a template cannot quietly ask a fourth and discover it at `naive up`.
+   *
+   * One of the three is `PLATFORM_QUESTION`, which every template of this blueprint asks, because
+   * where a channel posts is not the blueprint's to decide. A template chooses the other two.
+   */
   questions: [SetupQuestion, SetupQuestion, SetupQuestion];
   /** Every word a screen prints that changes with the template. */
   words: {
@@ -392,7 +507,20 @@ export const agent = (decl: {
  * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
  * names the rest of the crew in the brief, which is the only line that differs between templates.
  */
-export const channelManager = (specialists: string): AgentDecl =>
+export const channelManager = (
+  specialists: string,
+  /**
+   * THE QUESTION THE SETUP FORM HAD NO SLOT FOR, asked in the first session instead.
+   *
+   * The studio asks three (see `SetupQuestion`), and `PLATFORM_QUESTION` takes one of them —
+   * where the channel posts gates whether anything it makes can be published at all. What it
+   * displaced is named here and asked on day one with `ask_operator`, which parks the session with
+   * the question in front of the operator (`canonical-spec §7`). The engine's own refusal says
+   * this is where a fourth question belongs; this is the sentence that puts it there, rather than
+   * leaving the crew to invent an answer the preamble forbids it to invent.
+   */
+  firstAsk: string,
+): AgentDecl =>
   agent({
     name: "channel-manager",
     role: "Channel lead",
@@ -404,7 +532,7 @@ export const channelManager = (specialists: string): AgentDecl =>
     skills: ["naive/caption-writing"],
     intake: {
       message:
-        "Day one. Read project_context — the niche, the tone and audience, and the posting cadence — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, `source` \"channel plan\", so the operator can read it and the team can work to it. If no account is connected yet, say so in the plan rather than naming one.",
+        `Day one. Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the network this channel posts to; if no account is connected for it yet, say so as the first line of the plan — until one is connected nothing the team files can be published.`,
       budget_micro_usd: 20_000_000,
     },
     schedules: CHANNEL_MANAGER_SCHEDULES,

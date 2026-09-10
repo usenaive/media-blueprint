@@ -17,14 +17,17 @@
  * caption-editor its style, and the clipper checks its tools. The first cuts and the first captions
  * belong to the crons, which do run in order: 06:00 briefs, 07:00 cuts, 07:30 captions.
  */
-import { agent, CADENCE_QUESTION, channelManager, schedule, type MediaTemplate } from "./template.ts";
+import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
 
 export const CLIPPING: MediaTemplate = {
   name: "clipping",
   description: "Repurposes existing video in one niche: cuts the best moments out of a source channel and captions them.",
 
   agents: [
-    channelManager("the scout, the clipper and the caption-editor"),
+    channelManager(
+      "the scout, the clipper and the caption-editor",
+      "who these clips are for and the tone they are cut in, in one line — the setup form asked for the sources and not for this.",
+    ),
     agent({
       name: "clipper",
       role: "Clip production",
@@ -119,12 +122,19 @@ export const CLIPPING: MediaTemplate = {
     }),
   ],
 
-  // Vertical short-form video is what this crew makes, so the network for it is where it files.
-  // One line, one `naive up`, and every post the crew files after it targets somewhere else.
-  platform: "tiktok",
+  // The FALLBACK target only: `PLATFORM_QUESTION` below asks the customer where this channel
+  // posts, and a filed post takes their answer. This is what an install with no usable answer
+  // falls back to, and it is the question's own first option so the two never disagree.
+  platform: PLATFORM_CHOICES[0]!.platform,
 
   kinds: [{ id: "clip", label: "Clip" }],
 
+  /**
+   * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
+   * `PLATFORM_QUESTION` takes was `niche` — "Niche / audience" — and the channel manager asks for
+   * it in its day-one session instead. The rights question keeps its slot whatever else goes: it is
+   * the one answer no seat may work without, and no crew may infer.
+   */
   questions: [
     {
       key: "sources",
@@ -132,12 +142,7 @@ export const CLIPPING: MediaTemplate = {
       type: "text",
       placeholder: "Channel or playlist URLs, one per line — nothing is cut from anywhere else",
     },
-    {
-      key: "niche",
-      label: "Niche / audience",
-      type: "text",
-      placeholder: "e.g. podcast highlights for founders who skip the full episode",
-    },
+    PLATFORM_QUESTION,
     CADENCE_QUESTION,
   ],
 

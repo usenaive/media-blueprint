@@ -108,7 +108,7 @@ describe("openStore", () => {
     expect(store.updatePost(post.id, { caption: "Rule three, then." })).toMatchObject({ caption: "Rule three, then.", status: "pending" });
     expect(store.updatePost(post.id, { title: "Rule three" })).toMatchObject({ title: "Rule three", caption: "Rule three, then." });
     expect(openStore(file).read().posts[0]).toEqual(post);
-    expect(store.createPost({ caption: "In the sky", platform: "bluesky", status: "ready" }).platform).toBe("bluesky");
+    expect(store.createPost({ caption: "In the sky", platform: "instagram", status: "ready" }).platform).toBe("instagram");
   });
 
   it("carries a piece's stage from brief to rendered, apart from its status, and a note carries none", () => {
