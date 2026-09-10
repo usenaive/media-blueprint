@@ -118,7 +118,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "apps",
-  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
+  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write", "trigger_agent",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
 
@@ -195,7 +195,7 @@ const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
  * needs no shell, and denying them is also what keeps the session from provisioning (and billing) a
  * machine it would never use.
  */
-export const toolset = (names: readonly string[]) => ({
+export const toolset = (names: readonly string[], handoffs: readonly string[] = []) => ({
   default_config: { permission: "ask" as const },
   configs: {
     ...Object.fromEntries(
@@ -215,6 +215,9 @@ export const toolset = (names: readonly string[]) => ({
         },
       ]),
     ),
+    // What `agents[].handoffs` compiles to on the platform (`canonical-spec §31.7`), written here too
+    // so the declaration reads whole: `allow`, because a handoff runs with nobody watching.
+    ...(handoffs.length > 0 ? { trigger_agent: { enabled: true, permission: "allow" as const, config: { targets: [...handoffs] } } } : {}),
   },
 });
 
@@ -315,6 +318,13 @@ export const agent = (decl: {
   /** Only where the template cannot run without this seat — the studio cannot untick it. */
   required?: boolean;
   /**
+   * The seats this one may start a session on with `trigger_agent`, once its own work is filed
+   * (`canonical-spec §46`). Day one is ordered by these, not by the crons: the scout files briefs
+   * and names them to the writer, the writer scripts them and names them to the producer. Each name
+   * must be an agent of the same template; `naive up` refuses one that is not.
+   */
+  handoffs?: string[];
+  /**
    * The crons this agent fires on, owned as a complete set — see `schedule` above, where the
    * ownership rule and the exact-cron-string matching are written out. An agent with none does
    * nothing until a human opens a chat window.
@@ -328,9 +338,10 @@ export const agent = (decl: {
   budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
-  tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...DASHBOARD_TOOLS]),
+  tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
   intake: decl.intake,
+  ...(decl.handoffs === undefined ? {} : { handoffs: decl.handoffs }),
   /**
    * The persona this agent acts as, and the reason it can act on a connected account at all: the
    * platform resolves a turn's connection tools along `session → agent → identity → connected

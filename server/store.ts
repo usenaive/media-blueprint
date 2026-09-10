@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStatus } from "../seed/posts.ts";
+import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStage, type PostStatus } from "../seed/posts.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
 import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
 
@@ -45,13 +45,15 @@ export interface NewPostInput {
   account?: string;
   /** What it was made from: the brief, the source video, the style template. */
   source?: string;
+  /** Where in the pipeline this row starts — `brief` for a topic filed for the next seat; unset for a note. */
+  stage?: PostStage;
   status: Extract<PostStatus, "pending" | "ready">;
 }
 
 export interface Store {
   read(): StoreState;
   createPost(input: NewPostInput): Post;
-  updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl">>): Post | null;
+  updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "stage">>): Post | null;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
@@ -128,6 +130,7 @@ export function openStoreOver(
         ...(input.agent === undefined ? {} : { agent: input.agent }),
         ...(input.account === undefined ? {} : { account: input.account }),
         ...(input.source === undefined ? {} : { source: input.source }),
+        ...(input.stage === undefined ? {} : { stage: input.stage }),
         // The kind is the template's first, not a constant: a `faceless` channel files what its
         // producer made, a `clipping` channel files a cut. The row is read by the same screens.
         kind: template.kinds[0].id,
@@ -143,6 +146,7 @@ export function openStoreOver(
       if (patch.title !== undefined) post.title = patch.title;
       if (patch.caption !== undefined) post.caption = patch.caption;
       if (patch.mediaUrl !== undefined) post.mediaUrl = patch.mediaUrl;
+      if (patch.stage !== undefined) post.stage = patch.stage;
       if (patch.status !== undefined) post.status = patch.status;
       if (patch.status === "posted") {
         post.postedAt = "just now";

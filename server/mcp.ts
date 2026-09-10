@@ -12,7 +12,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
-import { POST_PLATFORMS, type PostPlatform } from "../seed/posts.ts";
+import { POST_PLATFORMS, POST_STAGES, type PostPlatform, type PostStage } from "../seed/posts.ts";
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -74,9 +74,12 @@ const OPERATOR_ONLY = "Approving, rejecting and publishing are operator actions 
 /** What a post with no stated destination gets — see `store.createPost`. */
 const DEFAULT_PLATFORM = "x";
 
+const STAGES = POST_STAGES.join("|");
+
 export const TOOLS = [
-  { name: "list_posts", description: `The post queue, optionally filtered by status. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "list_posts", description: `The post queue, optionally filtered by status and/or stage. ${OPERATOR_ONLY}`, inputSchema: obj({
     status: str("Optional filter: pending|ready|approved|posted|rejected"),
+    stage: str(`Optional filter on how far a piece is: ${STAGES}. A row with no stage is a note, not a piece.`),
   }, []) },
   { name: "get_post", description: "One post by id.", inputSchema: obj({ id: str("Post id (post_…)") }, ["id"]) },
   { name: "create_post", description: `File a finished piece into the queue for the operator to review. Lands as pending unless status is ready. Say who you are, which account it is for and what it was made from — the operator approves the row, and an unsigned one tells them nothing. ${OPERATOR_ONLY}`, inputSchema: obj({
@@ -86,10 +89,12 @@ export const TOOLS = [
     agent: str("Your own name, as the roster lists it — who filed this"),
     account: str("The connected account this is for, from list_accounts"),
     source: str("What it was made from: the brief, the source video, the style template"),
+    stage: str(`How far along the piece is: ${STAGES}. Leave unset for a note (a plan, a report) that no seat takes further.`),
     status: str("pending (default) or ready"),
   }, ["caption"]) },
-  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "update_post", description: `Fix the title, caption or media URL of a pending or ready post, or move it to the next stage. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
     id: str("Post id"), title: str("New title"), caption: str("New caption"), media_url: str("New media URL"),
+    stage: str(`The stage the piece has reached: ${STAGES}`),
   }, ["id"]) },
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
@@ -103,6 +108,13 @@ const need = (params: Record<string, unknown>, key: string): string => {
 };
 const optional = (params: Record<string, unknown>, key: string): string | undefined =>
   typeof params[key] === "string" ? (params[key] as string) : undefined;
+/** The `stage` a caller named, refused rather than persisted when it is not one the queue knows. */
+const stageOf = (params: Record<string, unknown>): PostStage | undefined => {
+  const stage = optional(params, "stage");
+  if (stage === undefined) return undefined;
+  if (!(POST_STAGES as readonly string[]).includes(stage)) throw new ToolError(`stage must be one of ${POST_STAGES.join(", ")}`);
+  return stage as PostStage;
+};
 
 /**
  * Connected accounts from the platform when wired and activated; otherwise the accounts the queue
@@ -140,8 +152,12 @@ async function listAccounts(store: Store, config: ProxyConfig | null): Promise<u
 
 async function callTool(name: string, params: Record<string, unknown>, store: Store, config: ProxyConfig | null): Promise<unknown> {
   switch (name) {
-    case "list_posts":
-      return store.read().posts.filter((p) => params.status === undefined || p.status === params.status);
+    case "list_posts": {
+      const stage = stageOf(params);
+      return store.read().posts.filter((p) =>
+        (params.status === undefined || p.status === params.status) && (stage === undefined || p.stage === stage),
+      );
+    }
     case "get_post": {
       const post = store.read().posts.find((p) => p.id === need(params, "id"));
       if (!post) throw new ToolError("no such post");
@@ -162,6 +178,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         agent: optional(params, "agent"),
         account: optional(params, "account"),
         source: optional(params, "source"),
+        stage: stageOf(params),
         platform: platform as PostPlatform,
         status,
       });
@@ -173,7 +190,12 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (post.status !== "pending" && post.status !== "ready") {
         throw new ToolError(`post is ${post.status}; only pending or ready posts can be edited`);
       }
-      return store.updatePost(id, { title: optional(params, "title"), caption: optional(params, "caption"), mediaUrl: optional(params, "media_url") });
+      return store.updatePost(id, {
+        title: optional(params, "title"),
+        caption: optional(params, "caption"),
+        mediaUrl: optional(params, "media_url"),
+        stage: stageOf(params),
+      });
     }
     case "list_style_templates":
       return store.read().templates;

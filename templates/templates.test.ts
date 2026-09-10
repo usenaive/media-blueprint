@@ -97,12 +97,11 @@ describe("the crews", () => {
 
   it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
     // The seats downstream of the scout are told that, told not to invent the upstream work, and
-    // told which fire — in cron order — takes the first of it; and they are budgeted for set-up
-    // (every call holds its quote until the turn commits, so the cap is turns, not dollars), under
-    // the timer that does render.
+    // told how the first of it reaches them; and they are budgeted for set-up (every call holds its
+    // quote until the turn commits, so the cap is turns, not dollars), under the timer that does render.
     const downstream: [MediaTemplate, string, RegExp][] = [
-      [TEMPLATES.faceless, "producer", /alongside yours.*Render nothing today.*07:00 fire/s],
-      [TEMPLATES.faceless, "scriptwriter", /alongside yours.*not yours to invent.*06:30 fire/s],
+      [TEMPLATES.faceless, "producer", /set-up, not a render.*reaches you as a handoff from the scriptwriter.*Render nothing in this session/s],
+      [TEMPLATES.faceless, "scriptwriter", /set-up, not scripts.*do not invent one.*reach you as a handoff naming their ids/s],
       [TEMPLATES.clipping, "clipper", /alongside yours.*Cut nothing today.*07:00 fire/s],
       [TEMPLATES.clipping, "caption-editor", /cuts nothing until its 07:00 fire.*07:30 fire/s],
     ];
@@ -110,12 +109,48 @@ describe("the crews", () => {
       const seat = template.agents.find((a) => a.name === name);
       expect(seat?.intake?.message, name).toMatch(says);
     }
-    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.clipping, "clipper"]] as const) {
+    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.faceless, "scriptwriter"], [TEMPLATES.clipping, "clipper"]] as const) {
       const seat = template.agents.find((a) => a.name === name);
       const timer = Math.max(...(seat?.schedules ?? []).map((s) => s.budget_micro_usd ?? 0));
       expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(timer);
       expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(ONE_RENDER_MICRO_USD * 4);
     }
+  });
+
+  /**
+   * The chain that replaced the race. Five intakes opening at once each read the others' empty
+   * output — the scriptwriter wrote "the scout has filed no briefs" in the minute the scout filed
+   * five — so day one is now ordered by what a seat hands on after it has filed (`trigger_agent`,
+   * canonical-spec §46), not by what it finds. Each seat may name exactly the next one; the producer
+   * is the end; the timers reconcile by `stage` for whatever a handoff did not carry.
+   */
+  it("orders the faceless pipeline as a chain of handoffs: scout → scriptwriter → producer, and nobody else", () => {
+    const chain: Record<string, string[] | undefined> = {
+      "trend-scout": ["scriptwriter"],
+      scriptwriter: ["producer"],
+      producer: undefined,
+      analyst: undefined,
+      "channel-manager": undefined,
+    };
+    for (const agent of TEMPLATES.faceless.agents) {
+      expect(agent.handoffs, agent.name).toEqual(chain[agent.name]);
+      // The grant the engine compiles from `handoffs` (§31.7), so the declaration reads whole.
+      expect(agent.tools?.configs["trigger_agent"], agent.name).toEqual(
+        chain[agent.name] === undefined
+          ? { enabled: false, permission: "deny" }
+          : { enabled: true, permission: "allow", config: { targets: chain[agent.name] } },
+      );
+    }
+    const seat = (name: string) => TEMPLATES.faceless.agents.find((a) => a.name === name);
+    // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.
+    expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, trigger_agent the scriptwriter once.*post ids.*handoff_key/s);
+    expect(seat("trend-scout")?.system).toMatch(/only then.*trigger_agent the scriptwriter once.*Filed nothing, trigger nothing/s);
+    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*`stage` scripted.*trigger_agent the producer once.*scripted nothing, trigger nothing/s);
+    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*`stage` rendered.*you trigger nobody/s);
+    // The timers are the fallback, by stage, and no seat's intake is told another intake is running.
+    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripted.*trigger_agent the producer/s);
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendered/s);
+    for (const agent of TEMPLATES.faceless.agents) expect(agent.intake?.message, agent.name).not.toMatch(/alongside yours|running alongside/);
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {

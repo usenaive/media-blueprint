@@ -137,9 +137,9 @@ it is printed in dollars here.
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one |
 |---|---|---|---|---|---|
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer — slots per week, days, kinds, accounts — and files it as a brief ($20) |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | Picks the style templates for the niche and renders the first scripted brief ($8) |
-| `trend-scout` | Trends & briefs | `web_search`, `web_fetch` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | Researches the niche and files the channel's **first five briefs** ($20) |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | Drafts three hooks per brief, picks one, writes the script and caption ($20) |
+| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | Picks the style templates for the niche; renders nothing until the scriptwriter hands it a scripted row ($8) |
+| `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | Researches the niche, files the channel's **first five briefs**, then triggers the scriptwriter with their ids ($20) |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | Files the channel's hook style; scripts the five briefs in the session the scout's handoff opens, then triggers the producer ($8) |
 | `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton for this niche and cadence ($20) |
 
 ### `clipping`
@@ -174,9 +174,15 @@ shows them as they are.
 
 The apply that creates the crew opens one session per agent with its `intake.message`, each
 written to consume the answers: the scout files the first five briefs for *your* niche, the
-scriptwriter hooks and scripts them, the producer renders the first one, the analyst lays out the
-report, and the manager writes the plan from *your* cadence. Day one costs at most the sum of
-the intake budgets ($88 on `faceless`, $88 on `clipping`), and everything it makes lands in the
+analyst lays out the report, the manager writes the plan from *your* cadence, and the
+scriptwriter and producer set themselves up. The intakes open at once, so none of them reads
+another's work; on `faceless` the pieces move by **handoff** instead. Each brief carries a
+`stage` — `brief` → `scripted` → `rendered` — and when the scout has filed its five it triggers
+the scriptwriter with their ids (`trigger_agent`, the `handoffs` line on the seat); the
+scriptwriter writes into those rows and triggers the producer, who renders the first. The timers
+stay as the fallback, picking up by stage whatever a handoff did not carry. Day one costs at
+most the sum of the intake budgets ($76 on `faceless`, $88 on `clipping`) plus the handoff
+sessions, each inside the receiving seat's $20 task ceiling, and everything it makes lands in the
 queue as pending — nothing is published. The Home screen tracks each intake session until it
 finishes.
 
@@ -199,7 +205,7 @@ agent's per-task ceiling.
 | When | Who | What it does |
 |---|---|---|
 | Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named sources |
-| Daily 06:30 | `scriptwriter` (`faceless`) | Hooks, scripts and captions every brief that has none |
+| Daily 06:30 | `scriptwriter` (`faceless`) | Hooks, scripts and captions every brief still at `stage: brief`, then hands the ids to the producer |
 | Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video, or the next batch of clips — and files it as a pending post |
 | Daily 07:30 | `caption-editor` (`clipping`) | Titles and captions the morning's cuts |
 | Monday 07:30 | `analyst` | Last week's numbers, before the plan |

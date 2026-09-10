@@ -111,6 +111,23 @@ describe("openStore", () => {
     expect(store.createPost({ caption: "In the sky", platform: "bluesky", status: "ready" }).platform).toBe("bluesky");
   });
 
+  it("carries a piece's stage from brief to rendered, apart from its status, and a note carries none", () => {
+    const file = storeFile();
+    const store = openStore(file);
+    const note = store.createPost({ caption: "Hook style: short, plain, no questions.", status: "pending" });
+    expect(note.stage).toBeUndefined();
+    const brief = store.createPost({ caption: "Why the Stoics slept on the floor", status: "pending", stage: "brief" });
+    expect(brief.stage).toBe("brief");
+    expect(store.updatePost(brief.id, { caption: "Hook: ...\nScript: ...", stage: "scripted" })).toMatchObject({ stage: "scripted", status: "pending" });
+    expect(store.updatePost(brief.id, { mediaUrl: "https://cdn.example/floor.mp4", stage: "rendered" })).toMatchObject({ stage: "rendered", status: "pending" });
+    expect(store.updatePost(brief.id, { status: "approved" })).toMatchObject({ stage: "rendered", status: "approved" });
+    const reopened = openStore(file).read().posts;
+    expect(reopened.find((p) => p.id === brief.id)?.stage).toBe("rendered");
+    expect(reopened.find((p) => p.id === note.id)).not.toHaveProperty("stage");
+    // The demo rows predate the field and stay readable without it.
+    for (const seeded of reopened.filter((p) => p.id !== brief.id && p.id !== note.id)) expect(seeded.stage).toBeUndefined();
+  });
+
   it("returns null for an unknown post", () => {
     expect(openStore(storeFile()).updatePost("post_nope", { status: "approved" })).toBeNull();
   });

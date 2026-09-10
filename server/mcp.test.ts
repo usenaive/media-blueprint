@@ -132,6 +132,42 @@ describe("mcp tools", () => {
     }
   });
 
+  /**
+   * The chain's data: the scout files a `brief`, the writer moves it to `scripted`, the producer to
+   * `rendered` — and each seat finds the rows the one before it left by stage, never by guessing at
+   * a caption. A stage the queue does not know is refused, and a row filed with none is a note.
+   */
+  it("carries a piece brief → scripted → rendered, filters by stage, and refuses a stage it does not know", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string; stage?: string }>(
+      (await handleMcp(call("create_post", { caption: "Why comfort is a trap\nBrief: Seneca on ease.", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    expect(brief.stage).toBe("brief");
+    const note = text<{ stage?: string }>((await handleMcp(call("create_post", { caption: "Channel plan", agent: "channel-manager" }), store, null))!);
+    expect(note.stage).toBeUndefined();
+    expect(text<{ id: string }[]>((await handleMcp(call("list_posts", { stage: "brief" }), store, null))!).map((p) => p.id)).toEqual([brief.id]);
+
+    const scripted = text<{ stage?: string; caption: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, caption: "Hook: comfort is the trap.\n#stoicism", stage: "scripted" }), store, null))!,
+    );
+    expect(scripted).toMatchObject({ stage: "scripted", caption: "Hook: comfort is the trap.\n#stoicism" });
+    expect(text<unknown[]>((await handleMcp(call("list_posts", { stage: "brief" }), store, null))!)).toEqual([]);
+
+    const rendered = text<{ stage?: string; mediaUrl?: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, media_url: "https://cdn.example/comfort.mp4", stage: "rendered" }), store, null))!,
+    );
+    expect(rendered).toMatchObject({ stage: "rendered", mediaUrl: "https://cdn.example/comfort.mp4" });
+    expect(text<{ id: string }[]>((await handleMcp(call("list_posts", { stage: "rendered", status: "pending" }), store, null))!).map((p) => p.id)).toEqual([brief.id]);
+
+    for (const bad of [call("create_post", { caption: "x", stage: "done" }), call("update_post", { id: brief.id, stage: "published" }), call("list_posts", { stage: "nope" })]) {
+      const refused = (await handleMcp(bad, store, null)) as CallResult;
+      expect(refused.result.isError).toBe(true);
+      expect(refused.result.content[0]!.text).toMatch(/stage must be one of brief, scripted, rendered/);
+    }
+    expect(TOOLS.find((t) => t.name === "list_posts")?.inputSchema.properties).toHaveProperty("stage");
+    expect(TOOLS.find((t) => t.name === "update_post")?.inputSchema.properties).toHaveProperty("stage");
+  });
+
   it("reads posts by status, templates and accounts from the store", async () => {
     const store = freshStore();
     expect(text<{ status: string }[]>((await handleMcp(call("list_posts", { status: "ready" }), store, null))!).every((p) => p.status === "ready")).toBe(true);

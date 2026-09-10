@@ -74,6 +74,10 @@ describe("naive.config", () => {
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
     // The dashboard is the crew's queue and MCP endpoint: an install cannot untick it.
     expect(project.apps[0]?.required).toBe(true);
+    // The chain survives `defineProject` (engine 0.5.0 validates it), so `up` compiles the grants.
+    expect(project.agents.map((agent) => [agent.name, agent.handoffs])).toEqual(
+      ACTIVE.agents.map((agent) => [agent.name, agent.handoffs]),
+    );
   });
 
   it("declares the persona its agents act as, so a connected account is reachable from a turn", () => {

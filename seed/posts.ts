@@ -37,6 +37,16 @@ export type PostPlatform = (typeof POST_PLATFORMS)[number];
 export const POST_KINDS = ["clip", "produced", "multi"] as const;
 export type PostKind = (typeof POST_KINDS)[number];
 
+/**
+ * Where a piece in the making stands, as data the next seat can filter on: brief (a topic, no
+ * script) → scripted (hook, script and caption written into the row) → rendered (media attached).
+ * A row with no stage is a note — a plan, a report, a style choice — and belongs to no pipeline.
+ * The seat that moves a row forward also names it to the next seat (`trigger_agent`), so the stage
+ * is what the timers reconcile against, not what the day depends on.
+ */
+export const POST_STAGES = ["brief", "scripted", "rendered"] as const;
+export type PostStage = (typeof POST_STAGES)[number];
+
 export interface Post {
   id: string;
   title: string;
@@ -56,6 +66,8 @@ export interface Post {
   /** What it was made from: the brief, the source video, the style template. */
   source?: string;
   kind: PostKind;
+  /** How far along a piece is; absent on a row that is not a piece. */
+  stage?: PostStage;
   /** The finished piece's running time, when it is known. */
   duration?: string;
   scheduledFor?: string;
