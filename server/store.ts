@@ -74,7 +74,7 @@ const emptyState = (): StoreState => ({
 export { emptyState, seedState };
 
 /** Opens (and on first run seeds) the JSON store at `file`, with the running template's demo rows. */
-export function openStore(file: string, template: MediaTemplate = ACTIVE): Store {
+export function openStore(file: string, template: MediaTemplate = ACTIVE, defaultPlatform?: PostPlatform): Store {
   let state: StoreState;
   try {
     state = JSON.parse(readFileSync(file, "utf8")) as StoreState;
@@ -83,7 +83,7 @@ export function openStore(file: string, template: MediaTemplate = ACTIVE): Store
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(state, null, 2));
   }
-  return openStoreOver(state, (next) => writeFileSync(file, JSON.stringify(next, null, 2)), template);
+  return openStoreOver(state, (next) => writeFileSync(file, JSON.stringify(next, null, 2)), template, defaultPlatform);
 }
 
 /**
@@ -108,6 +108,18 @@ export function openStoreOver(
   state: StoreState,
   persist: (state: StoreState) => void,
   template: MediaTemplate = ACTIVE,
+  /**
+   * WHERE THIS CHANNEL POSTS, as the customer answered it in the studio — the network stamped on
+   * a row whose caller named none. Resolved from the applied install by `server/channel.ts` and
+   * passed in, because reading it is a pair of upstream calls and this file is synchronous.
+   *
+   * Omitted, the stamp falls back to `template.platform`, which is where the answer used to be
+   * decided outright: a per-template literal, before that a literal in `server/mcp.ts` reading
+   * `"x"`, which is how a channel of vertical video filed nine text-network posts. It is a
+   * fallback now and only a fallback — an install with no answer, or one whose context could not
+   * be read this second, still files somewhere sane.
+   */
+  defaultPlatform?: PostPlatform,
 ): Store {
   const save = () => persist(state);
 
@@ -119,10 +131,9 @@ export function openStoreOver(
         title: titleFrom(input.caption),
         caption: input.caption,
         ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
-        // No platform named: the network this template declares the channel posts to. It was the
-        // constant `"x"`, which is how a channel of vertical video filed nine posts to a text
-        // network — the target is the channel's, not this file's (`templates/template.ts`).
-        platform: input.platform ?? template.platform,
+        // Named by the caller, else the customer's own setup answer, else the template's fallback.
+        // The target is the channel owner's — it is not this file's and it is no longer a literal.
+        platform: input.platform ?? defaultPlatform ?? template.platform,
         // Only what the caller actually said. The row used to be stamped `agent: "mcp"`,
         // `account: "unassigned"` and `duration: "—"` whatever it knew, so every agent-filed post
         // printed the transport's name, a placeholder handle and an em dash where its running time

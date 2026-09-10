@@ -94,10 +94,13 @@ describe("mcp tools", () => {
    * #5 — the whole reason this channel could not post to TikTok, and it was entirely this repo's.
    *
    * MEASURED IN PRODUCTION, 2026-09-09: all nine rows the crew filed carried `"platform":"x"`. No
-   * agent ever named a target, so every filing fell back to a constant in this file; and `tiktok`
-   * was not in `POST_PLATFORMS` at all, so an agent that DID name it was refused and the operator
-   * could not retarget the row either. The platform publishes to TikTok fine. The target is the
-   * channel's — declared on the template it runs — and an agent may still name another.
+   * agent ever named a target, so every filing fell back to a constant in this file, and the
+   * operator could not retarget the rows either.
+   *
+   * The target is the CUSTOMER'S now — `PLATFORM_QUESTION`, answered in the studio and resolved per
+   * request by `server/channel.ts` — and the template's own `platform` is the fallback this test
+   * exercises, because no config is passed here and so there is no install to read. An agent may
+   * still name another network per post.
    */
   it("files for the channel's own network, and takes TikTok when an agent names it", async () => {
     const store = freshStore();
@@ -105,7 +108,7 @@ describe("mcp tools", () => {
       (await handleMcp(call("create_post", { caption: "No target named." }), store, null))!,
     );
     expect(defaulted.platform).toBe(TEMPLATES.faceless.platform);
-    expect(defaulted.platform).toBe("tiktok");
+    expect(defaulted.platform).toBe("youtube");
 
     const named = text<{ platform: string }>(
       (await handleMcp(
@@ -123,7 +126,7 @@ describe("mcp tools", () => {
       result: { tools: { name: string; inputSchema: { properties: Record<string, { description: string }> } }[] };
     };
     expect(listed.result.tools.find((t) => t.name === "create_post")?.inputSchema.properties["platform"]?.description).toMatch(
-      /This channel posts to tiktok/,
+      /This channel posts to youtube/,
     );
   });
 
@@ -196,7 +199,7 @@ describe("mcp tools", () => {
     expect(((await handleMcp(call("get_post", { id: "post_nope" }), store, null)) as CallResult).result.isError).toBe(true);
     expect(text<unknown[]>((await handleMcp(call("list_style_templates", {}), store, null))!).length).toBeGreaterThan(0);
     const accounts = text<{ platform: string; handle: string }[]>((await handleMcp(call("list_accounts", {}), store, null))!);
-    expect(accounts).toContainEqual({ platform: "x", handle: "@dailystoic" });
+    expect(accounts).toContainEqual({ platform: "youtube", handle: "@dailystoic" });
   });
 
   it("answers list_accounts from the queue, not with an error, when the platform refuses (social not activated)", async () => {
@@ -207,7 +210,7 @@ describe("mcp tools", () => {
     try {
       const answer = (await handleMcp(call("list_accounts", {}), store, config)) as CallResult;
       expect(answer.result.isError).not.toBe(true);
-      expect(text<{ platform: string; handle: string }[]>(answer)).toContainEqual({ platform: "x", handle: "@dailystoic" });
+      expect(text<{ platform: string; handle: string }[]>(answer)).toContainEqual({ platform: "youtube", handle: "@dailystoic" });
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();

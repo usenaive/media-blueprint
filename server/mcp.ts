@@ -10,10 +10,12 @@
  * on the Posts screen.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { channelPlatform } from "./channel.ts";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, type PostPlatform } from "../seed/posts.ts";
 import { ACTIVE } from "../templates/index.ts";
+import { labelOf } from "../templates/template.ts";
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -73,15 +75,16 @@ const str = (description: string) => ({ type: "string", description }) as const;
 const OPERATOR_ONLY = "Approving, rejecting and publishing are operator actions on the dashboard; no tool does them.";
 
 /**
- * Where this channel posts, declared with the rest of the template (`templates/template.ts`) and
- * read here only to say it on the tool. It was a constant `"x"` in this file, so every post the
- * crew filed went to a text network whatever the channel was for. The store applies it (a post with
- * no stated destination gets it there, in one place); this names it to the agent, because a default
- * nothing tells the crew about is a default the crew never chooses against.
+ * THE TOOLS, WRITTEN FOR THE NETWORK THIS CHANNEL ACTUALLY POSTS TO.
+ *
+ * The description of `create_post`'s `platform` names the channel's own target, because a default
+ * nothing tells the crew about is a default the crew never chooses against. That target used to be
+ * a constant `"x"` in this file, then a constant on the running template; it is now the customer's
+ * setup answer (`PLATFORM_QUESTION`), resolved per request by `server/channel.ts`. So the list is
+ * built rather than declared: the same agent, on two installs that answered differently, reads two
+ * different sentences, which is the point.
  */
-const CHANNEL_PLATFORM = ACTIVE.platform;
-
-export const TOOLS = [
+export const toolsFor = (channel: PostPlatform) => [
   { name: "list_posts", description: `The post queue, optionally filtered by status. ${OPERATOR_ONLY}`, inputSchema: obj({
     status: str("Optional filter: pending|ready|approved|posted|rejected"),
   }, []) },
@@ -89,7 +92,7 @@ export const TOOLS = [
   { name: "create_post", description: `File a finished piece into the queue for the operator to review. Lands as pending unless status is ready. Say who you are, which account it is for and what it was made from — the operator approves the row, and an unsigned one tells them nothing. ${OPERATOR_ONLY}`, inputSchema: obj({
     caption: str("The caption, hashtags included"),
     media_url: str("URL of the finished clip or video — it is published with the post, and the operator watches it here before approving"),
-    platform: str(`Where it should go: ${POST_PLATFORMS.join("|")}. This channel posts to ${CHANNEL_PLATFORM}, which is what a post that names none becomes; name another only when the piece is genuinely for it. These are the only networks this channel can publish to.`),
+    platform: str(`Where it should go: ${POST_PLATFORMS.join("|")}. This channel posts to ${channel} (${labelOf(channel)}), which is what a post that names none becomes; name another only when the piece is genuinely for it. These are the only networks this channel can publish to, and every one of them publishes video and refuses a bare caption.`),
     agent: str("Your own name, as the roster lists it — who filed this"),
     account: str("The connected account this is for, from list_accounts"),
     source: str("What it was made from: the brief, the source video, the style template"),
@@ -102,6 +105,12 @@ export const TOOLS = [
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
 ] as const;
+
+/**
+ * The tool list under the running template's fallback target — the names, for any caller that needs
+ * them without a request in hand. What a live `tools/list` answers is `toolsFor(the resolved one)`.
+ */
+export const TOOLS = toolsFor(ACTIVE.platform);
 
 class ToolError extends Error {}
 const need = (params: Record<string, unknown>, key: string): string => {
@@ -171,7 +180,10 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         agent: optional(params, "agent"),
         account: optional(params, "account"),
         source: optional(params, "source"),
-        ...(platform === undefined ? {} : { platform: platform as PostPlatform }),
+        // Named by the agent, else the network the operator chose in setup. Resolved here rather
+        // than left to the store's own fallback because only this layer can await the read, and
+        // because the agent was just told, on the tool it called, which network that is.
+        platform: (platform as PostPlatform | undefined) ?? (await channelPlatform(config)),
         status,
       });
     }
@@ -222,7 +234,9 @@ export async function handleMcp(raw: string, store: Store, config: ProxyConfig |
       serverInfo: { name: "media", version: "0.0.0" },
     });
   }
-  if (msg.method === "tools/list") return rpcResult(msg.id, { tools: TOOLS });
+  // Built per request, because the sentence on `create_post` names the network this install
+  // actually posts to and two installs of the same template answer differently.
+  if (msg.method === "tools/list") return rpcResult(msg.id, { tools: toolsFor(await channelPlatform(config)) });
   if (msg.method === "tools/call") {
     const { name, arguments: args } = (msg.params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
     try {

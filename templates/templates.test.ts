@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -143,18 +143,18 @@ describe("the crews", () => {
   });
 
   /**
-   * #5 — where this channel posts is the channel's, and it was a constant in `server/mcp.ts`.
-   *
-   * Both crews render vertical short-form video, and the network for that is the one the queue
-   * could not name at all. It is declared here, with the rest of what a template is, so switching
-   * template switches the target and the studio's own `naive up` is the only edit.
+   * #5 — where this channel posts is the channel OWNER'S, and it was a constant in `server/mcp.ts`,
+   * then a constant here. It is now `PLATFORM_QUESTION`, asked in the studio before anything is
+   * provisioned; what is left on the template is the FALLBACK an install with no usable answer
+   * files against, and it is the question's own first option so the two can never disagree.
    */
-  it("declares the network its crew files for, and it is one the queue can publish to", () => {
+  it("declares a fallback network its crew can file for, and it is the question's own default", () => {
     for (const template of both) {
       expect(POST_PLATFORMS as readonly string[], template.name).toContain(template.platform);
+      expect(template.platform, template.name).toBe(PLATFORM_CHOICES[0]!.platform);
     }
-    expect(TEMPLATES.faceless.platform).toBe("tiktok");
-    expect(TEMPLATES.clipping.platform).toBe("tiktok");
+    expect(TEMPLATES.faceless.platform).toBe("youtube");
+    expect(TEMPLATES.clipping.platform).toBe("youtube");
   });
 
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
@@ -502,19 +502,26 @@ describe("the data the screens read", () => {
   });
 
   /**
-   * Plan §4, rows 3–4: three questions per template, asked by the studio before anything is
-   * provisioned — the engine refuses a fourth. `choice` where the answers are a short list, `text`
-   * where they are the client's own words; and never a fourth spelling of the same question here.
+   * Three questions per template, asked by the studio before anything is provisioned — the engine
+   * refuses a fourth, and `onboarding.test.ts` holds it to that by asking the engine itself.
+   * `choice` where the answers are a short list, `text` where they are the client's own words.
+   *
+   * TWO OF THE THREE ARE SHARED NOW. Where the channel posts is not a matter of template — both
+   * crews make the same vertical video and both need a network to file it for — so
+   * `PLATFORM_QUESTION` sits between the template's own question and the cadence, and each
+   * template spends its one remaining slot on the thing only it needs: the niche, or the sources.
    */
   it("asks exactly three setup questions per template, and no more anywhere", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["audience", "text"], ["cadence", "choice"]]);
-    expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["niche", "text"], ["cadence", "choice"]]);
+    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["platform", "choice"], ["cadence", "choice"]]);
+    expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["platform", "choice"], ["cadence", "choice"]]);
     for (const template of both) {
       expect(template.questions).toHaveLength(3);
       for (const question of template.questions) expect(question.label).toMatch(/\S/);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(3);
     }
-    // The cadence is one question, spelled once, because every plan and every timer is sized by it.
+    // Each shared question is one question, spelled once: the cadence sizes every plan and every
+    // timer, and the network is what every filed row is stamped with.
+    expect(TEMPLATES.faceless.questions[1]).toBe(TEMPLATES.clipping.questions[1]);
     expect(TEMPLATES.faceless.questions[2]).toBe(TEMPLATES.clipping.questions[2]);
     expect(TEMPLATES.faceless.questions[2]).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
   });

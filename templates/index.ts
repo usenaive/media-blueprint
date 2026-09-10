@@ -22,7 +22,17 @@ import { FACELESS } from "./faceless.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 export type { MediaTemplate, PostKindDecl, SetupQuestion, TemplateName } from "./template.ts";
-export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PROJECT_NAME } from "./template.ts";
+export {
+  CHANNEL_IDENTITY,
+  CHANNEL_TIMEZONE,
+  labelOf,
+  PLATFORM_ANSWER_KEY,
+  PLATFORM_CHOICES,
+  PLATFORM_QUESTION,
+  platformFromAnswers,
+  platformOf,
+  PROJECT_NAME,
+} from "./template.ts";
 
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING };
 

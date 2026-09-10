@@ -18,14 +18,17 @@
  * scriptwriter and producer set themselves up without touching a brief. The first scripts and the
  * first render belong to the crons, which do run in order: 06:00 briefs, 06:30 scripts, 07:00 render.
  */
-import { agent, CADENCE_QUESTION, channelManager, schedule, type MediaTemplate } from "./template.ts";
+import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",
   description: "Generates original short-form video in one niche, from briefs, in the channel's own look.",
 
   agents: [
-    channelManager("the trend-scout, the scriptwriter and the producer"),
+    channelManager(
+      "the trend-scout, the scriptwriter and the producer",
+      "the channel's tone and who it is for, in one line — the setup form asked for the niche and not for this.",
+    ),
     agent({
       name: "producer",
       role: "Video production",
@@ -120,15 +123,23 @@ export const FACELESS: MediaTemplate = {
     }),
   ],
 
-  // Vertical short-form video is what this crew makes, so the network for it is where it files.
-  // One line, one `naive up`, and every post the crew files after it targets somewhere else.
-  platform: "tiktok",
+  // The FALLBACK target only: `PLATFORM_QUESTION` below asks the customer where this channel
+  // posts, and a filed post takes their answer. This is what an install with no usable answer
+  // falls back to, and it is the question's own first option so the two never disagree.
+  platform: PLATFORM_CHOICES[0]!.platform,
 
   kinds: [
     { id: "produced", label: "Produced" },
     { id: "multi", label: "Multi-part" },
   ],
 
+  /**
+   * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
+   * `PLATFORM_QUESTION` takes was `audience` — "Tone and audience, in one line" — and that question
+   * is now the first thing the channel manager asks the operator in its day-one session. Where a
+   * channel posts cannot be asked later: the crew starts filing within the minute, and every row it
+   * files carries a target.
+   */
   questions: [
     {
       key: "niche",
@@ -142,14 +153,9 @@ export const FACELESS: MediaTemplate = {
         "History mysteries",
         "Health & longevity",
       ],
-      help: "Pick one or type your own — every brief, script and render is for this niche.",
+      help: "Pick one or type your own — every brief, script and render is for this niche. Your tone and who it is for is the first thing the channel manager will ask you about.",
     },
-    {
-      key: "audience",
-      label: "Tone and audience, in one line",
-      type: "text",
-      placeholder: "e.g. calm and direct, for people in their 20s starting out",
-    },
+    PLATFORM_QUESTION,
     CADENCE_QUESTION,
   ],
 

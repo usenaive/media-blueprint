@@ -44,7 +44,7 @@ describe("dayOne", () => {
 
 describe("queueCounts", () => {
   it("counts every status, zeros included, in the order the queue prints them", () => {
-    const post = (status: PostStatus): Post => ({ id: status, title: "", caption: "", platform: "x", status, kind: "produced" });
+    const post = (status: PostStatus): Post => ({ id: status, title: "", caption: "", platform: "youtube", status, kind: "produced" });
     expect(queueCounts([post("pending"), post("pending"), post("posted")])).toEqual([
       ["pending", 2],
       ["ready", 0],
