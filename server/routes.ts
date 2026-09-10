@@ -389,6 +389,29 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     const rows = await collect(ctx.config, upstream);
     return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
   }
+  /**
+   * THE WORKSPACE HAS TO EXIST BEFORE A CONNECT LINK CAN BE MINTED.
+   *
+   * `POST /v1/identities/{id}/social/portal` answers `400 validation_failed — social publishing is
+   * not activated for this identity` on an install that never activated one, and that is EVERY
+   * fresh install: nothing in this app has ever called `social/activate`, and the studio's own
+   * Connect control (platform PR #418) belongs to a different app and cannot help here. So the
+   * Connect button the operator is now pointed at by `connectNotice` failed for exactly the people
+   * it was added for — the ones who had just picked a network and connected nothing.
+   *
+   * Activate first. The call is idempotent (it mints the workspace or returns the one already
+   * there), so this costs one extra hop on every Connect and can never fail for having succeeded
+   * before. A failure here is deliberately not fatal: the portal call runs anyway and answers with
+   * the platform's own reason, which is more useful than a message this proxy invented.
+   */
+  if (req.method === "POST" && req.path === "/api/social/portal" && ctx.config.identityId !== null) {
+    await proxyFetch(
+      ctx.config,
+      { method: "POST", path: `/v1/identities/${ctx.config.identityId}/social/activate` },
+      "{}",
+    ).catch(() => undefined);
+  }
+
   const body = req.method === "GET" ? null : req.body || "{}";
   const answer = await proxyFetch(ctx.config, upstream, body);
   if (upstream.sse) return { status: answer.status, stream: answer, sse: true };

@@ -133,6 +133,29 @@ describe("post now", () => {
     });
   });
 
+  /**
+   * A fresh install has never activated a social workspace — nothing in this app called
+   * `social/activate`, and the studio's Connect (platform PR #418) is a different app. So the
+   * portal call answered `400 social publishing is not activated for this identity` for exactly
+   * the operator the connect line had just sent to Accounts.
+   */
+  it("activates the workspace before minting a connect link, so a fresh install can connect", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({ url: "https://connect.test/x" }, 200));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(
+      req("POST", "/api/social/portal", '{"platforms":["youtube"]}'),
+      ctxOver(demoState(), CONFIG),
+    );
+
+    expect(reply.status).toBe(200);
+    const paths = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(paths[0], "activate must come first, or the portal call 400s").toContain(
+      "/v1/identities/idn_1/social/activate",
+    );
+    expect(paths[1]).toContain("/v1/identities/idn_1/social/portal");
+  });
+
   it("publishes a rendered video by its file id, which the platform signs itself", async () => {
     const state = demoState();
     const post = state.posts.find((p) => p.id === "post_4a6f")!;
