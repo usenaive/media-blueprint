@@ -343,7 +343,9 @@ function sameOriginGuard(req: ApiRequest): ApiReply | null {
   if (req.method === "GET" || req.method === "HEAD") return null;
   const site = req.headers["sec-fetch-site"];
   if (site !== undefined) return site === "same-origin" || site === "none" ? null : fail(403, CROSS_SITE);
-  return originHost(req.headers.origin) === req.headers.host ? null : fail(403, CROSS_SITE);
+  const origin = originHost(req.headers.origin);
+  const host = req.headers.host;
+  return origin !== undefined && host !== undefined && origin === host ? null : fail(403, CROSS_SITE);
 }
 
 function originHost(origin: string | undefined): string | undefined {

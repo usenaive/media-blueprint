@@ -815,10 +815,21 @@ describe("every /api/* route is behind the operator's bearer", () => {
       expect((await write({ origin: `https://${HOST}` })).status).toBe(200);
       expect(await write({ origin: "https://evil.example" })).toEqual(refused);
       expect(await write({ origin: "not a url" })).toEqual(refused);
+      expect(await write({ origin: "null" })).toEqual(refused);
       expect(await write({})).toEqual(refused);
       // Sec-Fetch-Site, when present, is the browser's word and outranks Origin either way.
       expect(await write({ origin: `https://${HOST}`, "sec-fetch-site": "cross-site" })).toEqual(refused);
       expect((await write({ origin: "https://evil.example", "sec-fetch-site": "same-origin" })).status).toBe(200);
+    });
+
+    it("fails closed when the request names no host at all: nothing to match is not a match", async () => {
+      const bare = (headers: Record<string, string | undefined>) =>
+        handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { cookie: `dashboard_session=${TOKEN}`, ...headers }), deployedCtx(demoState(), TOKEN));
+      // Only the cookie: neither Origin nor Host. `undefined === undefined` must not open the door.
+      expect(await bare({})).toEqual(refused);
+      expect(await bare({ origin: `https://${HOST}` })).toEqual(refused);
+      expect(await bare({ host: HOST })).toEqual(refused);
+      expect((await bare({ host: HOST, origin: `https://${HOST}` })).status).toBe(200);
     });
 
     it("does not apply to a bearer, to a read, or to /api/enter", async () => {
