@@ -433,11 +433,17 @@ function signedIn(ctx: ApiContext): ApiReply {
   const cookie = `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; ${site}; Max-Age=${COOKIE_MAX_AGE}`;
   // Off the laptop the new cookie is partitioned, so the old `Lax` one is a different cookie and
   // must be ended alongside; locally the new one simply replaces it.
+  //
+  // The order is load-bearing. A browser without CHIPS (Safari) ignores the unknown `Partitioned`
+  // attribute, so both headers then name ONE cookie — same name, no Domain, `Path=/` — and the
+  // browser applies them in order, the last one winning. The expiry goes first and the session
+  // second: on a CHIPS browser they are two cookies and the order is moot; everywhere else the
+  // sign-in survives instead of being deleted by its own response.
   return {
     status: 303,
     headers: {
       location: "/",
-      "set-cookie": ctx.local ? cookie : [cookie, legacyCookieGone(ctx)],
+      "set-cookie": ctx.local ? cookie : [legacyCookieGone(ctx), cookie],
     },
   };
 }

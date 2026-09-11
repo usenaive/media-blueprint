@@ -22,6 +22,11 @@
  * would be refused by its frame policy or nest it inside itself. The framed gate draws the form
  * straight away, and its studio link opens in the top window (`target="_top"`).
  *
+ * The mark is best-effort. A cross-site frame with third-party storage blocked (Chrome Incognito,
+ * Brave) throws `SecurityError` on merely touching `sessionStorage`, while the partitioned cookie
+ * keeps working. A store that cannot be read counts as "already attempted": the gate draws its
+ * doors rather than bouncing forever or crashing the frame blank.
+ *
  * The password form is a plain HTML post, deliberately: the value goes straight to `/api/enter` as a
  * document navigation and never through this bundle's state, a URL or storage. A refusal comes back
  * as `/?entry=denied`, which is the only thing the gate reads out of the address.
@@ -61,7 +66,27 @@ export function decide(session: Session, attempted: boolean, denied: boolean, fr
   return "gate";
 }
 
-const attempted = (): boolean => window.sessionStorage.getItem(ATTEMPTED) !== null;
+const readAttempted = (): boolean => {
+  try {
+    return window.sessionStorage.getItem(ATTEMPTED) !== null;
+  } catch {
+    return true;
+  }
+};
+const markAttempted = (): void => {
+  try {
+    window.sessionStorage.setItem(ATTEMPTED, "1");
+  } catch {
+    // Unreachable store: readAttempted() already answers true, so the bounce is not retried.
+  }
+};
+const clearAttempted = (): void => {
+  try {
+    window.sessionStorage.removeItem(ATTEMPTED);
+  } catch {
+    // Nothing was written to an unreachable store.
+  }
+};
 const leave = (url: string): void => window.location.assign(url);
 /** Whether this document is someone else's frame — the studio's preview — rather than the tab itself. */
 const inFrame = (): boolean => window.self !== window.top;
@@ -91,11 +116,11 @@ export function Gate({ children, go = leave, framed = inFrame() }: GateProps) {
 
   useEffect(() => {
     if (session === null) return;
-    const verdict = decide(session, attempted(), denied, framed);
-    if (verdict === "app") window.sessionStorage.removeItem(ATTEMPTED);
+    const verdict = decide(session, readAttempted(), denied, framed);
+    if (verdict === "app") clearAttempted();
     if (verdict === "bounce" && session.studio_url !== null) {
       // The mark is set before the navigation, so a studio that answers instantly still finds it.
-      window.sessionStorage.setItem(ATTEMPTED, "1");
+      markAttempted();
       setLeft(true);
       go(session.studio_url);
     }
@@ -106,7 +131,7 @@ export function Gate({ children, go = leave, framed = inFrame() }: GateProps) {
     return error === null ? null : <Screen title={TITLE} subtitle={error} tone="fail" />;
   }
   if (session.authenticated) return <>{children}</>;
-  if (left || decide(session, attempted(), denied, framed) === "bounce") return <Screen title="Opening your dashboard…" />;
+  if (left || decide(session, readAttempted(), denied, framed) === "bounce") return <Screen title="Opening your dashboard…" />;
 
   const studio = session.studio_url;
   return (

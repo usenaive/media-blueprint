@@ -144,6 +144,42 @@ describe("the gate", () => {
     expect(host.querySelector("form")).not.toBeNull();
   });
 
+  it("renders the gate, not a blank frame, when merely touching sessionStorage throws (third-party storage blocked)", async () => {
+    // Chrome Incognito and Brave refuse a cross-site frame all storage: the accessor itself throws
+    // a SecurityError, while the partitioned cookie keeps working. The gate must survive that.
+    const original = Object.getOwnPropertyDescriptor(window, "sessionStorage");
+    Object.defineProperty(window, "sessionStorage", {
+      get() {
+        throw new DOMException("denied", "SecurityError");
+      },
+      configurable: true,
+    });
+    try {
+      expect(() => window.sessionStorage).toThrow(DOMException);
+      const signedOut: Session = { authenticated: false, studio_url: STUDIO, password_enabled: true };
+      const { go } = await mount(signedOut, vi.fn(), true);
+      expect(go).not.toHaveBeenCalled();
+      expect(host.textContent).toContain(TITLE);
+      expect(host.querySelector("form")?.getAttribute("action")).toBe("/api/enter");
+      expect(host.querySelector<HTMLAnchorElement>("a.btn-primary")?.getAttribute("href")).toBe(STUDIO);
+
+      // Top level, the same store counts as "already attempted": the doors, not a bounce loop.
+      await remount();
+      const top = await mount(signedOut);
+      expect(top.go).not.toHaveBeenCalled();
+      expect(host.querySelector("form")).not.toBeNull();
+      expect(host.querySelector("a.btn-primary")).not.toBeNull();
+
+      // Signed in, the app renders and the clear is swallowed too.
+      await remount();
+      await mount({ authenticated: true, studio_url: STUDIO, password_enabled: true });
+      expect(host.textContent).toBe("the app");
+    } finally {
+      if (original) Object.defineProperty(window, "sessionStorage", original);
+      else delete (window as { sessionStorage?: Storage }).sessionStorage;
+    }
+  });
+
   it("reads its framing from the window when not told: a top-level jsdom document is not framed", async () => {
     expect(window.self).toBe(window.top);
     const { go } = await mount({ authenticated: false, studio_url: STUDIO, password_enabled: true });

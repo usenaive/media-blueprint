@@ -587,10 +587,12 @@ describe("every /api/* route is behind the operator's bearer", () => {
       // Deployed: partitioned per top-level site, so the studio's frame and a top-level tab each
       // sign in once. `SameSite=None` is what lets the frame carry it; `Partitioned` needs `Secure`.
       // Alongside it, as a SEPARATE header, the end of the pre-partitioned cookie a returning
-      // browser may still hold under the same name.
+      // browser may still hold under the same name — and that one goes FIRST. A browser without
+      // CHIPS ignores `Partitioned`, sees one cookie set twice, and keeps the last header: the
+      // session must be the last header, or a correct password lands back on the login form.
       expect(reply.headers?.["set-cookie"]).toEqual([
-        `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
         "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure",
+        `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
       ]);
     });
 
@@ -716,10 +718,10 @@ describe("every /api/* route is behind the operator's bearer", () => {
         expect(reply.status, body).toBe(303);
         expect(reply.body).toBeUndefined();
         expect(reply.headers?.["location"]).toBe("/");
-        // Byte-identical to the cookie the ticket buys.
+        // Byte-identical to the cookie the ticket buys, expiry first and session last.
         expect(reply.headers?.["set-cookie"]).toEqual([
-          `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
           "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure",
+          `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
         ]);
         // The password is compared, never echoed — not in the cookie and not anywhere else.
         expect(JSON.stringify(reply)).not.toContain(PASSWORD);
