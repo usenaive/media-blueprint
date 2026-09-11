@@ -18,8 +18,12 @@
  * studio that refused (signed out there too, or a different org) does not loop the browser between
  * the two origins; the second arrival draws the gate and lets the person choose.
  *
+ * Inside the studio's own `<iframe>` there is no bounce at all: a framed navigation to the studio
+ * would be refused by its frame policy or nest it inside itself. The framed gate draws the form
+ * straight away, and its studio link opens in the top window (`target="_top"`).
+ *
  * The password form is a plain HTML post, deliberately: the value goes straight to `/api/enter` as a
- * top-level navigation and never through this bundle's state, a URL or storage. A refusal comes back
+ * document navigation and never through this bundle's state, a URL or storage. A refusal comes back
  * as `/?entry=denied`, which is the only thing the gate reads out of the address.
  */
 import { useEffect, useState, type ReactNode } from "react";
@@ -36,6 +40,7 @@ export interface Session {
 /** The tab-scoped mark that the automatic studio bounce has been spent. */
 export const ATTEMPTED = "naive.entry.attempted";
 
+export const TITLE = "Sign in to your dashboard";
 export const DENIED_TEXT = "That didn't check out — try again or use your dashboard password.";
 export const CLOSED_TEXT = "This dashboard is opened from the studio that installed it.";
 
@@ -46,26 +51,30 @@ export const wasDenied = (search: string): boolean => new URLSearchParams(search
  * What the gate does with the session it read: render the app, bounce to the studio, or draw
  * itself. Pure, so the exactly-once rule can be asserted without a browser.
  *
- * The bounce happens only when there is somewhere to bounce to, only when this tab has not tried it
- * already, and never on the way back from a refused password — a person who just typed one wrong
- * is owed the form again, not a trip to another site.
+ * The bounce happens only when there is somewhere to bounce to, only at the top level, only when
+ * this tab has not tried it already, and never on the way back from a refused password — a person
+ * who just typed one wrong is owed the form again, not a trip to another site.
  */
-export function decide(session: Session, attempted: boolean, denied: boolean): "app" | "bounce" | "gate" {
+export function decide(session: Session, attempted: boolean, denied: boolean, framed = false): "app" | "bounce" | "gate" {
   if (session.authenticated) return "app";
-  if (session.studio_url !== null && !attempted && !denied) return "bounce";
+  if (session.studio_url !== null && !attempted && !denied && !framed) return "bounce";
   return "gate";
 }
 
 const attempted = (): boolean => window.sessionStorage.getItem(ATTEMPTED) !== null;
 const leave = (url: string): void => window.location.assign(url);
+/** Whether this document is someone else's frame — the studio's preview — rather than the tab itself. */
+const inFrame = (): boolean => window.self !== window.top;
 
 interface GateProps {
   children: ReactNode;
   /** The top-level navigation the bounce performs; a test hands in a spy. */
   go?: (url: string) => void;
+  /** Whether the document is framed; defaults to asking the window. */
+  framed?: boolean;
 }
 
-export function Gate({ children, go = leave }: GateProps) {
+export function Gate({ children, go = leave, framed = inFrame() }: GateProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [left, setLeft] = useState(false);
@@ -82,7 +91,7 @@ export function Gate({ children, go = leave }: GateProps) {
 
   useEffect(() => {
     if (session === null) return;
-    const verdict = decide(session, attempted(), denied);
+    const verdict = decide(session, attempted(), denied, framed);
     if (verdict === "app") window.sessionStorage.removeItem(ATTEMPTED);
     if (verdict === "bounce" && session.studio_url !== null) {
       // The mark is set before the navigation, so a studio that answers instantly still finds it.
@@ -90,22 +99,28 @@ export function Gate({ children, go = leave }: GateProps) {
       setLeft(true);
       go(session.studio_url);
     }
-  }, [session, denied, go]);
+  }, [session, denied, go, framed]);
 
   if (session === null) {
     // Nothing is drawn while the answer is out. A server that could not answer is a gate with no doors.
-    return error === null ? null : <Screen title="This dashboard is private" subtitle={error} tone="fail" />;
+    return error === null ? null : <Screen title={TITLE} subtitle={error} tone="fail" />;
   }
   if (session.authenticated) return <>{children}</>;
-  if (left || decide(session, attempted(), denied) === "bounce") return <Screen title="Opening your dashboard…" />;
+  if (left || decide(session, attempted(), denied, framed) === "bounce") return <Screen title="Opening your dashboard…" />;
 
   const studio = session.studio_url;
   return (
-    <Screen title="This dashboard is private" subtitle={denied ? DENIED_TEXT : undefined} tone={denied ? "fail" : "quiet"}>
+    <Screen title={TITLE} subtitle={denied ? DENIED_TEXT : undefined} tone={denied ? "fail" : "quiet"}>
       {studio !== null ? (
-        <a className="btn btn-primary w-full" href={studio}>
-          Open with Naive Studio
-        </a>
+        framed ? (
+          <a className="btn btn-primary w-full" href={studio} target="_top">
+            Open in the Studio
+          </a>
+        ) : (
+          <a className="btn btn-primary w-full" href={studio}>
+            Open with Naive Studio
+          </a>
+        )
       ) : null}
       {session.password_enabled ? (
         <form method="post" action="/api/enter" className={studio !== null ? "mt-5 space-y-3" : "space-y-3"}>

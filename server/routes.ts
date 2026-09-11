@@ -77,13 +77,22 @@ const DENIED = "/?entry=denied";
  * trades it for the cookie below. The value the cookie carries never passes through the DOM,
  * `sessionStorage`, a URL or anything a person is shown.
  *
- * `HttpOnly` so no script on this page can read it; `SameSite=Lax` so another site cannot make the
- * browser spend it on a write, while still allowing the top-level navigation that sets it; thirty
- * days because the alternative — a token that dies with the tab — sends the operator back to the
- * studio every morning for a credential neither of them can see.
+ * `HttpOnly` so no script on this page can read it; thirty days because the alternative — a token
+ * that dies with the tab — sends the operator back to the studio every morning for a credential
+ * neither of them can see.
+ *
+ * Deployed, the dashboard is shown two ways: as its own tab, and inside the studio's cross-site
+ * `<iframe>`. A `SameSite=Lax` cookie is never sent to a framed cross-site document, so the framed
+ * dashboard could never be signed in. The deployed cookie is therefore `SameSite=None; Secure;
+ * Partitioned` (CHIPS): the browser keys it by the top-level site, so the framed context and the
+ * top-level context each sign in once and neither can read the other's. What `Lax` used to buy —
+ * another site not spending the cookie on a write — `sameOriginGuard` buys instead. Locally
+ * (`ctx.local`) it stays `SameSite=Lax` with no `Secure`, because `Partitioned` requires `Secure`
+ * and `pnpm serve` is plain HTTP on the loopback.
  */
 const COOKIE = "dashboard_session";
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
+const CROSS_SITE = "cross-site request refused";
 
 /** One cookie out of the header, without a parser dependency and without regex over a whole header. */
 function cookieValue(header: string | undefined, name: string): string | undefined {
@@ -317,7 +326,33 @@ function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
     held === undefined
       ? bearerMatches(ctx.dashboardToken, req.headers.authorization)
       : secretMatches(ctx.dashboardToken, held);
-  return allowed ? null : fail(401, `missing or invalid dashboard token — ${CLOSED}`);
+  if (!allowed) return fail(401, `missing or invalid dashboard token — ${CLOSED}`);
+  return held === undefined ? null : sameOriginGuard(req);
+}
+
+/**
+ * What `SameSite=Lax` used to do, done by hand: a cookie-authenticated WRITE is honoured only from
+ * this origin. The deployed cookie is `SameSite=None` so the studio's frame can carry it, which
+ * means any site's form could too — so the browser's own word on where the request came from
+ * decides. `Sec-Fetch-Site: same-origin` (the page's own fetches, framed or not) or `none` (the
+ * address bar) passes; a browser too old to say sends `Origin` on every write, and that must name
+ * this host; anything else is refused. Reads are not writes, a bearer is not a cookie, and
+ * `/api/enter` never reaches here: the studio's ticket form is cross-site by design.
+ */
+function sameOriginGuard(req: ApiRequest): ApiReply | null {
+  if (req.method === "GET" || req.method === "HEAD") return null;
+  const site = req.headers["sec-fetch-site"];
+  if (site !== undefined) return site === "same-origin" || site === "none" ? null : fail(403, CROSS_SITE);
+  return originHost(req.headers.origin) === req.headers.host ? null : fail(403, CROSS_SITE);
+}
+
+function originHost(origin: string | undefined): string | undefined {
+  if (!origin) return undefined;
+  try {
+    return new URL(origin).host;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -331,8 +366,9 @@ function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
  * the remedy for both is the same single click.
  *
  * The form that posts here is served by the studio on a different origin, so this is a cross-site
- * top-level navigation: no CORS applies to it, `SameSite=Lax` still permits SETTING the cookie on
- * the way past, and every same-origin request the dashboard makes afterwards carries it.
+ * navigation: no CORS applies to it, setting the cookie on the way past is permitted, and every
+ * same-origin request the dashboard makes afterwards carries it. This route is deliberately outside
+ * `sameOriginGuard` for that reason.
  */
 function enter(req: ApiRequest, ctx: ApiContext): ApiReply {
   if (req.method !== "POST") return fail(405, "method not allowed");
@@ -366,12 +402,12 @@ function enterWithPassword(req: ApiRequest, ctx: ApiContext, password: string): 
 
 /** The session, minted: the cookie and the redirect home, identical for either credential. */
 function signedIn(ctx: ApiContext): ApiReply {
-  const secure = ctx.local ? "" : "; Secure";
+  const site = ctx.local ? "SameSite=Lax" : "Secure; SameSite=None; Partitioned";
   return {
     status: 303,
     headers: {
       location: "/",
-      "set-cookie": `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=${COOKIE_MAX_AGE}`,
+      "set-cookie": `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; ${site}; Max-Age=${COOKIE_MAX_AGE}`,
     },
   };
 }

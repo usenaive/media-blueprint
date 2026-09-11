@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATTEMPTED, CLOSED_TEXT, DENIED_TEXT, decide, Gate, wasDenied, type Session } from "./Gate";
+import { ATTEMPTED, CLOSED_TEXT, DENIED_TEXT, decide, Gate, TITLE, wasDenied, type Session } from "./Gate";
 
 const STUDIO = "https://app.usenaive.ai/apps/app_123/open";
 const json = (body: unknown, status = 200) =>
@@ -32,17 +32,23 @@ afterEach(async () => {
 });
 
 /** Mounts the gate over a `/api/session` answer and lets the fetch and both effects settle. */
-async function mount(session: Session, go = vi.fn<(url: string) => void>()) {
+async function mount(session: Session, go = vi.fn<(url: string) => void>(), framed?: boolean) {
   const fetchMock = vi.fn().mockResolvedValue(json(session));
   vi.stubGlobal("fetch", fetchMock);
   await act(async () => {
     root.render(
-      <Gate go={go}>
+      <Gate go={go} framed={framed}>
         <p data-testid="app">the app</p>
       </Gate>,
     );
   });
   return { fetchMock, go };
+}
+
+/** Unmounts and starts a fresh root, as a new page load would. */
+async function remount() {
+  await act(async () => root.unmount());
+  root = createRoot(host);
 }
 
 describe("the gate's verdict", () => {
@@ -53,6 +59,9 @@ describe("the gate's verdict", () => {
     expect(decide(out(STUDIO), true, false)).toBe("gate");
     expect(decide(out(STUDIO), false, true)).toBe("gate");
     expect(decide(out(null), false, false)).toBe("gate");
+    // Framed: never a bounce, whatever else is true.
+    expect(decide(out(STUDIO), false, false, true)).toBe("gate");
+    expect(decide({ ...out(STUDIO), authenticated: true }, false, false, true)).toBe("app");
     expect(wasDenied("?entry=denied")).toBe(true);
     expect(wasDenied("?entry=granted")).toBe(false);
     expect(wasDenied("")).toBe(false);
@@ -100,14 +109,50 @@ describe("the gate", () => {
     expect(host.textContent).not.toContain("the app");
 
     // The studio hands the browser back (or refuses); the tab remembers and does not go again.
-    await act(async () => root.unmount());
-    root = createRoot(host);
+    await remount();
     const second = await mount(signedOut);
     expect(second.go).not.toHaveBeenCalled();
     const link = host.querySelector<HTMLAnchorElement>("a.btn-primary");
     expect(link?.getAttribute("href")).toBe(STUDIO);
+    expect(link?.getAttribute("target")).toBeNull();
     expect(link?.textContent).toBe("Open with Naive Studio");
+    expect(host.textContent).toContain(TITLE);
+    expect(host.textContent).not.toContain("private");
     expect(host.textContent).not.toContain("the app");
+  });
+
+  it("never bounces when framed: it draws the form at once, and its studio link opens the top window", async () => {
+    const signedOut: Session = { authenticated: false, studio_url: STUDIO, password_enabled: true };
+    const { go } = await mount(signedOut, vi.fn(), true);
+    expect(go).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(ATTEMPTED)).toBeNull();
+    expect(host.textContent).not.toContain("Opening your dashboard");
+    expect(host.textContent).toContain(TITLE);
+    const form = host.querySelector("form");
+    expect(form?.getAttribute("action")).toBe("/api/enter");
+    expect(form?.querySelector("input[type=password][name=password]")).not.toBeNull();
+    const link = host.querySelector<HTMLAnchorElement>("a.btn-primary");
+    expect(link?.getAttribute("href")).toBe(STUDIO);
+    expect(link?.getAttribute("target")).toBe("_top");
+    expect(link?.textContent).toBe("Open in the Studio");
+    expect(host.textContent).not.toContain("the app");
+
+    // A second framed load is the same: still no navigation.
+    await remount();
+    const again = await mount(signedOut, vi.fn(), true);
+    expect(again.go).not.toHaveBeenCalled();
+    expect(host.querySelector("form")).not.toBeNull();
+  });
+
+  it("reads its framing from the window when not told: a top-level jsdom document is not framed", async () => {
+    expect(window.self).toBe(window.top);
+    const { go } = await mount({ authenticated: false, studio_url: STUDIO, password_enabled: true });
+    expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the framed app when signed in, just as at the top level", async () => {
+    await mount({ authenticated: true, studio_url: STUDIO, password_enabled: true }, vi.fn(), true);
+    expect(host.textContent).toBe("the app");
   });
 
   it("offers the password as a plain HTML post to /api/enter, with nothing of it in this bundle's hands", async () => {
@@ -141,8 +186,7 @@ describe("the gate", () => {
     expect(host.querySelector("a.btn-primary")).toBeNull();
     expect(host.textContent).not.toContain(CLOSED_TEXT);
 
-    await act(async () => root.unmount());
-    root = createRoot(host);
+    await remount();
     window.sessionStorage.setItem(ATTEMPTED, "1");
     await mount({ authenticated: false, studio_url: STUDIO, password_enabled: false });
     expect(host.querySelector("form")).toBeNull();
@@ -168,6 +212,7 @@ describe("the gate", () => {
       );
     });
     expect(host.textContent).toContain("no such route");
+    expect(host.textContent).toContain(TITLE);
     expect(host.textContent).not.toContain("the app");
   });
 });

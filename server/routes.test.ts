@@ -584,11 +584,21 @@ describe("every /api/* route is behind the operator's bearer", () => {
       expect(reply.status).toBe(303);
       expect(reply.body).toBeUndefined();
       expect(reply.headers?.["location"]).toBe("/");
-      const cookie = reply.headers?.["set-cookie"] ?? "";
-      expect(cookie).toContain("HttpOnly");
-      expect(cookie).toContain("SameSite=Lax");
-      expect(cookie).toContain("Secure");
-      expect(cookie).toContain(`dashboard_session=${TOKEN}`);
+      // Deployed: partitioned per top-level site, so the studio's frame and a top-level tab each
+      // sign in once. `SameSite=None` is what lets the frame carry it; `Partitioned` needs `Secure`.
+      expect(reply.headers?.["set-cookie"]).toBe(
+        `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
+      );
+    });
+
+    it("sets a plain SameSite=Lax cookie, without Secure, on a local server: Partitioned requires Secure and pnpm serve is http", async () => {
+      const ctx = { ...ctxOver(demoState(), CONFIG), dashboardToken: TOKEN };
+      const reply = await handleRequest(
+        req("POST", "/api/enter", new URLSearchParams({ ticket: ticket(Date.now() + 60_000) }).toString(), { "content-type": "application/x-www-form-urlencoded" }),
+        ctx,
+      );
+      expect(reply.status).toBe(303);
+      expect(reply.headers?.["set-cookie"]).toBe(`dashboard_session=${TOKEN}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
     });
 
     it("takes the ticket from a JSON body too, because the host parses a form for us", async () => {
@@ -657,12 +667,10 @@ describe("every /api/* route is behind the operator's bearer", () => {
         expect(reply.status, body).toBe(303);
         expect(reply.body).toBeUndefined();
         expect(reply.headers?.["location"]).toBe("/");
-        const cookie = reply.headers?.["set-cookie"] ?? "";
-        expect(cookie).toContain(`dashboard_session=${TOKEN}`);
-        expect(cookie).toContain("HttpOnly");
-        expect(cookie).toContain("SameSite=Lax");
-        expect(cookie).toContain("Secure");
-        expect(cookie).toContain("Max-Age=2592000");
+        // Byte-identical to the cookie the ticket buys.
+        expect(reply.headers?.["set-cookie"]).toBe(
+          `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
+        );
         // The password is compared, never echoed — not in the cookie and not anywhere else.
         expect(JSON.stringify(reply)).not.toContain(PASSWORD);
       }
@@ -761,6 +769,74 @@ describe("every /api/* route is behind the operator's bearer", () => {
         expect(reply.status, path).toBe(401);
         expect(reply.headers).toBeUndefined();
       }
+    });
+  });
+
+  /**
+   * The deployed cookie is `SameSite=None` so the studio's frame can carry it — which is also what
+   * would let any other site's form carry it. `SameSite=Lax` used to refuse that in the browser;
+   * `sameOriginGuard` refuses it here, for cookie-authenticated writes only.
+   */
+  describe("a cookie-authenticated write is honoured from this origin only", () => {
+    const TOKEN = "a-long-generated-value";
+    const HOST = "channel.example.app";
+    const COOKIE = { cookie: `dashboard_session=${TOKEN}`, host: HOST };
+    const writes: [string, string, string][] = [
+      ["PATCH", "/api/posts/post_9f2a", '{"status":"ready"}'],
+      ["POST", "/api/chat", '{"message":"hi"}'],
+      ["POST", "/api/sessions/ses_1/tool_confirmations", '{"tool_call_id":"call_1","decision":"allow"}'],
+    ];
+    const refused = { status: 403, body: { error: "cross-site request refused" } };
+
+    it("passes the page's own fetches, framed or top-level: Sec-Fetch-Site same-origin, or none", async () => {
+      for (const site of ["same-origin", "none"]) {
+        const ctx = deployedCtx(demoState(), TOKEN);
+        const reply = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { ...COOKIE, "sec-fetch-site": site }), ctx);
+        expect(reply.status, site).toBe(200);
+      }
+    });
+
+    it("refuses a cross-site write that carries the cookie, on every writing route, and moves nothing", async () => {
+      vi.stubGlobal("fetch", vi.fn());
+      for (const site of ["cross-site", "same-site"]) {
+        for (const [method, path, body] of writes) {
+          const state = demoState();
+          const reply = await handleRequest(req(method, path, body, { ...COOKIE, "sec-fetch-site": site }), deployedCtx(state, TOKEN, CONFIG));
+          expect(reply, `${site} ${method} ${path}`).toEqual(refused);
+          expect(state).toEqual(demoState());
+        }
+      }
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the Origin header when the browser does not say: this host passes, another does not, none does not", async () => {
+      const write = (headers: Record<string, string | undefined>) =>
+        handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { ...COOKIE, ...headers }), deployedCtx(demoState(), TOKEN));
+      expect((await write({ origin: `https://${HOST}` })).status).toBe(200);
+      expect(await write({ origin: "https://evil.example" })).toEqual(refused);
+      expect(await write({ origin: "not a url" })).toEqual(refused);
+      expect(await write({})).toEqual(refused);
+      // Sec-Fetch-Site, when present, is the browser's word and outranks Origin either way.
+      expect(await write({ origin: `https://${HOST}`, "sec-fetch-site": "cross-site" })).toEqual(refused);
+      expect((await write({ origin: "https://evil.example", "sec-fetch-site": "same-origin" })).status).toBe(200);
+    });
+
+    it("does not apply to a bearer, to a read, or to /api/enter", async () => {
+      const cross = { "sec-fetch-site": "cross-site", host: HOST, origin: "https://app.usenaive.ai" };
+      const ctx = deployedCtx(demoState(), TOKEN);
+      // A bearer is a credential a script holds, not one a browser attaches on its own.
+      expect((await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { ...cross, authorization: `Bearer ${TOKEN}` }), ctx)).status).toBe(200);
+      // A read with the cookie, from anywhere, is what a framed dashboard IS.
+      expect((await handleRequest(req("GET", "/api/posts", "", { ...cross, cookie: `dashboard_session=${TOKEN}` }), ctx)).status).toBe(200);
+      expect((await handleRequest(req("GET", "/api/session", "", { ...cross, cookie: `dashboard_session=${TOKEN}` }), ctx)).body).toMatchObject({ authenticated: true });
+      // The studio's ticket form is cross-site by design.
+      const expiresAt = Date.now() + 60_000;
+      const live = `${expiresAt}.${createHmac("sha256", TOKEN).update(`vetta.app-entry.v1:${expiresAt}`).digest("base64url")}`;
+      const entered = await handleRequest(
+        req("POST", "/api/enter", new URLSearchParams({ ticket: live }).toString(), { ...cross, "content-type": "application/x-www-form-urlencoded" }),
+        deployedCtx(demoState(), TOKEN, CONFIG),
+      );
+      expect(entered.status).toBe(303);
     });
   });
 

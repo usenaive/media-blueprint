@@ -113,8 +113,8 @@ There are two ways in, and both end in the same place:
 
 - **From the studio.** Open the dashboard from the studio that installed it. That mints a
   short-lived entry ticket, the browser posts it to `POST /api/enter`, and the server trades it
-  for an `HttpOnly`, `SameSite=Lax` session cookie the browser then attaches to every same-origin
-  call by itself — the credential never passes through the DOM, a URL or storage.
+  for an `HttpOnly` session cookie the browser then attaches to every call by itself — the
+  credential never passes through the DOM, a URL or storage.
 - **With your dashboard password.** `naive.config.ts` also declares `DASHBOARD_PASSWORD`
   `{ generate: true }`: the platform generates a password-shaped value and shows it to you in the
   studio, on the app's **Access** panel (where it can also be rotated). Type it into the gate's
@@ -130,6 +130,18 @@ password form. A refused password returns to `/?entry=denied` — the reason tra
 and nowhere else, and the form is offered again. A deployment that somehow has no token answers
 `503 not configured` to every API route rather than serving your channel to anyone who finds the
 URL.
+
+The dashboard also works inside the studio's own `<iframe>`. Framed, the gate never redirects
+anywhere on its own — it shows the form at once, and its **Open in the Studio** link opens the
+top window. For the frame to be signed in at all, the deployed cookie is `Secure; SameSite=None;
+Partitioned` (CHIPS): the browser keys it by the top-level site, so the framed dashboard and a
+tab of its own each sign in once and neither can read the other's. Because such a cookie travels
+on cross-site requests, a cookie-authenticated **write** (`POST`/`PUT`/`PATCH`/`DELETE`) to a
+gated route is honoured only from the dashboard's own origin — `Sec-Fetch-Site: same-origin` or
+`none`, or failing that an `Origin` naming this host — and answers `403 cross-site request
+refused` otherwise. Reads, bearer-authenticated calls and `/api/enter` itself (the studio's ticket
+form is cross-site by design) are not subject to that check. `pnpm serve` on the laptop keeps a
+plain `SameSite=Lax` cookie: `Partitioned` requires `Secure`, and the loopback is `http`.
 
 `/mcp` is untouched by all of this: the organization's agents authenticate there with their own
 credentials.
