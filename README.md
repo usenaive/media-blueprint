@@ -21,10 +21,10 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 | `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **three questions** (what the channel is about, **where it posts**, and how often), every
-agent reads the answers back through the platform's `project_context` tool, and each opens a
-**day-one** session that turns those answers into the channel's first briefs, scripts, clips,
-report and plan. See [The crew](#-the-crew).
+studio asks **three questions** (what the channel is about, **where it posts** — one network or
+several — and how often), every agent reads the answers back through the platform's
+`project_context` tool, and each opens a **day-one** session that turns those answers into the
+channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
 
 One repo carries both, so switching is an edit and a `naive up` — never a re-clone and never a
 new app. See [Switching template](#-switching-template).
@@ -107,14 +107,47 @@ Every `/api/*` route on the deployment — the post queue, "Post now", the agent
 a session, and deciding a held tool call — is behind the app's `DASHBOARD_TOKEN`. You never
 have to invent that value and you never see it: `naive.config.ts` declares it
 `{ generate: true }`, the platform makes one on the apply that creates the app, and no route
-anywhere returns an app secret.
+anywhere returns it.
 
-You get in by opening the dashboard from the studio that installed it. That mints a short-lived
-entry ticket, the browser posts it to `POST /api/enter`, and the server trades it for an
-`HttpOnly`, `SameSite=Lax` session cookie the browser then attaches to every same-origin call
-by itself — the credential never passes through the DOM, a URL or storage. A deployment that
-somehow has no token answers `503 not configured` to every API route rather than serving your
-channel to anyone who finds the URL.
+There are two ways in, and both end in the same place:
+
+- **From the studio.** Open the dashboard from the studio that installed it. That mints a
+  short-lived entry ticket, the browser posts it to `POST /api/enter`, and the server trades it
+  for an `HttpOnly` session cookie the browser then attaches to every call by itself — the
+  credential never passes through the DOM, a URL or storage.
+- **With your dashboard password.** `naive.config.ts` also declares `DASHBOARD_PASSWORD`
+  `{ generate: true }`: the platform generates a password-shaped value and shows it to you in the
+  studio, on the app's **Access** panel (where it can also be rotated). Type it into the gate's
+  form and `POST /api/enter` compares it in constant time and sets the very same cookie. A
+  deployment with no password set refuses every password.
+
+A browser that reaches the URL without a session sees **one gate screen** and nothing of the app:
+the SPA asks `GET /api/session` first (`{ authenticated, studio_url, password_enabled }`, never a
+secret) and fetches nothing else until that says it is signed in. On the first arrival in a tab it
+sends the browser to the studio's `/open` for this app automatically, once; a tab that comes back
+still signed out is shown the **Open with Naive Studio** link and, when a password exists, the
+password form. A refused password returns to `/?entry=denied` — the reason travels in the address
+and nowhere else, and the form is offered again. A deployment that somehow has no token answers
+`503 not configured` to every API route rather than serving your channel to anyone who finds the
+URL.
+
+The dashboard also works inside the studio's own `<iframe>`. Framed, the gate never redirects
+anywhere on its own — it shows the form at once, and its **Open in the Studio** link opens the
+top window. For the frame to be signed in at all, the deployed cookie is `Secure; SameSite=None;
+Partitioned` (CHIPS): the browser keys it by the top-level site, so the framed dashboard and a
+tab of its own each sign in once and neither can read the other's. Because such a cookie travels
+on cross-site requests, a cookie-authenticated **write** (`POST`/`PUT`/`PATCH`/`DELETE`) to a
+gated route is honoured only from the dashboard's own origin — `Sec-Fetch-Site: same-origin` or
+`none`, or failing that an `Origin` naming this host — and answers `403 cross-site request
+refused` otherwise. Reads, bearer-authenticated calls and `/api/enter` itself (the studio's ticket
+form is cross-site by design) are not subject to that check. `pnpm serve` on the laptop keeps a
+plain `SameSite=Lax` cookie: `Partitioned` requires `Secure`, and the loopback is `http`.
+
+A browser that signed in before the cookie was partitioned still holds the old `SameSite=Lax`
+cookie under the same name and sends both. Every `dashboard_session` value on a request is
+checked, so the old one cannot shadow a live session; when none matches, the `401` carries a
+`Set-Cookie` that expires the old unpartitioned cookie, and a fresh sign-in off the laptop sends
+that same expiring header alongside the new cookie.
 
 `/mcp` is untouched by all of this: the organization's agents authenticate there with their own
 credentials.
@@ -165,13 +198,16 @@ place the answers live.
 
 | Template | 1 | 2 | 3 |
 |---|---|---|---|
-| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Source channel(s) you hold the rights to** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Source channel(s) you hold the rights to** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 
 The middle one is the same question on both templates, and it is the one this channel cannot run
-without: **it decides the network every post the crew files is aimed at**. It used to be a constant
-in the code — a line an operator was expected to edit and re-deploy — so every install of this
-blueprint filed for the same network whoever installed it and whatever they had connected.
+without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
+(checkboxes in the studio), because the same vertical video usually goes out on more than one
+network: every network you tick is a target the crew files for, and a post that names no network
+goes to the **first** one you ticked. It used to be a constant in the code — a line an operator was
+expected to edit and re-deploy — so every install of this blueprint filed for the same network
+whoever installed it and whatever they had connected.
 
 Three is a budget, so asking that one meant not asking another. The slot came from *"tone and
 audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager now asks for it
@@ -194,10 +230,17 @@ So the dashboard says so, on **Home** and on **Posts**, above everything else:
 > This channel posts to YouTube Shorts, and no YouTube Shorts account is connected yet — nothing
 > here can publish until you connect one on Accounts.
 
-It reads the network from your own answer and the accounts from the platform, and it distinguishes
+With several networks ticked the one line covers each of them, saying which are connected and
+which are not:
+
+> This channel posts to YouTube Shorts, TikTok and Instagram Reels, and no YouTube Shorts or
+> Instagram Reels account is connected yet — nothing here can publish there until you connect them
+> on Accounts. Connected: TikTok as @channel.
+
+It reads the networks from your own answer and the accounts from the platform, and it distinguishes
 *"no account connected"* from *"we could not check"* — being told to reconnect an account that is
-already fine is how a warning gets ignored. Once the right account is connected the line goes quiet
-and names the handle.
+already fine is how a warning gets ignored. Once the right account is connected on every network the
+line goes quiet and names the handles.
 
 **The crew keeps filing while nothing is connected, on purpose.** A queue is a review surface, not
 a publish action: refusing to file would throw away a render that has already been paid for (~$3.32
@@ -298,11 +341,16 @@ work behind. The list this replaced admitted six of those and excluded `youtube`
 two of the three that take the work.
 
 **Where *this* channel posts is yours**, answered in setup (see [The three
-questions](#the-three-questions)) and read back by everything that stamps a target: the store's
-default, the `create_post` tool description the crew reads before filing, and the line on Home and
-Posts. `platform` on the template is now only the fallback for an install with no usable answer,
-and it is the question's own first option so the two cannot disagree. An agent can still name a
-different network per post, and the channel manager can retarget a row before you approve it.
+questions](#the-three-questions)) — **one network or several** — and read back by everything that
+stamps a target: the store's default, the `create_post` tool description the crew reads before
+filing, and the line on Home and Posts. The answer is read as a list (`platformsFromAnswers`): every
+recognised pick in your order, each once, anything unrecognised dropped. With several picked, the
+`create_post` description names all of them as this channel's targets and tells the crew to file
+one post per network; a post that names no network still goes to one, and it is the **first you
+picked** (`platformFromAnswers`). `platform` on the template is now only the fallback for an install
+with no usable answer, and it is the question's own first option so the two cannot disagree. An
+agent can still name a different network per post, and the channel manager can retarget a row
+before you approve it.
 
 All three publish video and refuse text, so an approved row with no video attached is refused here,
 by name, rather than at the button — a brief is exactly that row. And a row targeting a network no
@@ -495,9 +543,12 @@ set that is destructive.)
   503 `not configured — set NAIVE_API_KEY` reaches the header slot rather than being swallowed.
   Set `VETTA_MCP_TOKEN` to open `/mcp` locally (the platform sets it in the deployed app);
   without it every MCP request is refused. `/api/*` skips the `DASHBOARD_TOKEN` gate **only** for
-  a request that arrives on the loopback interface — your own browser against `pnpm serve`.
-  Anything reaching this server over a real network (bound to `0.0.0.0`, a tunnel, a LAN peer) is
-  gated exactly as the deployment is.
+  a request that arrives on the loopback interface — your own browser against `pnpm serve`, which
+  `GET /api/session` reports as signed in, so the gate screen never shows locally. Anything
+  reaching this server over a real network (bound to `0.0.0.0`, a tunnel, a LAN peer) is gated
+  exactly as the deployment is; set `DASHBOARD_TOKEN` and, if you want the password form there,
+  `DASHBOARD_PASSWORD` (plus `NAIVE_STUDIO_URL` and `NAIVE_APP_ID` for the studio link). None of
+  the four is needed for local development.
 
 One route table serves both: [`server/routes.ts`](server/routes.ts) holds every path, `/mcp`
 included, and `server/index.ts` (node `http`) and `server/api-entry.ts` (the deployed function)
@@ -536,7 +587,8 @@ export default defineProject({
       mcp: "/mcp",
       env: {
         NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-        DASHBOARD_TOKEN: { generate: true },
+        DASHBOARD_TOKEN: { generate: true },     // the operator bearer; never shown
+        DASHBOARD_PASSWORD: { generate: true },  // the operator's dashboard password; shown in the studio
       },
     },
   ],

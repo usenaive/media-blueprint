@@ -20,7 +20,16 @@ const demoState = () => seedState(TEMPLATES.faceless);
 
 function ctxOver(state: StoreState, config: ProxyConfig | null = null, mcpToken?: string): ApiContext & { store(): Promise<Store> } {
   const store = openStoreOver(state, () => {});
-  return { store: () => Promise.resolve(store), config, mcpToken, dashboardToken: undefined, local: true };
+  return {
+    store: () => Promise.resolve(store),
+    config,
+    mcpToken,
+    dashboardToken: undefined,
+    dashboardPassword: undefined,
+    studioUrl: undefined,
+    appId: undefined,
+    local: true,
+  };
 }
 
 /** The deployed shape: not local, so `/api/*` is behind the operator's bearer. */
@@ -494,6 +503,8 @@ describe("every /api/* route is behind the operator's bearer", () => {
   // the roster with its system prompts, opened a real billable session and relayed the events of a
   // session this dashboard never created. Each of these ran green with no gate at all.
   const AUTH = { authorization: "Bearer s3cret" };
+  // Shaped like the platform's generated value; a fixture, not a secret.
+  const PASSWORD = "kq7m-x2rt-8bvn-pz4h";
   const anyRoute: [string, string, string][] = [
     ["GET", "/api/posts", ""],
     ["GET", "/api/templates", ""],
@@ -573,11 +584,27 @@ describe("every /api/* route is behind the operator's bearer", () => {
       expect(reply.status).toBe(303);
       expect(reply.body).toBeUndefined();
       expect(reply.headers?.["location"]).toBe("/");
-      const cookie = reply.headers?.["set-cookie"] ?? "";
-      expect(cookie).toContain("HttpOnly");
-      expect(cookie).toContain("SameSite=Lax");
-      expect(cookie).toContain("Secure");
-      expect(cookie).toContain(`dashboard_session=${TOKEN}`);
+      // Deployed: partitioned per top-level site, so the studio's frame and a top-level tab each
+      // sign in once. `SameSite=None` is what lets the frame carry it; `Partitioned` needs `Secure`.
+      // Alongside it, as a SEPARATE header, the end of the pre-partitioned cookie a returning
+      // browser may still hold under the same name — and that one goes FIRST. A browser without
+      // CHIPS ignores `Partitioned`, sees one cookie set twice, and keeps the last header: the
+      // session must be the last header, or a correct password lands back on the login form.
+      expect(reply.headers?.["set-cookie"]).toEqual([
+        "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure",
+        `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
+      ]);
+    });
+
+    it("sets a plain SameSite=Lax cookie, without Secure, on a local server: Partitioned requires Secure and pnpm serve is http", async () => {
+      const ctx = { ...ctxOver(demoState(), CONFIG), dashboardToken: TOKEN };
+      const reply = await handleRequest(
+        req("POST", "/api/enter", new URLSearchParams({ ticket: ticket(Date.now() + 60_000) }).toString(), { "content-type": "application/x-www-form-urlencoded" }),
+        ctx,
+      );
+      expect(reply.status).toBe(303);
+      // One header only: locally the new cookie has the same attributes as the old and replaces it.
+      expect(reply.headers?.["set-cookie"]).toBe(`dashboard_session=${TOKEN}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
     });
 
     it("takes the ticket from a JSON body too, because the host parses a form for us", async () => {
@@ -607,9 +634,272 @@ describe("every /api/* route is behind the operator's bearer", () => {
       expect((await handleRequest(wrong, ctx)).status).toBe(401);
     });
 
+    /**
+     * A browser that signed in before the cookie was partitioned still holds the old `Lax` one
+     * under the same name, and sends both. Cookies are keyed by name, domain and path, so the new
+     * cookie does not replace it, and the header's order is the browser's, not ours.
+     */
+    describe("a browser still carrying the pre-partitioned cookie", () => {
+      const ctx = deployedCtx(demoState(), TOKEN);
+      const gone = "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure";
+
+      it("is in when ANY dashboard_session value is the token, whichever the browser sends first", async () => {
+        const stale = "a-token-since-rotated";
+        for (const cookie of [`dashboard_session=${stale}; dashboard_session=${TOKEN}`, `dashboard_session=${TOKEN}; dashboard_session=${stale}`]) {
+          const reply = await handleRequest(req("GET", "/api/posts", "", { cookie }), ctx);
+          expect(reply.status, cookie).toBe(200);
+          expect(reply.headers, cookie).toBeUndefined();
+          const session = await handleRequest(req("GET", "/api/session", "", { cookie }), ctx);
+          expect(session.body, cookie).toMatchObject({ authenticated: true });
+          expect(session.headers, cookie).toBeUndefined();
+        }
+      });
+
+      it("is refused when none matches, and told to drop the old cookie — unpartitioned, so it reaches the old jar", async () => {
+        const reply = await handleRequest(req("GET", "/api/posts", "", { cookie: "dashboard_session=old-one; dashboard_session=other-old-one" }), ctx);
+        expect(reply).toEqual({
+          status: 401,
+          body: { error: "missing or invalid dashboard token — this dashboard is opened from the studio that installed it" },
+          headers: { "set-cookie": gone },
+        });
+        // One wrong cookie is the same case, on a write as on a read.
+        expect((await handleRequest(req("GET", "/api/posts", "", { cookie: "dashboard_session=old-one" }), ctx)).headers).toEqual({ "set-cookie": gone });
+        const write = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { cookie: "dashboard_session=old-one", "sec-fetch-site": "same-origin" }), ctx);
+        expect(write.status).toBe(401);
+        expect(write.headers).toEqual({ "set-cookie": gone });
+      });
+
+      it("does not send the expiring header to a request that held no cookie at all: there is nothing to expire", async () => {
+        expect((await handleRequest(req("GET", "/api/posts"), ctx)).headers).toBeUndefined();
+        expect((await handleRequest(req("GET", "/api/posts", "", { authorization: "Bearer nope" }), ctx)).headers).toBeUndefined();
+        // `/api/session` never sets a cookie, whatever it was sent.
+        const session = await handleRequest(req("GET", "/api/session", "", { cookie: "dashboard_session=old-one" }), ctx);
+        expect(session.status).toBe(200);
+        expect(session.headers).toBeUndefined();
+      });
+    });
+
     it("is the only route that runs before the gate, so it needs no credential to reach", async () => {
       // Reached with no bearer and no cookie on a deployed, non-local context.
       expect((await post("ticket=")).status).not.toBe(401);
+    });
+
+    it("still refuses a bad ticket the same way when a password is also set: the ticket path is untouched", async () => {
+      const ctx = { ...deployedCtx(demoState(), TOKEN, CONFIG), dashboardPassword: PASSWORD };
+      const form = { "content-type": "application/x-www-form-urlencoded" };
+      expect(await handleRequest(req("POST", "/api/enter", "ticket=", form), ctx)).toEqual({
+        status: 403,
+        body: { error: "this link did not check out — this dashboard is opened from the studio that installed it" },
+      });
+      const live = await handleRequest(req("POST", "/api/enter", new URLSearchParams({ ticket: ticket(Date.now() + 60_000) }).toString(), form), ctx);
+      expect(live.status).toBe(303);
+      expect(live.headers?.["location"]).toBe("/");
+    });
+  });
+
+  /**
+   * THE SECOND DOOR: the operator's own `DASHBOARD_PASSWORD`, generated by the platform and shown in
+   * the studio's Access panel, for a browser that reached the URL without the studio's handoff.
+   */
+  describe("the dashboard password is the other way in, and it buys the very same cookie", () => {
+    const TOKEN = "a-long-generated-value";
+    const FORM = { "content-type": "application/x-www-form-urlencoded" };
+    const JSON_BODY = { "content-type": "application/json" };
+    const withPassword = (password: string | undefined) => ({ ...deployedCtx(demoState(), TOKEN, CONFIG), dashboardPassword: password });
+
+    it("trades the right password for the cookie and the redirect home, from a form or from JSON", async () => {
+      for (const [body, headers] of [
+        [new URLSearchParams({ password: PASSWORD }).toString(), FORM],
+        [JSON.stringify({ password: PASSWORD }), JSON_BODY],
+        // The host parses a form and the adapter re-encodes it: JSON body under a form content type.
+        [JSON.stringify({ password: PASSWORD }), FORM],
+      ] as const) {
+        const reply = await handleRequest(req("POST", "/api/enter", body, headers), withPassword(PASSWORD));
+        expect(reply.status, body).toBe(303);
+        expect(reply.body).toBeUndefined();
+        expect(reply.headers?.["location"]).toBe("/");
+        // Byte-identical to the cookie the ticket buys, expiry first and session last.
+        expect(reply.headers?.["set-cookie"]).toEqual([
+          "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure",
+          `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
+        ]);
+        // The password is compared, never echoed — not in the cookie and not anywhere else.
+        expect(JSON.stringify(reply)).not.toContain(PASSWORD);
+      }
+    });
+
+    it("sends a refused form back to the gate with entry=denied, and sets no cookie", async () => {
+      for (const wrong of ["kq7m-x2rt-8bvn-pz4x", PASSWORD.toUpperCase(), "", TOKEN]) {
+        const reply = await handleRequest(req("POST", "/api/enter", new URLSearchParams({ password: wrong }).toString(), FORM), withPassword(PASSWORD));
+        expect(reply, wrong).toEqual({ status: 303, headers: { location: "/?entry=denied" } });
+      }
+    });
+
+    it("answers a refused JSON post with 403, as the ticket path does", async () => {
+      const reply = await handleRequest(req("POST", "/api/enter", JSON.stringify({ password: "kq7m-x2rt-8bvn-pz4x" }), JSON_BODY), withPassword(PASSWORD));
+      expect(reply.status).toBe(403);
+      expect(reply.headers).toBeUndefined();
+      expect((reply.body as { error: string }).error).toMatch(/did not check out/);
+    });
+
+    it("refuses every password, the right one included, while DASHBOARD_PASSWORD is unset", async () => {
+      for (const unset of [undefined, ""]) {
+        const form = await handleRequest(req("POST", "/api/enter", new URLSearchParams({ password: PASSWORD }).toString(), FORM), withPassword(unset));
+        expect(form).toEqual({ status: 303, headers: { location: "/?entry=denied" } });
+        const json = await handleRequest(req("POST", "/api/enter", JSON.stringify({ password: PASSWORD }), JSON_BODY), withPassword(unset));
+        expect(json.status).toBe(403);
+        expect(json.headers).toBeUndefined();
+      }
+    });
+
+    it("still fails closed with no DASHBOARD_TOKEN: a password cannot mint a cookie there is no token for", async () => {
+      const reply = await handleRequest(
+        req("POST", "/api/enter", new URLSearchParams({ password: PASSWORD }).toString(), FORM),
+        { ...deployedCtx(demoState(), undefined, CONFIG), dashboardPassword: PASSWORD },
+      );
+      expect(reply).toEqual({ status: 503, body: { error: "not configured — set DASHBOARD_TOKEN on this app" } });
+    });
+  });
+
+  /**
+   * `GET /api/session`: what the gate reads before it draws anything. Ungated, cookie-less, and the
+   * same verdict `dashboardAuth` reaches — so the screen and the server can never disagree about
+   * whether the browser is in.
+   */
+  describe("/api/session tells the gate what it may offer", () => {
+    const TOKEN = "a-long-generated-value";
+    const studio = { studioUrl: "https://app.usenaive.ai", appId: "app_123" };
+
+    it("is reachable signed out, sets no cookie, and names both doors when both exist", async () => {
+      const ctx = { ...deployedCtx(demoState(), TOKEN, CONFIG), dashboardPassword: PASSWORD, ...studio };
+      const reply = await handleRequest(req("GET", "/api/session"), ctx);
+      expect(reply.headers).toBeUndefined();
+      expect(reply).toEqual({
+        status: 200,
+        body: { authenticated: false, studio_url: "https://app.usenaive.ai/apps/app_123/open", password_enabled: true },
+      });
+      // The password itself is in no answer this server gives.
+      expect(JSON.stringify(reply)).not.toContain(PASSWORD);
+    });
+
+    it("says signed in for the cookie the door set, and for the bearer", async () => {
+      const ctx = { ...deployedCtx(demoState(), TOKEN, CONFIG), ...studio };
+      const cookied = await handleRequest(req("GET", "/api/session", "", { cookie: `dashboard_session=${TOKEN}` }), ctx);
+      expect(cookied.body).toMatchObject({ authenticated: true });
+      const bearer = await handleRequest(req("GET", "/api/session", "", { authorization: `Bearer ${TOKEN}` }), ctx);
+      expect(bearer.body).toMatchObject({ authenticated: true });
+      const wrong = await handleRequest(req("GET", "/api/session", "", { cookie: "dashboard_session=nope" }), ctx);
+      expect(wrong.status).toBe(200);
+      expect(wrong.body).toMatchObject({ authenticated: false });
+    });
+
+    it("offers no studio link unless the platform set both NAIVE_STUDIO_URL and NAIVE_APP_ID, and no password unless one is set", async () => {
+      for (const partial of [{}, { studioUrl: "https://app.usenaive.ai" }, { appId: "app_123" }]) {
+        const reply = await handleRequest(req("GET", "/api/session"), { ...deployedCtx(demoState(), TOKEN, CONFIG), ...partial });
+        expect(reply.body, JSON.stringify(partial)).toEqual({ authenticated: false, studio_url: null, password_enabled: false });
+      }
+      // A trailing slash on the studio's base does not double up in the link.
+      const slashed = await handleRequest(req("GET", "/api/session"), { ...deployedCtx(demoState(), TOKEN, CONFIG), studioUrl: "https://app.usenaive.ai/", appId: "app_123" });
+      expect(slashed.body).toMatchObject({ studio_url: "https://app.usenaive.ai/apps/app_123/open" });
+    });
+
+    it("is signed out on a deployment with no token at all, and signed in on a local request", async () => {
+      const closed = await handleRequest(req("GET", "/api/session"), deployedCtx(demoState(), undefined, CONFIG));
+      expect(closed).toEqual({ status: 200, body: { authenticated: false, studio_url: null, password_enabled: false } });
+      const local = await handleRequest(req("GET", "/api/session"), ctxOver(demoState()));
+      expect(local.body).toMatchObject({ authenticated: true });
+    });
+
+    it("answers GET only", async () => {
+      expect((await handleRequest(req("POST", "/api/session"), deployedCtx(demoState(), TOKEN, CONFIG))).status).toBe(405);
+    });
+
+    it("leaves every other /api/* route gated exactly as before", async () => {
+      const ctx = { ...deployedCtx(demoState(), TOKEN, CONFIG), dashboardPassword: PASSWORD, ...studio };
+      for (const [method, path, body] of anyRoute) {
+        const reply = await handleRequest(req(method, path, body), ctx);
+        expect(reply.status, path).toBe(401);
+        expect(reply.headers).toBeUndefined();
+      }
+    });
+  });
+
+  /**
+   * The deployed cookie is `SameSite=None` so the studio's frame can carry it — which is also what
+   * would let any other site's form carry it. `SameSite=Lax` used to refuse that in the browser;
+   * `sameOriginGuard` refuses it here, for cookie-authenticated writes only.
+   */
+  describe("a cookie-authenticated write is honoured from this origin only", () => {
+    const TOKEN = "a-long-generated-value";
+    const HOST = "channel.example.app";
+    const COOKIE = { cookie: `dashboard_session=${TOKEN}`, host: HOST };
+    const writes: [string, string, string][] = [
+      ["PATCH", "/api/posts/post_9f2a", '{"status":"ready"}'],
+      ["POST", "/api/chat", '{"message":"hi"}'],
+      ["POST", "/api/sessions/ses_1/tool_confirmations", '{"tool_call_id":"call_1","decision":"allow"}'],
+    ];
+    const refused = { status: 403, body: { error: "cross-site request refused" } };
+
+    it("passes the page's own fetches, framed or top-level: Sec-Fetch-Site same-origin, or none", async () => {
+      for (const site of ["same-origin", "none"]) {
+        const ctx = deployedCtx(demoState(), TOKEN);
+        const reply = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { ...COOKIE, "sec-fetch-site": site }), ctx);
+        expect(reply.status, site).toBe(200);
+      }
+    });
+
+    it("refuses a cross-site write that carries the cookie, on every writing route, and moves nothing", async () => {
+      vi.stubGlobal("fetch", vi.fn());
+      for (const site of ["cross-site", "same-site"]) {
+        for (const [method, path, body] of writes) {
+          const state = demoState();
+          const reply = await handleRequest(req(method, path, body, { ...COOKIE, "sec-fetch-site": site }), deployedCtx(state, TOKEN, CONFIG));
+          expect(reply, `${site} ${method} ${path}`).toEqual(refused);
+          expect(state).toEqual(demoState());
+        }
+      }
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the Origin header when the browser does not say: this host passes, another does not, none does not", async () => {
+      const write = (headers: Record<string, string | undefined>) =>
+        handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { ...COOKIE, ...headers }), deployedCtx(demoState(), TOKEN));
+      expect((await write({ origin: `https://${HOST}` })).status).toBe(200);
+      expect(await write({ origin: "https://evil.example" })).toEqual(refused);
+      expect(await write({ origin: "not a url" })).toEqual(refused);
+      expect(await write({ origin: "null" })).toEqual(refused);
+      expect(await write({})).toEqual(refused);
+      // Sec-Fetch-Site, when present, is the browser's word and outranks Origin either way.
+      expect(await write({ origin: `https://${HOST}`, "sec-fetch-site": "cross-site" })).toEqual(refused);
+      expect((await write({ origin: "https://evil.example", "sec-fetch-site": "same-origin" })).status).toBe(200);
+    });
+
+    it("fails closed when the request names no host at all: nothing to match is not a match", async () => {
+      const bare = (headers: Record<string, string | undefined>) =>
+        handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { cookie: `dashboard_session=${TOKEN}`, ...headers }), deployedCtx(demoState(), TOKEN));
+      // Only the cookie: neither Origin nor Host. `undefined === undefined` must not open the door.
+      expect(await bare({})).toEqual(refused);
+      expect(await bare({ origin: `https://${HOST}` })).toEqual(refused);
+      expect(await bare({ host: HOST })).toEqual(refused);
+      expect((await bare({ host: HOST, origin: `https://${HOST}` })).status).toBe(200);
+    });
+
+    it("does not apply to a bearer, to a read, or to /api/enter", async () => {
+      const cross = { "sec-fetch-site": "cross-site", host: HOST, origin: "https://app.usenaive.ai" };
+      const ctx = deployedCtx(demoState(), TOKEN);
+      // A bearer is a credential a script holds, not one a browser attaches on its own.
+      expect((await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { ...cross, authorization: `Bearer ${TOKEN}` }), ctx)).status).toBe(200);
+      // A read with the cookie, from anywhere, is what a framed dashboard IS.
+      expect((await handleRequest(req("GET", "/api/posts", "", { ...cross, cookie: `dashboard_session=${TOKEN}` }), ctx)).status).toBe(200);
+      expect((await handleRequest(req("GET", "/api/session", "", { ...cross, cookie: `dashboard_session=${TOKEN}` }), ctx)).body).toMatchObject({ authenticated: true });
+      // The studio's ticket form is cross-site by design.
+      const expiresAt = Date.now() + 60_000;
+      const live = `${expiresAt}.${createHmac("sha256", TOKEN).update(`vetta.app-entry.v1:${expiresAt}`).digest("base64url")}`;
+      const entered = await handleRequest(
+        req("POST", "/api/enter", new URLSearchParams({ ticket: live }).toString(), { ...cross, "content-type": "application/x-www-form-urlencoded" }),
+        deployedCtx(demoState(), TOKEN, CONFIG),
+      );
+      expect(entered.status).toBe(303);
     });
   });
 

@@ -26,10 +26,12 @@ export {
   CHANNEL_IDENTITY,
   CHANNEL_TIMEZONE,
   labelOf,
+  labelsOf,
   PLATFORM_ANSWER_KEY,
   PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   platformFromAnswers,
+  platformsFromAnswers,
   platformOf,
   PROJECT_NAME,
 } from "./template.ts";

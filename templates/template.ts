@@ -87,14 +87,21 @@ export const PLATFORM_CHOICES: readonly { option: string; platform: PostPlatform
  *
  * `other: false` deliberately: a network typed in free text is a network nothing can publish to,
  * and the refusal would arrive at the publish button weeks later.
+ *
+ * `multiple: true` because a channel of vertical video rarely posts to one network: the same
+ * render goes out on Shorts, TikTok and Reels. The studio renders the question as checkboxes and
+ * stores the answer as an array of the option strings, in the order the customer ticked them —
+ * and that order matters: the first pick is where a post that names no network is filed
+ * (`platformsFromAnswers`).
  */
 export const PLATFORM_QUESTION: SetupQuestion = {
   key: PLATFORM_ANSWER_KEY,
   label: "Where should this channel post?",
   type: "choice",
   options: PLATFORM_CHOICES.map((choice) => choice.option),
+  multiple: true,
   other: false,
-  help: "Pick the app your videos go out on. Picking it is not the same as connecting it — after setup, open Accounts and connect the account you post from, or the team will fill a queue that cannot publish.",
+  help: "Pick the apps your videos go out on — one or several. Picking them is not the same as connecting them — after setup, open Accounts and connect the account you post from on each one, or the team will fill a queue that cannot publish.",
 };
 
 /** What a customer saw this network called; the raw id for anything not on the list. */
@@ -119,23 +126,44 @@ export const platformOf = (answer: unknown): PostPlatform | null => {
 };
 
 /**
- * The channel's network as the customer answered it, or `fallback` when they did not.
+ * The channel's networks as the customer answered them, or `[fallback]` when they did not.
  *
  * Takes either the whole `project_context` body (`{ template, answers, updated_at }`) or the bare
- * answers array, because the server reads the first and the browser is handed the same object. It
- * NEVER guesses: an answer naming something this blueprint cannot publish to is not "close
- * enough", it is no answer, and the caller's own default is more honest than a network nobody
- * chose. This is the one place the answer is interpreted, so the store, `/mcp` and the screens
- * cannot disagree about where the channel posts.
+ * answers array, because the server reads the first and the browser is handed the same object.
+ * The list is the customer's: every recognised pick in the order they ticked them, each network
+ * once, and nothing this blueprint cannot publish to. It NEVER guesses: an answer naming something
+ * unpublishable is not "close enough", it is no answer, and when nothing usable is left the
+ * caller's own default is more honest than a network nobody chose. This is the one place the
+ * answer is interpreted, so the store, `/mcp` and the screens cannot disagree about where the
+ * channel posts.
  */
-export const platformFromAnswers = (context: unknown, fallback: PostPlatform): PostPlatform => {
+export const platformsFromAnswers = (context: unknown, fallback: PostPlatform): PostPlatform[] => {
   const answers = Array.isArray(context)
     ? context
     : ((context as { answers?: unknown } | null | undefined)?.answers ?? []);
-  if (!Array.isArray(answers)) return fallback;
+  if (!Array.isArray(answers)) return [fallback];
   const answer = (answers as { key?: unknown; value?: unknown }[]).find((row) => row?.key === PLATFORM_ANSWER_KEY);
-  const value = Array.isArray(answer?.value) ? answer.value[0] : answer?.value;
-  return platformOf(value) ?? fallback;
+  const values = Array.isArray(answer?.value) ? answer.value : [answer?.value];
+  const chosen: PostPlatform[] = [];
+  for (const value of values) {
+    const platform = platformOf(value);
+    if (platform !== null && !chosen.includes(platform)) chosen.push(platform);
+  }
+  return chosen.length > 0 ? chosen : [fallback];
+};
+
+/**
+ * The FIRST network the customer picked — where a post that names none is filed — or `fallback`.
+ * The first of `platformsFromAnswers`, so the two can never disagree about which that is.
+ */
+export const platformFromAnswers = (context: unknown, fallback: PostPlatform): PostPlatform =>
+  platformsFromAnswers(context, fallback)[0]!;
+
+/** "YouTube Shorts, TikTok and Instagram Reels" — the networks as the customer saw them named, in one phrase. */
+export const labelsOf = (platforms: readonly PostPlatform[]): string => {
+  const names = platforms.map(labelOf);
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 };
 
 /** One kind of post a template's crew files. `id` is what a row carries; the label is what a screen prints. */
@@ -163,8 +191,9 @@ export interface MediaTemplate {
    * constant instead of the machine's; it was still a constant, and the remedy this comment used
    * to offer — "edit this one line and run `naive up`" — is a patch, not an onboarding flow.
    *
-   * `PLATFORM_QUESTION` now asks the customer, and `platformFromAnswers` is what a post is filed
-   * for. This value is what an install that has no answer falls back to: a fresh clone before the
+   * `PLATFORM_QUESTION` now asks the customer — one network or several — and the first they
+   * picked (`platformFromAnswers`) is what an untargeted post is filed for. This value is what an
+   * install that has no answer falls back to: a fresh clone before the
    * studio has asked anything, an install whose context cannot be read right now, an answer naming
    * a network this blueprint cannot publish to. It is the first option of the question, so the
    * fallback and the default a customer sees pre-selected are the same network.
@@ -536,7 +565,7 @@ export const channelManager = (
     skills: ["naive/caption-writing"],
     intake: {
       message:
-        `Day one. Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the network this channel posts to; if no account is connected for it yet, say so as the first line of the plan — until one is connected nothing the team files can be published.`,
+        `Day one. Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published.`,
       budget_micro_usd: 20_000_000,
     },
     schedules: CHANNEL_MANAGER_SCHEDULES,

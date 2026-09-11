@@ -35,7 +35,8 @@ interface Request {
 
 interface Response {
   status(code: number): Response;
-  setHeader(name: string, value: string): void;
+  /** Node's: an array is several headers of that name (`Set-Cookie` must never be joined). */
+  setHeader(name: string, value: string | string[]): void;
   json(body: unknown): void;
   write(chunk: Uint8Array | string): void;
   end(body?: string): void;
@@ -330,6 +331,9 @@ export default async function handler(req: Request, res: Response): Promise<void
       config,
       mcpToken: process.env["VETTA_MCP_TOKEN"],
       dashboardToken: process.env["DASHBOARD_TOKEN"],
+      dashboardPassword: process.env["DASHBOARD_PASSWORD"],
+      studioUrl: process.env["NAIVE_STUDIO_URL"],
+      appId: process.env["NAIVE_APP_ID"],
       local: false,
     });
 

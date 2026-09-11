@@ -10,7 +10,7 @@
  * on the Posts screen.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { channelPlatform } from "./channel.ts";
+import { channelPlatform, channelPlatforms } from "./channel.ts";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, type PostPlatform, type PostStage } from "../seed/posts.ts";
@@ -75,18 +75,36 @@ const str = (description: string) => ({ type: "string", description }) as const;
 const OPERATOR_ONLY = "Approving, rejecting and publishing are operator actions on the dashboard; no tool does them.";
 
 /**
- * THE TOOLS, WRITTEN FOR THE NETWORK THIS CHANNEL ACTUALLY POSTS TO.
+ * The sentence on `create_post` that tells the crew where this channel posts.
  *
- * The description of `create_post`'s `platform` names the channel's own target, because a default
+ * One network: it is the default, said once. Several: every one is a target the crew should file
+ * for, and the first is what an untargeted row becomes — said in that order, because an agent that
+ * reads only "posts to youtube" files nothing for the TikTok the customer also ticked.
+ */
+const targetSentence = (channels: readonly PostPlatform[]): string => {
+  const first = channels[0]!;
+  const named = (platform: PostPlatform) => `${platform} (${labelOf(platform)})`;
+  if (channels.length === 1) {
+    return `This channel posts to ${named(first)}, which is what a post that names none becomes; name another only when the piece is genuinely for it.`;
+  }
+  const all = channels.map(named);
+  const listed = `${all.slice(0, -1).join(", ")} and ${all[all.length - 1]}`;
+  return `This channel posts to ${listed}, and every finished piece is for all of them: file one post per network. A post that names none goes to ${named(first)}, the first the customer chose. Name a network outside these only when the piece is genuinely for it.`;
+};
+
+/**
+ * THE TOOLS, WRITTEN FOR THE NETWORKS THIS CHANNEL ACTUALLY POSTS TO.
+ *
+ * The description of `create_post`'s `platform` names the channel's own targets, because a default
  * nothing tells the crew about is a default the crew never chooses against. That target used to be
  * a constant `"x"` in this file, then a constant on the running template; it is now the customer's
- * setup answer (`PLATFORM_QUESTION`), resolved per request by `server/channel.ts`. So the list is
- * built rather than declared: the same agent, on two installs that answered differently, reads two
- * different sentences, which is the point.
+ * setup answer (`PLATFORM_QUESTION`, one network or several), resolved per request by
+ * `server/channel.ts`. So the list is built rather than declared: the same agent, on two installs
+ * that answered differently, reads two different sentences, which is the point.
  */
 const STAGES = POST_STAGES.join("|");
 
-export const toolsFor = (channel: PostPlatform) => [
+export const toolsFor = (channels: readonly PostPlatform[]) => [
   { name: "list_posts", description: `The post queue, optionally filtered by status and/or stage. ${OPERATOR_ONLY}`, inputSchema: obj({
     status: str("Optional filter: pending|ready|approved|posted|rejected"),
     stage: str(`Optional filter on how far a piece is: ${STAGES}. A row with no stage is a note, not a piece.`),
@@ -95,7 +113,7 @@ export const toolsFor = (channel: PostPlatform) => [
   { name: "create_post", description: `File a finished piece into the queue for the operator to review. Lands as pending unless status is ready. Say who you are, which account it is for and what it was made from — the operator approves the row, and an unsigned one tells them nothing. ${OPERATOR_ONLY}`, inputSchema: obj({
     caption: str("The caption, hashtags included"),
     media_url: str("URL of the finished clip or video — it is published with the post, and the operator watches it here before approving"),
-    platform: str(`Where it should go: ${POST_PLATFORMS.join("|")}. This channel posts to ${channel} (${labelOf(channel)}), which is what a post that names none becomes; name another only when the piece is genuinely for it. These are the only networks this channel can publish to, and every one of them publishes video and refuses a bare caption.`),
+    platform: str(`Where it should go: ${POST_PLATFORMS.join("|")}. ${targetSentence(channels)} These are the only networks this channel can publish to, and every one of them publishes video and refuses a bare caption.`),
     agent: str("Your own name, as the roster lists it — who filed this"),
     account: str("The connected account this is for, from list_accounts"),
     source: str("What it was made from: the brief, the source video, the style template"),
@@ -116,7 +134,7 @@ export const toolsFor = (channel: PostPlatform) => [
  * The tool list under the running template's fallback target — the names, for any caller that needs
  * them without a request in hand. What a live `tools/list` answers is `toolsFor(the resolved one)`.
  */
-export const TOOLS = toolsFor(ACTIVE.platform);
+export const TOOLS = toolsFor([ACTIVE.platform]);
 
 class ToolError extends Error {}
 const need = (params: Record<string, unknown>, key: string): string => {
@@ -198,9 +216,9 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         account: optional(params, "account"),
         source: optional(params, "source"),
         stage: stageOf(params),
-        // Named by the agent, else the network the operator chose in setup. Resolved here rather
-        // than left to the store's own fallback because only this layer can await the read, and
-        // because the agent was just told, on the tool it called, which network that is.
+        // Named by the agent, else the first network the operator chose in setup. Resolved here
+        // rather than left to the store's own fallback because only this layer can await the read,
+        // and because the agent was just told, on the tool it called, which network that is.
         platform: (platform as PostPlatform | undefined) ?? (await channelPlatform(config)),
         status,
       });
@@ -258,9 +276,9 @@ export async function handleMcp(raw: string, store: Store, config: ProxyConfig |
       serverInfo: { name: "media", version: "0.0.0" },
     });
   }
-  // Built per request, because the sentence on `create_post` names the network this install
+  // Built per request, because the sentence on `create_post` names the networks this install
   // actually posts to and two installs of the same template answer differently.
-  if (msg.method === "tools/list") return rpcResult(msg.id, { tools: toolsFor(await channelPlatform(config)) });
+  if (msg.method === "tools/list") return rpcResult(msg.id, { tools: toolsFor(await channelPlatforms(config)) });
   if (msg.method === "tools/call") {
     const { name, arguments: args } = (msg.params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
     try {
