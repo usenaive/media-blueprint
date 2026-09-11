@@ -15,9 +15,9 @@
  *     named a network nobody had chosen and nobody had connected.
  *   · And the dashboard said nothing about it. The operator found out at publish time.
  *
- * Everything below is that path end to end: the set of networks, the question that picks one, the
- * wiring that carries the answer to a filed row, and the line that says whether the account behind
- * it is connected yet.
+ * Everything below is that path end to end: the set of networks, the question that picks one or
+ * several, the wiring that carries the answer to a filed row, and the line that says whether the
+ * account behind each is connected yet.
  */
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -28,11 +28,13 @@ import {
   PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   labelOf,
+  labelsOf,
   platformFromAnswers,
+  platformsFromAnswers,
   platformOf,
 } from "./templates/template.ts";
 import { declaration } from "./naive.config.ts";
-import { channelPlatform, forgetChannelPlatform } from "./server/channel.ts";
+import { channelPlatform, channelPlatforms, forgetChannelPlatform } from "./server/channel.ts";
 import { handleMcp } from "./server/mcp.ts";
 import { openStoreOver, seedState } from "./server/store.ts";
 import { connectNotice } from "./src/connect.ts";
@@ -108,6 +110,16 @@ describe("the question that asks where the channel posts", () => {
   });
 
   /**
+   * A channel of vertical video posts the same render to more than one network, so the question
+   * takes several picks: the studio renders `multiple: true` as checkboxes and stores the answer
+   * as an array of the option strings, in the customer's order.
+   */
+  it("lets the customer pick more than one network", () => {
+    expect(PLATFORM_QUESTION.multiple).toBe(true);
+    expect(PLATFORM_QUESTION.help ?? "").toMatch(/apps/);
+  });
+
+  /**
    * The help text is the only place a non-technical person is told that picking is not connecting.
    * A customer who picks YouTube and never connects an account has a queue that cannot publish.
    */
@@ -178,6 +190,41 @@ describe("the answer, read back", () => {
   it("names each network the way the customer saw it named", () => {
     expect(labelOf("youtube")).toBe("YouTube Shorts");
     expect(labelOf("tiktok")).toBe("TikTok");
+    expect(labelsOf(["youtube"])).toBe("YouTube Shorts");
+    expect(labelsOf(["youtube", "tiktok"])).toBe("YouTube Shorts and TikTok");
+    expect(labelsOf(["youtube", "tiktok", "instagram"])).toBe("YouTube Shorts, TikTok and Instagram Reels");
+  });
+
+  describe("as the whole list the customer picked", () => {
+    it("keeps every recognised pick, in the customer's order", () => {
+      expect(platformsFromAnswers(answers(["TikTok", "YouTube Shorts"]), "instagram")).toEqual(["tiktok", "youtube"]);
+      expect(platformsFromAnswers(answers(["Instagram Reels", "youtube", "TikTok"]), "youtube")).toEqual(["instagram", "youtube", "tiktok"]);
+      // A single string is a list of one, so an answer saved before the question took several still reads.
+      expect(platformsFromAnswers(answers("YouTube Shorts"), "tiktok")).toEqual(["youtube"]);
+    });
+
+    it("names each network once, however it was spelled", () => {
+      expect(platformsFromAnswers(answers(["TikTok", "tiktok", " TIKTOK ", "YouTube Shorts"]), "instagram")).toEqual(["tiktok", "youtube"]);
+    });
+
+    it("drops what it cannot publish to and keeps the rest", () => {
+      expect(platformsFromAnswers(answers(["Myspace", "TikTok", "", 42, "Instagram Reels"]), "youtube")).toEqual(["tiktok", "instagram"]);
+    });
+
+    it("falls back to the caller's one default when nothing usable was picked", () => {
+      expect(platformsFromAnswers(answers(["Myspace", "X"]), "youtube")).toEqual(["youtube"]);
+      expect(platformsFromAnswers(answers([]), "tiktok")).toEqual(["tiktok"]);
+      expect(platformsFromAnswers([], "youtube")).toEqual(["youtube"]);
+      expect(platformsFromAnswers(undefined, "instagram")).toEqual(["instagram"]);
+      expect(platformsFromAnswers({ template: "faceless", answers: "nope" }, "tiktok")).toEqual(["tiktok"]);
+    });
+
+    /** The single-valued reader is the head of the list, so the two can never name a different default. */
+    it("is what the single-valued reader takes the first of", () => {
+      const picked = answers(["Instagram Reels", "TikTok"]);
+      expect(platformFromAnswers(picked, "youtube")).toBe(platformsFromAnswers(picked, "youtube")[0]);
+      expect(platformFromAnswers(picked, "youtube")).toBe("instagram");
+    });
   });
 });
 
@@ -198,12 +245,20 @@ describe("the answer reaching a filed post", () => {
     expect(await channelPlatform(CONFIG, installFetch("TikTok"))).toBe("tiktok");
   });
 
+  it("resolves every network the customer picked, first pick first", async () => {
+    forgetChannelPlatform();
+    expect(await channelPlatforms(CONFIG, installFetch(["TikTok", "Instagram Reels"]))).toEqual(["tiktok", "instagram"]);
+    // The same read, memoised: the single-valued resolution is the head of that list.
+    expect(await channelPlatform(CONFIG, installFetch(["TikTok", "Instagram Reels"]))).toBe("tiktok");
+  });
+
   it("falls back to the template's own default when the platform cannot be asked", async () => {
     forgetChannelPlatform();
     const failing = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch;
     expect(await channelPlatform(CONFIG, failing)).toBe(TEMPLATES.faceless.platform);
     forgetChannelPlatform();
     expect(await channelPlatform(null)).toBe(TEMPLATES.faceless.platform);
+    expect(await channelPlatforms(null)).toEqual([TEMPLATES.faceless.platform]);
   });
 
   /**
@@ -273,13 +328,46 @@ describe("the answer reaching a filed post", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  /**
+   * A customer who ticked three networks has a channel that posts to three. The tool has to say all
+   * of them — an agent told only about the first files nothing for the other two — and it has to say
+   * which one an untargeted row lands on, because that is still one network and it is the first.
+   */
+  it("names every chosen network on the tool, and files an untargeted post for the first", async () => {
+    forgetChannelPlatform();
+    const fetchImpl = installFetch(["Instagram Reels", "TikTok", "YouTube Shorts"]);
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const store = openStoreOver(seedState(TEMPLATES.faceless), () => {}, TEMPLATES.faceless);
+      const rpc = (method: string, params?: unknown) => JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
+      const listed = (await handleMcp(rpc("tools/list"), store, CONFIG)) as {
+        result: { tools: { name: string; inputSchema: { properties: Record<string, { description: string }> } }[] };
+      };
+      const said = listed.result.tools.find((t) => t.name === "create_post")!.inputSchema.properties["platform"]!.description;
+      expect(said).toMatch(/This channel posts to instagram \(Instagram Reels\), tiktok \(TikTok\) and youtube \(YouTube Shorts\)/);
+      expect(said).toMatch(/one post per network/);
+      expect(said).toMatch(/A post that names none goes to instagram \(Instagram Reels\), the first the customer chose/);
+
+      const filed = (await handleMcp(
+        rpc("tools/call", { name: "create_post", arguments: { caption: "No target named." } }),
+        store,
+        CONFIG,
+      )) as { result: { content: { text: string }[] } };
+      expect(JSON.parse(filed.result.content[0]!.text).platform).toBe("instagram");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("the line that says whether the account is connected", () => {
   const account = (platform: string) => ({ id: `acc_${platform}`, handle: `@channel`, platform, state: "connected" as const });
 
+  const youtube = ["youtube" as PostPlatform];
+
   it("names the network and says an account is still needed", () => {
-    const notice = connectNotice({ platform: "youtube" as PostPlatform, accounts: [], error: null });
+    const notice = connectNotice({ platforms: youtube, accounts: [], error: null });
     expect(notice.tone).toBe("warn");
     expect(notice.text).toMatch(/YouTube/);
     expect(notice.text).toMatch(/connect/i);
@@ -287,21 +375,63 @@ describe("the line that says whether the account is connected", () => {
   });
 
   it("an account on another network is not an account on this one", () => {
-    const notice = connectNotice({ platform: "youtube" as PostPlatform, accounts: [account("tiktok")], error: null });
+    const notice = connectNotice({ platforms: youtube, accounts: [account("tiktok")], error: null });
     expect(notice.tone).toBe("warn");
   });
 
   it("goes quiet the moment the right account is connected", () => {
-    const notice = connectNotice({ platform: "youtube" as PostPlatform, accounts: [account("youtube")], error: null });
+    const notice = connectNotice({ platforms: youtube, accounts: [account("youtube")], error: null });
     expect(notice.tone).toBe("ok");
     expect(notice.text).toMatch(/@channel/);
     expect(notice.text).toMatch(/YouTube/);
   });
 
   it("never claims a network is unconnected when the read simply failed", () => {
-    expect(connectNotice({ platform: "youtube" as PostPlatform, accounts: null, error: null }).tone).toBe("unknown");
-    expect(connectNotice({ platform: "youtube" as PostPlatform, accounts: null, error: "401" }).tone).toBe("unknown");
-    expect(connectNotice({ platform: "youtube" as PostPlatform, accounts: null, error: "401" }).text).toMatch(/401/);
+    expect(connectNotice({ platforms: youtube, accounts: null, error: null }).tone).toBe("unknown");
+    expect(connectNotice({ platforms: youtube, accounts: null, error: "401" }).tone).toBe("unknown");
+    expect(connectNotice({ platforms: youtube, accounts: null, error: "401" }).text).toMatch(/401/);
+  });
+
+  /**
+   * Several networks, one line. A YouTube account connected says nothing about the TikTok the
+   * customer also ticked, so the line covers each pick and says which are connected and which are
+   * not — a line that named only the first would let the second fill a queue silently.
+   */
+  describe("when the customer picked more than one network", () => {
+    const three = ["youtube", "tiktok", "instagram"] as PostPlatform[];
+
+    it("names every network while the accounts are still being read", () => {
+      const notice = connectNotice({ platforms: three, accounts: null, error: null });
+      expect(notice.tone).toBe("unknown");
+      expect(notice.text).toMatch(/YouTube Shorts, TikTok and Instagram Reels/);
+    });
+
+    it("warns about each network with no account, and says which ones are fine", () => {
+      const notice = connectNotice({ platforms: three, accounts: [account("tiktok")], error: null });
+      expect(notice.tone).toBe("warn");
+      expect(notice.text).toMatch(/posts to YouTube Shorts, TikTok and Instagram Reels/);
+      expect(notice.text).toMatch(/no YouTube Shorts or Instagram Reels account is connected yet/);
+      expect(notice.text).toMatch(/nothing here can publish there until you connect them on Accounts/);
+      expect(notice.text).toMatch(/Connected: TikTok as @channel/);
+    });
+
+    it("tells an expired connection apart from a missing one", () => {
+      const expired = { ...account("tiktok"), state: "expired" as const };
+      const notice = connectNotice({ platforms: ["youtube", "tiktok"] as PostPlatform[], accounts: [account("youtube"), expired], error: null });
+      expect(notice.tone).toBe("warn");
+      expect(notice.text).toMatch(/the TikTok connection has expired/);
+      expect(notice.text).not.toMatch(/no .* account is connected yet/);
+      expect(notice.text).toMatch(/until you connect it on Accounts/);
+      expect(notice.text).toMatch(/Connected: YouTube Shorts as @channel/);
+    });
+
+    it("goes quiet only when every network has a live account", () => {
+      const partial = connectNotice({ platforms: three, accounts: [account("youtube"), account("tiktok")], error: null });
+      expect(partial.tone).toBe("warn");
+      const all = connectNotice({ platforms: three, accounts: three.map(account), error: null });
+      expect(all.tone).toBe("ok");
+      expect(all.text).toMatch(/YouTube Shorts as @channel; TikTok as @channel; Instagram Reels as @channel/);
+    });
   });
 
   /** It has to be on a screen the operator opens before the first post, not only in a module. */

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router";
-import { connectNotice, channelPlatformOf, type ContextAnswers } from "../connect";
+import { connectNotice, channelPlatformsOf, type ContextAnswers } from "../connect";
 import { apiGet, fetchAccounts, messageOf } from "../api";
 import type { Account, PostStatus } from "../data";
 
@@ -94,11 +94,11 @@ export function PlatformChip({ platform, account }: { platform: string; account?
 /**
  * *** THE LINE THAT SAYS WHETHER THIS CHANNEL CAN PUBLISH AT ALL. ***
  *
- * One sentence, at the top of the two screens an operator opens first: which network this channel
- * posts to (their own setup answer), whether an account is connected for it, and where to connect
- * one. Before it, the answer to "have I finished setting this up?" was not on any screen — the
- * queue filled with rows for a network nobody had connected and the first refusal arrived at the
- * publish button.
+ * One sentence, at the top of the two screens an operator opens first: which networks this channel
+ * posts to (their own setup answer, one or several), whether an account is connected for each, and
+ * where to connect one. Before it, the answer to "have I finished setting this up?" was not on any
+ * screen — the queue filled with rows for a network nobody had connected and the first refusal
+ * arrived at the publish button.
  *
  * It reads both facts itself rather than taking them as props, because it belongs on screens that
  * share no state; both reads are cheap and both already existed. A read that has not answered, or
@@ -115,7 +115,7 @@ export function ConnectLine() {
 
   useEffect(() => {
     let live = true;
-    // The channel's network is the setup answer; before it answers, the running template's own
+    // The channel's networks are the setup answer; before it answers, the running template's own
     // fallback is used, which is the same resolution the server makes.
     apiGet<{ context?: ContextAnswers }>("/context").then(
       (home) => { if (live && home.context) setContext(home.context); },
@@ -128,7 +128,7 @@ export function ConnectLine() {
     return () => { live = false; };
   }, []);
 
-  const notice = connectNotice({ platform: channelPlatformOf(context), accounts, error });
+  const notice = connectNotice({ platforms: channelPlatformsOf(context), accounts, error });
   return (
     <div className={`connect-line mb-4 ${notice.tone === "warn" ? "connect-line-warn" : ""}`}>
       <span className={`dot ${notice.tone === "ok" ? "dot-ok" : notice.tone === "warn" ? "dot-warn" : "dot-idle"}`} aria-hidden />

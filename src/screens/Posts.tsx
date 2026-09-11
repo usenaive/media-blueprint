@@ -69,7 +69,7 @@ export function Posts() {
         actions={error ? <span className="chip chip-fail">{error}</span> : null}
       />
 
-      {/* The queue is aimed at one network. This says which, and whether it can be reached. */}
+      {/* The queue is aimed at the networks the customer picked. This says which, and whether each can be reached. */}
       <ConnectLine />
 
       <div className="seg mb-4 w-fit" role="tablist">
