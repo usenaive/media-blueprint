@@ -143,6 +143,12 @@ refused` otherwise. Reads, bearer-authenticated calls and `/api/enter` itself (t
 form is cross-site by design) are not subject to that check. `pnpm serve` on the laptop keeps a
 plain `SameSite=Lax` cookie: `Partitioned` requires `Secure`, and the loopback is `http`.
 
+A browser that signed in before the cookie was partitioned still holds the old `SameSite=Lax`
+cookie under the same name and sends both. Every `dashboard_session` value on a request is
+checked, so the old one cannot shadow a live session; when none matches, the `401` carries a
+`Set-Cookie` that expires the old unpartitioned cookie, and a fresh sign-in off the laptop sends
+that same expiring header alongside the new cookie.
+
 `/mcp` is untouched by all of this: the organization's agents authenticate there with their own
 credentials.
 

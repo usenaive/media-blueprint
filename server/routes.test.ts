@@ -586,9 +586,12 @@ describe("every /api/* route is behind the operator's bearer", () => {
       expect(reply.headers?.["location"]).toBe("/");
       // Deployed: partitioned per top-level site, so the studio's frame and a top-level tab each
       // sign in once. `SameSite=None` is what lets the frame carry it; `Partitioned` needs `Secure`.
-      expect(reply.headers?.["set-cookie"]).toBe(
+      // Alongside it, as a SEPARATE header, the end of the pre-partitioned cookie a returning
+      // browser may still hold under the same name.
+      expect(reply.headers?.["set-cookie"]).toEqual([
         `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
-      );
+        "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure",
+      ]);
     });
 
     it("sets a plain SameSite=Lax cookie, without Secure, on a local server: Partitioned requires Secure and pnpm serve is http", async () => {
@@ -598,6 +601,7 @@ describe("every /api/* route is behind the operator's bearer", () => {
         ctx,
       );
       expect(reply.status).toBe(303);
+      // One header only: locally the new cookie has the same attributes as the old and replaces it.
       expect(reply.headers?.["set-cookie"]).toBe(`dashboard_session=${TOKEN}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
     });
 
@@ -626,6 +630,51 @@ describe("every /api/* route is behind the operator's bearer", () => {
       // A cookie that is not the token is still refused: the cookie is checked, not merely present.
       const wrong = req("GET", "/api/posts", "", { cookie: "dashboard_session=nope-wrong-length" });
       expect((await handleRequest(wrong, ctx)).status).toBe(401);
+    });
+
+    /**
+     * A browser that signed in before the cookie was partitioned still holds the old `Lax` one
+     * under the same name, and sends both. Cookies are keyed by name, domain and path, so the new
+     * cookie does not replace it, and the header's order is the browser's, not ours.
+     */
+    describe("a browser still carrying the pre-partitioned cookie", () => {
+      const ctx = deployedCtx(demoState(), TOKEN);
+      const gone = "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure";
+
+      it("is in when ANY dashboard_session value is the token, whichever the browser sends first", async () => {
+        const stale = "a-token-since-rotated";
+        for (const cookie of [`dashboard_session=${stale}; dashboard_session=${TOKEN}`, `dashboard_session=${TOKEN}; dashboard_session=${stale}`]) {
+          const reply = await handleRequest(req("GET", "/api/posts", "", { cookie }), ctx);
+          expect(reply.status, cookie).toBe(200);
+          expect(reply.headers, cookie).toBeUndefined();
+          const session = await handleRequest(req("GET", "/api/session", "", { cookie }), ctx);
+          expect(session.body, cookie).toMatchObject({ authenticated: true });
+          expect(session.headers, cookie).toBeUndefined();
+        }
+      });
+
+      it("is refused when none matches, and told to drop the old cookie — unpartitioned, so it reaches the old jar", async () => {
+        const reply = await handleRequest(req("GET", "/api/posts", "", { cookie: "dashboard_session=old-one; dashboard_session=other-old-one" }), ctx);
+        expect(reply).toEqual({
+          status: 401,
+          body: { error: "missing or invalid dashboard token — this dashboard is opened from the studio that installed it" },
+          headers: { "set-cookie": gone },
+        });
+        // One wrong cookie is the same case, on a write as on a read.
+        expect((await handleRequest(req("GET", "/api/posts", "", { cookie: "dashboard_session=old-one" }), ctx)).headers).toEqual({ "set-cookie": gone });
+        const write = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"ready"}', { cookie: "dashboard_session=old-one", "sec-fetch-site": "same-origin" }), ctx);
+        expect(write.status).toBe(401);
+        expect(write.headers).toEqual({ "set-cookie": gone });
+      });
+
+      it("does not send the expiring header to a request that held no cookie at all: there is nothing to expire", async () => {
+        expect((await handleRequest(req("GET", "/api/posts"), ctx)).headers).toBeUndefined();
+        expect((await handleRequest(req("GET", "/api/posts", "", { authorization: "Bearer nope" }), ctx)).headers).toBeUndefined();
+        // `/api/session` never sets a cookie, whatever it was sent.
+        const session = await handleRequest(req("GET", "/api/session", "", { cookie: "dashboard_session=old-one" }), ctx);
+        expect(session.status).toBe(200);
+        expect(session.headers).toBeUndefined();
+      });
     });
 
     it("is the only route that runs before the gate, so it needs no credential to reach", async () => {
@@ -668,9 +717,10 @@ describe("every /api/* route is behind the operator's bearer", () => {
         expect(reply.body).toBeUndefined();
         expect(reply.headers?.["location"]).toBe("/");
         // Byte-identical to the cookie the ticket buys.
-        expect(reply.headers?.["set-cookie"]).toBe(
+        expect(reply.headers?.["set-cookie"]).toEqual([
           `dashboard_session=${TOKEN}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
-        );
+          "dashboard_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure",
+        ]);
         // The password is compared, never echoed — not in the cookie and not anywhere else.
         expect(JSON.stringify(reply)).not.toContain(PASSWORD);
       }

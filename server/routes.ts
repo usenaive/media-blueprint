@@ -37,8 +37,12 @@ export interface ApiReply {
   stream?: Response;
   /** With `stream`: an event stream (relay preamble) rather than a file's bytes. */
   sse?: boolean;
-  /** Set only by `/api/enter`, which answers with a cookie (on success) and a redirect and no body at all. */
-  headers?: Record<string, string>;
+  /**
+   * Set by `/api/enter` (a cookie and a redirect, no body) and by a refused cookie (an expiring
+   * cookie). An array is several headers of that name, never one joined with commas: a browser
+   * reads `Set-Cookie` one header at a time.
+   */
+  headers?: Record<string, string | string[]>;
 }
 
 export interface ApiContext {
@@ -89,18 +93,35 @@ const DENIED = "/?entry=denied";
  * another site not spending the cookie on a write — `sameOriginGuard` buys instead. Locally
  * (`ctx.local`) it stays `SameSite=Lax` with no `Secure`, because `Partitioned` requires `Secure`
  * and `pnpm serve` is plain HTTP on the loopback.
+ *
+ * A browser that signed in before the cookie was partitioned still holds the old `Lax`,
+ * unpartitioned one under the same name, and keeps sending both: a cookie is keyed by name, domain
+ * and path, so the new one does not replace it. Two `dashboard_session` values arrive, in an order
+ * the server does not choose, and one of them may be a token since rotated. So every value is
+ * tried, and a request whose values all fail is answered with a `Set-Cookie` that expires the old
+ * unpartitioned cookie (`legacyCookieGone`) — as is a fresh sign-in off the laptop, so the tab
+ * that just signed in does not carry a dead cookie for thirty more days.
  */
 const COOKIE = "dashboard_session";
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 const CROSS_SITE = "cross-site request refused";
 
-/** One cookie out of the header, without a parser dependency and without regex over a whole header. */
-function cookieValue(header: string | undefined, name: string): string | undefined {
+/**
+ * The header that ends the pre-partitioned cookie: same name, path and (absence of) domain, `Lax`
+ * and unpartitioned like the one it targets — a `Partitioned` attribute here would address the new
+ * cookie's jar instead and leave the old one where it is.
+ */
+const legacyCookieGone = (ctx: ApiContext): string =>
+  `${COOKIE}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${ctx.local ? "" : "; Secure"}`;
+
+/** Every value a cookie name carries in the header — there can be more than one — without a parser dependency. */
+function cookieValues(header: string | undefined, name: string): string[] {
+  const values: string[] = [];
   for (const part of (header ?? "").split(";")) {
     const at = part.indexOf("=");
-    if (at > 0 && part.slice(0, at).trim() === name) return part.slice(at + 1).trim();
+    if (at > 0 && part.slice(0, at).trim() === name) values.push(part.slice(at + 1).trim());
   }
-  return undefined;
+  return values;
 }
 
 /** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
@@ -321,13 +342,17 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
 function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
   if (!req.path.startsWith("/api/") || ctx.local) return null;
   if (!ctx.dashboardToken) return fail(503, NO_DASHBOARD_TOKEN);
-  const held = cookieValue(req.headers.cookie, COOKIE);
-  const allowed =
-    held === undefined
-      ? bearerMatches(ctx.dashboardToken, req.headers.authorization)
-      : secretMatches(ctx.dashboardToken, held);
-  if (!allowed) return fail(401, `missing or invalid dashboard token — ${CLOSED}`);
-  return held === undefined ? null : sameOriginGuard(req);
+  const token = ctx.dashboardToken;
+  const held = cookieValues(req.headers.cookie, COOKIE);
+  if (held.length === 0) {
+    return bearerMatches(token, req.headers.authorization) ? null : fail(401, `missing or invalid dashboard token — ${CLOSED}`);
+  }
+  // Every candidate is compared in constant time; the first match is enough.
+  if (held.some((value) => secretMatches(token, value))) return sameOriginGuard(req);
+  return {
+    ...fail(401, `missing or invalid dashboard token — ${CLOSED}`),
+    headers: { "set-cookie": legacyCookieGone(ctx) },
+  };
 }
 
 /**
@@ -405,11 +430,14 @@ function enterWithPassword(req: ApiRequest, ctx: ApiContext, password: string): 
 /** The session, minted: the cookie and the redirect home, identical for either credential. */
 function signedIn(ctx: ApiContext): ApiReply {
   const site = ctx.local ? "SameSite=Lax" : "Secure; SameSite=None; Partitioned";
+  const cookie = `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; ${site}; Max-Age=${COOKIE_MAX_AGE}`;
+  // Off the laptop the new cookie is partitioned, so the old `Lax` one is a different cookie and
+  // must be ended alongside; locally the new one simply replaces it.
   return {
     status: 303,
     headers: {
       location: "/",
-      "set-cookie": `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; ${site}; Max-Age=${COOKIE_MAX_AGE}`,
+      "set-cookie": ctx.local ? cookie : [cookie, legacyCookieGone(ctx)],
     },
   };
 }

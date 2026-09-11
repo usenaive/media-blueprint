@@ -35,7 +35,8 @@ interface Request {
 
 interface Response {
   status(code: number): Response;
-  setHeader(name: string, value: string): void;
+  /** Node's: an array is several headers of that name (`Set-Cookie` must never be joined). */
+  setHeader(name: string, value: string | string[]): void;
   json(body: unknown): void;
   write(chunk: Uint8Array | string): void;
   end(body?: string): void;
