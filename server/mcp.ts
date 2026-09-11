@@ -13,7 +13,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { channelPlatform } from "./channel.ts";
 import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
-import { POST_PLATFORMS, POST_STAGES, type PostPlatform, type PostStage } from "../seed/posts.ts";
+import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
 import { ACTIVE } from "../templates/index.ts";
 import { labelOf } from "../templates/template.ts";
 
@@ -89,7 +89,7 @@ const STAGES = POST_STAGES.join("|");
 export const toolsFor = (channel: PostPlatform) => [
   { name: "list_posts", description: `The post queue, optionally filtered by status and/or stage. ${OPERATOR_ONLY}`, inputSchema: obj({
     status: str("Optional filter: pending|ready|approved|posted|rejected"),
-    stage: str(`Optional filter on how far a piece is: ${STAGES}. A row with no stage is a note, not a piece.`),
+    stage: str(`Optional filter on how far a piece is: ${STAGES}. A row carrying neither a stage nor a video is a note, not a piece.`),
   }, []) },
   { name: "get_post", description: "One post by id.", inputSchema: obj({ id: str("Post id (post_…)") }, ["id"]) },
   { name: "create_post", description: `File a finished piece into the queue for the operator to review. Lands as pending unless status is ready. Say who you are, which account it is for and what it was made from — the operator approves the row, and an unsigned one tells them nothing. ${OPERATOR_ONLY}`, inputSchema: obj({
@@ -102,7 +102,7 @@ export const toolsFor = (channel: PostPlatform) => [
     stage: str(`How far along the piece is: ${STAGES}. Leave unset for a note (a plan, a report) that no seat takes further.`),
     status: str("pending (default) or ready"),
   }, ["caption"]) },
-  { name: "update_post", description: `Fix the title, caption, media URL or target network of a pending or ready post, or move it to the next stage. To claim a row before working on it, move it to scripting or rendering with expected_stage set to the stage it should still be at: the call is refused if another session got there first, and a refusal means the row is not yours. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "update_post", description: `Fix the title, caption, media URL or target network of a pending or ready post, or move it to the next stage. To claim a row before working on it, move it to scripting or rendering with expected_stage set to the stage it should still be at: the call is refused if another session got there first, and a refusal means the row is not yours. Set expected_stage on the write that finishes the work as well, not only on the one that claims it. A row that already carries media has been rendered and cannot be moved back to a stage before rendered — that video was paid for. Approved and posted posts belong to the operator and cannot be edited. ${OPERATOR_ONLY}`, inputSchema: obj({
     id: str("Post id"), title: str("New title"), caption: str("New caption"), media_url: str("New media URL"),
     platform: str(`Retarget the post: ${POST_PLATFORMS.join("|")}`),
     stage: str(`The stage the piece has reached: ${STAGES}`),
@@ -173,7 +173,10 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
     case "list_posts": {
       const stage = stageOf(params);
       return store.read().posts.filter((p) =>
-        (params.status === undefined || p.status === params.status) && (stage === undefined || p.stage === stage),
+        // `postStage`, not `p.stage`: a row filed before the field existed reads at the stage its
+        // own contents put it at, and the seat that lists for work has to see the same stage the
+        // claim it makes next will compare against.
+        (params.status === undefined || p.status === params.status) && (stage === undefined || postStage(p) === stage),
       );
     }
     case "get_post": {
@@ -217,15 +220,47 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         throw new ToolError(`platform must be one of ${POST_PLATFORMS.join(", ")}`);
       }
       // The whole call runs under the store's lock, so this read-then-write is the atomic claim.
+      // Compared through `postStage` for the same reason `list_posts` filters through it: a row the
+      // seat was shown at `rendered` has to be claimable as `rendered`, and a derivation used on
+      // one side of that pair and not the other is a guard that refuses the caller it just invited.
       const expected = stageOf(params, "expected_stage");
-      if (expected !== undefined && post.stage !== expected) {
-        throw new ToolError(`post is at stage ${post.stage ?? "none"}, not ${expected}; another session has it`);
+      const current = postStage(post);
+      if (expected !== undefined && current !== expected) {
+        throw new ToolError(`post is at stage ${current ?? "none"}, not ${expected}; another session has it`);
+      }
+      // THE OTHER END OF THE CLAIM, AND THE ONLY THING THAT MAKES A REPLAY COST NOTHING.
+      //
+      // `expected_stage` guards the START of the render; nothing guarded its end, and no field
+      // recorded that a render had been paid for. So the manager's 08:00 sweep, putting a claim a
+      // dead session left behind back to `scripted`, was an instruction to render a second time —
+      // ~$3.32 (`ONE_RENDER_MICRO_USD`) for a video the channel already owns. The media on the row
+      // IS the record: a row that carries one has been through the paid step, so it cannot be moved
+      // back to a stage that precedes it, by the sweep or by anything else. Forward is untouched —
+      // the producer's own write lands `rendered` with the video attached in the same call.
+      const stage = stageOf(params);
+      const media = optional(params, "media_url") ?? post.mediaUrl;
+      if (stage !== undefined && media !== undefined && POST_STAGES.indexOf(stage) < POST_STAGES.indexOf("rendered")) {
+        throw new ToolError(
+          `post already has media attached: it has been rendered and that render was paid for. It cannot go back to ${stage} — take it to rendered. A piece that genuinely has to be remade is a new row; rendering this one again spends the render twice.`,
+        );
+      }
+      // The same invariant read the other way, and the cheapest way to lose a piece. `rendered` is
+      // what a row with a render attached IS — it is the word `postStage` derives from the media —
+      // so writing it onto a row that carries none makes the stage and the evidence it is derived
+      // from say different things about one row. It also strands the piece: `update_post {id, stage:
+      // "rendered"}` on a fresh brief is out of the scriptwriter's list and out of the producer's,
+      // parked at a stage that says the work is done, in a queue that cannot publish it (`postNow`
+      // refuses a row with no video). The stage set is otherwise a membership check and not a state
+      // machine — brief straight to scripting or scripted is a legal skip, because a seat may write
+      // its result without claiming first — and this is the one transition worth spelling out.
+      if (stage === "rendered" && media === undefined) {
+        throw new ToolError("a post reaches rendered by having its video attached: send media_url with this call, or leave the stage where it is");
       }
       return store.updatePost(id, {
         title: optional(params, "title"),
         caption: optional(params, "caption"),
         mediaUrl: optional(params, "media_url"),
-        stage: stageOf(params),
+        stage,
         ...(target === undefined ? {} : { platform: target as PostPlatform }),
       });
     }

@@ -154,8 +154,26 @@ describe("the crews", () => {
     // The timers are the fallback, by stage, claim the same way, and no seat's intake is told another intake is running.
     expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*send_to_agent the producer once, wait false/s);
     expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendering, expected_stage scripted.*stage rendered/s);
-    // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that finds it.
-    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage/s);
+    /**
+     * AND THE RENDER IS GUARDED AT BOTH ENDS, in the only seat that spends on one.
+     *
+     * A claim on the way in and nothing on the way out is half a guard: the producer's completion
+     * write landed whatever had happened to the row while it rendered, so a stale session could
+     * overwrite the render that replaced it, and neither the producer nor the manager was told that
+     * a row with a video attached is a row the channel has already paid ~$3.32 for. Both are said
+     * in the brief and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat
+     * only after it has spent the money.
+     */
+    for (const prompt of [seat("producer")?.system, seat("producer")?.schedules?.[0]?.input]) {
+      expect(prompt).toMatch(/`?expected_stage`? rendering.*(no longer yours|moved on).*(twice|second time)/s);
+    }
+    // The sentence about the receipt itself is on the timer, not in the brief: the producer's
+    // `system` is at the 400-word ceiling to the word, and the tool refuses the claim — before the
+    // render, not after — with the same sentence on it (`update_post`, `server/mcp.ts`).
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/already carries a media_url.*paid.*never render it again/s);
+    // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that
+    // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not back.
+    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered/s);
     for (const agent of TEMPLATES.faceless.agents) expect(agent.intake?.message, agent.name).not.toMatch(/alongside yours|running alongside/);
   });
 

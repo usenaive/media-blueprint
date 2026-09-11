@@ -21,7 +21,11 @@
  * the fallback — 06:00 briefs, 06:30 scripts, 07:00 render — and pick up, by stage, whatever a
  * handoff did not carry. A handoff and a cron can overlap, so a seat claims a row before it spends
  * on it (`scripting` / `rendering`, with `expected_stage`): the claim is one locked write, one
- * session wins it, and the other is refused before the work — not after the render.
+ * session wins it, and the other is refused before the work — not after the render. The render is
+ * also the one step that cannot be replayed, so the claim is guarded at both ends: the producer's
+ * completion write carries `expected_stage` too, and the media on a row is the receipt for the
+ * render, which nothing — the producer, or the sweep freeing a dead session's claim — may send back
+ * to a stage before `rendered` (`server/mcp.ts`).
  */
 import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
 
@@ -40,7 +44,7 @@ export const FACELESS: MediaTemplate = {
       description:
         "Renders each scripted brief into one original vertical video in the style template it names. Files the finished piece for approval; never publishes.",
       brief:
-        "You are the producer. Your work is the render: take a scripted row — one the scriptwriter named to you in a handoff, or else the next at `stage` scripted (channel.list_posts, stage scripted) — and claim it before you spend anything: channel.update_post with stage rendering and expected_stage scripted. A refusal means another session has it; take the next row, or stop if there is none. Then produce one original vertical video, under fifteen seconds, in the style template the row names (channel.list_style_templates). Stay inside that template's look — its reference image and prompt are the channel's identity. The first three seconds carry the scriptwriter's hook; render for it. When the video is done, attach it to the row with channel.update_post: `media_url`, the publishable caption the scriptwriter wrote, and `stage` rendered. One piece per session: the rest of a handoff's rows wait for your 07:00 fires, and if nothing is at scripted, file nothing and stop. You are the end of the chain; you hand on to nobody.",
+        "You are the producer. Your work is the render: take a scripted row — one the scriptwriter named to you in a handoff, or else the next at `stage` scripted (channel.list_posts) — and claim it before you spend anything: channel.update_post with stage rendering and expected_stage scripted. A refusal means another session has it: take the next, or stop. Then produce one original vertical video, under fifteen seconds, in the style template the row names (channel.list_style_templates). Stay inside that look: the reference image and prompt are the channel's identity. The first three seconds carry the hook; render for it. Attach the video to the row with channel.update_post: `media_url`, the publishable caption the scriptwriter wrote, `stage` rendered and `expected_stage` rendering — refused there, the row is no longer yours: stop rather than render it twice. One piece per session: a handoff's other rows wait for your 07:00 fires; if nothing is at scripted, file nothing and stop. You are the end of the chain; you hand on to nobody.",
       tools: ["generate_video", "generate_image"],
       skills: ["naive/short-video-hooks"],
       intake: {
@@ -52,7 +56,7 @@ export const FACELESS: MediaTemplate = {
         schedule({
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
           input:
-            "Make the next piece. Read the niche and tone (project_context) and the scripted rows (channel.list_posts with stage scripted); claim the next one — channel.update_post, stage rendering, expected_stage scripted; refused means it is not yours, take the next — and produce one original vertical video in the style template that row names (channel.list_style_templates). Attach it to the row with channel.update_post — media_url, the publishable caption, stage rendered. If nothing is at scripted, file nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
+            "Make the next piece. Read the niche and tone (project_context) and the scripted rows (channel.list_posts with stage scripted); claim the next one — channel.update_post, stage rendering, expected_stage scripted; refused means it is not yours, take the next; and a row that already carries a media_url is one the channel has paid to render, so never render it again — and produce one original vertical video in the style template that row names (channel.list_style_templates). Attach it to the row with channel.update_post — media_url, the publishable caption, stage rendered, expected_stage rendering; refused there means the row moved on while you rendered, so say so and stop rather than render a second time. If nothing is at scripted, file nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
           budget_micro_usd: 10_000_000, // $10 — one generated video plus the turns that brief and file it.
         }),
       ],
