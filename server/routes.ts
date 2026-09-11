@@ -37,8 +37,12 @@ export interface ApiReply {
   stream?: Response;
   /** With `stream`: an event stream (relay preamble) rather than a file's bytes. */
   sse?: boolean;
-  /** Set only by `/api/enter`, which answers with a cookie and a redirect and no body at all. */
-  headers?: Record<string, string>;
+  /**
+   * Set by `/api/enter` (a cookie and a redirect, no body) and by a refused cookie (an expiring
+   * cookie). An array is several headers of that name, never one joined with commas: a browser
+   * reads `Set-Cookie` one header at a time.
+   */
+  headers?: Record<string, string | string[]>;
 }
 
 export interface ApiContext {
@@ -48,6 +52,11 @@ export interface ApiContext {
   mcpToken: string | undefined;
   /** The operator's bearer for `/api/*` (`DASHBOARD_TOKEN`). Undefined closes the whole surface. */
   dashboardToken: string | undefined;
+  /** The operator's own way through `/api/enter` (`DASHBOARD_PASSWORD`). Undefined refuses every password. */
+  dashboardPassword: string | undefined;
+  /** The studio that installed this app (`NAIVE_STUDIO_URL`) and the app's own id (`NAIVE_APP_ID`): together, the link the gate offers. */
+  studioUrl: string | undefined;
+  appId: string | undefined;
   /** True on `pnpm serve` / `pnpm dev`. False in the deployed function. */
   local: boolean;
 }
@@ -59,6 +68,8 @@ const NOT_CONFIGURED = "not configured — set NAIVE_API_KEY";
 const NO_DASHBOARD_TOKEN = "not configured — set DASHBOARD_TOKEN on this app";
 /** Said to a browser that arrived on its own. There is nothing for it to type; there is a button. */
 const CLOSED = "this dashboard is opened from the studio that installed it";
+/** Where a refused form post lands: the gate, which reads the flag and says so. The reason travels in nothing else. */
+const DENIED = "/?entry=denied";
 
 /**
  * THE OPERATOR'S SESSION, AND WHY IT IS A COOKIE AND NOT A THING THEY HOLD.
@@ -70,21 +81,47 @@ const CLOSED = "this dashboard is opened from the studio that installed it";
  * trades it for the cookie below. The value the cookie carries never passes through the DOM,
  * `sessionStorage`, a URL or anything a person is shown.
  *
- * `HttpOnly` so no script on this page can read it; `SameSite=Lax` so another site cannot make the
- * browser spend it on a write, while still allowing the top-level navigation that sets it; thirty
- * days because the alternative — a token that dies with the tab — sends the operator back to the
- * studio every morning for a credential neither of them can see.
+ * `HttpOnly` so no script on this page can read it; thirty days because the alternative — a token
+ * that dies with the tab — sends the operator back to the studio every morning for a credential
+ * neither of them can see.
+ *
+ * Deployed, the dashboard is shown two ways: as its own tab, and inside the studio's cross-site
+ * `<iframe>`. A `SameSite=Lax` cookie is never sent to a framed cross-site document, so the framed
+ * dashboard could never be signed in. The deployed cookie is therefore `SameSite=None; Secure;
+ * Partitioned` (CHIPS): the browser keys it by the top-level site, so the framed context and the
+ * top-level context each sign in once and neither can read the other's. What `Lax` used to buy —
+ * another site not spending the cookie on a write — `sameOriginGuard` buys instead. Locally
+ * (`ctx.local`) it stays `SameSite=Lax` with no `Secure`, because `Partitioned` requires `Secure`
+ * and `pnpm serve` is plain HTTP on the loopback.
+ *
+ * A browser that signed in before the cookie was partitioned still holds the old `Lax`,
+ * unpartitioned one under the same name, and keeps sending both: a cookie is keyed by name, domain
+ * and path, so the new one does not replace it. Two `dashboard_session` values arrive, in an order
+ * the server does not choose, and one of them may be a token since rotated. So every value is
+ * tried, and a request whose values all fail is answered with a `Set-Cookie` that expires the old
+ * unpartitioned cookie (`legacyCookieGone`) — as is a fresh sign-in off the laptop, so the tab
+ * that just signed in does not carry a dead cookie for thirty more days.
  */
 const COOKIE = "dashboard_session";
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
+const CROSS_SITE = "cross-site request refused";
 
-/** One cookie out of the header, without a parser dependency and without regex over a whole header. */
-function cookieValue(header: string | undefined, name: string): string | undefined {
+/**
+ * The header that ends the pre-partitioned cookie: same name, path and (absence of) domain, `Lax`
+ * and unpartitioned like the one it targets — a `Partitioned` attribute here would address the new
+ * cookie's jar instead and leave the old one where it is.
+ */
+const legacyCookieGone = (ctx: ApiContext): string =>
+  `${COOKIE}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax${ctx.local ? "" : "; Secure"}`;
+
+/** Every value a cookie name carries in the header — there can be more than one — without a parser dependency. */
+function cookieValues(header: string | undefined, name: string): string[] {
+  const values: string[] = [];
   for (const part of (header ?? "").split(";")) {
     const at = part.indexOf("=");
-    if (at > 0 && part.slice(0, at).trim() === name) return part.slice(at + 1).trim();
+    if (at > 0 && part.slice(0, at).trim() === name) values.push(part.slice(at + 1).trim());
   }
-  return undefined;
+  return values;
 }
 
 /** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
@@ -305,39 +342,141 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
 function dashboardAuth(req: ApiRequest, ctx: ApiContext): ApiReply | null {
   if (!req.path.startsWith("/api/") || ctx.local) return null;
   if (!ctx.dashboardToken) return fail(503, NO_DASHBOARD_TOKEN);
-  const held = cookieValue(req.headers.cookie, COOKIE);
-  const allowed =
-    held === undefined
-      ? bearerMatches(ctx.dashboardToken, req.headers.authorization)
-      : secretMatches(ctx.dashboardToken, held);
-  return allowed ? null : fail(401, `missing or invalid dashboard token — ${CLOSED}`);
+  const token = ctx.dashboardToken;
+  const held = cookieValues(req.headers.cookie, COOKIE);
+  if (held.length === 0) {
+    return bearerMatches(token, req.headers.authorization) ? null : fail(401, `missing or invalid dashboard token — ${CLOSED}`);
+  }
+  // Every candidate is compared in constant time; the first match is enough.
+  if (held.some((value) => secretMatches(token, value))) return sameOriginGuard(req);
+  return {
+    ...fail(401, `missing or invalid dashboard token — ${CLOSED}`),
+    headers: { "set-cookie": legacyCookieGone(ctx) },
+  };
 }
 
 /**
- * `POST /api/enter` — the one door through the gate, and the only route that runs before it.
+ * What `SameSite=Lax` used to do, done by hand: a cookie-authenticated WRITE is honoured only from
+ * this origin. The deployed cookie is `SameSite=None` so the studio's frame can carry it, which
+ * means any site's form could too — so the browser's own word on where the request came from
+ * decides. `Sec-Fetch-Site: same-origin` (the page's own fetches, framed or not) or `none` (the
+ * address bar) passes; a browser too old to say sends `Origin` on every write, and that must name
+ * this host; anything else is refused. Reads are not writes, a bearer is not a cookie, and
+ * `/api/enter` never reaches here: the studio's ticket form is cross-site by design.
+ */
+function sameOriginGuard(req: ApiRequest): ApiReply | null {
+  if (req.method === "GET" || req.method === "HEAD") return null;
+  const site = req.headers["sec-fetch-site"];
+  if (site !== undefined) return site === "same-origin" || site === "none" ? null : fail(403, CROSS_SITE);
+  const origin = originHost(req.headers.origin);
+  const host = req.headers.host;
+  return origin !== undefined && host !== undefined && origin === host ? null : fail(403, CROSS_SITE);
+}
+
+function originHost(origin: string | undefined): string | undefined {
+  if (!origin) return undefined;
+  try {
+    return new URL(origin).host;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `POST /api/enter` — the one door through the gate, and one of the two routes that run before it
+ * (`/api/session` is the other, and it only looks).
  *
- * It takes a ticket, not a token (`mcp.ts`), and it answers with a cookie and a redirect and no
- * body: there is nothing here for a person to read, copy or lose. A bad or stale ticket gets 403
- * and no hint about why — the difference between "wrong" and "expired" is a probing oracle, and the
- * remedy for both is the same single click.
+ * It takes a ticket, not a token (`mcp.ts`) — or, since the platform started generating one, the
+ * operator's dashboard password (`enterWithPassword`) — and it answers with a cookie and a redirect
+ * and no body: there is nothing here for a person to read, copy or lose. A bad or stale ticket gets
+ * 403 and no hint about why — the difference between "wrong" and "expired" is a probing oracle, and
+ * the remedy for both is the same single click.
  *
  * The form that posts here is served by the studio on a different origin, so this is a cross-site
- * top-level navigation: no CORS applies to it, `SameSite=Lax` still permits SETTING the cookie on
- * the way past, and every same-origin request the dashboard makes afterwards carries it.
+ * navigation: no CORS applies to it, setting the cookie on the way past is permitted, and every
+ * same-origin request the dashboard makes afterwards carries it. This route is deliberately outside
+ * `sameOriginGuard` for that reason.
  */
 function enter(req: ApiRequest, ctx: ApiContext): ApiReply {
   if (req.method !== "POST") return fail(405, "method not allowed");
   if (!ctx.dashboardToken) return fail(503, NO_DASHBOARD_TOKEN);
-  const ticket = String(parse(req.body)["ticket"] ?? new URLSearchParams(req.body).get("ticket") ?? "");
+  const password = field(req.body, "password");
+  if (password !== undefined) return enterWithPassword(req, ctx, password);
+  const ticket = field(req.body, "ticket") ?? "";
   if (!ticketMatches(ctx.dashboardToken, ticket, Date.now())) return fail(403, `this link did not check out — ${CLOSED}`);
-  const secure = ctx.local ? "" : "; Secure";
+  return signedIn(ctx);
+}
+
+/**
+ * The second credential `/api/enter` takes: the operator's own `DASHBOARD_PASSWORD`, typed into the
+ * gate the SPA renders (`src/Gate.tsx`) by a browser that reached this URL without the studio.
+ *
+ * The platform generates the password and shows it in the studio's Access panel; this route only
+ * ever compares it, in constant time, and answers with the same cookie the ticket buys — the two
+ * doors open onto one session. Unset means there is no second door: every password is refused, and
+ * `/api/session` says so up front (`password_enabled`) so the gate never draws a field for it.
+ *
+ * A refused FORM post is sent back to the gate with `entry=denied` rather than answered with JSON a
+ * person would be left reading; a refused JSON post gets the 403 a script expects. The form is the
+ * gate's own, same-origin, so the redirect lands on the screen that made it. The ticket path above
+ * is untouched by any of this.
+ */
+function enterWithPassword(req: ApiRequest, ctx: ApiContext, password: string): ApiReply {
+  if (ctx.dashboardPassword && secretMatches(ctx.dashboardPassword, password)) return signedIn(ctx);
+  if (isForm(req)) return { status: 303, headers: { location: DENIED } };
+  return fail(403, ctx.dashboardPassword ? `this password did not check out — ${CLOSED}` : `no dashboard password is set on this app — ${CLOSED}`);
+}
+
+/** The session, minted: the cookie and the redirect home, identical for either credential. */
+function signedIn(ctx: ApiContext): ApiReply {
+  const site = ctx.local ? "SameSite=Lax" : "Secure; SameSite=None; Partitioned";
+  const cookie = `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; ${site}; Max-Age=${COOKIE_MAX_AGE}`;
+  // Off the laptop the new cookie is partitioned, so the old `Lax` one is a different cookie and
+  // must be ended alongside; locally the new one simply replaces it.
+  //
+  // The order is load-bearing. A browser without CHIPS (Safari) ignores the unknown `Partitioned`
+  // attribute, so both headers then name ONE cookie — same name, no Domain, `Path=/` — and the
+  // browser applies them in order, the last one winning. The expiry goes first and the session
+  // second: on a CHIPS browser they are two cookies and the order is moot; everywhere else the
+  // sign-in survives instead of being deleted by its own response.
   return {
     status: 303,
     headers: {
       location: "/",
-      "set-cookie": `${COOKIE}=${ctx.dashboardToken}; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=${COOKIE_MAX_AGE}`,
+      "set-cookie": ctx.local ? cookie : [legacyCookieGone(ctx), cookie],
     },
   };
+}
+
+/**
+ * One field of an `/api/enter` body, whichever way it arrived: JSON from a script, a form from the
+ * browser — or a form the host already parsed and the adapter re-encoded as JSON (`api-entry.ts`),
+ * which is why the content type is not what decides how the body is read.
+ */
+function field(body: string, name: string): string | undefined {
+  const parsed = parse(body)[name];
+  if (parsed !== undefined && parsed !== null) return String(parsed);
+  return new URLSearchParams(body).get(name) ?? undefined;
+}
+
+/** Whether the browser posted a form — the one caller a redirect is for. */
+const isForm = (req: ApiRequest): boolean =>
+  (req.headers["content-type"] ?? "").toLowerCase().includes("application/x-www-form-urlencoded");
+
+/**
+ * `GET /api/session` — what the gate reads before it draws anything, and the only other route in
+ * front of `dashboardAuth`. It sets no cookie and answers the same question the gate asks (cookie or
+ * bearer), plus the two doors a signed-out browser can be shown: the studio's `/open` for this
+ * app, when the platform told us where the studio is, and whether a password is set at all.
+ * Neither value is a secret; the password itself is in no response this server makes.
+ */
+function session(req: ApiRequest, ctx: ApiContext): ApiReply {
+  if (req.method !== "GET") return fail(405, "method not allowed");
+  return json(200, {
+    authenticated: dashboardAuth(req, ctx) === null,
+    studio_url: ctx.studioUrl && ctx.appId ? `${ctx.studioUrl.replace(/\/+$/, "")}/apps/${ctx.appId}/open` : null,
+    password_enabled: Boolean(ctx.dashboardPassword),
+  });
 }
 
 /** Every route the dashboard serves, browser and agent alike. */
@@ -355,6 +494,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
 
   if (req.path === "/api/enter") return enter(req, ctx);
+  if (req.path === "/api/session") return session(req, ctx);
 
   const refused = dashboardAuth(req, ctx);
   if (refused !== null) return refused;

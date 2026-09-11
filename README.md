@@ -107,14 +107,47 @@ Every `/api/*` route on the deployment — the post queue, "Post now", the agent
 a session, and deciding a held tool call — is behind the app's `DASHBOARD_TOKEN`. You never
 have to invent that value and you never see it: `naive.config.ts` declares it
 `{ generate: true }`, the platform makes one on the apply that creates the app, and no route
-anywhere returns an app secret.
+anywhere returns it.
 
-You get in by opening the dashboard from the studio that installed it. That mints a short-lived
-entry ticket, the browser posts it to `POST /api/enter`, and the server trades it for an
-`HttpOnly`, `SameSite=Lax` session cookie the browser then attaches to every same-origin call
-by itself — the credential never passes through the DOM, a URL or storage. A deployment that
-somehow has no token answers `503 not configured` to every API route rather than serving your
-channel to anyone who finds the URL.
+There are two ways in, and both end in the same place:
+
+- **From the studio.** Open the dashboard from the studio that installed it. That mints a
+  short-lived entry ticket, the browser posts it to `POST /api/enter`, and the server trades it
+  for an `HttpOnly` session cookie the browser then attaches to every call by itself — the
+  credential never passes through the DOM, a URL or storage.
+- **With your dashboard password.** `naive.config.ts` also declares `DASHBOARD_PASSWORD`
+  `{ generate: true }`: the platform generates a password-shaped value and shows it to you in the
+  studio, on the app's **Access** panel (where it can also be rotated). Type it into the gate's
+  form and `POST /api/enter` compares it in constant time and sets the very same cookie. A
+  deployment with no password set refuses every password.
+
+A browser that reaches the URL without a session sees **one gate screen** and nothing of the app:
+the SPA asks `GET /api/session` first (`{ authenticated, studio_url, password_enabled }`, never a
+secret) and fetches nothing else until that says it is signed in. On the first arrival in a tab it
+sends the browser to the studio's `/open` for this app automatically, once; a tab that comes back
+still signed out is shown the **Open with Naive Studio** link and, when a password exists, the
+password form. A refused password returns to `/?entry=denied` — the reason travels in the address
+and nowhere else, and the form is offered again. A deployment that somehow has no token answers
+`503 not configured` to every API route rather than serving your channel to anyone who finds the
+URL.
+
+The dashboard also works inside the studio's own `<iframe>`. Framed, the gate never redirects
+anywhere on its own — it shows the form at once, and its **Open in the Studio** link opens the
+top window. For the frame to be signed in at all, the deployed cookie is `Secure; SameSite=None;
+Partitioned` (CHIPS): the browser keys it by the top-level site, so the framed dashboard and a
+tab of its own each sign in once and neither can read the other's. Because such a cookie travels
+on cross-site requests, a cookie-authenticated **write** (`POST`/`PUT`/`PATCH`/`DELETE`) to a
+gated route is honoured only from the dashboard's own origin — `Sec-Fetch-Site: same-origin` or
+`none`, or failing that an `Origin` naming this host — and answers `403 cross-site request
+refused` otherwise. Reads, bearer-authenticated calls and `/api/enter` itself (the studio's ticket
+form is cross-site by design) are not subject to that check. `pnpm serve` on the laptop keeps a
+plain `SameSite=Lax` cookie: `Partitioned` requires `Secure`, and the loopback is `http`.
+
+A browser that signed in before the cookie was partitioned still holds the old `SameSite=Lax`
+cookie under the same name and sends both. Every `dashboard_session` value on a request is
+checked, so the old one cannot shadow a live session; when none matches, the `401` carries a
+`Set-Cookie` that expires the old unpartitioned cookie, and a fresh sign-in off the laptop sends
+that same expiring header alongside the new cookie.
 
 `/mcp` is untouched by all of this: the organization's agents authenticate there with their own
 credentials.
@@ -483,9 +516,12 @@ set that is destructive.)
   503 `not configured — set NAIVE_API_KEY` reaches the header slot rather than being swallowed.
   Set `VETTA_MCP_TOKEN` to open `/mcp` locally (the platform sets it in the deployed app);
   without it every MCP request is refused. `/api/*` skips the `DASHBOARD_TOKEN` gate **only** for
-  a request that arrives on the loopback interface — your own browser against `pnpm serve`.
-  Anything reaching this server over a real network (bound to `0.0.0.0`, a tunnel, a LAN peer) is
-  gated exactly as the deployment is.
+  a request that arrives on the loopback interface — your own browser against `pnpm serve`, which
+  `GET /api/session` reports as signed in, so the gate screen never shows locally. Anything
+  reaching this server over a real network (bound to `0.0.0.0`, a tunnel, a LAN peer) is gated
+  exactly as the deployment is; set `DASHBOARD_TOKEN` and, if you want the password form there,
+  `DASHBOARD_PASSWORD` (plus `NAIVE_STUDIO_URL` and `NAIVE_APP_ID` for the studio link). None of
+  the four is needed for local development.
 
 One route table serves both: [`server/routes.ts`](server/routes.ts) holds every path, `/mcp`
 included, and `server/index.ts` (node `http`) and `server/api-entry.ts` (the deployed function)
@@ -524,7 +560,8 @@ export default defineProject({
       mcp: "/mcp",
       env: {
         NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-        DASHBOARD_TOKEN: { generate: true },
+        DASHBOARD_TOKEN: { generate: true },     // the operator bearer; never shown
+        DASHBOARD_PASSWORD: { generate: true },  // the operator's dashboard password; shown in the studio
       },
     },
   ],

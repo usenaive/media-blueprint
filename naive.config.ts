@@ -112,6 +112,12 @@ export const declaration = {
       // asking a person to invent entropy was never a setup question, it was a defect — so the
       // platform makes one, once, on the apply that creates the app, and never rolls it after.
       //
+      // DASHBOARD_PASSWORD is the operator's dashboard password: the second credential
+      // `POST /api/enter` accepts, for a browser that reached the deployed URL without the studio's
+      // handoff. The platform generates it too (`{generate: true}`, password-shaped — four groups of
+      // four, e.g. `kq7m-x2rt-8bvn-pz4h`), keeps a copy, and shows it in the studio's Access panel,
+      // which is also the one place it is rotated. Nothing in this repo ever prints it.
+      //
       // NAIVE_API_URL and NAIVE_IDENTITY_ID are NOT declared here and must not be. They were
       // `process.env` reads, which meant the PUBLISHER'S shell was baked into the declaration every
       // customer installs — and, on a hosted apply, that there is no shell, so both silently
@@ -121,6 +127,7 @@ export const declaration = {
       env: {
         NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
         DASHBOARD_TOKEN: { generate: true as const },
+        DASHBOARD_PASSWORD: { generate: true as const },
       },
     },
   ],
