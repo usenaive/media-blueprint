@@ -12,9 +12,10 @@
  * time somebody pressed Post now — by which time the crew had spent real money rendering video for
  * a destination that did not exist.
  *
- * Two facts fix it and both were already on the wire: the network (the customer's own setup
- * answer, `GET /api/context`) and the accounts (`GET /api/social/accounts`). This module is the one
- * sentence they make together, kept pure so it can be read on any screen and asserted in a test.
+ * Two facts fix it and both were already on the wire: the networks (the customer's own setup
+ * answer, `GET /api/context` — one or several) and the accounts (`GET /api/social/accounts`). This
+ * module is the one sentence they make together, kept pure so it can be read on any screen and
+ * asserted in a test.
  * The `ConnectLine` component that renders it lives in `src/components/kit.tsx`.
  *
  * It is deliberately not a blocker. See `README.md` — the crew goes on filing posts for a network
@@ -22,7 +23,7 @@
  * a render that has already been paid for. What is not acceptable is filing them *silently*.
  */
 import type { Account, PostPlatform } from "./data";
-import { ACTIVE, labelOf, platformFromAnswers } from "../templates";
+import { ACTIVE, labelOf, labelsOf, platformsFromAnswers } from "../templates";
 
 /** What `GET /api/context` answers with; only the answers matter here. */
 export interface ContextAnswers {
@@ -30,16 +31,18 @@ export interface ContextAnswers {
 }
 
 /**
- * The network this channel posts to: the customer's setup answer, or the running template's
- * fallback until the context has been read (or when it names nothing publishable). Exactly the
- * resolution `server/channel.ts` performs, through exactly the same function, so the line the
- * operator reads and the network the queue is filled with can never disagree.
+ * The networks this channel posts to: the customer's setup answer, in their order, or the running
+ * template's fallback alone until the context has been read (or when it names nothing
+ * publishable). Exactly the resolution `server/channel.ts` performs, through exactly the same
+ * function, so the line the operator reads and the networks the queue is filled for can never
+ * disagree.
  */
-export const channelPlatformOf = (context: ContextAnswers | null): PostPlatform =>
-  platformFromAnswers(context, ACTIVE.platform);
+export const channelPlatformsOf = (context: ContextAnswers | null): PostPlatform[] =>
+  platformsFromAnswers(context, ACTIVE.platform);
 
 export interface ConnectInput {
-  platform: PostPlatform;
+  /** Every network the customer picked; never empty. */
+  platforms: PostPlatform[];
   /** `null` while the read is still out, or when it failed. */
   accounts: Account[] | null;
   /** The sentence the accounts read failed with, if it did. */
@@ -53,39 +56,63 @@ export interface Notice {
 }
 
 /**
- * One line about where this channel posts and whether it can.
+ * One line about where this channel posts and whether it can — covering every network the
+ * customer picked, because a connected YouTube account says nothing about the TikTok they also
+ * ticked, and a line that named only the first would let the second fill a queue silently.
  *
  * "No account connected" and "we could not check" are different answers and are said differently —
  * the same rule `channel.list_accounts` follows on the server. Telling an operator to connect an
  * account they already connected, because a read timed out, teaches them to ignore the line.
  */
-export function connectNotice({ platform, accounts, error }: ConnectInput): Notice {
-  const name = labelOf(platform);
+export function connectNotice({ platforms, accounts, error }: ConnectInput): Notice {
+  const names = labelsOf(platforms);
   if (accounts === null) {
     return {
       tone: "unknown",
       text:
         error === null
-          ? `This channel posts to ${name} — checking whether an account is connected…`
-          : `This channel posts to ${name}. Could not check connected accounts: ${error}`,
+          ? `This channel posts to ${names} — checking whether an account is connected…`
+          : `This channel posts to ${names}. Could not check connected accounts: ${error}`,
     };
   }
-  // A connected TikTok account is not a connected YouTube one, and the queue is aimed at one of
+  // A connected TikTok account is not a connected YouTube one, and the queue is aimed at each of
   // them. The org's other connections are the Accounts screen's business, not this line's.
-  const mine = accounts.filter((account) => account.platform === platform);
-  const live = mine.filter((account) => account.state === "connected");
-  if (mine.length === 0) {
+  const missing: string[] = [];
+  const expired: string[] = [];
+  const connected: string[] = [];
+  for (const platform of platforms) {
+    const name = labelOf(platform);
+    const mine = accounts.filter((account) => account.platform === platform);
+    const live = mine.filter((account) => account.state === "connected");
+    if (mine.length === 0) missing.push(name);
+    else if (live.length === 0) expired.push(name);
+    else connected.push(`${name} as ${live.map((account) => account.handle).join(", ")}`);
+  }
+  if (missing.length === 0 && expired.length === 0) {
+    return { tone: "ok", text: `This channel posts to ${connected.join("; ")}.` };
+  }
+  if (platforms.length === 1) {
     return {
       tone: "warn",
-      text: `This channel posts to ${name}, and no ${name} account is connected yet — nothing here can publish until you connect one on Accounts.`,
+      text:
+        missing.length > 0
+          ? `This channel posts to ${names}, and no ${names} account is connected yet — nothing here can publish until you connect one on Accounts.`
+          : `This channel posts to ${names}, and its ${names} connection has expired — nothing here can publish until you reconnect it on Accounts.`,
     };
   }
-  if (live.length === 0) {
-    return {
-      tone: "warn",
-      text: `This channel posts to ${name}, and its ${name} connection has expired — nothing here can publish until you reconnect it on Accounts.`,
-    };
-  }
-  const handles = live.map((account) => account.handle).join(", ");
-  return { tone: "ok", text: `This channel posts to ${name}, as ${handles}.` };
+  // Several networks: name each one that cannot publish, then the ones that can, so the operator
+  // knows which button to press and is not told to reconnect an account that is fine.
+  const problems = [
+    ...(missing.length > 0 ? [`no ${either(missing)} account is connected yet`] : []),
+    ...(expired.length > 0 ? [`the ${either(expired)} connection has expired`] : []),
+  ];
+  const fine = connected.length > 0 ? ` Connected: ${connected.join("; ")}.` : "";
+  return {
+    tone: "warn",
+    text: `This channel posts to ${names}, and ${problems.join(" and ")} — nothing here can publish there until you connect ${missing.length + expired.length === 1 ? "it" : "them"} on Accounts.${fine}`,
+  };
 }
+
+/** "TikTok", "TikTok or Instagram Reels" — the networks one problem names. */
+const either = (names: string[]): string =>
+  names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;

@@ -17,10 +17,10 @@
  */
 import { POST_PLATFORMS, type PostPlatform } from "../seed/posts.ts";
 import { ACTIVE } from "../templates/index.ts";
-import { platformFromAnswers } from "../templates/template.ts";
+import { platformsFromAnswers } from "../templates/template.ts";
 import { proxyFetch, type ProxyConfig } from "./proxy.ts";
 
-export { PLATFORM_ANSWER_KEY, platformFromAnswers, platformOf } from "../templates/template.ts";
+export { PLATFORM_ANSWER_KEY, platformFromAnswers, platformsFromAnswers, platformOf } from "../templates/template.ts";
 
 /**
  * How long a resolved answer is trusted inside one warm instance.
@@ -33,7 +33,7 @@ export { PLATFORM_ANSWER_KEY, platformFromAnswers, platformOf } from "../templat
  */
 const TTL_MS = 60_000;
 
-let cached: { at: number; platform: PostPlatform } | null = null;
+let cached: { at: number; platforms: PostPlatform[] } | null = null;
 
 /** Drops the memoised answer. Tests only — nothing in a request path should need to call it. */
 export function forgetChannelPlatform(): void {
@@ -47,7 +47,8 @@ interface WireInstall {
 }
 
 /**
- * The customer's answer, or the running template's fallback — never an error and never a throw.
+ * The customer's answer — every network they picked, in their order — or the running template's
+ * fallback alone. Never an error and never a throw.
  *
  * EVERY FAILURE FALLS BACK RATHER THAN REFUSING, and that is deliberate: this is called on the
  * path that files an agent's finished work, and a post that cannot be filed because the context
@@ -55,23 +56,32 @@ interface WireInstall {
  * recoverable from the dashboard in one call (`update_post`); a lost post is not.
  *
  * What it must never do is fall back SILENTLY where the operator cannot see it — which is why the
- * dashboard now prints the channel's network and whether an account is connected for it
+ * dashboard now prints the channel's networks and whether an account is connected for each
  * (`src/connect.ts`), instead of leaving the first sign of a wrong target to the publish button.
  */
+export async function channelPlatforms(
+  config: ProxyConfig | null,
+  fetchImpl: typeof fetch = fetch,
+  now: number = Date.now(),
+): Promise<PostPlatform[]> {
+  const fallback = ACTIVE.platform;
+  if (config === null) return [fallback];
+  if (cached !== null && now - cached.at < TTL_MS) return cached.platforms;
+  const platforms = await read(config, fetchImpl, fallback);
+  cached = { at: now, platforms };
+  return platforms;
+}
+
+/** The first network the customer picked: what a post that names none is stamped with. */
 export async function channelPlatform(
   config: ProxyConfig | null,
   fetchImpl: typeof fetch = fetch,
   now: number = Date.now(),
 ): Promise<PostPlatform> {
-  const fallback = ACTIVE.platform;
-  if (config === null) return fallback;
-  if (cached !== null && now - cached.at < TTL_MS) return cached.platform;
-  const platform = await read(config, fetchImpl, fallback);
-  cached = { at: now, platform };
-  return platform;
+  return (await channelPlatforms(config, fetchImpl, now))[0]!;
 }
 
-async function read(config: ProxyConfig, fetchImpl: typeof fetch, fallback: PostPlatform): Promise<PostPlatform> {
+async function read(config: ProxyConfig, fetchImpl: typeof fetch, fallback: PostPlatform): Promise<PostPlatform[]> {
   try {
     const listed = await proxyFetch(
       config,
@@ -79,21 +89,21 @@ async function read(config: ProxyConfig, fetchImpl: typeof fetch, fallback: Post
       null,
       fetchImpl,
     );
-    if (!listed.ok) return fallback;
+    if (!listed.ok) return [fallback];
     const page = (await listed.json()) as { data?: WireInstall[] };
     const applied = (page.data ?? []).find((row) => row.status === "applied");
-    if (applied === undefined) return fallback;
+    if (applied === undefined) return [fallback];
     const context = await proxyFetch(
       config,
       { method: "GET", path: `/v1/blueprints/installs/${applied.id}/context` },
       null,
       fetchImpl,
     );
-    if (!context.ok) return fallback;
-    return platformFromAnswers(await context.json(), fallback);
+    if (!context.ok) return [fallback];
+    return platformsFromAnswers(await context.json(), fallback);
   } catch {
     // A network that is down, a body that is not JSON: the channel still has a default.
-    return fallback;
+    return [fallback];
   }
 }
 

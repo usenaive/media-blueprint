@@ -21,10 +21,10 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 | `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **three questions** (what the channel is about, **where it posts**, and how often), every
-agent reads the answers back through the platform's `project_context` tool, and each opens a
-**day-one** session that turns those answers into the channel's first briefs, scripts, clips,
-report and plan. See [The crew](#-the-crew).
+studio asks **three questions** (what the channel is about, **where it posts** — one network or
+several — and how often), every agent reads the answers back through the platform's
+`project_context` tool, and each opens a **day-one** session that turns those answers into the
+channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
 
 One repo carries both, so switching is an edit and a `naive up` — never a re-clone and never a
 new app. See [Switching template](#-switching-template).
@@ -198,13 +198,16 @@ place the answers live.
 
 | Template | 1 | 2 | 3 |
 |---|---|---|---|
-| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Source channel(s) you hold the rights to** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Source channel(s) you hold the rights to** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 
 The middle one is the same question on both templates, and it is the one this channel cannot run
-without: **it decides the network every post the crew files is aimed at**. It used to be a constant
-in the code — a line an operator was expected to edit and re-deploy — so every install of this
-blueprint filed for the same network whoever installed it and whatever they had connected.
+without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
+(checkboxes in the studio), because the same vertical video usually goes out on more than one
+network: every network you tick is a target the crew files for, and a post that names no network
+goes to the **first** one you ticked. It used to be a constant in the code — a line an operator was
+expected to edit and re-deploy — so every install of this blueprint filed for the same network
+whoever installed it and whatever they had connected.
 
 Three is a budget, so asking that one meant not asking another. The slot came from *"tone and
 audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager now asks for it
@@ -227,10 +230,17 @@ So the dashboard says so, on **Home** and on **Posts**, above everything else:
 > This channel posts to YouTube Shorts, and no YouTube Shorts account is connected yet — nothing
 > here can publish until you connect one on Accounts.
 
-It reads the network from your own answer and the accounts from the platform, and it distinguishes
+With several networks ticked the one line covers each of them, saying which are connected and
+which are not:
+
+> This channel posts to YouTube Shorts, TikTok and Instagram Reels, and no YouTube Shorts or
+> Instagram Reels account is connected yet — nothing here can publish there until you connect them
+> on Accounts. Connected: TikTok as @channel.
+
+It reads the networks from your own answer and the accounts from the platform, and it distinguishes
 *"no account connected"* from *"we could not check"* — being told to reconnect an account that is
-already fine is how a warning gets ignored. Once the right account is connected the line goes quiet
-and names the handle.
+already fine is how a warning gets ignored. Once the right account is connected on every network the
+line goes quiet and names the handles.
 
 **The crew keeps filing while nothing is connected, on purpose.** A queue is a review surface, not
 a publish action: refusing to file would throw away a render that has already been paid for (~$3.32
@@ -319,11 +329,16 @@ work behind. The list this replaced admitted six of those and excluded `youtube`
 two of the three that take the work.
 
 **Where *this* channel posts is yours**, answered in setup (see [The three
-questions](#the-three-questions)) and read back by everything that stamps a target: the store's
-default, the `create_post` tool description the crew reads before filing, and the line on Home and
-Posts. `platform` on the template is now only the fallback for an install with no usable answer,
-and it is the question's own first option so the two cannot disagree. An agent can still name a
-different network per post, and the channel manager can retarget a row before you approve it.
+questions](#the-three-questions)) — **one network or several** — and read back by everything that
+stamps a target: the store's default, the `create_post` tool description the crew reads before
+filing, and the line on Home and Posts. The answer is read as a list (`platformsFromAnswers`): every
+recognised pick in your order, each once, anything unrecognised dropped. With several picked, the
+`create_post` description names all of them as this channel's targets and tells the crew to file
+one post per network; a post that names no network still goes to one, and it is the **first you
+picked** (`platformFromAnswers`). `platform` on the template is now only the fallback for an install
+with no usable answer, and it is the question's own first option so the two cannot disagree. An
+agent can still name a different network per post, and the channel manager can retarget a row
+before you approve it.
 
 All three publish video and refuse text, so an approved row with no video attached is refused here,
 by name, rather than at the button — a brief is exactly that row. And a row targeting a network no
