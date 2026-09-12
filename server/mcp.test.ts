@@ -192,6 +192,199 @@ describe("mcp tools", () => {
     }
   });
 
+  /**
+   * The chain's data: the scout files a `brief`, the writer moves it to `scripted`, the producer to
+   * `rendered` — and each seat finds the rows the one before it left by stage, never by guessing at
+   * a caption. A stage the queue does not know is refused, and a row filed with none is a note.
+   */
+  it("carries a piece brief → scripted → rendered, filters by stage, and refuses a stage it does not know", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string; stage?: string }>(
+      (await handleMcp(call("create_post", { caption: "Why comfort is a trap\nBrief: Seneca on ease.", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    expect(brief.stage).toBe("brief");
+    const note = text<{ stage?: string }>((await handleMcp(call("create_post", { caption: "Channel plan", agent: "channel-manager" }), store, null))!);
+    expect(note.stage).toBeUndefined();
+    expect(text<{ id: string }[]>((await handleMcp(call("list_posts", { stage: "brief" }), store, null))!).map((p) => p.id)).toEqual([brief.id]);
+
+    const scripted = text<{ stage?: string; caption: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, caption: "Hook: comfort is the trap.\n#stoicism", stage: "scripted" }), store, null))!,
+    );
+    expect(scripted).toMatchObject({ stage: "scripted", caption: "Hook: comfort is the trap.\n#stoicism" });
+    expect(text<unknown[]>((await handleMcp(call("list_posts", { stage: "brief" }), store, null))!)).toEqual([]);
+
+    const rendered = text<{ stage?: string; mediaUrl?: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, media_url: "https://cdn.example/comfort.mp4", stage: "rendered" }), store, null))!,
+    );
+    expect(rendered).toMatchObject({ stage: "rendered", mediaUrl: "https://cdn.example/comfort.mp4" });
+    // The demo rows carry a running time and no `stage` of their own — they were written before the
+    // field existed — so they read as rendered too (`postStage`). That is the derivation doing its
+    // job, and the reason this is not a list of one.
+    expect(text<{ id: string }[]>((await handleMcp(call("list_posts", { stage: "rendered", status: "pending" }), store, null))!).map((p) => p.id)).toEqual([brief.id, "post_9f2a", "post_8e1b"]);
+
+    for (const bad of [call("create_post", { caption: "x", stage: "done" }), call("update_post", { id: brief.id, stage: "published" }), call("list_posts", { stage: "nope" })]) {
+      const refused = (await handleMcp(bad, store, null)) as CallResult;
+      expect(refused.result.isError).toBe(true);
+      expect(refused.result.content[0]!.text).toMatch(/stage must be one of brief, scripting, scripted, rendering, rendered/);
+    }
+    expect(TOOLS.find((t) => t.name === "list_posts")?.inputSchema.properties).toHaveProperty("stage");
+    expect(TOOLS.find((t) => t.name === "update_post")?.inputSchema.properties).toHaveProperty("stage");
+  });
+
+  /**
+   * The claim. A stage records progress, not ownership: a handoff session and the cron that fires
+   * beside it both list the same `brief`, and without this both would script it and both would
+   * trigger a producer — two renders for one post. `expected_stage` makes the move to `scripting`
+   * (or `rendering`) a compare-and-set under the store's lock: the first caller gets the row, the
+   * second is refused and told so, and a claimed row is no longer in the `brief` list the cron reads.
+   */
+  it("lets one session claim a row with expected_stage and refuses the second", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>(
+      (await handleMcp(call("create_post", { caption: "Why the Stoics slept on the floor", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    const handoff = text<{ stage?: string; stageAt?: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, stage: "scripting", expected_stage: "brief" }), store, null))!,
+    );
+    expect(handoff.stage).toBe("scripting");
+    const { stageAt } = handoff;
+    expect(stageAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(text<unknown[]>((await handleMcp(call("list_posts", { stage: "brief" }), store, null))!)).toEqual([]);
+
+    const cron = (await handleMcp(call("update_post", { id: brief.id, stage: "scripting", expected_stage: "brief" }), store, null)) as CallResult;
+    expect(cron.result.isError).toBe(true);
+    expect(cron.result.content[0]!.text).toMatch(/post is at stage scripting, not brief; another session has it/);
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "scripting", stageAt });
+
+    // The winner's later writes still land, guarded or not; a wrong guard on a plain edit is refused too.
+    expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: brief.id, caption: "Hook: the floor.", stage: "scripted", expected_stage: "scripting" }), store, null))!).stage).toBe("scripted");
+    const stale = (await handleMcp(call("update_post", { id: brief.id, caption: "late", expected_stage: "brief" }), store, null)) as CallResult;
+    expect(stale.result.isError).toBe(true);
+    expect(store.read().posts.find((p) => p.id === brief.id)?.caption).toBe("Hook: the floor.");
+
+    // A note has no stage to compare against, and a guard the queue does not know is refused as such.
+    const note = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Channel plan", agent: "channel-manager" }), store, null))!);
+    const onNote = (await handleMcp(call("update_post", { id: note.id, stage: "scripting", expected_stage: "brief" }), store, null)) as CallResult;
+    expect(onNote.result.content[0]!.text).toMatch(/post is at stage none, not brief/);
+    const bad = (await handleMcp(call("update_post", { id: brief.id, expected_stage: "claimed" }), store, null)) as CallResult;
+    expect(bad.result.content[0]!.text).toMatch(/expected_stage must be one of/);
+    expect(TOOLS.find((t) => t.name === "update_post")?.inputSchema.properties).toHaveProperty("expected_stage");
+  });
+
+  /**
+   * WHAT A ROW FILED BEFORE `stage` EXISTED READS AS.
+   *
+   * Both fallback crons find their work by stage and every claim compares against one, so on the
+   * morning this ships every row already in the queue — filed by an agent that had no stage to give
+   * — matched no filter and no `expected_stage`. Those rows were not idle, they were unreachable:
+   * nothing in the pipeline could ever list one again, and the demo queue is the same case.
+   *
+   * `postStage` reads a stageless row off what it carries, and both places a stage is read go
+   * through it, so the list a seat works from and the claim it makes next cannot give two answers
+   * about one row. What it does NOT do is guess: a row carrying no finished piece is still a note,
+   * because promoting one would put the crew's plans and reports in front of the paid render.
+   */
+  it("reads a pre-stage row at the stage its contents put it at, and leaves a note at none", async () => {
+    const store = freshStore();
+    // Exactly what `create_post` wrote before the field existed: a finished piece with its video
+    // attached, and nothing on the row to say where it stands.
+    const filed = text<{ id: string; stage?: string }>(
+      (await handleMcp(call("create_post", { caption: "Amor fati in 40 seconds", media_url: "https://cdn.example/fati.mp4", agent: "producer" }), store, null))!,
+    );
+    expect(filed.stage).toBeUndefined();
+    const note = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Report skeleton", agent: "analyst", source: "report skeleton" }), store, null))!);
+
+    const rendered = text<{ id: string }[]>((await handleMcp(call("list_posts", { stage: "rendered" }), store, null))!).map((p) => p.id);
+    expect(rendered).toContain(filed.id);
+    // The demo rows reach the same answer by the other piece of evidence: a running time is
+    // something only a piece that exists has.
+    expect(rendered).toContain("post_9f2a");
+    expect(rendered).not.toContain(note.id);
+
+    // And nothing is promoted into a stage a seat spends money on: the pre-render lists stay empty,
+    // so neither cron picks up a note, a report or a finished piece as work to do.
+    for (const stage of ["brief", "scripting", "scripted", "rendering"]) {
+      expect(text<unknown[]>((await handleMcp(call("list_posts", { stage }), store, null))!), stage).toEqual([]);
+    }
+
+    // The claim reads the same row the same way: shown at rendered, it guards at rendered.
+    const guarded = (await handleMcp(call("update_post", { id: filed.id, caption: "Love what happens. All of it.", expected_stage: "rendered" }), store, null))!;
+    expect(text<{ caption: string }>(guarded).caption).toBe("Love what happens. All of it.");
+    const wrongGuard = (await handleMcp(call("update_post", { id: filed.id, caption: "no", expected_stage: "scripted" }), store, null)) as CallResult;
+    expect(wrongGuard.result.content[0]!.text).toMatch(/post is at stage rendered, not scripted/);
+    // The note carries nothing, so it is at no stage on both sides — the same answer it gave before.
+    const onNote = (await handleMcp(call("update_post", { id: note.id, expected_stage: "scripted" }), store, null)) as CallResult;
+    expect(onNote.result.content[0]!.text).toMatch(/post is at stage none, not scripted/);
+  });
+
+  /**
+   * THE REPLAY, AND WHAT IT WOULD HAVE COST.
+   *
+   * `expected_stage` guarded the START of the render and nothing guarded its end: no field recorded
+   * that a render had been bought. So the manager's 08:00 sweep, putting a claim a dead session left
+   * at `rendering` back to `scripted`, was an instruction to render the same piece a second time —
+   * ~$3.32 (`ONE_RENDER_MICRO_USD`) of video the channel already owns — and a producer whose stale
+   * completion write landed unguarded overwrote the render that replaced it.
+   *
+   * The media on the row is the receipt. A row that carries one cannot go back to a stage before
+   * `rendered`, whoever asks: the sweep is refused, and so is the claim that would follow it.
+   */
+  it("refuses to send a row that already has media back to a stage before the render", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>(
+      (await handleMcp(call("create_post", { caption: "Why the Stoics slept on the floor", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    await handleMcp(call("update_post", { id: brief.id, caption: "Hook: the floor.", stage: "scripted", expected_stage: "brief" }), store, null);
+    await handleMcp(call("update_post", { id: brief.id, stage: "rendering", expected_stage: "scripted" }), store, null);
+    // The producer's own write, guarded at both ends now: the claim it made, and the render it paid for.
+    const done = text<{ stage?: string; mediaUrl?: string }>(
+      (await handleMcp(call("update_post", { id: brief.id, media_url: "https://cdn.example/floor.mp4", stage: "rendered", expected_stage: "rendering" }), store, null))!,
+    );
+    expect(done).toMatchObject({ stage: "rendered", mediaUrl: "https://cdn.example/floor.mp4" });
+
+    // The sweep's reset, the claim a producer would make on the row it freed, and a reset all the
+    // way to brief: every one of them ends in a render the channel has already bought.
+    for (const back of [
+      { stage: "scripted", expected_stage: "rendered" },
+      { stage: "rendering", expected_stage: "rendered" },
+      { stage: "brief" },
+    ]) {
+      const refused = (await handleMcp(call("update_post", { id: brief.id, ...back }), store, null)) as CallResult;
+      expect(refused.result.isError, JSON.stringify(back)).toBe(true);
+      expect(refused.result.content[0]!.text).toMatch(/already has media attached.*paid for/);
+    }
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "rendered", mediaUrl: "https://cdn.example/floor.mp4" });
+
+    // What is refused is the way back, not the work: the caption still gets fixed, and a row with no
+    // media yet is still the sweep's to free.
+    expect(text<{ caption: string }>((await handleMcp(call("update_post", { id: brief.id, caption: "Hook: the floor, revised." }), store, null))!).caption).toBe("Hook: the floor, revised.");
+    const dead = text<{ id: string }>((await handleMcp(call("create_post", { caption: "A second piece", agent: "trend-scout", stage: "brief" }), store, null))!);
+    await handleMcp(call("update_post", { id: dead.id, stage: "rendering" }), store, null);
+    expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: dead.id, stage: "scripted", expected_stage: "rendering" }), store, null))!).stage).toBe("scripted");
+  });
+
+  /**
+   * The stage set is a membership check and not a state machine: a seat may write `scripted` onto a
+   * brief without claiming `scripting` first, and that skip is deliberate. `rendered` is the one
+   * word that is not free, because it is the word `postStage` reads back off a row's media — so a
+   * row can only be called rendered by the call that attaches the render. Written onto a brief it
+   * used to be accepted, and the piece left the scriptwriter's list and the producer's at once, to
+   * sit at a stage claiming work that was never done, in a queue that cannot publish it.
+   */
+  it("refuses to call a post rendered when no render is attached", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>(
+      (await handleMcp(call("create_post", { caption: "Seneca on ease", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    const claimed = (await handleMcp(call("update_post", { id: brief.id, stage: "rendered" }), store, null)) as CallResult;
+    expect(claimed.result.isError).toBe(true);
+    expect(claimed.result.content[0]!.text).toMatch(/reaches rendered by having its video attached/);
+    expect(store.read().posts.find((p) => p.id === brief.id)?.stage).toBe("brief");
+    // The call that attaches the video is the call that may say it, and the skips that cost nothing stay legal.
+    expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: brief.id, caption: "Hook: ease is the trap.", stage: "scripted" }), store, null))!).stage).toBe("scripted");
+    expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: brief.id, media_url: "https://cdn.example/ease.mp4", stage: "rendered" }), store, null))!).stage).toBe("rendered");
+  });
+
   it("reads posts by status, templates and accounts from the store", async () => {
     const store = freshStore();
     expect(text<{ status: string }[]>((await handleMcp(call("list_posts", { status: "ready" }), store, null))!).every((p) => p.status === "ready")).toBe(true);

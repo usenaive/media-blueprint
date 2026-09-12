@@ -98,12 +98,11 @@ describe("the crews", () => {
 
   it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
     // The seats downstream of the scout are told that, told not to invent the upstream work, and
-    // told which fire — in cron order — takes the first of it; and they are budgeted for set-up
-    // (every call holds its quote until the turn commits, so the cap is turns, not dollars), under
-    // the timer that does render.
+    // told how the first of it reaches them; and they are budgeted for set-up (every call holds its
+    // quote until the turn commits, so the cap is turns, not dollars), under the timer that does render.
     const downstream: [MediaTemplate, string, RegExp][] = [
-      [TEMPLATES.faceless, "producer", /alongside yours.*Render nothing today.*07:00 fire/s],
-      [TEMPLATES.faceless, "scriptwriter", /alongside yours.*not yours to invent.*06:30 fire/s],
+      [TEMPLATES.faceless, "producer", /set-up, not a render.*reaches you as a handoff from the scriptwriter.*Render nothing in this session/s],
+      [TEMPLATES.faceless, "scriptwriter", /set-up, not scripts.*do not invent one.*reach you as a handoff naming their ids/s],
       [TEMPLATES.clipping, "clipper", /alongside yours.*Cut nothing today.*07:00 fire/s],
       [TEMPLATES.clipping, "caption-editor", /cuts nothing until its 07:00 fire.*07:30 fire/s],
     ];
@@ -111,12 +110,71 @@ describe("the crews", () => {
       const seat = template.agents.find((a) => a.name === name);
       expect(seat?.intake?.message, name).toMatch(says);
     }
-    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.clipping, "clipper"]] as const) {
+    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.faceless, "scriptwriter"], [TEMPLATES.clipping, "clipper"]] as const) {
       const seat = template.agents.find((a) => a.name === name);
       const timer = Math.max(...(seat?.schedules ?? []).map((s) => s.budget_micro_usd ?? 0));
       expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(timer);
       expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(ONE_RENDER_MICRO_USD * 4);
     }
+  });
+
+  /**
+   * The chain that replaced the race. Five intakes opening at once each read the others' empty
+   * output — the scriptwriter wrote "the scout has filed no briefs" in the minute the scout filed
+   * five — so day one is now ordered by what a seat hands on after it has filed (`send_to_agent` with
+   * `wait: false`, canonical-spec §28.15), not by what it finds. Each seat may name exactly the next one; the producer
+   * is the end; the timers reconcile by `stage` for whatever a handoff did not carry.
+   */
+  it("orders the faceless pipeline as a chain of handoffs: scout → scriptwriter → producer, and nobody else", () => {
+    // `false`, never omitted: the platform's default is anyone in the organization (§28.12).
+    const chain: Record<string, string[] | false> = {
+      "trend-scout": ["scriptwriter"],
+      scriptwriter: ["producer"],
+      producer: false,
+      analyst: false,
+      "channel-manager": false,
+    };
+    for (const agent of TEMPLATES.faceless.agents) {
+      expect(agent.handoffs, agent.name).toEqual(chain[agent.name]);
+      // The grant the engine compiles from `handoffs` (§31.7), so the declaration reads whole.
+      for (const tool of ["send_to_agent", "list_agents"]) {
+        expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual(
+          chain[agent.name] === false ? { enabled: false, permission: "deny" } : { enabled: true, permission: "allow" },
+        );
+      }
+    }
+    const seat = (name: string) => TEMPLATES.faceless.agents.find((a) => a.name === name);
+    // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.
+    expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, send_to_agent the scriptwriter once — wait false.*post ids.*handoff_key/s);
+    expect(seat("trend-scout")?.system).toMatch(/only then.*send_to_agent the scriptwriter once, wait false.*Filed nothing, hand on nothing/s);
+    // The next two claim a row (`expected_stage`) before they spend on it, so a handoff and the cron
+    // that overlaps it cannot both script or render the same piece, and hand on only what they claimed.
+    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*`stage` scripted.*send_to_agent the producer once, wait false.*claimed nothing, hand on nothing/s);
+    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*stage rendering and expected_stage scripted.*`stage` rendered.*you hand on to nobody/s);
+    // The timers are the fallback, by stage, claim the same way, and no seat's intake is told another intake is running.
+    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*send_to_agent the producer once, wait false/s);
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendering, expected_stage scripted.*stage rendered/s);
+    /**
+     * AND THE RENDER IS GUARDED AT BOTH ENDS, in the only seat that spends on one.
+     *
+     * A claim on the way in and nothing on the way out is half a guard: the producer's completion
+     * write landed whatever had happened to the row while it rendered, so a stale session could
+     * overwrite the render that replaced it, and neither the producer nor the manager was told that
+     * a row with a video attached is a row the channel has already paid ~$3.32 for. Both are said
+     * in the brief and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat
+     * only after it has spent the money.
+     */
+    for (const prompt of [seat("producer")?.system, seat("producer")?.schedules?.[0]?.input]) {
+      expect(prompt).toMatch(/`?expected_stage`? rendering.*(no longer yours|moved on).*(twice|second time)/s);
+    }
+    // The sentence about the receipt itself is on the timer, not in the brief: the producer's
+    // `system` is at the 400-word ceiling to the word, and the tool refuses the claim — before the
+    // render, not after — with the same sentence on it (`update_post`, `server/mcp.ts`).
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/already carries a media_url.*paid.*never render it again/s);
+    // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that
+    // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not back.
+    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered/s);
+    for (const agent of TEMPLATES.faceless.agents) expect(agent.intake?.message, agent.name).not.toMatch(/alongside yours|running alongside/);
   });
 
   /**

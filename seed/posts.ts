@@ -63,6 +63,22 @@ export const POST_MEDIA_PLATFORMS: readonly PostPlatform[] = POST_PLATFORMS;
 export const POST_KINDS = ["clip", "produced", "multi"] as const;
 export type PostKind = (typeof POST_KINDS)[number];
 
+/**
+ * Where a piece in the making stands, as data the next seat can filter on: brief (a topic, no
+ * script) → scripting → scripted (hook, script and caption written into the row) → rendering →
+ * rendered (media attached). The two `-ing` stages are claims: a seat moves a row onto one with
+ * `expected_stage` set to the stage before it, atomically under the store's row lock, so a handoff
+ * session and the cron that overlaps it cannot both script or render the same row — one claim wins
+ * and the other is refused before it spends anything. A row carrying neither a stage nor a finished
+ * video is a note — a plan, a report, a style choice — and belongs to no pipeline; one carrying the
+ * video but no stage was filed before this field existed and reads at `rendered` (`postStage`,
+ * below, which is how every stage is read). The seat that moves a row forward also names
+ * it to the next seat (`send_to_agent`, `wait: false`), so the stage is what the timers reconcile against, not
+ * what the day depends on.
+ */
+export const POST_STAGES = ["brief", "scripting", "scripted", "rendering", "rendered"] as const;
+export type PostStage = (typeof POST_STAGES)[number];
+
 export interface Post {
   id: string;
   title: string;
@@ -82,6 +98,10 @@ export interface Post {
   /** What it was made from: the brief, the source video, the style template. */
   source?: string;
   kind: PostKind;
+  /** How far along a piece is; absent on a row that is not a piece. */
+  stage?: PostStage;
+  /** When `stage` last changed (ISO 8601), so a claim a dead session left behind can be aged out. */
+  stageAt?: string;
   /** The finished piece's running time, when it is known. */
   duration?: string;
   scheduledFor?: string;
@@ -90,6 +110,35 @@ export interface Post {
   views?: number;
   likes?: number;
 }
+
+/**
+ * THE STAGE A ROW READS AT, WHICH IS NOT ALWAYS THE STAGE IT WAS WRITTEN WITH.
+ *
+ * `stage` arrives with the handoff chain, so every row filed before it — the demo queue below, and
+ * on a live channel everything already in the queue the morning this ships — carries none. Both
+ * fallback crons now find their work by stage and every claim compares against one, so a stageless
+ * row matched no filter and no `expected_stage`: it was not "at no stage", it was invisible, and
+ * nothing in the pipeline would ever have picked it up again.
+ *
+ * So a row with no stage of its own is read from what it carries. The finished video is the
+ * evidence, and it reaches a row two ways: `mediaUrl`, which is what the producer attaches when it
+ * moves a piece to `rendered`, and `duration` — a running time only a piece that exists can have —
+ * which is what the demo rows carry instead, having been written before either field did. Either
+ * one reads as `rendered`.
+ *
+ * NOTHING DERIVES `brief`, `scripting` OR `scripted`, and that is the deliberate half. No field on
+ * a `Post` records a script: `caption` holds the brief's topic before the scriptwriter and the
+ * publishable caption after it, and from here the two are the same string. Reading a stageless row
+ * as `scripted` would hand the producer's next fire every note the crew has ever filed — a plan, a
+ * report, a style choice, all of them a caption and no media — and the render is the paid step
+ * (~$3.32, `ONE_RENDER_MICRO_USD`). A row with nothing attached therefore stays exactly what it has
+ * always been: a note, at no stage, in no pipeline.
+ *
+ * Read a stage through this and never off the field, so that what `list_posts` shows a seat and
+ * what `expected_stage` lets it claim can never be two different answers about the same row.
+ */
+export const postStage = (post: Pick<Post, "stage" | "mediaUrl" | "duration">): PostStage | undefined =>
+  post.stage ?? (post.mediaUrl === undefined && post.duration === undefined ? undefined : "rendered");
 
 /** The `faceless` demo queue: original video the producer made, in one niche. */
 export const FACELESS_SEEDS: Post[] = [

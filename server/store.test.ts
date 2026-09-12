@@ -111,6 +111,26 @@ describe("openStore", () => {
     expect(store.createPost({ caption: "In the sky", platform: "instagram", status: "ready" }).platform).toBe("instagram");
   });
 
+  it("carries a piece's stage from brief to rendered, apart from its status, and a note carries none", () => {
+    const file = storeFile();
+    const store = openStore(file);
+    const note = store.createPost({ caption: "Hook style: short, plain, no questions.", status: "pending" });
+    expect(note.stage).toBeUndefined();
+    const brief = store.createPost({ caption: "Why the Stoics slept on the floor", status: "pending", stage: "brief" });
+    expect(brief.stage).toBe("brief");
+    expect(store.updatePost(brief.id, { caption: "Hook: ...\nScript: ...", stage: "scripted" })).toMatchObject({ stage: "scripted", status: "pending" });
+    expect(store.updatePost(brief.id, { mediaUrl: "https://cdn.example/floor.mp4", stage: "rendered" })).toMatchObject({ stage: "rendered", status: "pending" });
+    expect(store.updatePost(brief.id, { status: "approved" })).toMatchObject({ stage: "rendered", status: "approved" });
+    const reopened = openStore(file).read().posts;
+    expect(reopened.find((p) => p.id === brief.id)?.stage).toBe("rendered");
+    // Each move stamps when it happened, so a claim a dead session left can be aged out; a note has none.
+    expect(Date.parse(reopened.find((p) => p.id === brief.id)?.stageAt ?? "")).toBeGreaterThan(Date.now() - 60_000);
+    expect(reopened.find((p) => p.id === note.id)).not.toHaveProperty("stage");
+    expect(reopened.find((p) => p.id === note.id)).not.toHaveProperty("stageAt");
+    // The demo rows predate the field and stay readable without it.
+    for (const seeded of reopened.filter((p) => p.id !== brief.id && p.id !== note.id)) expect(seeded.stage).toBeUndefined();
+  });
+
   it("returns null for an unknown post", () => {
     expect(openStore(storeFile()).updatePost("post_nope", { status: "approved" })).toBeNull();
   });
