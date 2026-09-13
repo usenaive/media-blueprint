@@ -132,13 +132,13 @@ export const CLIPPING: MediaTemplate = {
   /**
    * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
    * `PLATFORM_QUESTION` takes was `niche` — "Niche / audience" — and the channel manager asks for
-   * it in its day-one session instead. The rights question keeps its slot whatever else goes: it is
+   * it in its day-one session instead. The sources question keeps its slot whatever else goes: it is
    * the one answer no seat may work without, and no crew may infer.
    */
   questions: [
     {
       key: "sources",
-      label: "Source channel(s) you hold the rights to",
+      label: "Reference channels for inspiration",
       type: "text",
       placeholder: "Channel or playlist URLs, one per line — nothing is cut from anywhere else",
     },

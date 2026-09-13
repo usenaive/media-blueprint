@@ -199,7 +199,7 @@ place the answers live.
 | Template | 1 | 2 | 3 |
 |---|---|---|---|
 | `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Source channel(s) you hold the rights to** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Reference channels for inspiration** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 
 The middle one is the same question on both templates, and it is the one this channel cannot run
 without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
