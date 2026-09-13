@@ -180,8 +180,8 @@ it is printed in dollars here.
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one |
 |---|---|---|---|---|---|
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer and files it as a brief ($20) |
-| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | Cuts the first two clips from the scout's briefs; cuts nothing from a source the context does not name ($8) |
-| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | Goes through the named sources and files the **first five moments** worth cutting ($20) |
+| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | Cuts the first two clips from the scout's briefs; cuts nothing from a channel the context does not name ($8) |
+| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | Goes through the named reference channels and files the **first five moments** worth cutting ($20) |
 | `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($10) | Titles and captions the morning's clips and files the channel's caption style ($20) |
 | `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton by source and clip ($20) |
 
@@ -297,7 +297,7 @@ agent's per-task ceiling.
 
 | When | Who | What it does |
 |---|---|---|
-| Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named sources |
+| Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named reference channels |
 | Daily 06:30 | `scriptwriter` (`faceless`) | Hooks, scripts and captions every brief still at `stage: brief`, then hands the ids to the producer |
 | Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video, or the next batch of clips — and files it as a pending post |
 | Daily 07:30 | `caption-editor` (`clipping`) | Titles and captions the morning's cuts |
