@@ -3,7 +3,7 @@ import { NavLink } from "react-router";
 import { ACTIVE } from "../../templates";
 import { apiGet, ApiError, messageOf } from "../api";
 import { ConnectLine, PageHeader, STATUS_LABEL } from "../components/kit";
-import type { Post, PostStatus } from "../data";
+import { piecesOf, rowKind, type Post, type PostStatus } from "../data";
 import { toRoster } from "./Agents";
 import { parked, type WireSession } from "./Approvals";
 
@@ -116,6 +116,16 @@ export function Home() {
   const due = parked([...(approvals.data?.data ?? []), ...(questions.data?.data ?? [])].filter((s) => ids.has(s.agent_id)), names).length;
   const partial = approvals.data?.has_more === true || questions.data?.has_more === true;
   const progress = dayOne(home?.day_one ?? []);
+  const notes = [...(posts.data ?? []).filter((post) => rowKind(post) === "note")];
+  const createdAt = (post: Post): string | undefined => {
+    const value = post as Post & { createdAt?: string; created_at?: string };
+    return value.createdAt ?? value.created_at;
+  };
+  if (notes.some((post) => createdAt(post) !== undefined)) {
+    notes.sort((a, b) => (createdAt(b) ?? "").localeCompare(createdAt(a) ?? ""));
+  } else {
+    notes.reverse();
+  }
 
   return (
     <div className="pane-in">
@@ -177,7 +187,7 @@ export function Home() {
             <div className="text-sm text-ink-3">{posts.error}</div>
           ) : (
             <div className="grid grid-cols-5 gap-2">
-              {queueCounts(posts.data ?? []).map(([status, count]) => (
+              {queueCounts(piecesOf(posts.data ?? [])).map(([status, count]) => (
                 <div key={status}>
                   <div className="font-display text-h2">{posts.data === null ? "…" : count}</div>
                   <div className="text-[0.6875rem] leading-tight text-ink-3">{STATUS_LABEL[status]}</div>
@@ -187,6 +197,29 @@ export function Home() {
           )}
         </section>
       </div>
+
+      <section className="mb-6">
+        <div className="eyebrow mb-2">From the team</div>
+        {posts.data === null ? (
+          <div className="absence">Reading the team's notes…</div>
+        ) : notes.length === 0 ? (
+          <div className="absence">Nothing filed yet — the crew's channel plan, hook style and weekly report show up here.</div>
+        ) : (
+          <div className="list">
+            {notes.map((post) => (
+              <details key={post.id} className="px-3 py-2.5">
+                <summary className="cursor-pointer font-medium">
+                  {post.title}{" "}
+                  <span className="font-mono text-xs text-ink-3">
+                    {post.agent ?? "an unnamed agent"}{post.source ? ` · ${post.source}` : ""}
+                  </span>
+                </summary>
+                <div className="mt-1 whitespace-pre-wrap text-sm text-ink-2">{post.caption}</div>
+              </details>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="eyebrow mb-2">The agent team</div>
       {agents.error !== null ? (

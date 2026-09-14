@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { channelStats, type Post } from "./data";
+import { channelStats, piecesOf, rowKind, type Post } from "./data";
 
 const post = (over: Partial<Post> & Pick<Post, "id" | "status">): Post => ({
   title: "t", caption: "c", platform: "youtube", account: "@a", agent: "clipper", kind: "clip", duration: "0:30",
@@ -43,5 +43,39 @@ describe("channelStats", () => {
     const stats = channelStats([post({ id: "1", status: "posted" })]);
     expect(stats.posted).toHaveLength(1);
     expect(stats).toMatchObject({ views: 0, likes: 0 });
+  });
+});
+
+describe("rowKind", () => {
+  it("keeps rendered rows as pieces", () => {
+    expect(rowKind(post({ id: "media", status: "pending", mediaUrl: "https://cdn.test/video.mp4", duration: undefined }))).toBe("piece");
+    expect(rowKind(post({ id: "approved", status: "approved", duration: undefined }))).toBe("piece");
+    expect(rowKind(post({ id: "posted", status: "posted", duration: undefined }))).toBe("piece");
+    expect(rowKind(post({ id: "rejected", status: "rejected", duration: undefined }))).toBe("piece");
+    expect(rowKind(post({ id: "rendered", status: "pending", stage: "rendered", duration: undefined }))).toBe("piece");
+  });
+
+  it("keeps staged pending rows in production", () => {
+    for (const [id, stage] of [
+      ["brief", "brief"],
+      ["scripted", "scripted"],
+      ["rendering", "rendering"],
+    ] as const) {
+      expect(rowKind(post({ id, status: "pending", stage, duration: undefined }))).toBe("production");
+    }
+  });
+
+  it("treats a pending stageless row as a note and duration alone as a piece", () => {
+    expect(rowKind(post({ id: "note", status: "pending", duration: undefined }))).toBe("note");
+    expect(rowKind(post({ id: "duration", status: "pending" }))).toBe("piece");
+  });
+
+  it("filters only pieces", () => {
+    const rows = [
+      post({ id: "piece", status: "pending" }),
+      post({ id: "production", status: "pending", stage: "rendering", duration: undefined }),
+      post({ id: "note", status: "pending", duration: undefined }),
+    ];
+    expect(piecesOf(rows).map((row) => row.id)).toEqual(["piece"]);
   });
 });

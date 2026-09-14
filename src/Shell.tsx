@@ -2,7 +2,7 @@ import { BarChart3, Home as HomeIcon, Link2, ListVideo, MessageSquare, Plus, Set
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { apiGet } from "./api";
-import type { ChannelAgent, Post } from "./data";
+import { piecesOf, type ChannelAgent, type Post } from "./data";
 import { ACTIVE } from "../templates";
 import { toRoster } from "./screens/Agents";
 import { parked, type WireSession } from "./screens/Approvals";
@@ -32,7 +32,7 @@ export function Shell() {
   const [niche, setNiche] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<Post[]>("/posts").then((posts) => setPending(posts.filter((p) => p.status === "pending").length), () => {});
+    apiGet<Post[]>("/posts").then((posts) => setPending(piecesOf(posts).filter((p) => p.status === "pending").length), () => {});
     apiGet<{ data?: Parameters<typeof toRoster>[0] }>("/agents").then((page) => setAgents(toRoster(page.data ?? [])), () => {});
     // The channel is named after its niche — the studio's answer, held by the platform, not a local row.
     apiGet<HomeContext>("/context").then((home) => {
