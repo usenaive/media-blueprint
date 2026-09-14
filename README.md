@@ -221,9 +221,11 @@ shows them as they are.
 ### …and the one thing the questions cannot do for you
 
 **Picking a network is not connecting an account.** The setup answer tells the crew where to file;
-publishing needs an account connected to the channel's identity, and that is one click on the
-**Accounts** screen (it opens the platform's own hosted connect portal — the dashboard builds no
-OAuth flow of its own). Until it is done, the queue fills and nothing in it can go out.
+publishing needs an account connected to the channel's identity, and the studio asks for exactly
+those accounts as the next step of setup — the identity's `connections` declaration in
+`naive.config.ts` maps each network you ticked to a row on that step, and the **Accounts** screen
+connects or reconnects one later (both open the platform's own hosted connect portal — the dashboard
+builds no OAuth flow of its own). Until it is done, the queue fills and nothing in it can go out.
 
 So the dashboard says so, on **Home** and on **Posts**, above everything else:
 
@@ -616,7 +618,7 @@ The config can declare more than this template uses:
 | `agents[].intake` | `message` and `budget_micro_usd` of the session the apply opens on day one |
 | `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |
 | `skills[]` | markdown files pushed by slug, versioned by content |
-| `identities[]` | personas agents and schedules act as |
+| `identities[]` | personas agents and schedules act as; `connections.social` names a `choice` question and maps its options to networks, so the studio's setup asks to connect exactly the accounts the answer calls for |
 | `vaults[]` | credential vaults; values are `{ from_env }` only and reconciled by presence |
 | `removed` | `apps`, `agents`, `skills`, `identities`, `vaults` to delete by name |
 
