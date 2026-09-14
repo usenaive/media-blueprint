@@ -118,6 +118,22 @@ export async function proxyFetch(
 }
 
 /**
+ * The one refusal on a social read that is an answer rather than a failure.
+ *
+ * The platform reaches a 400 on these routes twice. Its `mapping()` throws `validation_failed`
+ * with `param: "identity"` when social publishing was never activated for this identity — the
+ * usual state of a fresh install, which simply has no accounts yet. Every other 400 comes from the
+ * social provider refusing a workspace that is already live, which the platform's adapter maps to
+ * a bare `validation_failed` carrying no `param` at all. Only the first is an empty list: an
+ * operator sent to Accounts to connect a network they already connected has nothing to do there.
+ */
+export function notActivated(status: number, body: unknown): boolean {
+  if (status !== 400) return false;
+  const error = (body as { error?: { code?: string; param?: string } } | null)?.error;
+  return error?.code === "validation_failed" && error.param === "identity";
+}
+
+/**
  * Every row of a cursor-paginated platform list, or null when any page failed — a list cut short
  * by a failed page would read as a shorter roster, and nothing downstream could tell.
  */

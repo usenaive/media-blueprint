@@ -170,7 +170,7 @@ describe("post now", () => {
       "fetch",
       vi.fn().mockResolvedValue(
         json(
-          { error: { type: "validation_failed", code: "validation_failed", message: "social publishing is not activated for this identity" } },
+          { error: { type: "validation_failed", code: "validation_failed", message: "social publishing is not activated for this identity", param: "identity" } },
           400,
         ),
       ),
@@ -180,6 +180,18 @@ describe("post now", () => {
 
     expect(reply.status).toBe(200);
     expect(reply.body).toEqual({ data: [], has_more: false, next_cursor: null });
+  });
+
+  it("forwards the other 400 on the accounts read — a provider refusal is not an empty list", async () => {
+    // No `param`: the platform's social adapter maps an upstream 400/409/422 to a bare
+    // `validation_failed`, and that workspace is live, with accounts the operator did connect.
+    const body = { error: { type: "validation_failed", code: "validation_failed", message: "the social provider refused the request" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(body, 400)));
+
+    const reply = await handleRequest(req("GET", "/api/social/accounts"), ctxOver(demoState(), CONFIG));
+
+    expect(reply.status).toBe(400);
+    expect(reply.body).toEqual(body);
   });
 
   it("still forwards a non-400 refusal from the accounts read", async () => {

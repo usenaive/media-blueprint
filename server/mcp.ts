@@ -11,7 +11,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { channelPlatform, channelPlatforms } from "./channel.ts";
-import { proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
+import { notActivated, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
 import { ACTIVE } from "../templates/index.ts";
@@ -170,10 +170,12 @@ async function listAccounts(store: Store, config: ProxyConfig | null): Promise<u
   if (config !== null && upstream !== null) {
     const res = await proxyFetch(config, upstream, null);
     if (res.ok) return ((await res.json()) as { data?: unknown[] }).data ?? [];
-    // The one refusal that is an answer: `GET …/social/accounts` validates nothing else, so its
-    // only 400 is "social publishing is not activated for this identity" (canonical-spec §27).
-    if (res.status !== 400) {
-      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    // The one refusal that is an answer, and it is narrower than its status: a 400 is "social
+    // publishing is not activated for this identity" (canonical-spec §27) only when the envelope
+    // names `param: "identity"`. A 400 without it is the social provider refusing a workspace that
+    // is already live — a read that failed over accounts that may well exist, not an empty list.
+    const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    if (!notActivated(res.status, body)) {
       throw new ToolError(
         `could not read the connected accounts — the platform answered ${res.status}${body?.error?.message === undefined ? "" : `: ${body.error.message}`}. That is not an empty list: do not name an account, and tell the operator publishing could not be checked.`,
       );
