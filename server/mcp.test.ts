@@ -398,7 +398,7 @@ describe("mcp tools", () => {
   it("answers list_accounts from the queue, not with an error, when the platform refuses (social not activated)", async () => {
     const store = freshStore();
     const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: "idn_1", project: "media" };
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: "validation_failed" } }), { status: 400 }));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { code: "validation_failed", param: "identity" } }), { status: 400 }));
     vi.stubGlobal("fetch", fetchImpl);
     try {
       const answer = (await handleMcp(call("list_accounts", {}), store, config)) as CallResult;
@@ -415,11 +415,12 @@ describe("mcp tools", () => {
    * from a revoked key, a 403 from a missing scope and a 500 from a broken upstream all fell
    * through to a list synthesised out of handles typed into the local queue — the agent was handed
    * accounts nobody had checked were connected. A customer reconnects an account that was fine, or
-   * never learns publishing is broken. Only the platform's own "not activated yet" (400, the fresh
-   * install's state) is an empty answer; everything else is "we could not ask" and says so.
+   * never learns publishing is broken. Only the platform's own "not activated yet" (a 400 naming
+   * `param: "identity"`, the fresh install's state) is an empty answer; everything else — a 400
+   * from a provider refusing a live workspace included — is "we could not ask" and says so.
    */
   it("says it could not ask, rather than inventing accounts, when the platform did not answer", async () => {
-    for (const status of [401, 403, 500, 502]) {
+    for (const status of [400, 401, 403, 500, 502]) {
       const store = freshStore();
       const config = { apiKey: "sk-secret", baseUrl: "http://up", identityId: "idn_1", project: "media" };
       vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "revoked" } }), { status })));
