@@ -116,8 +116,8 @@ export function Home() {
   const due = parked([...(approvals.data?.data ?? []), ...(questions.data?.data ?? [])].filter((s) => ids.has(s.agent_id)), names).length;
   const partial = approvals.data?.has_more === true || questions.data?.has_more === true;
   const progress = dayOne(home?.day_one ?? []);
-  // Newest first: the store appends, so the last row filed is the one the operator has not read.
-  const notes = (posts.data ?? []).filter((post) => rowKind(post) === "note").reverse();
+  // The store prepends, so the queue already reads newest first.
+  const notes = (posts.data ?? []).filter((post) => rowKind(post) === "note");
 
   return (
     <div className="pane-in">
@@ -192,7 +192,9 @@ export function Home() {
 
       <section className="mb-6">
         <div className="eyebrow mb-2">From the team</div>
-        {posts.data === null ? (
+        {posts.error !== null ? (
+          <div className="absence">{posts.error}</div>
+        ) : posts.data === null ? (
           <div className="absence">Reading the team's notes…</div>
         ) : notes.length === 0 ? (
           <div className="absence">Nothing filed yet — the crew's channel plan, hook style and weekly report show up here.</div>
