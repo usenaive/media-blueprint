@@ -31,7 +31,14 @@
  */
 import { defineProject } from "@usenaive-sdk/blueprints";
 import { CLIPPING_SEEDS, FACELESS_SEEDS } from "./seed/posts.ts";
-import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
+import {
+  ACTIVE,
+  CHANNEL_IDENTITY,
+  PLATFORM_ANSWER_KEY,
+  PLATFORM_CHOICES,
+  PROJECT_NAME,
+  TEMPLATES,
+} from "./templates/index.ts";
 
 /**
  * Every template this repo carries — all of them, not just the running one. The engine takes the
@@ -81,11 +88,25 @@ export const declaration = {
    * persona here and naming it on each agent (`templates/template.ts`) is the grant; `up` refuses
    * an agent whose identity was not provisioned rather than creating one that runs as nobody.
    * It is also the persona the dashboard's own social routes already act as.
+   *
+   * `connections` is what the studio's "Add connections" step — the second of three, between the
+   * questions and confirming the team (`canonical-spec §31.10`) — reads to know which accounts to
+   * ask for: `social.from` names the network question every template asks (`PLATFORM_QUESTION`),
+   * and `social.map` turns each option the customer ticked into the network id to connect. The
+   * pre-filled rows are exactly the picks, so the map is `PLATFORM_CHOICES` restated, not a second
+   * list that could drift from it. `defineProject` refuses a `from` naming no `choice` question and
+   * a map key that is not one of its options.
    */
   identities: [
     {
       name: CHANNEL_IDENTITY,
       description: "The channel itself — the persona its agents post, read and connect accounts as.",
+      connections: {
+        social: {
+          from: PLATFORM_ANSWER_KEY,
+          map: Object.fromEntries(PLATFORM_CHOICES.map((choice) => [choice.option, choice.platform])),
+        },
+      },
     },
   ],
 
