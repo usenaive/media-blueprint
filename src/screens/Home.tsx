@@ -116,16 +116,8 @@ export function Home() {
   const due = parked([...(approvals.data?.data ?? []), ...(questions.data?.data ?? [])].filter((s) => ids.has(s.agent_id)), names).length;
   const partial = approvals.data?.has_more === true || questions.data?.has_more === true;
   const progress = dayOne(home?.day_one ?? []);
-  const notes = [...(posts.data ?? []).filter((post) => rowKind(post) === "note")];
-  const createdAt = (post: Post): string | undefined => {
-    const value = post as Post & { createdAt?: string; created_at?: string };
-    return value.createdAt ?? value.created_at;
-  };
-  if (notes.some((post) => createdAt(post) !== undefined)) {
-    notes.sort((a, b) => (createdAt(b) ?? "").localeCompare(createdAt(a) ?? ""));
-  } else {
-    notes.reverse();
-  }
+  // Newest first: the store appends, so the last row filed is the one the operator has not read.
+  const notes = (posts.data ?? []).filter((post) => rowKind(post) === "note").reverse();
 
   return (
     <div className="pane-in">
