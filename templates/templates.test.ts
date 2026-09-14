@@ -93,7 +93,7 @@ describe("the crews", () => {
     }
     expect(TEMPLATES.faceless.agents.find((a) => a.name === "trend-scout")?.intake?.message).toMatch(/five/);
     expect(TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")?.intake?.message).toMatch(/hook/i);
-    expect(TEMPLATES.clipping.agents.find((a) => a.name === "scout")?.intake?.message).toMatch(/source channel\(s\).*first five/);
+    expect(TEMPLATES.clipping.agents.find((a) => a.name === "scout")?.intake?.message).toMatch(/reference channel\(s\).*first five/);
   });
 
   it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
