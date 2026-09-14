@@ -97,20 +97,38 @@ export function Posts() {
           </summary>
           <div className="list">
             {production.map((p) => (
-              <div key={p.id} className="px-3 py-2.5">
-                <div className="font-medium">{p.title}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                  <span className="chip chip-plain font-mono">{p.stage}</span>
-                  <span>filed by {p.agent ?? "an unnamed agent"}</span>
-                  {p.source ? <span>from {p.source}</span> : null}
+              <div key={p.id} className="flex items-start gap-3 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{p.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                    <span className="chip chip-plain font-mono">{p.stage}</span>
+                    <span>filed by {p.agent ?? "an unnamed agent"}</span>
+                    {p.source ? <span>from {p.source}</span> : null}
+                  </div>
                 </div>
+                {/* The one call a brief still needs from a person. The producer renders what is filed
+                    here on its own schedule, so a brief that is off-brand or legally risky has to be
+                    stoppable while it is still a brief. There is deliberately no Approve: a brief is
+                    not a piece to clear, and approving one stranded the row. */}
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm shrink-0"
+                  title="Reject this brief — it moves to Rejected and is never rendered"
+                  onClick={() => move(p.id, "rejected")}
+                >
+                  <X size={14} strokeWidth={1.75} /> Reject
+                </button>
               </div>
             ))}
           </div>
         </details>
       ) : null}
 
-      {posts === null && error === null ? (
+      {posts === null && error !== null ? (
+        <div className="absence">
+          The queue could not be read, so nothing can be said about what is {tab}: {error}
+        </div>
+      ) : posts === null ? (
         <div className="absence">Loading the queue…</div>
       ) : rows.length === 0 ? (
         <div className="absence">
