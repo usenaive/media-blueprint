@@ -2,7 +2,7 @@ import { Check, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiGet, apiSend, messageOf } from "../api";
 import { ConnectLine, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
-import type { Post, PostStatus } from "../data";
+import { piecesOf, rowKind, type Post, type PostStatus } from "../data";
 import { ACTIVE } from "../../templates";
 
 const TABS: { key: PostStatus; label: string }[] = [
@@ -18,7 +18,7 @@ const TABS: { key: PostStatus; label: string }[] = [
 const KIND_LABELS: Record<string, string> = Object.fromEntries(ACTIVE.kinds.map((kind) => [kind.id, kind.label]));
 
 /** The post lifecycle: pending (agent proposed) → ready (person edited/ok'd
- * content) → approved (cleared to publish, awaiting slot) → posted / rejected. */
+ * content) → approved (cleared to publish, awaiting slot) → posted / rejected. Only rendered pieces are listed. */
 export function Posts() {
   const [tab, setTab] = useState<PostStatus>("pending");
   const [posts, setPosts] = useState<Post[] | null>(null);
@@ -26,7 +26,9 @@ export function Posts() {
   useEffect(() => {
     apiGet<Post[]>("/posts").then(setPosts, (err: unknown) => setError(messageOf(err)));
   }, []);
-  const rows = (posts ?? []).filter((p) => p.status === tab);
+  const pieces = piecesOf(posts ?? []);
+  const rows = pieces.filter((p) => p.status === tab);
+  const production = (posts ?? []).filter((p) => rowKind(p) === "production");
 
   /**
    * Moves a post and keeps the screen truthful about what the server did. "Post now" publishes for
@@ -83,17 +85,55 @@ export function Posts() {
             onClick={() => setTab(key)}
           >
             {label}
-            <span className="ml-1.5 font-mono text-xs text-ink-3">{(posts ?? []).filter((p) => p.status === key).length}</span>
+            <span className="ml-1.5 font-mono text-xs text-ink-3">{pieces.filter((p) => p.status === key).length}</span>
           </button>
         ))}
       </div>
 
-      {posts === null && error === null ? (
+      {production.length > 0 ? (
+        <details className="panel mb-4">
+          <summary className="cursor-pointer px-3 py-2.5 font-medium">
+            In production {production.length} — briefs the crew is still scripting or rendering; they land here as videos
+          </summary>
+          <div className="list">
+            {production.map((p) => (
+              <div key={p.id} className="flex items-start gap-3 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{p.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                    <span className="chip chip-plain font-mono">{p.stage}</span>
+                    <span>filed by {p.agent ?? "an unnamed agent"}</span>
+                    {p.source ? <span>from {p.source}</span> : null}
+                  </div>
+                </div>
+                {/* The one call a brief still needs from a person. The producer renders what is filed
+                    here on its own schedule, so a brief that is off-brand or legally risky has to be
+                    stoppable while it is still a brief. There is deliberately no Approve: a brief is
+                    not a piece to clear, and approving one stranded the row. */}
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm shrink-0"
+                  title="Reject this brief — it moves to Rejected and is never rendered"
+                  onClick={() => move(p.id, "rejected")}
+                >
+                  <X size={14} strokeWidth={1.75} /> Reject
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {posts === null && error !== null ? (
+        <div className="absence">
+          The queue could not be read, so nothing can be said about what is {tab}: {error}
+        </div>
+      ) : posts === null ? (
         <div className="absence">Loading the queue…</div>
       ) : rows.length === 0 ? (
         <div className="absence">
           Nothing {tab} right now.
-          {posts?.length === 0 ? ` ${ACTIVE.words.queueEmpty}` : ""}
+          {pieces.length === 0 ? ` ${ACTIVE.words.queueEmpty}` : ""}
         </div>
       ) : (
         <div className="list">

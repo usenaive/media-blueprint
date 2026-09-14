@@ -12,6 +12,15 @@ import type { Post, PostPlatform, PostStatus } from "../seed/posts";
 
 export type { Post, PostPlatform, PostStatus };
 
+/** What a queue row is: a rendered piece, a brief still in production, or a seat's note. */
+export type RowKind = "piece" | "production" | "note";
+export const rowKind = (post: Post): RowKind => {
+  const rendered = post.mediaUrl !== undefined || post.duration !== undefined || post.stage === "rendered";
+  if (rendered || post.status === "approved" || post.status === "posted" || post.status === "rejected") return "piece";
+  return post.stage === undefined ? "note" : "production";
+};
+export const piecesOf = (posts: readonly Post[]) => posts.filter((p) => rowKind(p) === "piece");
+
 export interface Account {
   id: string;
   handle: string;
