@@ -165,6 +165,33 @@ describe("post now", () => {
     expect(paths[1]).toContain("/v1/identities/idn_1/social/portal");
   });
 
+  it("answers GET /api/social/accounts with an empty list, not a 400, when social publishing is not yet activated", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        json(
+          { error: { type: "validation_failed", code: "validation_failed", message: "social publishing is not activated for this identity" } },
+          400,
+        ),
+      ),
+    );
+
+    const reply = await handleRequest(req("GET", "/api/social/accounts"), ctxOver(demoState(), CONFIG));
+
+    expect(reply.status).toBe(200);
+    expect(reply.body).toEqual({ data: [], has_more: false, next_cursor: null });
+  });
+
+  it("still forwards a non-400 refusal from the accounts read", async () => {
+    const body = { error: { type: "authentication_error", code: "unauthorized", message: "bad key" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(body, 401)));
+
+    const reply = await handleRequest(req("GET", "/api/social/accounts"), ctxOver(demoState(), CONFIG));
+
+    expect(reply.status).toBe(401);
+    expect(reply.body).toEqual(body);
+  });
+
   it("publishes a rendered video by its file id, which the platform signs itself", async () => {
     const state = demoState();
     const post = state.posts.find((p) => p.id === "post_4a6f")!;

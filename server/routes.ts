@@ -556,5 +556,9 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   const answer = await proxyFetch(ctx.config, upstream, body);
   if (upstream.sse) return { status: answer.status, stream: answer, sse: true };
   if (upstream.raw) return answer.ok ? { status: answer.status, stream: answer } : fail(answer.status, "file unavailable");
+  /** Like `mcp.ts`'s listAccounts rule: not activated means no accounts yet, not a failed read. */
+  if (req.method === "GET" && req.path === "/api/social/accounts" && answer.status === 400) {
+    return json(200, { data: [], has_more: false, next_cursor: null });
+  }
   return json(answer.status, await answer.json());
 }
