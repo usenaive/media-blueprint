@@ -341,4 +341,14 @@ describe("the ChatPane", () => {
     expect(placeholder()).toBe("Message channel-manager…");
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("lets the screen say who hears the first message and what stays with the operator", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(json({ error: "unexpected" }, 500))));
+    await mount({ sessionId: null, empty: "Your first note opens one with the producer.", under: <span>producer · renders again</span> });
+    expect(host.querySelector(".absence")!.textContent).toBe("Your first note opens one with the producer.");
+    expect(host.querySelector(".composer-under")!.textContent).toBe("producer · renders again");
+
+    await mount({ sessionId: null });
+    expect(host.querySelector(".composer-under")!.textContent).toContain("approving and publishing stay with you");
+  });
 });

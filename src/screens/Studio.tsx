@@ -8,6 +8,7 @@ import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago, clock } from
 import type { Post, VideoProject } from "../data";
 import { sessionState } from "./Chat";
 import { ProjectStatusChip, Scenes, Section, Sources, rangeOf, total } from "./Projects";
+import { RENDERER } from "../../templates/template";
 
 export interface StudioSession {
   id: string;
@@ -421,6 +422,18 @@ export function Studio() {
             onEvent={onEvent}
             keepOpen={rendering}
             placeholder={project ? "Say what to change about this video…" : "Say what to change about this post…"}
+            empty={
+              project
+                ? `No session is bound to this plan yet — your first note opens one with the ${RENDERER[project.kind]}.`
+                : "Nothing has been said about this post yet — the channel-manager hears your first note."
+            }
+            under={
+              project ? (
+                <>
+                  <span className="font-mono">{RENDERER[project.kind]}</span> · renders this plan again on your note — approving and publishing stay with you
+                </>
+              ) : undefined
+            }
           />
         </section>
 

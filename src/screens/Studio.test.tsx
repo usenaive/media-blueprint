@@ -140,6 +140,8 @@ describe("the Studio", () => {
     expect(header.textContent).toContain("ses_1");
     expect(header.querySelector("a[href='/projects']")).not.toBeNull();
     expect(header.querySelector("a[href='/posts']")?.textContent).toBe("Open post");
+    expect(host.querySelector(".composer-under")!.textContent).toContain("producer · renders this plan again");
+    expect(host.querySelector(".composer-under")!.textContent).toContain("approving and publishing stay with you");
 
     expect(tabs()).toEqual(["Video", "Plan", "Post"]);
     expect(players()).toEqual(["/api/files/fil_cur"]);
@@ -225,6 +227,8 @@ describe("the Studio", () => {
     await mount(fetchMock);
 
     expect(host.textContent).toContain("This post has no plan behind it");
+    expect(host.querySelector(".absence")!.textContent).toContain("the channel-manager hears your first note");
+    expect(host.querySelector(".composer-under")!.textContent).toContain("channel-manager");
     expect(tabs()).toEqual(["Post"]);
     expect(host.textContent).toContain(post.title);
 

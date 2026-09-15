@@ -235,6 +235,12 @@ export function ChatPane({
   onEvent,
   keepOpen = false,
   placeholder = "Message channel-manager…",
+  empty = "Brief the channel-manager: a source video to clip, a series to produce, a week of posts to plan.",
+  under = (
+    <>
+      <span className="font-mono">channel-manager</span> · can clip, produce, post &amp; reply on your connected accounts — approving and publishing stay with you
+    </>
+  ),
   className = "",
 }: {
   sessionId: string | null;
@@ -243,6 +249,10 @@ export function ChatPane({
   onEvent?: (event: WireEvent) => void;
   keepOpen?: boolean;
   placeholder?: string;
+  /** The absence shown while there is no session yet — who hears the first message. */
+  empty?: string;
+  /** The line under the composer — the seat and what stays with the operator. */
+  under?: ReactNode;
   className?: string;
 }) {
   const [stream, setStream] = useState<Stream>(emptyStream);
@@ -377,9 +387,7 @@ export function ChatPane({
         {loading ? <div className="absence">Reading the conversation…</div> : null}
         {!loading && items.length === 0 && error === null && !thinking ? (
           <div className="absence">
-            {sessionId === null
-              ? "Brief the channel-manager: a source video to clip, a series to produce, a week of posts to plan."
-              : "Nothing has been said in this session yet."}
+            {sessionId === null ? empty : "Nothing has been said in this session yet."}
           </div>
         ) : null}
         <div className="flex flex-col gap-4">
@@ -442,9 +450,7 @@ export function ChatPane({
               </button>
             </div>
           </div>
-          <div className="composer-under">
-            <span className="font-mono">channel-manager</span> · can clip, produce, post &amp; reply on your connected accounts — approving and publishing stay with you
-          </div>
+          <div className="composer-under">{under}</div>
         </div>
       </div>
     </div>
