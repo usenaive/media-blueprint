@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { apiGet, messageOf } from "../api";
-import { fmt, PageHeader, PlatformChip } from "../components/kit";
+import { Card, fmt, PageHeader, PlatformChip } from "../components/kit";
 import {
   channelStats,
   dailySeries,
@@ -92,8 +92,8 @@ export function Analytics() {
       ) : everything.posted.length === 0 ? (
         <div className="absence">Nothing published yet. Approve a post and publish it, and its views and likes appear here.</div>
       ) : (
-        <>
-          <section className="panel mb-4 p-4">
+        <div className="space-y-3">
+          <Card>
             <div className="grid grid-cols-3 gap-3" role="group" aria-label="Metric">
               {METRICS.map((m) => (
                 <button key={m} type="button" className="tile equip" aria-pressed={metric === m} onClick={() => setMetric(m)}>
@@ -104,10 +104,9 @@ export function Analytics() {
               ))}
             </div>
             <LineChart points={series} label={METRIC_LABEL[metric]} />
-          </section>
+          </Card>
 
-          <section className="panel p-4">
-            <h2 className="card-title mb-2">Posts</h2>
+          <Card title="Posts" aside={<span className="chip chip-plain tabular-nums">{rows.length}</span>}>
             {rows.length === 0 ? (
               <div className="absence">Nothing published in this range.</div>
             ) : (
@@ -122,11 +121,10 @@ export function Analytics() {
                 ))}
               </div>
             )}
-          </section>
+          </Card>
 
           {stats.byAccount.length > 1 ? (
-            <section className="panel mt-4 p-4">
-              <h2 className="card-title mb-2">By account</h2>
+            <Card title="By account" aside={<span className="chip chip-plain tabular-nums">{stats.byAccount.length}</span>}>
               <div className="tbl" style={{ "--cols": "9rem minmax(0, 1fr) 5rem 5rem 5rem" } as CSSProperties}>
                 <div className="tbl-head">Platform</div>
                 <div className="tbl-head">Account</div>
@@ -145,9 +143,9 @@ export function Analytics() {
                   </div>
                 ))}
               </div>
-            </section>
+            </Card>
           ) : null}
-        </>
+        </div>
       )}
     </div>
   );
