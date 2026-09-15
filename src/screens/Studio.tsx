@@ -285,7 +285,7 @@ export function Studio() {
       (answer) => {
         setData(answer);
         setError(null);
-        setSession((s) => (s !== null && answer.session !== null && s.id === answer.session.id ? s : answer.session));
+        setSession((s) => (answer.session === null || (s !== null && s.id === answer.session.id) ? s : answer.session));
         setSessionId((current) => current ?? answer.session?.id ?? null);
       },
       (err: unknown) => setError({ status: err instanceof ApiError ? err.status : 0, text: messageOf(err) }),
