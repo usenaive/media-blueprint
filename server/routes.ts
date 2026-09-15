@@ -160,7 +160,7 @@ export const renderInstruction = (project: VideoProject, renderer: string): stri
   [
     `Render video project ${project.id} now — a ${project.kind} plan, planned and handed to you by the operator.`,
     `Claim it first: channel.update_project id ${project.id}, status rendering, expected_status planned; refused means another session has it, so stop.`,
-    `Then read it in full (channel.get_project ${project.id}) and render exactly this plan${project.kind === "generation" ? " — every scene in order, in its model and style template" : " — the moment named in each source"}.`,
+    `Then read it in full (channel.get_project ${project.id}) and render exactly this plan${project.kind === "generation" ? " — every scene in order, as one generate_video call in its model and style template" : " — the moment named in each source"}.`,
     `Finish with channel.update_project id ${project.id}, status rendered, expected_status rendering, the video as media_url and "${renderer}" as agent; that write puts the video on the post, which keeps the id ${project.id}.`,
     "Do not rewrite the plan and do not render a second one.",
     "",

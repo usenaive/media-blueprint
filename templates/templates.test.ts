@@ -152,7 +152,9 @@ describe("the crews", () => {
     // handoff and the cron that overlaps it cannot both plan or render the same piece, and each
     // hands on only what it claimed.
     expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*channel\.create_project, kind generation, post_id the row.*`stage` scripted.*send_to_agent the producer once, wait false.*project ids.*claimed nothing, hand on nothing/s);
-    expect(seat("producer")?.system).toMatch(/named to you by the operator or a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*you hand on to nobody/s);
+    expect(seat("producer")?.system).toMatch(/named to you by the operator or a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*You end the chain/s);
+    // Nothing on the platform joins clips, so a multi-scene plan is one render, not one per scene.
+    expect(seat("producer")?.system).toContain("one generate_video call — nothing here joins clips");
     // The timers are the fallback, by stage and status, claim the same way, and no seat's intake is told another intake is running.
     expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*channel\.create_project \(kind generation, post_id the row\).*send_to_agent the producer once, wait false.*project ids/s);
     expect(seat("producer")?.schedules?.[0]?.input).toMatch(/status planned, kind generation.*status rendering, expected_status planned.*status rendered, expected_status rendering/s);
