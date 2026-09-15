@@ -4,27 +4,10 @@ import { Link, useParams } from "react-router";
 import { ApiError, apiGet, apiSend, messageOf } from "../api";
 import { ChatPane } from "../chat/ChatPane";
 import type { WireEvent } from "../chat/stream";
-import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago } from "../components/kit";
+import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago, clock } from "../components/kit";
 import type { Post, VideoProject } from "../data";
 import { sessionState } from "./Chat";
 import { ProjectStatusChip, Scenes, Section, Sources, rangeOf, total } from "./Projects";
-
-/** The session rows a project keeps, as `GET /api/studio/:id` sends them (`seed/projects.ts`). */
-export interface ProjectSession {
-  id: string;
-  role: "planned" | "rendered" | "revised";
-  at: string;
-}
-export interface Render {
-  mediaUrl: string;
-  at: string;
-  sessionId?: string;
-}
-export type StudioProject = VideoProject & {
-  sessions?: ProjectSession[];
-  renders?: Render[];
-  revision?: { openedAt: string; sessionId: string; note: string };
-};
 
 export interface StudioSession {
   id: string;
@@ -35,7 +18,7 @@ export interface StudioSession {
 
 /** What `GET /api/studio/:id` answers: the plan, the post it lands on, and the session bound to it. */
 export interface StudioData {
-  project: StudioProject | null;
+  project: VideoProject | null;
   post: Post | null;
   session: StudioSession | null;
 }
@@ -59,14 +42,11 @@ const TABS: { key: Tab; label: string; Icon: typeof Film }[] = [
 
 const KIND_LABEL = { generation: "Generated", clipping: "Clip" } as const;
 
-/** `2m10s` of rendering so far, from when the status changed. */
-export const elapsed = (sinceIso: string, now: number = Date.now()): string => {
-  const s = Math.max(0, Math.floor((now - new Date(sinceIso).getTime()) / 1000));
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
-};
+/** `2:10` of rendering so far, from when the status changed — the same clock as the pane's status line. */
+export const elapsed = (sinceIso: string, now: number = Date.now()): string => clock(now - new Date(sinceIso).getTime());
 
 /** Every cut of this project, oldest first: `renders[]` are the earlier ones, the post's file is the current one. */
-export const versionsOf = (project: StudioProject, post: Post | null): { mediaUrl: string; at: string; current: boolean }[] => [
+export const versionsOf = (project: VideoProject, post: Post | null): { mediaUrl: string; at: string; current: boolean }[] => [
   ...(project.renders ?? []).map((r) => ({ mediaUrl: r.mediaUrl, at: r.at, current: false })),
   ...(post?.mediaUrl !== undefined ? [{ mediaUrl: post.mediaUrl, at: project.statusAt, current: true }] : []),
 ];
@@ -90,7 +70,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function VideoTab({ project, post, drafts, playing, setPlaying }: { project: StudioProject; post: Post | null; drafts: string[]; playing: string | null; setPlaying: (url: string) => void }) {
+function VideoTab({ project, post, drafts, playing, setPlaying }: { project: VideoProject; post: Post | null; drafts: string[]; playing: string | null; setPlaying: (url: string) => void }) {
   const versions = versionsOf(project, post);
   const rendering = project.status === "rendering";
   const now = useNow(rendering);
@@ -151,7 +131,7 @@ function VideoTab({ project, post, drafts, playing, setPlaying }: { project: Stu
   );
 }
 
-function PlanTab({ project }: { project: StudioProject }) {
+function PlanTab({ project }: { project: VideoProject }) {
   const sources = project.sources ?? [];
   const [only] = sources;
   const facts: [string, ReactNode][] = [

@@ -4,7 +4,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Clamp, Facts, ago } from "./kit";
+import { Clamp, Facts, ago, clock } from "./kit";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -82,5 +82,14 @@ describe("ago", () => {
     expect(ago("2026-09-15T09:00:00Z", now)).toBe("3h ago");
     expect(ago("2026-09-12T12:00:00Z", now)).toBe("3d ago");
     expect(ago(undefined, now)).toBe("");
+  });
+});
+
+describe("clock", () => {
+  it("counts minutes and zero-padded seconds, never below zero", () => {
+    expect(clock(0)).toBe("0:00");
+    expect(clock(42_000)).toBe("0:42");
+    expect(clock(130_400)).toBe("2:10");
+    expect(clock(-5_000)).toBe("0:00");
   });
 });

@@ -2,7 +2,7 @@ import { ArrowUp, Plus } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { apiGet, messageOf } from "../api";
-import { Clamp } from "../components/kit";
+import { Clamp, clock } from "../components/kit";
 import {
   APPROVALS_TAIL,
   duration,
@@ -127,11 +127,6 @@ export function argsSummary(args: Record<string, unknown>): string {
     })
     .join(" · ");
 }
-
-const clock = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 
 export function placeholderFor(phase: Phase, fallback: string): string {
   if (phase.kind === "approval") return "Answer in Approvals, or say something else…";

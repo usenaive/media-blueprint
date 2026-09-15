@@ -9,9 +9,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Post } from "../data";
+import type { Post, VideoProject } from "../data";
 import { Approvals, postIdOf } from "./Approvals";
-import { POLL_EVERY, Studio, elapsed, versionsOf, type StudioData, type StudioProject } from "./Studio";
+import { POLL_EVERY, Studio, elapsed, versionsOf, type StudioData } from "./Studio";
 import { FACELESS_PROJECT_SEEDS } from "../../seed/projects";
 
 const json = (body: unknown, status = 200) =>
@@ -52,7 +52,7 @@ afterEach(async () => {
 
 const HOURS = 3_600_000;
 const seed = FACELESS_PROJECT_SEEDS.find((p) => p.status === "rendered")!;
-const rendered: StudioProject = {
+const rendered: VideoProject = {
   ...seed,
   statusAt: new Date(Date.now() - 5 * 60_000).toISOString(),
   sessions: [{ id: "ses_1", role: "rendered", at: new Date(Date.now() - 2 * HOURS).toISOString() }],
@@ -274,7 +274,7 @@ describe("the Studio", () => {
 
   it("while rendering: pulses with the time so far, keeps re-reading every 4s, and re-reads at once when the renderer files the video", async () => {
     vi.useFakeTimers();
-    const rendering: StudioProject = { ...rendered, status: "rendering", statusAt: new Date(Date.now() - 130_000).toISOString(), revision: { openedAt: new Date().toISOString(), sessionId: "ses_1", note: "make scene 2 dusk instead of dawn" } };
+    const rendering: VideoProject = { ...rendered, status: "rendering", statusAt: new Date(Date.now() - 130_000).toISOString(), revision: { openedAt: new Date().toISOString(), sessionId: "ses_1", note: "make scene 2 dusk instead of dawn" } };
     let answer: StudioData = { ...studio, project: rendering, post: { ...post, stage: "rendering" } };
     let streamed = false;
     const fetchMock = wire(
@@ -289,7 +289,7 @@ describe("the Studio", () => {
     await tick(50);
 
     expect(host.textContent).toContain("Rendering…");
-    expect(host.textContent).toContain("2m10s");
+    expect(host.textContent).toContain("2:10");
     expect(host.querySelector(".dot-run.animate-pulse")).not.toBeNull();
     expect(host.textContent).toContain("Revising");
     expect(host.textContent).toContain("make scene 2 dusk instead of dawn");
@@ -321,8 +321,8 @@ describe("versionsOf and elapsed", () => {
 
   it("says the time rendering as seconds, then minutes and seconds", () => {
     const t0 = Date.parse("2026-01-01T00:00:00Z");
-    expect(elapsed(new Date(t0).toISOString(), t0 + 42_000)).toBe("42s");
-    expect(elapsed(new Date(t0).toISOString(), t0 + 130_000)).toBe("2m10s");
+    expect(elapsed(new Date(t0).toISOString(), t0 + 42_000)).toBe("0:42");
+    expect(elapsed(new Date(t0).toISOString(), t0 + 130_000)).toBe("2:10");
   });
 });
 
