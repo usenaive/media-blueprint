@@ -1,18 +1,14 @@
 // @vitest-environment jsdom
 /**
- * The session relay is a bearer-gated `/api/*` route like every other one, and `EventSource`
- * cannot send a header — an unauthenticated relay was how anyone could read the events of a
- * session this dashboard never created. So the transcript is read with `fetch`, and this is the
- * proof that the token travels and that the frames still arrive.
- *
- * Below it, the screen itself: a session arrived at from the rail is read back from its log, a
- * follow-up is queued on it, and the first send from `/chat` moves to the session it opened.
+ * The screen over the `ChatPane`: a session arrived at from the rail is read back from its log,
+ * a follow-up is queued on it, and the first send from `/chat` moves to the session it opened.
+ * The relay reader and the reducer have their own tests under `src/chat/`.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Chat, isWall, readFrames, sessionState, streamReplies, turnsFrom } from "./Chat";
+import { Chat, sessionState } from "./Chat";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -46,47 +42,6 @@ const stream = (text: string) =>
     },
   }), { status: 200 });
 
-describe("streamReplies", () => {
-  it("carries no credential of its own and appends what the agent said", async () => {
-    const body =
-      "retry: 3000\n\n" +
-      `event: message.completed\ndata: ${JSON.stringify({ data: { role: "assistant", content: "On it." } })}\n\n` +
-      "event: session.idle\ndata: {}\n\n";
-    const fetchMock = vi.fn().mockResolvedValue(stream(body));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const said: string[] = [];
-    streamReplies("ses_1", (text) => said.push(text));
-    await vi.waitFor(() => expect(said).toEqual(["On it."]));
-
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/chat/ses_1/stream");
-    // The relay is same-origin, so the `HttpOnly` cookie `/api/enter` set travels on its own; a
-    // header here would be a second copy of a credential this bundle is not allowed to hold.
-    expect((fetchMock.mock.calls[0]![1] as { headers: Record<string, string> }).headers).not.toHaveProperty("authorization");
-    // `session.idle` ends it: the relay is not re-opened once the session is done.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("picks the log up past what is already on screen, and says when it is over", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(stream("event: session.idle\ndata: {}\n\n"));
-    vi.stubGlobal("fetch", fetchMock);
-    const ended = vi.fn();
-    streamReplies("ses_1", () => {}, 12, ended);
-    await vi.waitFor(() => expect(ended).toHaveBeenCalledTimes(1));
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/chat/ses_1/stream?after_seq=12");
-  });
-});
-
-describe("readFrames", () => {
-  it("holds a half-arrived frame back until the rest of it lands", () => {
-    const seen: [string, string][] = [];
-    const rest = readFrames("event: a\ndata: 1\n\nevent: b\ndata: 2", (e, d) => seen.push([e, d]));
-    expect(seen).toEqual([["a", "1"]]);
-    expect(readFrames(`${rest}\n\n`, (e, d) => seen.push([e, d]))).toBe("");
-    expect(seen).toEqual([["a", "1"], ["b", "2"]]);
-  });
-});
-
 const LOG = [
   { seq: 1, type: "session.started", data: {} },
   { seq: 2, type: "message.completed", data: { role: "user", content: "Clip the interview" } },
@@ -94,15 +49,6 @@ const LOG = [
   { seq: 4, type: "message.completed", data: { role: "assistant", content: "Three clips are ready.\n\nWant captions?" } },
   { seq: 5, type: "message.completed", data: { content: "" } },
 ];
-
-describe("turnsFrom", () => {
-  it("keeps both sides of the conversation, in order, and nothing that was not said", () => {
-    expect(turnsFrom(LOG)).toEqual([
-      { you: true, text: "Clip the interview" },
-      { you: false, text: "Three clips are ready.\n\nWant captions?" },
-    ]);
-  });
-});
 
 describe("sessionState", () => {
   it("warns only where a person is waited on", () => {
@@ -112,15 +58,6 @@ describe("sessionState", () => {
     expect(sessionState({ status: "idle", stop_reason: "awaiting_input" }).dot).toBe("dot-warn");
     expect(sessionState({ status: "idle", stop_reason: "end_turn" })).toEqual({ label: "Idle", dot: "dot-idle", chip: "chip-plain" });
     expect(sessionState({ status: "idle", stop_reason: "error" }).chip).toBe("chip-fail");
-  });
-});
-
-describe("isWall", () => {
-  it("is a reply past six lines' worth of text, or past six paragraphs", () => {
-    expect(isWall("Three clips are ready.")).toBe(false);
-    expect(isWall("word ".repeat(140))).toBe(true);
-    expect(isWall(Array.from({ length: 7 }, (_, i) => `Step ${i}`).join("\n"))).toBe(true);
-    expect(isWall(Array.from({ length: 6 }, (_, i) => `Step ${i}`).join("\n"))).toBe(false);
   });
 });
 
