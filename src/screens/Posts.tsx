@@ -1,6 +1,6 @@
-import { Check, Send, X } from "lucide-react";
+import { Check, Clapperboard, Send, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { apiGet, apiSend, messageOf } from "../api";
 import { Avatar, Card, Clamp, ConnectLine, Facts, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
 import { piecesOf, postedLabel, rowKind, type Post, type PostStatus } from "../data";
@@ -13,6 +13,13 @@ const TABS: { key: PostStatus; label: string }[] = [
   { key: "posted", label: "Posted" },
   { key: "rejected", label: "Rejected" },
 ];
+
+/** The tab `/posts?tab=` asks for; the queue opens on Pending when it names none. */
+export const tabAsked = (asked: string | null): PostStatus => TABS.find((t) => t.key === asked)?.key ?? "pending";
+
+/** The operator's move on a post, as every surface sends it: a rejection names its reason. */
+export const moveBody = (status: PostStatus): { status: PostStatus; rejectedReason?: string } =>
+  status === "rejected" ? { status, rejectedReason: "Rejected by you" } : { status };
 
 /** What each kind a row can carry is called, in the running template's words; a row filed under
  * the other template keeps its own kind and is still listed, so the id is the fallback. */
@@ -38,7 +45,8 @@ export const postFacts = (post: Post): [string, ReactNode][] => {
 /** The post lifecycle: pending (agent proposed) → ready (person edited/ok'd
  * content) → approved (cleared to publish, awaiting slot) → posted / rejected. Only rendered pieces are listed. */
 export function Posts() {
-  const [tab, setTab] = useState<PostStatus>("pending");
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<PostStatus>(() => tabAsked(params.get("tab")));
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -62,16 +70,15 @@ export function Posts() {
         p.id === id
           ? {
               ...p,
-              status,
+              ...moveBody(status),
               ...(status === "posted" ? { postedAt: new Date().toISOString(), views: 0, likes: 0 } : {}),
-              ...(status === "rejected" ? { rejectedReason: "Rejected by you" } : {}),
             }
           : p,
       ),
     );
     const sent = status === "posted"
       ? apiSend<Post>("POST", `/posts/${id}/post-now`)
-      : apiSend<Post>("PATCH", `/posts/${id}`, { status });
+      : apiSend<Post>("PATCH", `/posts/${id}`, moveBody(status));
     sent.then(
       (saved) => setPosts((ps) => (ps ?? []).map((p) => (p.id === saved.id ? saved : p))),
       (err: unknown) => {
@@ -81,11 +88,17 @@ export function Posts() {
     );
   };
 
-  /** The one or two calls a row in this tab still needs from a person; none once it is posted or rejected. */
+  /** The one or two calls a row in this tab still needs from a person — and the way to its video; none once it is posted or rejected. */
   const actionsFor = (p: Post): ReactNode => {
+    const studio = (
+      <Link to={`/studio/${p.projectId ?? p.id}`} className="btn btn-ghost btn-sm" title="Open this post and its video in the Studio">
+        <Clapperboard size={14} strokeWidth={1.75} /> Open in Studio
+      </Link>
+    );
     if (tab === "pending" || tab === "ready") {
       return (
         <>
+          {studio}
           <button type="button" className="btn btn-accent btn-sm" title="Approve for posting" onClick={() => move(p.id, "approved")}>
             <Check size={14} strokeWidth={1.75} /> Approve
           </button>
@@ -99,17 +112,20 @@ export function Posts() {
     }
     if (tab === "approved") {
       return (
-        <button
-          type="button"
-          className="btn btn-accent btn-sm"
-          title={`Publish now to ${p.platform}${p.account ? ` as ${p.account}` : ""}, video included`}
-          onClick={() => move(p.id, "posted")}
-        >
-          <Send size={14} strokeWidth={1.75} /> Post now
-        </button>
+        <>
+          {studio}
+          <button
+            type="button"
+            className="btn btn-accent btn-sm"
+            title={`Publish now to ${p.platform}${p.account ? ` as ${p.account}` : ""}, video included`}
+            onClick={() => move(p.id, "posted")}
+          >
+            <Send size={14} strokeWidth={1.75} /> Post now
+          </button>
+        </>
       );
     }
-    return undefined;
+    return studio;
   };
 
   return (

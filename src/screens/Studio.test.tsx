@@ -139,8 +139,9 @@ describe("the Studio", () => {
     expect(header.textContent).toContain("Idle");
     expect(header.textContent).toContain("ses_1");
     expect(header.querySelector("a[href='/projects']")).not.toBeNull();
-    expect(header.querySelector("a[href='/posts']")?.textContent).toBe("Open post");
-    expect(host.querySelector(".composer-under")!.textContent).toContain("producer · renders this plan again");
+    // Into the queue on the post's own tab, not the bare list.
+    expect(header.querySelector("a[href='/posts?tab=pending']")?.textContent).toBe("Open post");
+    expect(host.querySelector(".composer-under")!.textContent).toContain("producer · re-renders on your note");
     expect(host.querySelector(".composer-under")!.textContent).toContain("approving and publishing stay with you");
 
     expect(tabs()).toEqual(["Video", "Plan", "Post"]);
@@ -190,6 +191,76 @@ describe("the Studio", () => {
     expect(JSON.parse((patch[1] as RequestInit).body as string)).toEqual({ status: "approved" });
     expect(buttons().map((b) => b.textContent?.trim())).not.toContain("Approve");
     expect(host.textContent).toContain("Approved");
+    expect(host.querySelector("header a[href='/posts?tab=approved']")?.textContent).toBe("Open post");
+  });
+
+  it("offers Approve and Reject on a ready post too, as the queue does, and Reject names its reason", async () => {
+    const ready: StudioData = { ...studio, post: { ...post, status: "ready" } };
+    const fetchMock = wire(
+      () => json(ready),
+      (_url, init) => (init?.method === "PATCH" ? json({ ...post, ...JSON.parse(init.body as string) }) : null),
+    );
+    await mount(fetchMock);
+    await click("Post");
+    expect(buttons().map((b) => b.textContent?.trim())).toEqual(expect.arrayContaining(["Approve", "Reject"]));
+
+    await click("Reject");
+    const patch = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === "PATCH")!;
+    expect(JSON.parse((patch[1] as RequestInit).body as string)).toEqual({ status: "rejected", rejectedReason: "Rejected by you" });
+    expect(host.textContent).toContain("Rejected by you");
+    expect(buttons().map((b) => b.textContent?.trim())).not.toContain("Reject");
+  });
+
+  it("lets the operator take an approval back — Reject alone on an approved post — after which a revision goes through", async () => {
+    let current: Post = { ...post, status: "approved" };
+    const fetchMock = wire(
+      () => json({ ...studio, post: current }),
+      (_url, init) => {
+        if (init?.method === "PATCH") {
+          current = { ...current, ...JSON.parse(init.body as string) };
+          return json(current);
+        }
+        if (init?.method === "POST") {
+          return current.status === "approved"
+            ? json({ error: "post is approved — reject it first; an approved video is the operator's word" }, 409)
+            : json({ session: "ses_1", acceptedSeq: 7, opened: false }, 202);
+        }
+        return null;
+      },
+    );
+    await mount(fetchMock);
+
+    await type("Make scene 2 dusk");
+    expect(Array.from(host.querySelectorAll(".chip-fail")).map((c) => c.textContent)[0]).toContain("reject it first");
+
+    await click("Post");
+    const labels = buttons().map((b) => b.textContent?.trim());
+    expect(labels).toContain("Reject");
+    expect(labels).not.toContain("Approve");
+    expect(labels).not.toContain("Post now");
+    await click("Reject");
+    const patch = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === "PATCH")!;
+    expect(JSON.parse((patch[1] as RequestInit).body as string)).toEqual({ status: "rejected", rejectedReason: "Rejected by you" });
+    expect(host.textContent).toContain("Rejected");
+
+    await click("Send");
+    const revise = fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === "POST");
+    expect(revise).toHaveLength(2);
+    expect(revise[1]![0]).toBe(`/api/studio/${seed.id}/revise`);
+    expect(Array.from(host.querySelectorAll(".chip-fail")).map((c) => c.textContent)).not.toContainEqual(expect.stringContaining("reject it first"));
+    expect(host.querySelectorAll(".bubble-you").length).toBe(1);
+    expect(host.querySelector("textarea")!.value).toBe("");
+  });
+
+  it("says a rendered plan with no file on record is rendered, not unrendered", async () => {
+    const fileless: StudioData = { ...studio, project: { ...rendered, renders: undefined }, post: { ...post, mediaUrl: undefined } };
+    await mount(wire(() => json(fileless)));
+
+    expect(host.querySelector("header")!.textContent).toContain("Rendered");
+    expect(players()).toEqual([]);
+    const absences = Array.from(host.querySelectorAll(".absence")).map((n) => n.textContent);
+    expect(absences).toContainEqual(expect.stringContaining("Rendered, but no file is on record for this plan"));
+    expect(host.textContent).not.toContain("has not been rendered");
   });
 
   it("folds the drawer to an icon rail and expands it again on the tab clicked", async () => {
@@ -298,7 +369,9 @@ describe("the Studio", () => {
     expect(host.textContent).toContain("2:10");
     expect(host.querySelector(".dot-run.animate-pulse")).not.toBeNull();
     expect(host.textContent).toContain("Revising");
-    expect(host.textContent).toContain("make scene 2 dusk instead of dawn");
+    // The note is prose: clamped, never a wall.
+    const note = Array.from(host.querySelectorAll("p")).find((p) => p.textContent === "make scene 2 dusk instead of dawn")!;
+    expect(note.className).toContain("line-clamp-2");
     // The event re-read: the mount's, then the one the tool.completed asked for.
     expect(studioReads(fetchMock)).toBe(2);
 

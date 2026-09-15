@@ -7,6 +7,7 @@ import type { WireEvent } from "../chat/stream";
 import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago, clock } from "../components/kit";
 import type { Post, VideoProject } from "../data";
 import { sessionState } from "./Chat";
+import { moveBody } from "./Posts";
 import { ProjectStatusChip, Scenes, Section, Sources, rangeOf, total } from "./Projects";
 import { RENDERER } from "../../templates/template";
 
@@ -79,10 +80,10 @@ function VideoTab({ project, post, drafts, playing, setPlaying }: { project: Vid
   return (
     <div className="space-y-4">
       {project.revision ? (
-        <blockquote className="border-l-2 border-accent pl-3 text-sm text-ink-2">
-          <span className="prop-label mr-1.5">Revising</span>
-          {project.revision.note}
-        </blockquote>
+        <div className="border-l-2 border-accent pl-3">
+          <div className="prop-label mb-1">Revising</div>
+          <Clamp text={project.revision.note} lines={2} />
+        </div>
       ) : null}
       {drafts.length > 0 ? (
         <div className="panel px-4 py-3">
@@ -107,6 +108,8 @@ function VideoTab({ project, post, drafts, playing, setPlaying }: { project: Vid
       ) : null}
       {shown !== null ? (
         <Portrait src={shown} label={project.title} />
+      ) : project.status === "rendered" ? (
+        <div className="absence">Rendered, but no file is on record for this plan.</div>
       ) : !rendering ? (
         <div className="absence">No video yet — this plan has not been rendered.</div>
       ) : null}
@@ -178,7 +181,9 @@ function PlanTab({ project }: { project: VideoProject }) {
 }
 
 /**
- * The post the video lands on, with the two calls it may still need from a person. Approving and
+ * The post the video lands on, with the calls it may still need from a person — the queue's
+ * Approve and Reject while it waits, and Reject alone once approved, since an approved video is
+ * the operator's word and only the operator takes it back to be revised. Approving and
  * publishing are the operator's: there is no publish button here, and no agent moves a row.
  */
 function PostTab({ post, onChange }: { post: Post; onChange: (saved: Post) => void }) {
@@ -187,7 +192,7 @@ function PostTab({ post, onChange }: { post: Post; onChange: (saved: Post) => vo
   const move = (status: "approved" | "rejected") => {
     setError(null);
     setBusy(true);
-    apiSend<Post>("PATCH", `/posts/${post.id}`, { status }).then(
+    apiSend<Post>("PATCH", `/posts/${post.id}`, moveBody(status)).then(
       (saved) => {
         setBusy(false);
         onChange(saved);
@@ -224,12 +229,20 @@ function PostTab({ post, onChange }: { post: Post; onChange: (saved: Post) => vo
           <Clamp text={post.rejectedReason} lines={2} />
         </Section>
       ) : null}
-      {post.status === "pending" ? (
+      {post.status === "pending" || post.status === "ready" || post.status === "approved" ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          <button type="button" className="btn btn-accent btn-sm" disabled={busy} title="Approve for posting" onClick={() => move("approved")}>
-            <Check size={14} strokeWidth={1.75} /> Approve
-          </button>
-          <button type="button" className="btn btn-danger btn-sm" disabled={busy} title="Reject this post — it moves to Rejected and is never published" onClick={() => move("rejected")}>
+          {post.status !== "approved" ? (
+            <button type="button" className="btn btn-accent btn-sm" disabled={busy} title="Approve for posting" onClick={() => move("approved")}>
+              <Check size={14} strokeWidth={1.75} /> Approve
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={busy}
+            title={post.status === "approved" ? "Take the approval back — it moves to Rejected, is never published, and can be revised again" : "Reject this post — it moves to Rejected and is never published"}
+            onClick={() => move("rejected")}
+          >
             <X size={14} strokeWidth={1.75} /> Reject
           </button>
           {error ? <span className="chip chip-fail">{error}</span> : null}
@@ -385,7 +398,7 @@ export function Studio() {
           </div>
         </div>
         {post ? (
-          <Link to="/posts" className="btn btn-ghost btn-sm shrink-0" title={`Open ${post.id} in the queue`}>
+          <Link to={`/posts?tab=${post.status}`} className="btn btn-ghost btn-sm shrink-0" title={`Open ${post.id} in the queue`}>
             Open post
           </Link>
         ) : null}
@@ -412,7 +425,7 @@ export function Studio() {
             under={
               project ? (
                 <>
-                  <span className="font-mono">{RENDERER[project.kind]}</span> · renders this plan again on your note — approving and publishing stay with you
+                  <span className="font-mono">{RENDERER[project.kind]}</span> · re-renders on your note — approving and publishing stay with you
                 </>
               ) : undefined
             }

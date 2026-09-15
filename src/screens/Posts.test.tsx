@@ -57,11 +57,11 @@ const wire = (rows: Post[], onSend?: (url: string, init: RequestInit) => Respons
     return Promise.resolve(json({ data: [] }));
   });
 
-async function mount(fetchMock: ReturnType<typeof vi.fn>) {
+async function mount(fetchMock: ReturnType<typeof vi.fn>, at = "/posts") {
   vi.stubGlobal("fetch", fetchMock);
   await act(async () => {
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[at]}>
         <Posts />
       </MemoryRouter>,
     );
@@ -95,6 +95,11 @@ describe("the Posts screen", () => {
     const plan = card.querySelector<HTMLAnchorElement>("dd a")!;
     expect(plan.textContent).toBe("plan proj_1");
     expect(plan.getAttribute("href")).toBe("/projects");
+    // And a visible way in, beside the calls: the title's underline alone was easy to miss.
+    const studio = card.querySelector<HTMLAnchorElement>("header a.btn")!;
+    expect(studio.textContent?.trim()).toBe("Open in Studio");
+    expect(studio.getAttribute("href")).toBe("/studio/proj_1");
+    expect(studio.className).toContain("btn-ghost");
   });
 
   it("approves a row through PATCH and moves it out of Pending", async () => {
@@ -108,6 +113,28 @@ describe("the Posts screen", () => {
     expect(JSON.parse((sent[1] as RequestInit).body as string)).toEqual({ status: "approved" });
     expect(host.querySelector("section.panel")).toBeNull();
     expect(host.querySelector(".absence")?.textContent).toContain("Nothing pending right now.");
+  });
+
+  it("rejects a row with its reason named, as the Studio does, so 'Rejected because' reads the same on both", async () => {
+    const fetchMock = wire([pending], (_url, init) => json({ ...pending, ...JSON.parse(init.body as string) }));
+    await mount(fetchMock);
+    await click("Reject");
+    const sent = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")!;
+    expect(JSON.parse((sent[1] as RequestInit).body as string)).toEqual({ status: "rejected", rejectedReason: "Rejected by you" });
+  });
+
+  it("opens on the tab the link names — the Studio's 'Open post' lands on the post's own tab — and on Pending otherwise", async () => {
+    const approved: Post = { ...pending, id: "post_ok", status: "approved" };
+    await mount(wire([pending, approved]), "/posts?tab=approved");
+    expect(host.querySelector("[role=tab][aria-selected=true]")?.textContent).toContain("Approved");
+    expect(host.querySelector("h2.card-title")?.textContent).toBe(approved.title);
+    expect(buttons()).toEqual(expect.arrayContaining(["Post now"]));
+    expect(host.querySelector<HTMLAnchorElement>("header a.btn")?.getAttribute("href")).toBe("/studio/proj_1");
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await mount(wire([pending]), "/posts?tab=nonsense");
+    expect(host.querySelector("[role=tab][aria-selected=true]")?.textContent).toContain("Pending");
   });
 
   it("names a missing account and plan as missing, and says so with a dashed absence when a tab is empty", async () => {
