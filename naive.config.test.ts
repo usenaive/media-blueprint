@@ -1,7 +1,14 @@
 /** The blueprint as `naive up` would read it: it parses, it names its template, and every agent carries the approval gate. */
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
+import {
+  ACTIVE,
+  CHANNEL_IDENTITY,
+  CHANNEL_TIMEZONE,
+  PLATFORM_ANSWER_KEY,
+  PLATFORM_CHOICES,
+  TEMPLATES,
+} from "./templates/index.ts";
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -86,6 +93,28 @@ describe("naive.config", () => {
     // account the org had connected — while the dashboard sells connected accounts as the point.
     expect(declaration.identities.map((one) => one.name)).toEqual([CHANNEL_IDENTITY]);
     for (const agent of project.agents) expect(agent.identity).toBe(CHANNEL_IDENTITY);
+  });
+
+  /**
+   * The studio's "Add connections" step (`canonical-spec §31.10`) pre-fills one row per network the
+   * customer ticked, and this map is the only way it can turn a tick into a network. Read back off
+   * `project`, so an engine that drops `connections` goes red here rather than as a setup step
+   * with nothing to ask for.
+   */
+  it("tells the studio which accounts to ask for: the network question's picks, mapped to network ids", () => {
+    const channel = project.identities.find((one) => one.name === CHANNEL_IDENTITY);
+    expect(channel?.connections?.social?.from).toBe(PLATFORM_ANSWER_KEY);
+    expect(channel?.connections?.social?.map).toEqual(
+      Object.fromEntries(PLATFORM_CHOICES.map((choice) => [choice.option, choice.platform])),
+    );
+    expect(Object.keys(channel?.connections?.social?.map ?? {})).toHaveLength(PLATFORM_CHOICES.length);
+    // Every map key is an option of the question it names, on the running template — the engine
+    // refuses otherwise, and the studio could pre-fill nothing for a key no answer can equal.
+    const question = project.questions.find((q) => q.key === PLATFORM_ANSWER_KEY);
+    expect(question?.type).toBe("choice");
+    expect(question && question.type === "choice" ? question.options : []).toEqual(
+      Object.keys(channel?.connections?.social?.map ?? {}),
+    );
   });
 
   /**
