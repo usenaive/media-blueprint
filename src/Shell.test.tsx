@@ -106,11 +106,16 @@ describe("the rail", () => {
     await mount(platform([]));
     expect(host.textContent).toContain("No sessions yet");
     expect(host.textContent).not.toContain("Sessions unavailable");
+    expect(host.querySelector(".rail-frame .dot-fail")).toBeNull();
     await act(async () => root.unmount());
     root = createRoot(host);
     await mount(platform(null));
     expect(host.textContent).toContain("Sessions unavailable");
     expect(host.textContent).not.toContain("No sessions yet");
+    // A failed read wears the fail tone, so it cannot be mistaken for an empty list.
+    const unavailable = host.querySelector(".rail-frame .dot-fail")!.parentElement!;
+    expect(unavailable.textContent).toBe("Sessions unavailable");
+    expect(unavailable.className).toContain("text-fail");
     await act(async () => root.unmount());
     root = createRoot(host);
     const many = Array.from({ length: 25 }, (_, i) => ({ id: `ses_${i}`, status: "idle", stop_reason: "end_turn", created_at: "2026-09-01T00:00:00Z", title: `Session ${i}` }));

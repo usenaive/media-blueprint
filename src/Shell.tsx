@@ -93,7 +93,12 @@ export function Shell() {
               <span>New session</span>
             </NavLink>
             <div className="rail-frame">
-              {sessions === null ? <div className="px-2.5 py-1.5 text-xs text-ink-3">Sessions unavailable</div> : null}
+              {sessions === null ? (
+                <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-fail">
+                  <span className="dot dot-fail" aria-hidden />
+                  Sessions unavailable
+                </div>
+              ) : null}
               {sessions?.length === 0 ? <div className="px-2.5 py-1.5 text-xs text-ink-3">No sessions yet</div> : null}
               {(sessions ?? []).map((s) => (
                 <NavLink key={s.id} to={`/chat/${s.id}`} className="rail-row equip">
