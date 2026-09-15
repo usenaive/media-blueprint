@@ -419,32 +419,34 @@ export function ChatPane({
 
   return (
     <div className={`flex min-h-0 flex-1 flex-col ${className}`}>
-      <div className="pane-in flex-1">
-        {loading ? <div className="absence">Reading the conversation…</div> : null}
-        {!loading && items.length === 0 && error === null && !thinking ? (
-          <div className="absence">
-            {sessionId === null ? empty : "Nothing has been said in this session yet."}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="pane-in">
+          {loading ? <div className="absence">Reading the conversation…</div> : null}
+          {!loading && items.length === 0 && error === null && !thinking ? (
+            <div className="absence">
+              {sessionId === null ? empty : "Nothing has been said in this session yet."}
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-4">
+            {blocks(items)}
+            {thinking ? (
+              <div className="thinking" role="status" aria-label="Thinking">
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : null}
+            {error !== null ? (
+              <div>
+                <span className="chip chip-fail">{error}</span>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        <div className="flex flex-col gap-4">
-          {blocks(items)}
-          {thinking ? (
-            <div className="thinking" role="status" aria-label="Thinking">
-              <span />
-              <span />
-              <span />
-            </div>
-          ) : null}
-          {error !== null ? (
-            <div>
-              <span className="chip chip-fail">{error}</span>
-            </div>
-          ) : null}
+          <div ref={end} />
         </div>
-        <div ref={end} />
       </div>
 
-      <div className="composer-dock">
+      <div className="composer-dock shrink-0">
         <div className="composer-stack">
           {label !== "" ? (
             <div className="chat-status" role="status" data-phase={phase.kind}>

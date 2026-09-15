@@ -322,13 +322,18 @@ convenience.
 `GET /v1/sessions/:id` as `{id, status, stop_reason, created_at}`. A terminal one (`completed`,
 `failed`, `cancelled`) is still returned — the screen shows what happened, and the next send opens
 a new session. With no platform configured, `session` is `null` and the rows are still 200. A plan
-made before plans remembered their sessions is backfilled once: the renderer's twenty newest
-sessions, every page of each one's events (`after_seq`, a hundred at a time — a render's finishing
-write lands after many spans), for a `tool.started` `channel.update_project` or
-`channel.create_project` whose `args.id` is this plan; the first hit is recorded (`rendered` or
-`planned`). A miss that read every candidate whole is remembered too (`backfilledAt`), so the
-Studio's poll does not repeat twenty-odd upstream reads every four seconds; a scan the platform cut
-short is tried again next time.
+made before plans remembered their sessions is backfilled once: the twenty newest sessions of the
+seat that last worked it — the planner's (`project.agent`) while it is `planned`, the renderer's
+once claimed — every page of each one's events (`after_seq`, a hundred at a time — a render's
+finishing write lands after many spans), for a `tool.started` `channel.update_project` whose
+`args.id` is this plan, or a `tool.completed` `channel.create_project` whose `output` (the plan, as
+JSON) has this id — a brief's plan takes the brief's id, so the call itself names only `post_id`.
+The first hit is recorded (`planned` or `rendered`). The scan runs with the document released —
+it is dozens of platform reads, and the store is one row every write in the channel waits on —
+and records under a fresh lock only if the plan still has no session by then. A miss that read
+every candidate whole is remembered too (`backfilledAt`), so the Studio's poll does not repeat
+twenty-odd upstream reads every four seconds; a scan the platform cut short is tried again next
+time.
 
 `POST /api/studio/:id/revise {message}` → `202 {session, acceptedSeq, opened}`. It refuses (409):
 
@@ -359,7 +364,10 @@ visible, with no cap, since a render takes minutes and the woken session's finis
 stream in. On the Post tab the operator has the queue's moves: Approve and Reject on a `pending`
 or `ready` post (Reject writes `rejectedReason: "Rejected by you"`, as the queue does), and Reject
 alone on an `approved` one — the way to revise an approved video is to take the approval back
-first. Nothing publishes from the Studio.
+first. While a revision is open neither is offered, and `PATCH /api/posts/:id` refuses a verdict
+(409) on the post: the row still carries the cut being replaced, so an approval would land on the
+new cut unseen and a rejection would drop the plan under it. The finishing write lands the new cut
+`pending`. Nothing publishes from the Studio.
 
 ## 8. Post lifecycle end to end
 

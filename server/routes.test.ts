@@ -22,6 +22,7 @@ function ctxOver(state: StoreState, config: ProxyConfig | null = null, mcpToken?
   const store = openStoreOver(state, () => {});
   return {
     store: () => Promise.resolve(store),
+    release: () => Promise.resolve(),
     config,
     mcpToken,
     dashboardToken: undefined,
@@ -1346,18 +1347,64 @@ describe("the Studio", () => {
       expect(hits.map((h) => h.url)).toEqual(["/v1/sessions/ses_maker"]);
     });
 
-    it("records a planner's create_project as planned", async () => {
+    it("scans a planned plan's planner, not its renderer, and knows the planner's create_project by the id it answered with", async () => {
+      // A brief's plan takes the brief's id: the call names `post_id`, only the answer names the plan.
       const state = studioState();
-      const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
-      upstream((method, url) => {
+      const plan = state.projects.find((p) => p.id === "proj_a1f0")!;
+      expect(plan).toMatchObject({ status: "planned", agent: "scriptwriter", sessions: [] });
+      const hits = upstream((method, url) => {
         if (url.pathname === "/v1/sessions") return json({ data: [{ id: "ses_s", status: "completed", stop_reason: null, created_at: "2026-09-13T09:00:00Z" }] });
         if (url.pathname === "/v1/sessions/ses_s/events") {
-          return json({ data: [{ seq: 2, type: "tool.started", data: { name: "channel.create_project", args: { id: plan.id, kind: "generation" } }, created_at: "2026-09-13T09:01:00Z" }] });
+          return json({ data: [
+            { seq: 2, type: "tool.started", data: { name: "channel.create_project", args: { post_id: "post_7d3c", kind: "generation" } }, created_at: "2026-09-13T09:00:50Z" },
+            { seq: 3, type: "tool.completed", data: { name: "channel.create_project", output: JSON.stringify({ id: "post_7d3c", kind: "generation", status: "planned" }) }, created_at: "2026-09-13T09:00:51Z" },
+            { seq: 5, type: "tool.completed", data: { name: "channel.create_project", output: JSON.stringify({ id: plan.id, kind: "generation", status: "planned" }) }, created_at: "2026-09-13T09:01:00Z" },
+          ] });
         }
         return session("completed")(method, url);
       });
-      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: { id: "ses_s", status: "completed" } });
+      expect((await handleRequest(req("GET", "/api/studio/proj_a1f0"), ctxOver(state, CONFIG))).body).toMatchObject({ session: { id: "ses_s", status: "completed" } });
       expect(plan.sessions).toEqual([{ id: "ses_s", role: "planned", at: "2026-09-13T09:01:00Z" }]);
+      expect(hits.map((h) => h.url)).toContain("/v1/sessions?limit=20&agent_id=agt_scriptwriter");
+      expect(hits.map((h) => h.url)).not.toContain("/v1/sessions?limit=20&agent_id=agt_producer");
+    });
+
+    it("lets the document go for the scan and records under a fresh lock — unless another open recorded meanwhile", async () => {
+      const state = studioState();
+      const store = openStoreOver(state, () => {});
+      const log: string[] = [];
+      const ctx: ApiContext = {
+        ...ctxOver(state, CONFIG),
+        store: () => {
+          log.push("store");
+          return Promise.resolve(store);
+        },
+        release: () => {
+          log.push("release");
+          return Promise.resolve();
+        },
+      };
+      upstream((method, url) => {
+        log.push(url.pathname);
+        if (url.pathname === "/v1/sessions") {
+          // Another open, racing this one, records the maker while the document is let go.
+          store.recordSession("post_9f2a", { id: "ses_first", role: "rendered", at: "2026-09-13T10:00:00Z" });
+          return json({ data: [{ id: "ses_maker", status: "idle", stop_reason: "end_turn", created_at: "2026-09-13T09:00:00Z" }] });
+        }
+        if (url.pathname === "/v1/sessions/ses_maker/events") {
+          return json({ data: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "post_9f2a", status: "rendering" } }, created_at: "2026-09-13T10:00:00Z" }] });
+        }
+        return session("idle")(method, url);
+      });
+      const reply = await handleRequest(req("GET", "/api/studio/post_9f2a"), ctx);
+      // Read the rows, let go, scan, take the document again, then read the session it names.
+      expect(log.slice(0, 2)).toEqual(["store", "release"]);
+      expect(log.indexOf("release")).toBeLessThan(log.indexOf("/v1/sessions"));
+      expect(log.indexOf("/v1/sessions/ses_maker/events")).toBeLessThan(log.lastIndexOf("store"));
+      expect(log.lastIndexOf("store")).toBeLessThan(log.indexOf("/v1/sessions/ses_first"));
+      // The racing open's word stands; this scan's hit is not written over it.
+      expect(rendered(state).sessions).toEqual([{ id: "ses_first", role: "rendered", at: "2026-09-13T10:00:00Z" }]);
+      expect(reply.body).toMatchObject({ session: { id: "ses_first" } });
     });
 
     it("scans a plan no log names once — the miss is stamped, and the next open scans nothing — but not one whose logs could not all be read", async () => {
@@ -1425,6 +1472,31 @@ describe("the Studio", () => {
       expect((await revise(state, "post_9f2a")).body).toMatchObject({ error: expect.stringContaining("a revision is already open") });
       expect(hits).toEqual([]);
       expect(rendered(state).revision?.note).toBe("first note");
+    });
+
+    it("holds the queue's verdict while a revision is out: the old cut can be neither approved nor rejected until the new one lands pending", async () => {
+      const state = studioState();
+      rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+      post(state, "post_9f2a").mediaUrl = "fil_v1";
+      upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages") return json({ session_id: "ses_render", status: "idle", accepted_seq: 41 }, 202);
+        return session("idle")(method, url);
+      });
+      expect((await revise(state, "post_9f2a")).status).toBe(202);
+      const ctx = ctxOver(state);
+      for (const status of ["approved", "rejected", "ready"]) {
+        expect(await handleRequest(req("PATCH", "/api/posts/post_9f2a", JSON.stringify({ status })), ctx)).toEqual({
+          status: 409, body: { error: "a revision of post_9f2a is being made — the new cut lands pending, so the verdict waits for it" },
+        });
+      }
+      expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", mediaUrl: "fil_v1" });
+      expect(rendered(state)).toMatchObject({ status: "rendering", revision: { note: "Tighter: cut scene two to three seconds." } });
+      // The finishing write lands the new cut pending, and the verdict is the operator's again.
+      const mcp = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "post_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } };
+      expect((await handleRequest(req("POST", "/mcp", JSON.stringify(mcp), { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"))).status).toBe(200);
+      expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v2" });
+      expect(rendered(state)).not.toHaveProperty("revision");
+      expect((await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"approved"}'), ctx)).status).toBe(200);
     });
 
     it("claims before it asks: two notes at once cost one render, and the second is refused with nothing sent", async () => {

@@ -242,6 +242,20 @@ describe("the Studio", () => {
     expect(buttons().map((b) => b.textContent?.trim())).not.toContain("Reject");
   });
 
+  it("withholds Approve and Reject while a revision is out: the verdict is on the cut that lands", async () => {
+    const revising: StudioData = {
+      ...studio,
+      project: { ...seed, status: "rendering", revision: { openedAt: seed.statusAt, sessionId: "ses_1", note: "dusk" } },
+      post: { ...post, stage: "rendering" },
+    };
+    await mount(wire(() => json(revising)));
+    await click("Post");
+    const labels = buttons().map((b) => b.textContent?.trim());
+    expect(labels).not.toContain("Approve");
+    expect(labels).not.toContain("Reject");
+    expect(host.textContent).toContain("A revision is being made");
+  });
+
   it("lets the operator take an approval back — Reject alone on an approved post — after which a revision goes through", async () => {
     let current: Post = { ...post, status: "approved" };
     const fetchMock = wire(

@@ -13,7 +13,7 @@ import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches, type
 import { SESSION_CREATE, collect, notActivated, proxyFetch, sessionEvents, sessionList, sessionMessages, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type Post, type PostStatus } from "../seed/posts.ts";
-import type { VideoProject } from "../seed/projects.ts";
+import type { ProjectSession, VideoProject } from "../seed/projects.ts";
 import { RENDERER } from "../templates/template.ts";
 
 /** The statuses the operator's screens move a row between; `posted` is `postNow`'s to write. */
@@ -50,6 +50,8 @@ export interface ApiReply {
 export interface ApiContext {
   /** Opens the store on first call and memoises it for this request. Platform-only routes never call it. */
   store(): Promise<Store>;
+  /** Commits what has been written and lets the document go; the next `store()` opens it afresh. For a route that must wait on the platform between two writes. */
+  release(): Promise<void>;
   config: ProxyConfig | null;
   mcpToken: string | undefined;
   /** The operator's bearer for `/api/*` (`DASHBOARD_TOKEN`). Undefined closes the whole surface. */
@@ -173,7 +175,7 @@ interface WireSession {
 interface WireEvent {
   seq: number;
   type: string;
-  data?: { role?: string; content?: unknown; name?: string; args?: { id?: unknown } };
+  data?: { role?: string; content?: unknown; name?: string; args?: { id?: unknown }; output?: unknown };
   created_at?: string;
 }
 
@@ -319,18 +321,33 @@ async function readSession(config: ProxyConfig, id: string): Promise<WireSession
   return { id: row.id, status: row.status, stop_reason: row.stop_reason ?? null, ...(row.created_at === undefined ? {} : { created_at: row.created_at }) };
 }
 
+/** The id a `channel.create_project` answered with: its output is the plan, as JSON text. */
+const createdId = (output: unknown): unknown => {
+  if (typeof output !== "string") return undefined;
+  try {
+    return (JSON.parse(output) as { id?: unknown }).id;
+  } catch {
+    return undefined;
+  }
+};
+
 /**
- * A plan made before plans remembered their sessions: the renderer's twenty most recent sessions,
- * each log read whole, for the `channel.update_project` or `channel.create_project` call that
- * named this id — the first hit is recorded, and a scan that found none is stamped on the plan
- * (`backfilledAt`), so either way it runs once. A log that could not be read leaves the scan
- * unfinished, to run again on the next open.
+ * A plan made before plans remembered their sessions: the twenty most recent sessions of the seat
+ * that last worked it — the planner's while it is planned, the renderer's once claimed — each log
+ * read whole, for the write that made it: the renderer's `channel.update_project` naming this id,
+ * or the planner's `channel.create_project` that answered with it (a brief's plan takes the brief's
+ * id, so the call itself names only `post_id`; the answer names the plan either way). The first hit
+ * is the session; none is `missed`; a log that could not be read leaves the scan `unfinished`, to
+ * run again on the next open. Network only — the store is not held while this waits.
  */
-async function backfillSessions(store: Store, config: ProxyConfig, project: VideoProject): Promise<void> {
-  const agent = await agentIdNamed(config, RENDERER[project.kind]);
-  if (agent === null) return;
+async function findSession(config: ProxyConfig, project: VideoProject): Promise<ProjectSession | "missed" | "unfinished"> {
+  const planned = project.status === "planned";
+  const seat = planned ? project.agent : RENDERER[project.kind];
+  if (seat === undefined) return "missed";
+  const agent = await agentIdNamed(config, seat);
+  if (agent === null) return "unfinished";
   const listed = await proxyFetch(config, sessionList({ agent_id: agent, limit: 20 }), null);
-  if (!listed.ok) return;
+  if (!listed.ok) return "unfinished";
   const page = (await listed.json()) as { data?: WireSession[] };
   const newest = [...(page.data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
   let whole = true;
@@ -341,17 +358,13 @@ async function backfillSessions(store: Store, config: ProxyConfig, project: Vide
       continue;
     }
     const hit = events.find((e) =>
-      e.type === "tool.started" && (e.data?.name === "channel.update_project" || e.data?.name === "channel.create_project") && e.data.args?.id === project.id,
+      (e.type === "tool.started" && e.data?.name === "channel.update_project" && e.data.args?.id === project.id) ||
+      (e.type === "tool.completed" && e.data?.name === "channel.create_project" && createdId(e.data.output) === project.id),
     );
     if (hit === undefined) continue;
-    store.recordSession(project.id, {
-      id: session.id,
-      role: hit.data?.name === "channel.create_project" ? "planned" : "rendered",
-      at: hit.created_at ?? session.created_at ?? new Date().toISOString(),
-    });
-    return;
+    return { id: session.id, role: planned ? "planned" : "rendered", at: hit.created_at ?? session.created_at ?? new Date().toISOString() };
   }
-  if (whole) store.markBackfilled(project.id);
+  return whole ? "missed" : "unfinished";
 }
 
 /**
@@ -359,14 +372,30 @@ async function backfillSessions(store: Store, config: ProxyConfig, project: Vide
  * knows whether it can still be talked to. A terminal one is still the answer: the operator sees
  * what happened, and the next send opens a new session. Without the platform there is no session
  * to read, and that is a 200 with `session: null`, not a failure of the rows.
+ *
+ * A plan with no session remembered is scanned for (`findSession`) with the document released:
+ * the scan is dozens of platform reads, and the document is one row every write in the channel
+ * waits on. What it found is recorded under a fresh lock, and only if the plan still remembers
+ * nothing — another open may have recorded the same session meanwhile.
  */
-async function studioRead(store: Store, config: ProxyConfig | null, id: string): Promise<ApiReply> {
-  const rows = studioRows(store, id);
+async function studioRead(ctx: ApiContext, id: string): Promise<ApiReply> {
+  let rows = studioRows(await ctx.store(), id);
   if (rows === null) return fail(404, "no such project or post");
-  if (config === null || rows.project === null) return json(200, { ...rows, session: null });
-  if (rows.project.sessions.length === 0 && rows.project.backfilledAt === undefined) await backfillSessions(store, config, rows.project);
-  const latest = rows.project.sessions.at(-1);
-  const session = latest === undefined ? null : await readSession(config, latest.id);
+  if (ctx.config === null || rows.project === null) return json(200, { ...rows, session: null });
+  if (rows.project.sessions.length === 0 && rows.project.backfilledAt === undefined) {
+    const scanned = structuredClone(rows.project);
+    await ctx.release();
+    const found = await findSession(ctx.config, scanned);
+    const store = await ctx.store();
+    rows = studioRows(store, id);
+    if (rows === null) return fail(404, "no such project or post");
+    if (rows.project !== null && rows.project.sessions.length === 0 && rows.project.backfilledAt === undefined) {
+      if (found === "missed") store.markBackfilled(rows.project.id);
+      else if (found !== "unfinished") store.recordSession(rows.project.id, found);
+    }
+  }
+  const latest = rows.project?.sessions.at(-1);
+  const session = latest === undefined ? null : await readSession(ctx.config, latest.id);
   return json(200, { ...rows, session });
 }
 
@@ -644,7 +673,14 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
     if (!(PATCHABLE as readonly string[]).includes(body.status)) {
       return fail(400, `status must be one of ${PATCHABLE.join(", ")}`);
     }
-    const updated = (await ctx.store()).updatePost(patch[1]!, {
+    const store = await ctx.store();
+    // While a revision is out the row still carries the cut being replaced. A verdict on it would
+    // land on the new cut sight unseen (approved) or drop the plan under it (rejected).
+    const revising = store.read().projects.find((p) => p.postId === patch[1] && p.revision !== undefined);
+    if (revising !== undefined) {
+      return fail(409, `a revision of ${revising.id} is being made — the new cut lands pending, so the verdict waits for it`);
+    }
+    const updated = store.updatePost(patch[1]!, {
       status: body.status,
       ...(body.rejectedReason === undefined ? {} : { rejectedReason: body.rejectedReason }),
     });
@@ -854,7 +890,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   // the revision does not, since its whole point is a session.
   const studio = /^\/api\/studio\/([\w-]+)(\/revise)?$/.exec(req.path);
   if (studio) {
-    if (studio[2] === undefined) return req.method === "GET" ? studioRead(await ctx.store(), ctx.config, studio[1]!) : fail(405, "method not allowed");
+    if (studio[2] === undefined) return req.method === "GET" ? studioRead(ctx, studio[1]!) : fail(405, "method not allowed");
     if (req.method !== "POST") return fail(405, "method not allowed");
     if (ctx.config === null) return fail(503, NOT_CONFIGURED);
     return revise(await ctx.store(), ctx.config, studio[1]!, textOf(parse(req.body).message).trim());

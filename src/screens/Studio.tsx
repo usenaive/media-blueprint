@@ -212,7 +212,7 @@ function PlanTab({ project }: { project: VideoProject }) {
  * the operator's word and only the operator takes it back to be revised. Approving and
  * publishing are the operator's: there is no publish button here, and no agent moves a row.
  */
-function PostTab({ post, onChange }: { post: Post; onChange: (saved: Post) => void }) {
+function PostTab({ post, revising, onChange }: { post: Post; revising: boolean; onChange: (saved: Post) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const move = (status: "approved" | "rejected") => {
@@ -255,7 +255,9 @@ function PostTab({ post, onChange }: { post: Post; onChange: (saved: Post) => vo
           <Clamp text={post.rejectedReason} lines={2} />
         </Section>
       ) : null}
-      {post.status === "pending" || post.status === "ready" || post.status === "approved" ? (
+      {revising ? (
+        <div className="absence">A revision is being made. The new cut lands here pending; approve or reject that one.</div>
+      ) : post.status === "pending" || post.status === "ready" || post.status === "approved" ? (
         <div className="flex flex-wrap items-center gap-1.5">
           {post.status !== "approved" ? (
             <button type="button" className="btn btn-accent btn-sm" disabled={busy} title="Approve for posting" onClick={() => move("approved")}>
@@ -509,7 +511,7 @@ export function Studio() {
               ) : tab === "plan" && project ? (
                 <PlanTab project={project} />
               ) : post ? (
-                <PostTab post={post} onChange={(saved) => setData((d) => (d === null ? d : { ...d, post: saved }))} />
+                <PostTab post={post} revising={project?.revision !== undefined} onChange={(saved) => setData((d) => (d === null ? d : { ...d, post: saved }))} />
               ) : (
                 <div className="absence">No post yet — the render lands on one.</div>
               )}
