@@ -105,6 +105,7 @@ export interface Post {
   /** The finished piece's running time, when it is known. */
   duration?: string;
   scheduledFor?: string;
+  /** When it was published (ISO 8601), stamped by the store the moment a row goes `posted`. */
   postedAt?: string;
   rejectedReason?: string;
   views?: number;
@@ -140,6 +141,9 @@ export interface Post {
 export const postStage = (post: Pick<Post, "stage" | "mediaUrl" | "duration">): PostStage | undefined =>
   post.stage ?? (post.mediaUrl === undefined && post.duration === undefined ? undefined : "rendered");
 
+/** A demo row's publish stamp, relative to the day the store is first seeded. */
+const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
+
 /** The `faceless` demo queue: original video the producer made, in one niche. */
 export const FACELESS_SEEDS: Post[] = [
   { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "youtube", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:41" },
@@ -148,8 +152,8 @@ export const FACELESS_SEEDS: Post[] = [
   { id: "post_6c4d", title: "Dichotomy of control, animated", caption: "Part 1 of 3 — the only flowchart you need.", platform: "youtube", account: "@dailystoic", status: "ready", agent: "producer", kind: "multi", duration: "0:52" },
   { id: "post_5b5e", title: "Epictetus was a slave first", caption: "The origin story they skip.", platform: "youtube", account: "@dailystoic", status: "approved", agent: "producer", kind: "produced", duration: "1:04", scheduledFor: "Tomorrow 09:00" },
   { id: "post_4a6f", title: "Amor fati in 40 seconds", caption: "Love what happens. All of it.", platform: "youtube", account: "@dailystoic", status: "approved", agent: "producer", kind: "produced", duration: "0:40", scheduledFor: "Fri 18:30" },
-  { id: "post_3970", title: "The obstacle is the way", caption: "Ryan Holiday's favourite line, sourced.", platform: "youtube", account: "@dailystoic", status: "posted", agent: "producer", kind: "multi", duration: "0:44", postedAt: "2d ago", views: 48_211, likes: 5_804 },
-  { id: "post_2881", title: "Memento mori, gently", caption: "A calmer take on the skull emoji.", platform: "instagram", account: "@dailystoic", status: "posted", agent: "producer", kind: "produced", duration: "0:49", postedAt: "4d ago", views: 21_930, likes: 2_112 },
+  { id: "post_3970", title: "The obstacle is the way", caption: "Ryan Holiday's favourite line, sourced.", platform: "youtube", account: "@dailystoic", status: "posted", agent: "producer", kind: "multi", duration: "0:44", postedAt: daysAgo(2), views: 48_211, likes: 5_804 },
+  { id: "post_2881", title: "Memento mori, gently", caption: "A calmer take on the skull emoji.", platform: "instagram", account: "@dailystoic", status: "posted", agent: "producer", kind: "produced", duration: "0:49", postedAt: daysAgo(4), views: 21_930, likes: 2_112 },
   { id: "post_1792", title: "Cold showers are not stoicism", caption: "Hot take, ancient sources.", platform: "tiktok", account: "@dailystoic", status: "rejected", agent: "producer", kind: "produced", duration: "0:38", rejectedReason: "Caption reads as engagement bait — soften the first line." },
 ];
 
@@ -159,6 +163,6 @@ export const CLIPPING_SEEDS: Post[] = [
   { id: "post_c2b5", title: "\"Say that again, slowly\"", caption: "The pause is the whole clip.", platform: "instagram", account: "@longformcuts", status: "pending", agent: "clipper", kind: "clip", duration: "0:33" },
   { id: "post_c3c6", title: "The question nobody asks a founder", caption: "Cut from episode 214.", platform: "tiktok", account: "@longformcuts", status: "ready", agent: "clipper", kind: "clip", duration: "0:52" },
   { id: "post_c4d7", title: "Two minutes that explain the whole book", caption: "Timestamps in the replies.", platform: "youtube", account: "@longformcuts", status: "approved", agent: "clipper", kind: "clip", duration: "1:12", scheduledFor: "Tomorrow 09:00" },
-  { id: "post_c5e8", title: "He changed his mind live on air", caption: "Rare. Worth 40 seconds.", platform: "youtube", account: "@longformcuts", status: "posted", agent: "clipper", kind: "clip", duration: "0:40", postedAt: "2d ago", views: 31_402, likes: 3_118 },
+  { id: "post_c5e8", title: "He changed his mind live on air", caption: "Rare. Worth 40 seconds.", platform: "youtube", account: "@longformcuts", status: "posted", agent: "clipper", kind: "clip", duration: "0:40", postedAt: daysAgo(2), views: 31_402, likes: 3_118 },
   { id: "post_c6f9", title: "The cold open everyone quoted", caption: "First thing said, best thing said.", platform: "instagram", account: "@longformcuts", status: "rejected", agent: "clipper", kind: "clip", duration: "0:29", rejectedReason: "We do not have clearance for this source yet." },
 ];

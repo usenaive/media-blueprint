@@ -84,7 +84,7 @@ export function StatusChip({ status }: { status: PostStatus }) {
 
 export function PlatformChip({ platform, account }: { platform: string; account?: string }) {
   return (
-    <span className="chip chip-plain font-mono">
+    <span className="chip chip-plain">
       {platform}
       {account ? <span className="text-ink-3"> · {account}</span> : null}
     </span>
