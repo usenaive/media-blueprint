@@ -103,8 +103,9 @@ const isUrl = (value: unknown): value is string =>
 
 /**
  * One argument, as a person reads it: a label, its value in prose, and any media it points at.
- * A nested object (or a list of them) also carries its own `rows`, so it can be drawn as labelled
- * rows rather than as the flattened prose in `text`; a list of scalars carries them as `list`.
+ * A nested object (or a list of them, numbered when there is more than one) also carries its own
+ * `rows`, so it is drawn as labelled rows rather than as the flattened prose in `text`; a list of
+ * scalars carries them as `list`.
  */
 export interface ArgRow {
   key: string;
@@ -140,9 +141,11 @@ export function argRows(args: Record<string, unknown>): ArgRow[] {
     const media = (Array.isArray(value) ? value : [value]).filter(isUrl);
     const row: ArgRow = { key, label: label(key), text: media.length > 0 ? "" : asText(value), media };
     if (isRecord(value)) row.rows = argRows(value);
-    else if (Array.isArray(value) && media.length === 0) {
+    else if (Array.isArray(value) && value.length > 0 && media.length === 0) {
       if (value.every(isRecord)) {
-        row.rows = value.map((inner, i) => ({ key: `${key}.${i}`, label: `${row.label} ${i + 1}`, text: asText(inner), media: [], rows: argRows(inner) }));
+        row.rows = value.length === 1
+          ? argRows(value[0] as Record<string, unknown>)
+          : value.map((inner, i) => ({ key: `${key}.${i}`, label: `${row.label} ${i + 1}`, text: asText(inner), media: [], rows: argRows(inner) }));
       } else if (value.every((inner) => !isRecord(inner) && !Array.isArray(inner))) {
         row.list = value.map(asText);
       }

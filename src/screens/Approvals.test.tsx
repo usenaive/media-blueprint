@@ -82,8 +82,11 @@ describe("argRows", () => {
       { key: "schedule_at", label: "Schedule at", text: "tomorrow", media: [] },
       { key: "retries", label: "Retries", text: "2", media: [] },
     ]);
-    const [tools] = argRows({ tools: [{ name: "generate_video", permission: "allow" }] });
-    expect(tools!.rows?.map((row) => [row.label, row.rows?.map((inner) => inner.text)])).toEqual([["Tools 1", ["generate_video", "allow"]]]);
+    // One object in a list is that object's rows; several are numbered so their rows stay apart.
+    const [tool] = argRows({ tools: [{ name: "generate_video", permission: "allow" }] });
+    expect(tool!.rows?.map((row) => [row.label, row.text])).toEqual([["Name", "generate_video"], ["Permission", "allow"]]);
+    const [tools] = argRows({ tools: [{ name: "generate_video" }, { name: "clip_video" }] });
+    expect(tools!.rows?.map((row) => [row.label, row.rows?.map((inner) => inner.text)])).toEqual([["Tools 1", ["generate_video"]], ["Tools 2", ["clip_video"]]]);
     expect(argRows({ content: "hello" })[0]).not.toHaveProperty("rows");
   });
 
@@ -249,7 +252,7 @@ describe("the Approvals screen", () => {
     send.mockResolvedValueOnce(json({ error: { message: "not yours to grant" } }, 403));
 
     expect(host.textContent).toContain("asks to be granted tools");
-    expect(texts("dl dt")).toEqual(["Tools", "Tools 1", "Name", "Permission"]);
+    expect(texts("dl dt")).toEqual(["Tools", "Name", "Permission"]);
     expect(host.textContent).not.toContain("Name: generate_video");
 
     await click("Reject");
