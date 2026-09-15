@@ -41,8 +41,8 @@ export const PROJECT_NAME = "media";
  * So the three slots are a budget, and spending one is choosing what NOT to ask. `PLATFORM_QUESTION`
  * below took a slot from `audience` on `faceless` and from `niche` on `clipping`, because a channel
  * that does not know where it posts fills a queue nothing can publish, while tone and audience are
- * one sentence the channel manager asks for in its first session — which is the home the engine's
- * own refusal names for them. Both displaced questions are asked there (`channelManager`), so
+ * one sentence the channel manager asks for on its first card — which is the home the engine's
+ * own refusal names for them. Both displaced questions are asked there (`channelPlanTask`), so
  * nothing was dropped; it moved to the conversation instead of the form.
  */
 export type SetupQuestion = NonNullable<DefineInput["questions"]>[number];
@@ -172,6 +172,23 @@ export interface PostKindDecl {
   label: string;
 }
 
+/**
+ * One card the apply seeds on the channel's board (`canonical-spec §31.10`), and how the crew
+ * starts: the board's tick wakes the assignee of a `todo` card with no open blocker, so the order
+ * of day one is `blocked_by` rather than declaration order or a race of first sessions. `assignee`
+ * is a seat's declared name; `blocked_by` names sibling tasks by `key`. The installed engine does
+ * not export this shape yet, so it is spelled here to the spec until the pin moves.
+ */
+export interface TaskDecl {
+  /** Stable per template — the idempotency handle (`<project>:<key>` on the wire). */
+  key: string;
+  title: string;
+  /** The brief, as a card: what "done" looks like and how the seat knows it got there. */
+  body: string;
+  assignee: string;
+  blocked_by?: string[];
+}
+
 export interface MediaTemplate {
   /** Spelled exactly as `defineProject({ template })` names it. */
   name: TemplateName;
@@ -179,6 +196,8 @@ export interface MediaTemplate {
   description: string;
   /** The crew, declared as `naive.config.ts` declares any agent. */
   agents: AgentDecl[];
+  /** The crew's first cards, one per seat, seeded on the channel's board by the apply. */
+  tasks: TaskDecl[];
   /** What this crew files; the first is what a post filed over MCP with no kind stated becomes. */
   kinds: [PostKindDecl, ...PostKindDecl[]];
   /**
@@ -258,25 +277,6 @@ const model = "anthropic/claude-sonnet-5";
  */
 export const CONTEXT_PREAMBLE =
   "Read `project_context` before anything else; the answers there are the client's, not yours to invent. Every brief, script, clip, caption and plan you make is for the niche, the audience and the cadence written there — when an answer is missing, ask the operator rather than filling it in.";
-
-/**
- * The sentence every day-one message ends with, and the race it is the answer to.
- *
- * `naive up` opens one intake session per created agent, all of them together in a single
- * `eachInFlight` after every other write (`packages/blueprints/src/up.ts`), and `intake` carries no
- * ordering knob. So on day one the downstream seats read a queue the upstream ones are still
- * filling: in production the scriptwriter's first session read `channel.list_posts -> "[]"` and
- * filed *"the trend-scout hasn't filed any briefs yet in its parallel session"* as its finding,
- * while the scout was filing five briefs in the same minute. The channel's real order is not the
- * intakes': it is the handoff a seat sends after it has filed (`send_to_agent` with `wait: false`,
- * `handoffs` on the seat — canonical-spec §28.15), naming the rows, and where no seat hands on, the
- * crons', which fire hours apart in dependency order.
- *
- * It is appended by `agent()` below rather than written into each message, for the same reason the
- * approval gate is: a rule every seat needs is a rule no seat can be written without.
- */
-export const DAY_ONE_ORDER =
-  "One last thing about today, and it is about today only. The install opens every seat's first session at the same moment, so the queue you read may hold nothing another seat is about to file. An empty or half-filled queue right now is the install's doing and not a finding: do not report it as one, do not wait for anyone, and do not invent the work you cannot see. Work that needs another seat's output reaches you by name — a handoff naming its rows, in a session of your own — or on your next cron fire, upstream seat first, hours apart; never from today's queue. File what you can make alone, hand on exactly what your message says to hand on, and say plainly what you left for the timers.";
 
 /** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
 const approvalGate =
@@ -490,15 +490,13 @@ export const agent = (decl: {
   tools: string[];
   /** `naive/<slug>` refs into the platform's skill catalogue; read with `read_skill`. */
   skills: string[];
-  /** The first session, opened by the apply that creates this agent (`canonical-spec §31.4`). */
-  intake: { message: string; budget_micro_usd: number };
   /** Only where the template cannot run without this seat — the studio cannot untick it. */
   required?: boolean;
   /**
    * The seats this one may hand on to with `send_to_agent` (`wait: false`), once its own work is
-   * filed (`canonical-spec §28.12, §28.15`). Day one is ordered by these, not by the crons: the scout
-   * files briefs and names them to the writer, the writer scripts them and names them to the
-   * producer. Each name must be an agent of the same template; `naive up` refuses one that is not. A
+   * filed (`canonical-spec §28.12, §28.15`): the scout files briefs and names them to the writer,
+   * the writer scripts them and names them to the producer. Each name must be an agent of the same
+   * template; `naive up` refuses one that is not. A
    * seat that declares none hands to nobody (`handoffs: false` on the wire): the platform's default
    * is anyone in the organization, and this channel's order is exactly the chain written here.
    */
@@ -519,9 +517,6 @@ export const agent = (decl: {
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
   tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
-  // Preamble → brief → gate for the standing prompt; message → order for the one-off. Composed here
-  // so a new seat cannot be written without either.
-  intake: { ...decl.intake, message: `${decl.intake.message} ${DAY_ONE_ORDER}` },
   handoffs: decl.handoffs ?? false,
   /**
    * The persona this agent acts as, and the reason it can act on a connected account at all: the
@@ -540,20 +535,7 @@ export const agent = (decl: {
  * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
  * names the rest of the crew in the brief, which is the only line that differs between templates.
  */
-export const channelManager = (
-  specialists: string,
-  /**
-   * THE QUESTION THE SETUP FORM HAD NO SLOT FOR, asked in the first session instead.
-   *
-   * The studio asks three (see `SetupQuestion`), and `PLATFORM_QUESTION` takes one of them —
-   * where the channel posts gates whether anything it makes can be published at all. What it
-   * displaced is named here and asked on day one with `ask_operator`, which parks the session with
-   * the question in front of the operator (`canonical-spec §7`). The engine's own refusal says
-   * this is where a fourth question belongs; this is the sentence that puts it there, rather than
-   * leaving the crew to invent an answer the preamble forbids it to invent.
-   */
-  firstAsk: string,
-): AgentDecl =>
+export const channelManager = (specialists: string): AgentDecl =>
   agent({
     name: "channel-manager",
     role: "Channel lead",
@@ -563,10 +545,25 @@ export const channelManager = (
     brief: `You are the channel manager, and the person the operator talks to in Chat. You keep the calendar full at the cadence the context names — daily, three times a week or weekly — and no fuller: a plan with more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and you never do their work for them. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows that are ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption anything you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel, for the audience the context describes. When the operator asks for something in Chat, answer with what the queue actually holds, and route the work to the seat it belongs to.`,
     tools: ["web_search", "web_fetch"],
     skills: ["naive/caption-writing"],
-    intake: {
-      message:
-        `Day one. Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published.`,
-      budget_micro_usd: 20_000_000,
-    },
     schedules: CHANNEL_MANAGER_SCHEDULES,
   });
+
+/**
+ * The channel manager's first card, shared like the seat is.
+ *
+ * THE QUESTION THE SETUP FORM HAD NO SLOT FOR is asked here. The studio asks three (see
+ * `SetupQuestion`), and `PLATFORM_QUESTION` takes one of them — where the channel posts gates
+ * whether anything it makes can be published at all. What it displaced is named by `firstAsk` and
+ * asked with `ask_operator`, which parks the session with the question in front of the operator
+ * (`canonical-spec §7`). The engine's own refusal says this is where a fourth question belongs;
+ * this is the card that puts it there, rather than leaving the crew to invent an answer the
+ * preamble forbids it to invent.
+ */
+export const channelPlanTask = (firstAsk: string): TaskDecl => ({
+  key: "channel-plan",
+  title: "Write the channel plan",
+  assignee: "channel-manager",
+  body:
+    `Read project_context — what this channel is about, where it posts and how often — then the queue (channel.list_posts) and the connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. ` +
+    `Done when the plan is filed as a pending post with no media, \`source\` "channel plan", and the operator's answer is recorded in it. Acceptance: the slot count matches the cadence answer exactly; every slot names a day, a time, a kind and an account; the first line names each network the context lists that has no account connected yet — until one is connected nothing the team files for that network can be published.`,
+});
