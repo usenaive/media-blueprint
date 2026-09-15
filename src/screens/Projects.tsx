@@ -50,12 +50,21 @@ export const total = (project: VideoProject) => (project.scenes ?? []).reduce((s
 export const rangeOf = (source: ClipSource) =>
   source.from || source.to ? `${source.from ?? "start"} → ${source.to ?? "end"}` : "whole video";
 
-/** A small labelled line under a scene's prompt: `VOICEOVER  Seneca told a rich friend…`. */
-function Line({ label, text }: { label: string; text: string }) {
+/**
+ * A small labelled line under a scene's prompt: `VOICEOVER  Seneca told a rich friend…`. Words that
+ * end up in the render — the narration, the text on the frame — are `prose`: clamped to the one line
+ * like the prompt above them, and opened on Read more, because the operator cannot approve the spend
+ * on a line they cannot finish reading. A model name is short by nature and stays a truncated line.
+ */
+function Line({ label, text, prose = false }: { label: string; text: string; prose?: boolean }) {
   return (
     <div className="flex items-baseline gap-2 text-xs">
       <span className="prop-label shrink-0">{label}</span>
-      <span className="min-w-0 truncate text-ink-2">{text}</span>
+      {prose ? (
+        <Clamp text={text} lines={1} className="min-w-0 flex-1 [&>p]:text-xs" />
+      ) : (
+        <span className="min-w-0 truncate text-ink-2">{text}</span>
+      )}
     </div>
   );
 }
@@ -74,8 +83,8 @@ export function Scenes({ scenes }: { scenes: Scene[] }) {
           <span className="text-right font-mono text-xs tabular-nums text-ink-2">{scene.seconds}s</span>
           <div className="min-w-0 space-y-1">
             <Clamp text={scene.prompt} lines={1} />
-            {scene.voiceover ? <Line label="Voiceover" text={scene.voiceover} /> : null}
-            {scene.text ? <Line label="On screen" text={scene.text} /> : null}
+            {scene.voiceover ? <Line label="Voiceover" text={scene.voiceover} prose /> : null}
+            {scene.text ? <Line label="On screen" text={scene.text} prose /> : null}
             {scene.model ? <Line label="Model" text={scene.model} /> : null}
           </div>
         </li>
