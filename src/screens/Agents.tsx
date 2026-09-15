@@ -44,12 +44,23 @@ const STOP_WORDS: Record<string, string> = {
   end_turn: "finished",
   awaiting_input: "waiting for a reply",
   awaiting_approval: "waiting for your approval",
+  awaiting_answer: "waiting for your answer",
   budget_paused: "paused — out of budget",
   interrupted: "interrupted",
   error: "stopped on an error",
   max_iterations: "hit its step limit",
   context_exhausted: "produced nothing",
   awaiting_delegation: "waiting on another agent",
+};
+
+/** A session still without a stop reason, by its `status`. */
+const STATUS_WORDS: Record<string, string> = {
+  queued: "queued",
+  running: "running",
+  idle: "idle",
+  completed: "finished",
+  failed: "failed",
+  cancelled: "cancelled",
 };
 
 export type Tone = "ok" | "wait" | "fail" | "run";
@@ -59,6 +70,7 @@ const STOP_TONES: Record<string, Tone> = {
   end_turn: "ok",
   awaiting_input: "wait",
   awaiting_approval: "wait",
+  awaiting_answer: "wait",
   awaiting_delegation: "wait",
   budget_paused: "fail",
   interrupted: "fail",
@@ -76,9 +88,11 @@ export const historyOf = (runs: readonly Run[], agentId: string): Run[] =>
     .filter((run) => run.agent_id === agentId)
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 
-/** How a run ended — the word and its tone. A run still going carries its status as the word. */
+/** How a run ended — the word and its tone. A run still going is worded by its status. */
 export function outcomeOf(session: Run): { word: string; tone: Tone } {
-  if (session.stop_reason === null || session.stop_reason === undefined) return { word: session.status, tone: "run" };
+  if (session.stop_reason === null || session.stop_reason === undefined) {
+    return { word: STATUS_WORDS[session.status] ?? session.status, tone: session.status === "failed" ? "fail" : "run" };
+  }
   return { word: STOP_WORDS[session.stop_reason] ?? session.stop_reason, tone: STOP_TONES[session.stop_reason] ?? "run" };
 }
 

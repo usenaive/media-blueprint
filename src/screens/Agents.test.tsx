@@ -80,8 +80,13 @@ describe("an agent's history", () => {
   it("gives each ending a tone: done, parked on someone, stopped short, or still going", () => {
     expect(outcomeOf(run({ id: "s", stop_reason: "end_turn" }))).toEqual({ word: "finished", tone: "ok" });
     expect(outcomeOf(run({ id: "s", stop_reason: "awaiting_approval" }))).toEqual({ word: "waiting for your approval", tone: "wait" });
+    // A question parks the run `awaiting_answer`; the roster says so in the operator's words, as
+    // Approvals and Home do, never as the wire's own token.
+    expect(outcomeOf(run({ id: "s", stop_reason: "awaiting_answer" }))).toEqual({ word: "waiting for your answer", tone: "wait" });
     expect(outcomeOf(run({ id: "s", stop_reason: "error" }))).toEqual({ word: "stopped on an error", tone: "fail" });
     expect(outcomeOf(run({ id: "s", stop_reason: null, status: "running" }))).toEqual({ word: "running", tone: "run" });
+    expect(outcomeOf(run({ id: "s", stop_reason: null, status: "completed" }))).toEqual({ word: "finished", tone: "run" });
+    expect(outcomeOf(run({ id: "s", stop_reason: null, status: "failed" }))).toEqual({ word: "failed", tone: "fail" });
     expect(outcomeOf(run({ id: "s", stop_reason: "something_new" }))).toEqual({ word: "something_new", tone: "run" });
   });
 });
@@ -137,7 +142,7 @@ describe("the Channel settings screen", () => {
       "/api/sessions": json({
         data: [
           run({ id: "ses_1", stop_reason: "end_turn", consumed_micro_usd: 50_000 }),
-          run({ id: "ses_2", stop_reason: "awaiting_approval", created_at: "2026-02-01T00:00:00.000Z", consumed_micro_usd: 120_000 }),
+          run({ id: "ses_2", stop_reason: "awaiting_answer", created_at: "2026-02-01T00:00:00.000Z", consumed_micro_usd: 120_000 }),
         ],
       }),
     });
@@ -156,8 +161,9 @@ describe("the Channel settings screen", () => {
     expect(Array.from(host.querySelectorAll("dt")).map((dt) => dt.textContent)).not.toContain("Model");
 
     // The newest run's ending, on the card's head — and tinted for what it is.
-    const waiting = Array.from(host.querySelectorAll(".chip")).find((chip) => chip.textContent === "waiting for your approval");
+    const waiting = Array.from(host.querySelectorAll(".chip")).find((chip) => chip.textContent === "waiting for your answer");
     expect(waiting?.className).toContain("chip-absent");
+    expect(host.textContent).not.toContain("awaiting_answer");
 
     // The tools fold closed, summarised by their count, and the one that stops for the operator is told apart.
     const fold = Array.from(host.querySelectorAll("details")).find((d) => d.querySelector("summary")?.textContent === "Tools (2)")!;
@@ -169,7 +175,7 @@ describe("the Channel settings screen", () => {
     // Both runs, newest first, each with its spend.
     const rows = Array.from(host.querySelectorAll("li")).map((li) => li.textContent);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain("waiting for your approval");
+    expect(rows[0]).toContain("waiting for your answer");
     expect(rows[0]).toContain("$0.12");
     expect(rows[1]).toContain("finished");
     expect(rows[1]).toContain("$0.05");
