@@ -165,9 +165,9 @@ export function openStoreOver(
     project.statusAt = now();
   };
 
-  const createPost: Store["createPost"] = (input) => {
+  const createPost = (input: NewPostInput, id = `post_${randomBytes(2).toString("hex")}`): Post => {
     const post: Post = {
-      id: `post_${randomBytes(2).toString("hex")}`,
+      id,
       title: titleFrom(input.caption),
       caption: input.caption,
       ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
@@ -225,8 +225,13 @@ export function openStoreOver(
     },
     createProject(input) {
       const brief = input.postId === undefined ? undefined : state.posts.find((p) => p.id === input.postId);
+      // ONE ID FROM BRIEF TO PLAN TO POST. A plan written on a brief is the brief's id; a plan with
+      // no brief gives its id to the post its render files (below). The operator follows one id
+      // across Posts and Projects, and a producer told to render `X` claims exactly `X`.
+      // A brief holds one plan (`server/mcp.ts` refuses a second), so the id is never taken.
+      const id = brief?.id ?? `proj_${randomBytes(2).toString("hex")}`;
       const project: VideoProject = {
-        id: `proj_${randomBytes(2).toString("hex")}`,
+        id,
         kind: input.kind,
         status: "planned",
         statusAt: now(),
@@ -284,16 +289,19 @@ export function openStoreOver(
         if (post === undefined) {
           // A plan with no brief row — a clipping scout's, or a plan written from Chat — gets its
           // post here, so the render is filed for review by the same write that records it.
-          const filed = createPost({
-            caption: project.caption ?? `${project.title}\n\n${project.brief}`,
-            mediaUrl: patch.mediaUrl,
-            platform: project.platform,
-            ...(project.account === undefined ? {} : { account: project.account }),
-            ...(patch.renderedBy === undefined ? {} : { agent: patch.renderedBy }),
-            source: `${project.title} (${project.id})`,
-            stage: "rendered",
-            status: "pending",
-          });
+          const filed = createPost(
+            {
+              caption: project.caption ?? `${project.title}\n\n${project.brief}`,
+              mediaUrl: patch.mediaUrl,
+              platform: project.platform,
+              ...(project.account === undefined ? {} : { account: project.account }),
+              ...(patch.renderedBy === undefined ? {} : { agent: patch.renderedBy }),
+              source: `${project.title} (${project.id})`,
+              stage: "rendered",
+              status: "pending",
+            },
+            project.id,
+          );
           filed.projectId = project.id;
           project.postId = filed.id;
         } else {

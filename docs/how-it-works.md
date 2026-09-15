@@ -209,7 +209,7 @@ the only thing an execution seat reads before it spends.
 
 ```ts
 interface VideoProject {
-  id: string;                 // proj_…
+  id: string;                 // the brief's id when written on one, else proj_… — and the post its render files takes that same id
   kind: "generation" | "clipping";
   status: "planned" | "rendering" | "rendered" | "dropped";
   statusAt: string;           // ISO; lets the 08:00 sweep age out a dead claim
@@ -234,10 +234,19 @@ Characters and narrators are not modelled yet — a scene carries the narration 
 (`voiceover`) and the look as a style template plus model, which is what `generate_video` can
 take today. When the platform grows named voices or characters they belong on `Scene`.
 
+**One id from brief to plan to post.** A plan written on a brief (`post_id`) takes the brief's id;
+a standalone plan gets `proj_…` and the pending post its finishing write creates takes that id.
+Either way the operator follows a single id across Posts and Projects, and a renderer told to
+render `X` claims exactly `X`.
+
 Status is mirrored onto the linked post's `stage`: `rendering` ↔ `rendering`, `planned` ↔
-`scripted`, `rendered` (with media) ↔ `rendered`. The operator's moves on a plan are
-`PATCH /api/projects/:id {status: dropped | planned}` from the Projects screen — `planned → dropped`
-and `dropped → planned` only. Never `rendered`, which only the finishing `update_project` (with
+`scripted`, `rendered` (with media) ↔ `rendered`. The operator's moves on a plan, from the
+Projects screen: **Render** — `POST /api/projects/:id/render` opens one session with the plan's
+renderer (`RENDERER` in `templates/template.ts`: `producer` for generation, `clipper` for
+clipping) carrying the id, the guarded claim/finish moves on that id, and the plan as JSON; the
+row stays `planned` until the renderer's own `expected_status: planned` claim lands, so a session
+that never starts leaves nothing to free — and `PATCH /api/projects/:id {status: dropped | planned}`
+for `planned → dropped` and `dropped → planned` only. Never `rendered`, which only the finishing `update_project` (with
 its `media_url`) can write; a rendered plan is refused there with a 409, and so is a `rendering`
 one, which its executor holds until the render lands or the manager's sweep frees it. Rejecting a
 post from the Posts screen drops the unrendered plan written on it, and `create_project` refuses

@@ -171,7 +171,8 @@ describe("openStore", () => {
       styleTemplate: "Sunlit stoic", model: "alibaba/wan-3.0", caption: "Seneca slept on the floor. #stoicism",
       scenes: [{ prompt: "A stone floor at dawn", seconds: 4, voiceover: "He chose the floor.", text: "on purpose" }, { prompt: "A mattress pushed away", seconds: 5 }],
     });
-    expect(plan.id).toMatch(/^proj_[0-9a-f]{4}$/);
+    // One id from brief to plan to post: the plan IS the brief's id.
+    expect(plan.id).toBe(brief.id);
     expect(plan).toMatchObject({ status: "planned", postId: brief.id, platform: brief.platform, agent: "scriptwriter" });
     expect(Date.parse(plan.createdAt)).toBeGreaterThan(Date.now() - 60_000);
     expect(plan.statusAt).toBe(plan.createdAt);
@@ -219,6 +220,9 @@ describe("openStore", () => {
     expect(store.read().posts).toHaveLength(1);
     const filed = store.read().posts[0]!;
     expect(done?.postId).toBe(filed.id);
+    // A plan with no brief hands its id to the post its render files.
+    expect(filed.id).toBe(plan.id);
+    expect(plan.id).toMatch(/^proj_[0-9a-f]{4}$/);
     expect(filed).toMatchObject({
       status: "pending", stage: "rendered", kind: "clip", platform: "tiktok", account: "@clips", agent: "clipper",
       mediaUrl: "https://cdn.example/hill.mp4", projectId: plan.id, source: `The gravel hill (${plan.id})`, title: "The gravel hill",

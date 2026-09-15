@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -152,7 +152,7 @@ describe("the crews", () => {
     // handoff and the cron that overlaps it cannot both plan or render the same piece, and each
     // hands on only what it claimed.
     expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*channel\.create_project, kind generation, post_id the row.*`stage` scripted.*send_to_agent the producer once, wait false.*project ids.*claimed nothing, hand on nothing/s);
-    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*you hand on to nobody/s);
+    expect(seat("producer")?.system).toMatch(/named to you by the operator or a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*you hand on to nobody/s);
     // The timers are the fallback, by stage and status, claim the same way, and no seat's intake is told another intake is running.
     expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*channel\.create_project \(kind generation, post_id the row\).*send_to_agent the producer once, wait false.*project ids/s);
     expect(seat("producer")?.schedules?.[0]?.input).toMatch(/status planned, kind generation.*status rendering, expected_status planned.*status rendered, expected_status rendering/s);
@@ -277,6 +277,18 @@ describe("the crews", () => {
     // The one who rewrites the caption reads the plan's reasoning, and the gate names both rows.
     expect(seat(TEMPLATES.clipping, "caption-editor")?.system).toMatch(/channel\.get_project on the row's projectId/);
     for (const template of both) for (const agent of template.agents) expect(agent.system).toMatch(/a video project is the plan a video is made from/);
+  });
+
+  it("names, per kind of plan, the seat the dashboard's Render button opens a session with — and each crew has it", () => {
+    // `POST /api/projects/:id/render` looks the renderer up by this name in the live roster, so a
+    // rename here without one in the template would send every press to nobody.
+    expect(TEMPLATES.faceless.agents.map((a) => a.name)).toContain(RENDERER.generation);
+    expect(TEMPLATES.clipping.agents.map((a) => a.name)).toContain(RENDERER.clipping);
+    const producer = TEMPLATES.faceless.agents.find((a) => a.name === RENDERER.generation);
+    const clipper = TEMPLATES.clipping.agents.find((a) => a.name === RENDERER.clipping);
+    // Both are briefed to take a plan named to them, which is what the button's message does.
+    expect(producer?.system).toMatch(/one named to you/);
+    expect(clipper?.system).toMatch(/named to you/);
   });
 
   it("files each agent's work through the dashboard queue, under the same gate", () => {

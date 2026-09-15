@@ -16,6 +16,7 @@
  */
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import type { PostKind, PostPlatform } from "../seed/posts.ts";
+import type { ProjectKind } from "../seed/projects.ts";
 
 export type TemplateName = "faceless" | "clipping";
 
@@ -318,6 +319,13 @@ export const BUILTIN_TOOLS = [
  * without an operator editing this file; narrowing the list narrows what it can choose.
  */
 export const VIDEO_MODELS: readonly string[] = ["alibaba/wan-3.0", "alibaba/wan-3.0-prime", "alibaba/happyhorse-1.1"];
+
+/**
+ * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
+ * (`POST /api/projects/:id/render`), and the one the planners hand off to. A generation plan is
+ * the faceless crew's producer; a clipping plan is the clipping crew's clipper.
+ */
+export const RENDERER: Record<ProjectKind, string> = { generation: "producer", clipping: "clipper" };
 
 /** The persona every agent of this channel acts as, and the one connected accounts hang off. */
 export const CHANNEL_IDENTITY = "channel";

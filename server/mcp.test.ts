@@ -410,7 +410,7 @@ describe("mcp tools", () => {
       }), store, null))!,
     );
     expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: "alibaba/wan-3.0", agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
-    expect(plan.id).toMatch(/^proj_[0-9a-f]{4}$/);
+    expect(plan.id).toBe(brief.id);
     expect(plan.statusAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(plan.scenes).toEqual(scenes);
     expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "scripted", projectId: plan.id });
@@ -482,6 +482,7 @@ describe("mcp tools", () => {
     expect(done.status).toBe("rendered");
     expect(store.read().posts).toHaveLength(posts + 1);
     const filed = store.read().posts.find((p) => p.id === done.postId);
+    expect(filed?.id).toBe(plan.id);
     expect(filed).toMatchObject({
       status: "pending", stage: "rendered", mediaUrl: "https://cdn.example/hill.mp4", platform: "tiktok", account: "@clips", agent: "clipper", projectId: plan.id,
     });

@@ -107,7 +107,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     caption: "The 5am debate, settled 1,900 years ago. #stoicism #marcusaurelius",
   },
   {
-    id: "proj_e5b2", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(2),
+    id: "post_9f2a", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(2),
     title: "3 stoic rules nobody follows", agent: "scriptwriter", platform: "youtube", account: "@dailystoic", postId: "post_9f2a",
     brief: "Three rules from the Enchiridion the niche quotes and does not keep. Rule two is the one that stings, so it goes in the middle.",
     styleTemplate: "Marble & ink", model: "alibaba/wan-3.0",

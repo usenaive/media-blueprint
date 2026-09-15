@@ -13,6 +13,8 @@ import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } fro
 import { collect, notActivated, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
+import type { VideoProject } from "../seed/projects.ts";
+import { RENDERER } from "../templates/template.ts";
 
 /** The statuses the operator's screens move a row between; `posted` is `postNow`'s to write. */
 const PATCHABLE = POST_STATUSES.filter((status) => status !== "posted");
@@ -135,15 +137,59 @@ const parse = (body: string): Record<string, unknown> => {
   }
 };
 
-/** Resolved once per warm instance: the channel-manager agent the chat talks to. */
-let managerId: string | null = null;
-async function chatAgentId(config: ProxyConfig): Promise<string | null> {
-  if (managerId !== null) return managerId;
+/** Resolved once per warm instance, by name: the channel-manager the chat talks to, the producer or clipper a Render goes to. */
+const agentIds = new Map<string, string>();
+async function agentIdNamed(config: ProxyConfig, name: string): Promise<string | null> {
+  const known = agentIds.get(name);
+  if (known !== undefined) return known;
   const res = await proxyFetch(config, { method: "GET", path: "/v1/agents" }, null);
   if (!res.ok) return null;
   const list = (await res.json()) as { data?: { id: string; name: string }[] };
-  managerId = list.data?.find((a) => a.name === "channel-manager")?.id ?? null;
-  return managerId;
+  const id = list.data?.find((a) => a.name === name)?.id;
+  if (id !== undefined) agentIds.set(name, id);
+  return id ?? null;
+}
+
+/**
+ * What the Render button says to the plan's renderer: the id, the moves that carry it (claim,
+ * render, finish — each `update_project` on that same id), and the plan itself. The id is the
+ * whole thread: the brief, the plan and the post it becomes are one id, so the operator who pressed
+ * the button follows it from Projects to Posts without a lookup.
+ */
+export const renderInstruction = (project: VideoProject, renderer: string): string =>
+  [
+    `Render video project ${project.id} now — a ${project.kind} plan, planned and handed to you by the operator.`,
+    `Claim it first: channel.update_project id ${project.id}, status rendering, expected_status planned; refused means another session has it, so stop.`,
+    `Then read it in full (channel.get_project ${project.id}) and render exactly this plan${project.kind === "generation" ? " — every scene in order, in its model and style template" : " — the moment named in each source"}.`,
+    `Finish with channel.update_project id ${project.id}, status rendered, expected_status rendering, the video as media_url and "${renderer}" as agent; that write puts the video on the post, which keeps the id ${project.id}.`,
+    "Do not rewrite the plan and do not render a second one.",
+    "",
+    "The plan:",
+    JSON.stringify(project, null, 2),
+  ].join("\n");
+
+/**
+ * THE OPERATOR'S RENDER BUTTON. Opens one session with the plan's renderer (`RENDERER`: producer for
+ * a generation plan, clipper for a clipping one) carrying `renderInstruction`. The plan stays
+ * `planned` here: the claim is the renderer's own guarded write, so a session that never starts
+ * leaves nothing to free, and two presses race on `expected_status` like any two sessions.
+ */
+async function renderProject(store: Store, config: ProxyConfig, id: string): Promise<ApiReply> {
+  const project = store.read().projects.find((p) => p.id === id);
+  if (!project) return fail(404, "no such project");
+  if (project.status !== "planned") {
+    return fail(409, project.status === "dropped" ? "project is dropped; restore it first" : `project is ${project.status}; a plan is rendered once`);
+  }
+  const renderer = RENDERER[project.kind];
+  const agent = await agentIdNamed(config, renderer);
+  if (agent === null) return fail(503, `no ${renderer} agent in this org — run naive up with the ${project.kind === "generation" ? "faceless" : "clipping"} template`);
+  const created = await proxyFetch(
+    config,
+    { method: "POST", path: "/v1/sessions" },
+    JSON.stringify({ agent_id: agent, message: renderInstruction(project, renderer) }),
+  );
+  const session = (await created.json()) as Record<string, unknown>;
+  return created.ok ? json(202, { project: project.id, renderer, session }) : json(created.status, session);
 }
 
 /**
@@ -526,7 +572,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
 
   if (req.path === "/api/chat") {
     if (req.method !== "POST") return fail(405, "method not allowed");
-    const agent = await chatAgentId(ctx.config);
+    const agent = await agentIdNamed(ctx.config, "channel-manager");
     if (agent === null) return fail(503, "no channel-manager agent in this org");
     const message = parse(req.body).message;
     const created = await proxyFetch(
@@ -535,6 +581,12 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
       JSON.stringify({ agent_id: agent, message: typeof message === "string" ? message : "" }),
     );
     return json(created.status, await created.json());
+  }
+
+  const render = /^\/api\/projects\/([\w-]+)\/render$/.exec(req.path);
+  if (render) {
+    if (req.method !== "POST") return fail(405, "method not allowed");
+    return renderProject(await ctx.store(), ctx.config, render[1]!);
   }
 
   const upstream = upstreamFor(req.method, req.path, ctx.config.identityId, req.query);
