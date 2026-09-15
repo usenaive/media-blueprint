@@ -185,12 +185,15 @@ export function dailySeries(posted: readonly Post[], metric: Metric, days: numbe
   return points;
 }
 
-/** The rows published within the last `days` (a row with no readable date is kept, not dropped). */
+/**
+ * The rows published within the last `days`. A row with no readable date belongs to "All time"
+ * only: it cannot be shown to fall inside a window, and the chart could not place it either.
+ */
 export const withinDays = (posted: readonly Post[], days: number | null, now = new Date()): Post[] => {
   if (days === null) return [...posted];
   const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
   return posted.filter((p) => {
     const at = postedDate(p);
-    return at === null || at.getTime() >= since;
+    return at !== null && at.getTime() >= since;
   });
 };
