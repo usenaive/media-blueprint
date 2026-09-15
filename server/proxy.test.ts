@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configFromEnv, proxyFetch, upstreamFor } from "./proxy";
+import { SESSION_CREATE, configFromEnv, proxyFetch, sessionEvents, sessionList, sessionMessages, upstreamFor } from "./proxy";
 
 describe("upstreamFor", () => {
   it("maps chat onto session create and the relay onto the session stream", () => {
@@ -103,6 +103,29 @@ describe("upstreamFor", () => {
     expect(upstreamFor("GET", "/api/social/accounts", null)).toBeNull();
     expect(upstreamFor("GET", "/api/anything-else", "idn_1")).toBeNull();
     expect(upstreamFor("GET", "/api/social/../../v1/keys", "idn_1")).toBeNull();
+  });
+});
+
+/**
+ * The server walks the platform's sessions itself — to find the one running session of a seat, to
+ * scan a renderer's recent sessions for the plan they wrote, to open or follow up the one bound
+ * to a plan. Those are the same upstreams the browser's paths map onto, built from one place.
+ */
+describe("the session upstreams the server itself uses", () => {
+  it("lists one agent's sessions, narrowed by status, a bounded page at a time", () => {
+    expect(sessionList({ agent_id: "agt_1", status: "running" })).toEqual({ method: "GET", path: "/v1/sessions?limit=100&agent_id=agt_1&status=running" });
+    expect(sessionList({ agent_id: "agt_1", limit: 20 })).toEqual({ method: "GET", path: "/v1/sessions?limit=20&agent_id=agt_1" });
+    expect(sessionList({ agent_id: "agt 1&x=y", limit: 20 }).path).toBe("/v1/sessions?limit=20&agent_id=agt+1%26x%3Dy");
+    // The browser's list is this same upstream, with the filters it may pass.
+    expect(upstreamFor("GET", "/api/sessions", null, new URLSearchParams({ status: "running", agent_id: "agt_1" }))).toEqual(sessionList({ agent_id: "agt_1", status: "running" }));
+  });
+
+  it("opens a session, reads its log from a cursor and follows it up on the platform's own routes", () => {
+    expect(SESSION_CREATE).toEqual({ method: "POST", path: "/v1/sessions" });
+    expect(upstreamFor("POST", "/api/chat", null)).toEqual(SESSION_CREATE);
+    expect(sessionEvents("ses_1")).toEqual({ method: "GET", path: "/v1/sessions/ses_1/events?limit=100" });
+    expect(sessionEvents("ses_1", 7)).toEqual({ method: "GET", path: "/v1/sessions/ses_1/events?limit=100&after_seq=7" });
+    expect(sessionMessages("ses_1")).toEqual(upstreamFor("POST", "/api/chat/ses_1/messages", null));
   });
 });
 
