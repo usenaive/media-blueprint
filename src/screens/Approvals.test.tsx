@@ -242,6 +242,21 @@ describe("the Approvals screen", () => {
     expect(texts("button")).toEqual([]);
   });
 
+  it("plays a media argument in its row, with the label at the top edge of the player", async () => {
+    await mount([
+      session({
+        id: "ses_m",
+        pending_actions: [{ ...call, args: { content: "Rule two.", media_urls: ["https://cdn.example/a.mp4"] } }],
+      }),
+    ]);
+    const rows = Array.from(host.querySelectorAll("dl > div"));
+    const [content, media] = rows.map((row) => [row.querySelector("dt")!, row.querySelector("dd")!] as const);
+    expect(media![0].textContent).toBe("Media urls");
+    expect(media![1].querySelector("video")?.getAttribute("src")).toBe("https://cdn.example/a.mp4");
+    expect(media!.map((el) => el.classList.contains("self-start"))).toEqual([true, true]);
+    expect(content!.map((el) => el.classList.contains("self-start"))).toEqual([false, false]);
+  });
+
   it("draws a tool request's nested arguments as rows of their own, and a refusal as a failed chip", async () => {
     const send = await mount([
       session({

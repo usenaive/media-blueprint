@@ -477,32 +477,36 @@ const LONG = 160;
 function Args({ rows }: { rows: readonly ArgRow[] }) {
   return (
     <dl className="dl">
-      {rows.map((row) => (
-        <div key={row.key} className="contents">
-          <dt>{row.label}</dt>
-          <dd>
-            {row.media.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {row.media.map((src) => (
-                  <div key={src} className="w-64">
-                    <MediaPreview src={src} label={`${row.label} of this call`} />
-                  </div>
-                ))}
-              </div>
-            ) : row.rows ? (
-              <Args rows={row.rows} />
-            ) : row.list ? (
-              <div className="flex flex-wrap gap-1.5">
-                {row.list.map((one, i) => <span key={`${i}:${one}`} className="chip chip-plain">{one}</span>)}
-              </div>
-            ) : row.text.length > LONG || row.text.includes("\n") ? (
-              <Clamp text={row.text} lines={2} />
-            ) : (
-              <span className="whitespace-pre-wrap">{row.text}</span>
-            )}
-          </dd>
-        </div>
-      ))}
+      {rows.map((row) => {
+        // A player is taller than its label; the label sits at its top edge, not its baseline.
+        const top = row.media.length > 0 ? "self-start" : undefined;
+        return (
+          <div key={row.key} className="contents">
+            <dt className={top}>{row.label}</dt>
+            <dd className={top}>
+              {row.media.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {row.media.map((src) => (
+                    <div key={src} className="w-64">
+                      <MediaPreview src={src} label={`${row.label} of this call`} />
+                    </div>
+                  ))}
+                </div>
+              ) : row.rows ? (
+                <Args rows={row.rows} />
+              ) : row.list ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {row.list.map((one, i) => <span key={`${i}:${one}`} className="chip chip-plain">{one}</span>)}
+                </div>
+              ) : row.text.length > LONG || row.text.includes("\n") ? (
+                <Clamp text={row.text} lines={2} />
+              ) : (
+                <span className="whitespace-pre-wrap">{row.text}</span>
+              )}
+            </dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }
