@@ -248,7 +248,9 @@ describe("the Studio", () => {
 
     await type("Make scene 2 dusk");
 
-    expect(host.querySelector(".chip-fail")?.textContent).toContain("reject it first");
+    const refusals = Array.from(host.querySelectorAll(".chip-fail")).map((c) => c.textContent);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toContain("reject it first");
     expect(host.querySelector("textarea")!.value).toBe("Make scene 2 dusk");
     expect(host.querySelectorAll(".bubble-you").length).toBe(0);
   });

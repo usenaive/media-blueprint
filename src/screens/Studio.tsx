@@ -252,7 +252,6 @@ export function Studio() {
   const [error, setError] = useState<{ status: number; text: string } | null>(null);
   const [session, setSession] = useState<StudioSession | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [refused, setRefused] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<string[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("video");
@@ -277,7 +276,6 @@ export function Studio() {
     setError(null);
     setSession(null);
     setSessionId(null);
-    setRefused(null);
     setDrafts([]);
     setPlaying(null);
     void load();
@@ -297,21 +295,13 @@ export function Studio() {
     if (planless) setTab("post");
   }, [planless]);
 
-  const send = (text: string) => {
-    setRefused(null);
-    return apiSend<Revised>("POST", `/studio/${id}/revise`, { message: text }).then(
-      (answer) => {
-        setSessionId(answer.session);
-        setSession({ id: answer.session, status: "running", stop_reason: null, ...(answer.opened ? { created_at: new Date().toISOString() } : {}) });
-        void load();
-        return { sessionId: answer.session, acceptedSeq: answer.acceptedSeq };
-      },
-      (err: unknown) => {
-        setRefused(messageOf(err));
-        throw err;
-      },
-    );
-  };
+  const send = (text: string) =>
+    apiSend<Revised>("POST", `/studio/${id}/revise`, { message: text }).then((answer) => {
+      setSessionId(answer.session);
+      setSession({ id: answer.session, status: "running", stop_reason: null, ...(answer.opened ? { created_at: new Date().toISOString() } : {}) });
+      void load();
+      return { sessionId: answer.session, acceptedSeq: answer.acceptedSeq };
+    });
 
   const onEvent = (event: WireEvent) => {
     if (event.type === "tool.completed" && event.data?.name === "channel.update_project") void load();
@@ -403,14 +393,6 @@ export function Studio() {
 
       <div ref={main} className="flex min-h-0 flex-1">
         <section className="flex min-h-0 flex-col" style={{ width: folded ? "100%" : `${chatPct}%`, flex: folded ? 1 : "none" }}>
-          {refused !== null ? (
-            <div className="flex items-center gap-2 border-b border-line px-6 py-2">
-              <span className="chip chip-fail">{refused}</span>
-              <button type="button" className="btn btn-ghost btn-sm ml-auto" aria-label="Dismiss" onClick={() => setRefused(null)}>
-                <X size={14} strokeWidth={1.75} />
-              </button>
-            </div>
-          ) : null}
           {project === null && post !== null ? (
             <div className="border-b border-line px-6 py-2 text-xs text-ink-3">This post has no plan behind it — the channel-manager hears you here.</div>
           ) : null}
