@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { channelStats, piecesOf, rowKind, type Post } from "./data";
+import { channelStats, dailySeries, piecesOf, postedLabel, rowKind, withinDays, type Post } from "./data";
 
 const post = (over: Partial<Post> & Pick<Post, "id" | "status">): Post => ({
   title: "t", caption: "c", platform: "youtube", account: "@a", agent: "clipper", kind: "clip", duration: "0:30",
@@ -77,5 +77,82 @@ describe("rowKind", () => {
       post({ id: "note", status: "pending", duration: undefined }),
     ];
     expect(piecesOf(rows).map((row) => row.id)).toEqual(["piece"]);
+  });
+});
+
+/**
+ * The dated half of the queue. `postedAt` is ISO 8601 and has not always been: the store stamped
+ * the literal `"just now"` until it stamped a date, and nothing migrated the rows already written.
+ * A phrase is not a day, so every one of these reads it as no day at all — which is why Analytics
+ * has to say so rather than report the empty window's zero (`src/screens/Analytics.test.tsx`).
+ */
+const NOW = new Date(2026, 8, 15, 12, 0, 0);
+const daysBack = (days: number): string => new Date(2026, 8, 15 - days, 12, 0, 0).toISOString();
+const posted = (id: string, over: Partial<Post> = {}): Post => post({ id, status: "posted", ...over });
+
+describe("postedLabel", () => {
+  it("prints a stamp as a short date and a phrase as itself", () => {
+    const at = new Date(2026, 8, 14, 9, 0, 0);
+    expect(postedLabel(posted("iso", { postedAt: at.toISOString() }), NOW)).toBe(
+      at.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    );
+    expect(postedLabel(posted("phrase", { postedAt: "just now" }), NOW)).toBe("just now");
+    expect(postedLabel(posted("none"), NOW)).toBe("—");
+  });
+
+  it("carries the year only when the row was not published this one", () => {
+    const at = new Date(2024, 10, 3, 9, 0, 0);
+    expect(postedLabel(posted("old", { postedAt: at.toISOString() }), NOW)).toBe(
+      at.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+    );
+  });
+});
+
+describe("withinDays", () => {
+  it("counts today as the first of the days and cuts at local midnight", () => {
+    const rows = [posted("in", { postedAt: daysBack(29) }), posted("out", { postedAt: daysBack(30) })];
+    expect(withinDays(rows, 30, NOW).map((p) => p.id)).toEqual(["in"]);
+  });
+
+  it("leaves a row it cannot date out of every finite range and keeps it in All time", () => {
+    // The whole of the legacy-row bug in one assertion: a channel whose published rows all carry
+    // `"just now"` has an empty 30-day window and a full All time, so a range cannot be read as
+    // "this channel published nothing".
+    const rows = [posted("phrase", { postedAt: "just now" }), posted("unstamped"), posted("dated", { postedAt: daysBack(1) })];
+    expect(withinDays(rows, 30, NOW).map((p) => p.id)).toEqual(["dated"]);
+    expect(withinDays(rows, null, NOW).map((p) => p.id)).toEqual(["phrase", "unstamped", "dated"]);
+  });
+});
+
+describe("dailySeries", () => {
+  it("draws one point per day, ending today, with a zero for a day nothing shipped", () => {
+    const series = dailySeries([posted("a", { postedAt: daysBack(2), views: 300 })], "views", 4, NOW);
+    expect(series).toEqual([
+      { day: "2026-09-12", value: 0 },
+      { day: "2026-09-13", value: 300 },
+      { day: "2026-09-14", value: 0 },
+      { day: "2026-09-15", value: 0 },
+    ]);
+  });
+
+  it("sums the day's rows, counts posts as rows, and skips a row it cannot date", () => {
+    const rows = [
+      posted("a", { postedAt: daysBack(1), views: 300, likes: 10 }),
+      posted("b", { postedAt: daysBack(1), views: 200 }),
+      posted("legacy", { postedAt: "just now", views: 9_999 }),
+    ];
+    expect(dailySeries(rows, "views", 2, NOW).map((p) => p.value)).toEqual([500, 0]);
+    expect(dailySeries(rows, "likes", 2, NOW).map((p) => p.value)).toEqual([10, 0]);
+    expect(dailySeries(rows, "posts", 2, NOW).map((p) => p.value)).toEqual([2, 0]);
+  });
+
+  it("buckets a row on its own local day, not on UTC's", () => {
+    // A row published at half past eleven at night belongs to that evening on the operator's
+    // calendar; keying off the ISO string would move it a day in half the world's timezones.
+    const late = new Date(2026, 8, 14, 23, 30, 0);
+    expect(dailySeries([posted("late", { postedAt: late.toISOString() })], "posts", 2, NOW)).toEqual([
+      { day: "2026-09-14", value: 1 },
+      { day: "2026-09-15", value: 0 },
+    ]);
   });
 });

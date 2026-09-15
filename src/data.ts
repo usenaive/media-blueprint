@@ -129,3 +129,71 @@ export function channelStats(posts: readonly Post[]): ChannelStats {
     byAccount: [...totals.values()].sort((a, b) => b.views - a.views),
   };
 }
+
+/** The numbers a posted row carries; each is a tile on Analytics and a line on its chart. */
+export type Metric = "views" | "likes" | "posts";
+export const METRICS: readonly Metric[] = ["views", "likes", "posts"];
+export const METRIC_LABEL: Record<Metric, string> = { views: "Views", likes: "Likes", posts: "Posts published" };
+
+/**
+ * When a row was published, as a date — or nothing. The store stamps `postedAt` as ISO 8601; a
+ * row written before it did carries a phrase (`"2d ago"`), which is printed as it stands and
+ * cannot be placed on a day, so it is left off the chart rather than guessed onto one.
+ */
+export const postedDate = (post: Pick<Post, "postedAt">): Date | null => {
+  if (post.postedAt === undefined) return null;
+  const at = new Date(post.postedAt);
+  return Number.isNaN(at.getTime()) ? null : at;
+};
+
+/** The date a post row prints: a short calendar date for a stamp, the phrase itself for anything else. */
+export const postedLabel = (post: Pick<Post, "postedAt">, now = new Date()): string => {
+  const at = postedDate(post);
+  if (at === null) return post.postedAt ?? "—";
+  return at.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) });
+};
+
+export interface DayPoint {
+  /** Local calendar day, `YYYY-MM-DD`. */
+  day: string;
+  value: number;
+}
+
+const dayKey = (at: Date): string =>
+  `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+
+/**
+ * One point per calendar day over the last `days`, ending today: the metric summed over the
+ * rows published that day. Views and likes sit on the day the post shipped, because the row
+ * holds one number per post and no history of it; a day nothing shipped is a zero, so the line
+ * shows the gap rather than skipping it.
+ */
+export function dailySeries(posted: readonly Post[], metric: Metric, days: number, now = new Date()): DayPoint[] {
+  const byDay = new Map<string, number>();
+  for (const post of posted) {
+    const at = postedDate(post);
+    if (at === null) continue;
+    const key = dayKey(at);
+    byDay.set(key, (byDay.get(key) ?? 0) + (metric === "posts" ? 1 : (post[metric] ?? 0)));
+  }
+  const points: DayPoint[] = [];
+  for (let back = days - 1; back >= 0; back -= 1) {
+    const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
+    const key = dayKey(at);
+    points.push({ day: key, value: byDay.get(key) ?? 0 });
+  }
+  return points;
+}
+
+/**
+ * The rows published within the last `days`. A row with no readable date belongs to "All time"
+ * only: it cannot be shown to fall inside a window, and the chart could not place it either.
+ */
+export const withinDays = (posted: readonly Post[], days: number | null, now = new Date()): Post[] => {
+  if (days === null) return [...posted];
+  const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
+  return posted.filter((p) => {
+    const at = postedDate(p);
+    return at !== null && at.getTime() >= since;
+  });
+};

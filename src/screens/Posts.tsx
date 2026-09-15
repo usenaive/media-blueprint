@@ -2,7 +2,7 @@ import { Check, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiGet, apiSend, messageOf } from "../api";
 import { ConnectLine, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
-import { piecesOf, rowKind, type Post, type PostStatus } from "../data";
+import { piecesOf, postedLabel, rowKind, type Post, type PostStatus } from "../data";
 import { ACTIVE } from "../../templates";
 
 const TABS: { key: PostStatus; label: string }[] = [
@@ -45,7 +45,7 @@ export function Posts() {
           ? {
               ...p,
               status,
-              ...(status === "posted" ? { postedAt: "just now", views: 0, likes: 0 } : {}),
+              ...(status === "posted" ? { postedAt: new Date().toISOString(), views: 0, likes: 0 } : {}),
               ...(status === "rejected" ? { rejectedReason: "Rejected by you" } : {}),
             }
           : p,
@@ -85,23 +85,23 @@ export function Posts() {
             onClick={() => setTab(key)}
           >
             {label}
-            <span className="ml-1.5 font-mono text-xs text-ink-3">{pieces.filter((p) => p.status === key).length}</span>
+            <span className="ml-1.5 text-xs tabular-nums text-ink-3">{pieces.filter((p) => p.status === key).length}</span>
           </button>
         ))}
       </div>
 
       {production.length > 0 ? (
         <details className="panel mb-4">
-          <summary className="cursor-pointer px-3 py-2.5 font-medium">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
             In production {production.length} — briefs the crew is still scripting or rendering; they land here as videos
           </summary>
-          <div className="list">
+          <div className="divide-y divide-line border-t border-line">
             {production.map((p) => (
-              <div key={p.id} className="flex items-start gap-3 px-3 py-2.5">
+              <div key={p.id} className="flex items-start gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{p.title}</div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                    <span className="chip chip-plain font-mono">{p.stage}</span>
+                    <span className="chip chip-plain">{p.stage}</span>
                     <span>filed by {p.agent ?? "an unnamed agent"}</span>
                     {p.source ? <span>from {p.source}</span> : null}
                   </div>
@@ -138,7 +138,7 @@ export function Posts() {
       ) : (
         <div className="list">
           {rows.map((p) => (
-            <div key={p.id} className="flex items-start gap-3 px-3 py-2.5">
+            <div key={p.id} className="flex items-start gap-3 px-4 py-3">
               <Thumb src={p.mediaUrl} duration={p.duration} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -155,18 +155,18 @@ export function Posts() {
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                   <PlatformChip platform={p.platform} account={p.account} />
                   {p.account ? null : <span>no account chosen yet</span>}
-                  <span className="font-mono">
+                  <span>
                     {p.agent ? `filed by ${p.agent}` : "filed by an unnamed agent"} · {KIND_LABELS[p.kind] ?? p.kind}
                   </span>
                   {p.source ? <span className="truncate">from {p.source}</span> : null}
-                  {p.scheduledFor ? <span className="font-mono">→ {p.scheduledFor}</span> : null}
-                  {p.postedAt ? <span className="font-mono">{p.postedAt} · {fmt(p.views ?? 0)} views · {fmt(p.likes ?? 0)} likes</span> : null}
+                  {p.scheduledFor ? <span>→ {p.scheduledFor}</span> : null}
+                  {p.postedAt ? <span className="tabular-nums">{postedLabel(p)} · {fmt(p.views ?? 0)} views · {fmt(p.likes ?? 0)} likes</span> : null}
                 </div>
                 {p.rejectedReason ? <div className="mt-1 text-xs text-tone-fail">{p.rejectedReason}</div> : null}
               </div>
               {tab === "pending" || tab === "ready" ? (
                 <div className="flex shrink-0 gap-1.5">
-                  <button type="button" className="btn btn-ghost btn-sm" title="Approve for posting" onClick={() => move(p.id, "approved")}>
+                  <button type="button" className="btn btn-accent btn-sm" title="Approve for posting" onClick={() => move(p.id, "approved")}>
                     <Check size={14} strokeWidth={1.75} /> Approve
                   </button>
                   {/* Labelled, like Approve: the destructive half of a pair was an icon on its own,
@@ -179,7 +179,7 @@ export function Posts() {
               {tab === "approved" ? (
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm shrink-0"
+                  className="btn btn-accent btn-sm shrink-0"
                   title={`Publish now to ${p.platform}${p.account ? ` as ${p.account}` : ""}, video included`}
                   onClick={() => move(p.id, "posted")}
                 >

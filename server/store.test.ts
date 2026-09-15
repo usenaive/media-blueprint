@@ -88,7 +88,8 @@ describe("openStore", () => {
     expect(store.updatePost("post_9f2a", { status: "approved" })?.status).toBe("approved");
     expect(store.updatePost("post_7d3c", { status: "rejected", rejectedReason: "too spicy" })?.rejectedReason).toBe("too spicy");
     const posted = store.updatePost("post_9f2a", { status: "posted" });
-    expect(posted?.postedAt).toBe("just now");
+    // An ISO stamp, not a phrase: the analytics chart places the row on its day from this.
+    expect(posted?.postedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     const reopened = openStore(file, TEMPLATES.faceless);
     expect(reopened.read().posts.find((p) => p.id === "post_9f2a")?.status).toBe("posted");

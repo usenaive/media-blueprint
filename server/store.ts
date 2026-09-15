@@ -168,7 +168,7 @@ export function openStoreOver(
       }
       if (patch.status !== undefined) post.status = patch.status;
       if (patch.status === "posted") {
-        post.postedAt = "just now";
+        post.postedAt = new Date().toISOString();
         post.views ??= 0;
         post.likes ??= 0;
       }

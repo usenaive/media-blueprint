@@ -137,7 +137,7 @@ export function Chat() {
               </button>
               <button
                 type="button"
-                className={`flex size-8 items-center justify-center rounded-full border border-line ${draft ? "bg-action text-on-action" : "bg-surface-sunken text-ink-3"}`}
+                className={`flex size-8 items-center justify-center rounded-full border border-line ${draft ? "bg-accent text-on-accent" : "bg-surface-sunken text-ink-3"}`}
                 aria-label="Send"
                 onClick={send}
               >
