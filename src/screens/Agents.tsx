@@ -110,15 +110,19 @@ function AgentCard({ agent, runs }: { agent: ChannelAgent; runs: Run[] | null })
           <span className="font-mono">{agent.name}</span>
         </span>
       }
-      meta={<span className="font-mono">{agent.id}</span>}
+      meta={
+        <>
+          <span className="font-mono">{agent.id}</span>
+          {agent.model ? <span className="chip chip-plain font-mono" title={agent.model}>{agent.model}</span> : null}
+        </>
+      }
       aside={<LastRunChip runs={runs} history={history} />}
     >
       <div className="space-y-3">
         {agent.role ? <Clamp text={agent.role} lines={2} /> : null}
         <Facts
-          cols={4}
+          cols={3}
           items={[
-            ["Model", agent.model ? <span className="font-mono text-xs" title={agent.model}>{agent.model}</span> : "—"],
             [agent.period ? `Budget/${agent.period}` : "Budget", agent.capMicroUsd > 0 ? <span className="font-mono">{usd(agent.capMicroUsd)}</span> : "—"],
             ["Per task", agent.taskMicroUsd > 0 ? <span className="font-mono">{usd(agent.taskMicroUsd)}</span> : "—"],
             ["Tools", agent.tools.length],

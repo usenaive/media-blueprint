@@ -145,10 +145,15 @@ describe("the Channel settings screen", () => {
     const text = host.textContent ?? "";
     expect(text).toContain("producer");
     expect(text).toContain("agt_1");
-    expect(text).toContain("test/model");
     expect(text).toContain("Budget/day");
     expect(text).toContain("$10.00");
     expect(text).toContain("$2.00");
+
+    // The model is a chip on the card's head, whole, not a truncated cell of the facts grid.
+    const model = Array.from(host.querySelectorAll("header .chip")).find((chip) => chip.textContent === "test/model")!;
+    expect(model.className).toContain("font-mono");
+    expect(model.closest(".truncate")).toBeNull();
+    expect(Array.from(host.querySelectorAll("dt")).map((dt) => dt.textContent)).not.toContain("Model");
 
     // The newest run's ending, on the card's head — and tinted for what it is.
     const waiting = Array.from(host.querySelectorAll(".chip")).find((chip) => chip.textContent === "waiting for your approval");
