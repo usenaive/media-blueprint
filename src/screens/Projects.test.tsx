@@ -131,6 +131,12 @@ describe("the Projects screen", () => {
     const caption = card().querySelector<HTMLDetailsElement>("details")!;
     expect(caption.open).toBe(false);
     expect(caption.querySelector("summary")?.textContent).toBe("Caption");
+    // Every label inside the card is the same micro label; the eyebrow is for the page's sections.
+    expect(caption.querySelector("summary")?.className).toContain("prop-label");
+    expect(card().querySelector(".eyebrow")).toBeNull();
+    expect(Array.from(card().querySelectorAll(".prop-label")).map((n) => n.textContent)).toEqual(
+      expect.arrayContaining(["Brief", `Scenes${planned.scenes!.length}`, "Caption"]),
+    );
     expect(caption.textContent).toContain(planned.caption!);
   });
 

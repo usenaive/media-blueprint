@@ -102,10 +102,14 @@ function Sources({ sources }: { sources: ClipSource[] }) {
   );
 }
 
+/** A labelled section of a card's body, counted when it is a list. */
 function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <div>
-      <SectionHead label={label} count={count} />
+      <div className="prop-label mb-1.5">
+        {label}
+        {count !== undefined ? <span className="ml-1.5 tabular-nums">{count}</span> : null}
+      </div>
       {children}
     </div>
   );
@@ -290,7 +294,7 @@ export function Projects() {
 
                 {p.caption ? (
                   <details className="group">
-                    <summary className="eyebrow cursor-pointer select-none">
+                    <summary className="prop-label flex cursor-pointer select-none items-center gap-1.5">
                       <ChevronRight size={14} strokeWidth={1.75} className="self-center transition-transform group-open:rotate-90" aria-hidden />
                       Caption
                     </summary>

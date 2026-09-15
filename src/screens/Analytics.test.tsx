@@ -56,6 +56,9 @@ describe("the Analytics screen", () => {
 
     const tiles = Array.from(host.querySelectorAll("button.tile"));
     expect(tiles.map((t) => t.querySelector(".tile-value")?.textContent)).toEqual(["48k", "5.8k", "1"]);
+    // Tile labels wear the same micro label as every other in-card label, not a section eyebrow.
+    expect(tiles.map((t) => t.querySelector(".prop-label")?.textContent)).toEqual(["Views", "Likes", "Posts published"]);
+    expect(host.querySelector(".tile .eyebrow")).toBeNull();
     expect(tiles[0]?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector("svg[role=img]")?.getAttribute("aria-label")).toBe("Views per day");
 

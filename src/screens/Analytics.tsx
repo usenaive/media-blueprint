@@ -97,7 +97,7 @@ export function Analytics() {
             <div className="grid grid-cols-3 gap-3" role="group" aria-label="Metric">
               {METRICS.map((m) => (
                 <button key={m} type="button" className="tile equip" aria-pressed={metric === m} onClick={() => setMetric(m)}>
-                  <span className="eyebrow">{METRIC_LABEL[m]}</span>
+                  <span className="prop-label">{METRIC_LABEL[m]}</span>
                   <span className="tile-value">{m === "posts" ? String(totals[m]) : fmt(totals[m])}</span>
                   <span className="text-xs text-ink-3">{RANGES.find((r) => r.days === range)?.label.toLowerCase()}</span>
                 </button>
