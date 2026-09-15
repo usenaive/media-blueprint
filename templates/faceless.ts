@@ -106,9 +106,19 @@ export const FACELESS: MediaTemplate = {
       },
       schedules: [
         schedule({
-          cron: "30 6 * * *", // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render.
+          // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render, and the
+          // only seat that rescues a row stranded at `scripted` with no plan on it. The producer now
+          // reads plans (`channel.list_projects`), not rows, so a row the old chain moved to
+          // `scripted` by writing the script into its caption is read by nobody: the writer's list
+          // (stage brief) skips it and the producer's (status planned) never sees it. `list_posts`
+          // filters on status and stage only, so the missing plan is not a filter — it is `projectId`
+          // on the rows that come back, which is why the fire is told to read stage `scripted` and
+          // then drop the ones that carry one. `scripting` is left out on purpose: a row there may
+          // be a live claim, and `expected_stage scripting` would not tell the two apart, so a stale
+          // one is aged back to `brief` by the manager's 08:00 sweep and picked up here on the next fire.
+          cron: "30 6 * * *",
           input:
-            "Plan what the handoffs missed. Read project_context, then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused — and write its video project with channel.create_project (kind generation, post_id the row): title, brief, style template, video model, the scenes in order with prompt, seconds, voiceover and on-screen text, and the publishable caption, in the channel's tone, for its audience. Then send_to_agent the producer once, wait false, with the project ids you planned, handoff_key plans-<today's date>. Nothing claimed means nothing to do, and no trigger.",
+            "Plan what the handoffs missed. Read project_context, then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused. Then the rows nothing else will ever take: channel.list_posts, stage scripted, keeping only those that carry no projectId — their plan was never written, so no producer can render them; claim each the same way, channel.update_post, stage scripting, expected_stage scripted, and plan it from the caption already on the row rather than inventing a new topic. Write every claimed row's video project with channel.create_project (kind generation, post_id the row): title, brief, style template, video model, the scenes in order with prompt, seconds, voiceover and on-screen text, and the publishable caption, in the channel's tone, for its audience; filing it puts the row back at stage scripted with the plan on it. Then send_to_agent the producer once, wait false, with the project ids you planned, handoff_key plans-<today's date>. Nothing claimed means nothing to do, and no trigger.",
           budget_micro_usd: 10_000_000, // $10 — a read and a few rewrites.
         }),
       ],
