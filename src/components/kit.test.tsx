@@ -3,7 +3,7 @@
  * time reads as how long ago rather than as a timestamp. */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Clamp, Facts, ago } from "./kit";
 
 declare global {
@@ -22,7 +22,14 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  vi.restoreAllMocks();
 });
+
+/** jsdom lays nothing out; this is the clamped box reporting what a browser's would. */
+const laidOut = (scrollHeight: number, clientHeight: number) => {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(scrollHeight);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(clientHeight);
+};
 
 describe("Clamp", () => {
   it("clamps a long text and opens it on Read more", () => {
@@ -39,6 +46,22 @@ describe("Clamp", () => {
 
   it("offers no toggle on a text that fits", () => {
     act(() => root.render(<Clamp text="One line." />));
+    expect(host.querySelector("button")).toBeNull();
+  });
+
+  it("offers Read more when the box clips, however short the text, and not when it does not", () => {
+    // A narrow column clips a prompt the length guess calls short — the reader had no way in.
+    laidOut(60, 40);
+    act(() => root.render(<Clamp text="Marble & ink: cool greys, one ink line, subtle grain." lines={2} />));
+    expect(host.querySelector("button")?.textContent).toBe("Read more");
+    act(() => host.querySelector("button")!.click());
+    expect(host.querySelector("p")!.className).not.toContain("line-clamp");
+    expect(host.querySelector("button")?.textContent).toBe("Show less");
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    laidOut(40, 40);
+    act(() => root.render(<Clamp text={"word ".repeat(120).trim()} lines={2} />));
     expect(host.querySelector("button")).toBeNull();
   });
 });

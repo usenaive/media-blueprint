@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { connectNotice, channelPlatformsOf, type ContextAnswers } from "../connect";
 import { apiGet, fetchAccounts, messageOf } from "../api";
@@ -198,16 +198,31 @@ export function Facts({ items, cols = 3 }: { items: readonly [label: string, val
   );
 }
 
-/** Prose that shows its first lines and opens on request, so a long brief is never a wall. */
+/**
+ * Prose that shows its first lines and opens on request, so a long brief is never a wall. Whether
+ * it offers to open is measured off the clamped box (a narrow column clips sooner than a wide
+ * one); the length guess stands in only where no layout has happened.
+ */
 export function Clamp({ text, lines = 2, className = "" }: { text: string; lines?: 1 | 2 | 3 | 4 | 6; className?: string }) {
   const [open, setOpen] = useState(false);
+  const [clipped, setClipped] = useState<boolean | null>(null);
+  const box = useRef<HTMLParagraphElement>(null);
   const clamp =
     lines === 1 ? "line-clamp-1" : lines === 2 ? "line-clamp-2" : lines === 3 ? "line-clamp-3" : lines === 4 ? "line-clamp-4" : "line-clamp-6";
-  // Roughly what the clamp can hold; a shorter text gets no toggle to a state that looks the same.
-  const long = text.length > lines * 110 || text.split("\n").length > lines;
+  useLayoutEffect(() => {
+    const p = box.current;
+    if (p === null || open) return;
+    const measure = () => { if (p.clientHeight > 0) setClipped(p.scrollHeight > p.clientHeight); };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(p);
+    return () => watch.disconnect();
+  }, [text, lines, open]);
+  const long = clipped ?? (text.length > lines * 110 || text.split("\n").length > lines);
   return (
     <div className={className}>
-      <p className={`whitespace-pre-line text-sm leading-relaxed text-ink-2 ${open ? "" : clamp}`}>{text}</p>
+      <p ref={box} className={`whitespace-pre-line text-sm leading-relaxed text-ink-2 ${open ? "" : clamp}`}>{text}</p>
       {long ? (
         <button type="button" className="mt-1 text-xs font-medium text-accent hover:underline" onClick={() => setOpen((o) => !o)}>
           {open ? "Show less" : "Read more"}
