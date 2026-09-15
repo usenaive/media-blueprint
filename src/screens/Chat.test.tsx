@@ -12,7 +12,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Chat, readFrames, sessionState, streamReplies, turnsFrom } from "./Chat";
+import { Chat, isWall, readFrames, sessionState, streamReplies, turnsFrom } from "./Chat";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -115,6 +115,15 @@ describe("sessionState", () => {
   });
 });
 
+describe("isWall", () => {
+  it("is a reply past six lines' worth of text, or past six paragraphs", () => {
+    expect(isWall("Three clips are ready.")).toBe(false);
+    expect(isWall("word ".repeat(140))).toBe(true);
+    expect(isWall(Array.from({ length: 7 }, (_, i) => `Step ${i}`).join("\n"))).toBe(true);
+    expect(isWall(Array.from({ length: 6 }, (_, i) => `Step ${i}`).join("\n"))).toBe(false);
+  });
+});
+
 const SESSION = { id: "ses_1", status: "idle", stop_reason: "end_turn", created_at: "2026-09-15T05:00:00Z", title: "Clip the interview" };
 
 function Where() {
@@ -164,6 +173,29 @@ describe("the Chat screen", () => {
     expect(head.querySelector(".font-mono")!.textContent).toBe("ses_1");
     // An idle session is not streamed: nothing is running to answer.
     expect(fetchMock.mock.calls.some((c) => /\/stream/.test(c[0] as string))).toBe(false);
+  });
+
+  it("folds a long agent reply to six lines with a Read more, and leaves a long message of yours whole", async () => {
+    const wall = "The plan for the week, in detail. ".repeat(30).trim();
+    const log = [
+      { seq: 1, type: "message.completed", data: { role: "user", content: wall } },
+      { seq: 2, type: "message.completed", data: { role: "assistant", content: wall } },
+      { seq: 3, type: "message.completed", data: { role: "assistant", content: "Short." } },
+    ];
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(url === "/api/chat/ses_1" ? json(SESSION) : url === "/api/chat/ses_1/events" ? json({ data: log }) : json({ error: url }, 404)),
+    );
+    await mount("/chat/ses_1", fetchMock);
+    const [yours, agent, short] = Array.from(host.querySelectorAll(".bubble"));
+    expect(yours!.querySelector("p")).toBeNull();
+    expect(yours!.textContent).toBe(wall);
+    expect(agent!.querySelector("p")!.className).toContain("line-clamp-6");
+    expect(agent!.querySelector("p")!.textContent).toBe(wall);
+    expect(agent!.querySelector("button")!.textContent).toBe("Read more");
+    expect(short!.querySelector("p")).toBeNull();
+
+    await act(async () => agent!.querySelector("button")!.click());
+    expect(agent!.querySelector("p")!.className).not.toContain("line-clamp-6");
   });
 
   it("queues a follow-up on the open session and shows it at once", async () => {

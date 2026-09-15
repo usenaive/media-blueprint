@@ -199,9 +199,10 @@ export function Facts({ items, cols = 3 }: { items: readonly [label: string, val
 }
 
 /** Prose that shows its first lines and opens on request, so a long brief is never a wall. */
-export function Clamp({ text, lines = 2, className = "" }: { text: string; lines?: 1 | 2 | 3 | 4; className?: string }) {
+export function Clamp({ text, lines = 2, className = "" }: { text: string; lines?: 1 | 2 | 3 | 4 | 6; className?: string }) {
   const [open, setOpen] = useState(false);
-  const clamp = lines === 1 ? "line-clamp-1" : lines === 2 ? "line-clamp-2" : lines === 3 ? "line-clamp-3" : "line-clamp-4";
+  const clamp =
+    lines === 1 ? "line-clamp-1" : lines === 2 ? "line-clamp-2" : lines === 3 ? "line-clamp-3" : lines === 4 ? "line-clamp-4" : "line-clamp-6";
   // Roughly what the clamp can hold; a shorter text gets no toggle to a state that looks the same.
   const long = text.length > lines * 110 || text.split("\n").length > lines;
   return (

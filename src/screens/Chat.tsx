@@ -2,7 +2,7 @@ import { ArrowUp, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { apiGet, apiSend, messageOf, replyText } from "../api";
-import { Avatar, ago } from "../components/kit";
+import { Avatar, Clamp, ago } from "../components/kit";
 
 export interface Turn {
   you: boolean;
@@ -28,6 +28,11 @@ export interface WireEvent {
 /** The rail and the Shell re-read the session list on this window event. */
 export const SESSIONS_CHANGED = "chat:sessions";
 const sessionsChanged = () => window.dispatchEvent(new Event(SESSIONS_CHANGED));
+
+/** A reply past this many lines is folded to them; the operator opens the rest. Sized to `Clamp`'s
+ * own measure of "long", so a folded reply always carries its `Read more`. */
+const FOLD_LINES = 6;
+export const isWall = (text: string): boolean => text.length > FOLD_LINES * 110 || text.split("\n").length > FOLD_LINES;
 
 /**
  * The transcript, reduced from the log: the stream carries both sides (canonical-spec §8), the
@@ -267,7 +272,7 @@ export function Chat() {
           {turns.map((turn, i) => (
             <div key={i} className={turn.you ? "self-end" : undefined}>
               <div className={`whitespace-pre-line text-sm leading-relaxed ${turn.you ? "bubble bubble-you max-w-md" : "bubble bubble-agent max-w-2xl"}`}>
-                {turn.text}
+                {!turn.you && isWall(turn.text) ? <Clamp text={turn.text} lines={FOLD_LINES} className="[&>p]:text-ink" /> : turn.text}
               </div>
             </div>
           ))}
