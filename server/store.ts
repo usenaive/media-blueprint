@@ -77,6 +77,7 @@ export interface Store {
   createPost(input: NewPostInput): Post;
   updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "platform" | "stage">>): Post | null;
   createProject(input: NewProjectInput): VideoProject;
+  /** Edits a plan; a status other than `rendered` is held back while a revision is open. Null for no such plan. */
   updateProject(id: string, patch: ProjectPatch): VideoProject | null;
   /**
    * Binds a session to a plan; a session already on it is left as first recorded. A `revised`
@@ -302,7 +303,10 @@ export function openStoreOver(
         if (patch.platform !== undefined) post.platform = patch.platform;
         if (patch.account !== undefined) post.account = patch.account;
       }
-      if (patch.status !== undefined && patch.status !== project.status) {
+      // An open revision is the operator's paid claim: the plan goes forward to `rendered` or
+      // waits. Moved back, the revision would stay set and no later revise could ever open one.
+      const held = project.revision !== undefined && patch.status !== "rendered";
+      if (patch.status !== undefined && patch.status !== project.status && !held) {
         setStatus(project, patch.status);
         // The post mirrors the plan: claimed is `rendering`, freed is `scripted`, done is `rendered`.
         if (patch.status === "rendering") setStage(post, "rendering");

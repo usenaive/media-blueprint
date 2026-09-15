@@ -353,6 +353,27 @@ describe("the sessions a plan remembers, and the operator's revision", () => {
     vi.useRealTimers();
   });
 
+  it("holds a revised plan at rendering against a move back, and still lets its render land", () => {
+    const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
+    const id = rendered(store);
+    store.openRevision(id, "ses_render1", "cut it shorter");
+    const opened = structuredClone(store.read().projects[0]!);
+
+    // The sweep's write on a claim it takes for stale: the operator's revision is not a stale claim.
+    for (const status of ["planned", "dropped"] as const) {
+      const swept = store.updateProject(id, { status })!;
+      expect(swept).toMatchObject({ status: "rendering", statusAt: opened.statusAt, revision: opened.revision });
+      expect(store.read().posts[0]).toMatchObject({ stage: "rendering", mediaUrl: "fil_v1" });
+    }
+    // The words are still editable under it.
+    expect(store.updateProject(id, { title: "The hill" })).toMatchObject({ title: "The hill", status: "rendering", revision: opened.revision });
+
+    const done = store.updateProject(id, { status: "rendered", mediaUrl: "fil_v2", renderedBy: "clipper" })!;
+    expect(done).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1", sessionId: "ses_render1" }] });
+    expect(done).not.toHaveProperty("revision");
+    expect(store.read().posts[0]).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v2" });
+  });
+
   it("closes a revision whose note never landed: rendered again as of its render, nothing archived, and null with none open", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-02T09:00:00.000Z"));

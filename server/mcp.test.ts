@@ -531,6 +531,35 @@ describe("mcp tools", () => {
     expect(text<{ status: string }>((await handleMcp(call("update_project", { id: dropped.id, status: "planned" }), store, null))!).status).toBe("planned");
   });
 
+  it("refuses the sweep's write on a plan the operator is revising: a revised plan goes forward only", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+    );
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
+    expect(store.openRevision(plan.id, "ses_rev", "tighter")).toMatchObject({ status: "rendering" });
+    const opened = structuredClone(store.read().projects.find((p) => p.id === plan.id)!);
+
+    // A day later the claim looks stale to the manager; it is the operator's paid revision.
+    for (const status of ["planned", "dropped", "rendering"]) {
+      const swept = (await handleMcp(call("update_project", { id: plan.id, status, expected_status: "rendering" }), store, null)) as CallResult;
+      expect(swept.result.isError, status).toBe(true);
+      expect(swept.result.content[0]!.text).toMatch(/a revised plan goes forward only/);
+    }
+    expect(store.read().projects.find((p) => p.id === plan.id)).toEqual(opened);
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "rendering", mediaUrl: "fil_v1" });
+
+    // The renderer's finish is the one way through, and the plan is revisable again after it.
+    const done = text<{ status: string; renders: unknown[] }>(
+      (await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" }), store, null))!,
+    );
+    expect(done).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1" }] });
+    expect(done).not.toHaveProperty("revision");
+    expect(store.openRevision(plan.id, "ses_rev2", "again")).not.toBeNull();
+  });
+
   it("retargets the brief with its plan while the row is the crew's, and keeps an approved row where the operator put it", async () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft", agent: "trend-scout", stage: "brief" }), store, null))!);

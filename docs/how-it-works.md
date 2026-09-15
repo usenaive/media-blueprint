@@ -288,7 +288,10 @@ platform refuses gives the claim back (`closeRevision`: `rendered` again, the la
 restored). The renderer then finishes exactly as it did the first time (`status: rendered`,
 `expected_status: rendering`, `media_url`); because a revision is open, the store pushes
 `replaces` onto `renders[]`, clears the revision, puts the new file on the post at
-`stage: rendered` — and leaves the post `pending`. Approval is the operator's, every time. A plan
+`stage: rendered` — and leaves the post `pending`. Approval is the operator's, every time. While
+the revision is open the plan goes forward only: `update_project` refuses to move it anywhere
+but `rendered`, so the manager's sweep — which frees a claim older than a day — cannot free the
+operator's paid claim, and the store holds the status either way. A plan
 still on its first render (`rendering`, no revision open) cannot be revised yet — "the render is
 still out — revise when it lands" — because a note framed for `expected_status: rendering` would
 be heard after the first render filed, and its second video would have no plan to land on.

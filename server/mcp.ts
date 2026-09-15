@@ -487,6 +487,10 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (project.status === "rendered" && (status !== undefined || media !== undefined)) {
         throw new ToolError("project is rendered and that render was paid for; it cannot go back or be rendered again. A piece that has to be remade is a new plan.");
       }
+      // The operator's revision is a paid claim too: it is finished with the video, never freed.
+      if (project.revision !== undefined && status !== undefined && status !== "rendered") {
+        throw new ToolError("project is being revised on the operator's note; a revised plan goes forward only — finish it with status rendered and its media_url");
+      }
       const post = project.postId === undefined ? undefined : store.read().posts.find((p) => p.id === project.postId);
       if (post?.status === "rejected" && (status === "rendering" || status === "rendered")) {
         throw new ToolError(`post ${post.id} was rejected (${post.rejectedReason ?? "no reason"}); its plan is not made`);
