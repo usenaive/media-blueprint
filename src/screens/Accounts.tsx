@@ -34,10 +34,11 @@ const STATE_CHIP: Record<Account["state"], [label: string, cls: string]> = {
   expired: ["expired", "chip-fail"],
 };
 
-/** The account's own picture where the network gave one; its network's initials where it did not. */
+/** The account's own picture where the network gave one; its own initials where it did not — the
+ * network is already the chip on the row. */
 function AccountFace({ row }: { row: AccountRow }) {
   if (row.avatarUrl) return <img src={row.avatarUrl} alt="" className="size-8 shrink-0 rounded-full border border-line object-cover" />;
-  return <Avatar name={row.platform} size="md" />;
+  return <Avatar name={row.handle} size="md" />;
 }
 
 /**

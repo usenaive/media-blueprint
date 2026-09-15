@@ -73,6 +73,8 @@ describe("the Accounts screen", () => {
     expect(row.textContent).toContain("sa_1");
     expect(row.textContent).toContain("connected 3d ago");
     expect(row.querySelector(".chip-credit")?.textContent).toBe("connected");
+    // The face is the account's own initials, not its network's — the network is the chip.
+    expect(row.querySelector("[aria-hidden]")?.textContent).toBe("da");
   });
 
   it("draws the absence when nothing is connected, and opens the portal from the header", async () => {
