@@ -78,7 +78,8 @@ describe("the rail", () => {
 
     const fresh = host.querySelector<HTMLAnchorElement>('a[aria-label="New session"]')!;
     expect(fresh.getAttribute("href")).toBe("/chat");
-    expect(fresh.className).toContain("bg-accent-soft");
+    expect(fresh.className).toContain("rail-new");
+    expect(fresh.textContent).toBe("New session");
 
     const sessions = rows().filter((a) => /^\/chat\/ses_/.test(a.getAttribute("href") ?? ""));
     expect(sessions.map((a) => a.getAttribute("href"))).toEqual(["/chat/ses_new", "/chat/ses_ask", "/chat/ses_old"]);
@@ -101,9 +102,15 @@ describe("the rail", () => {
     expect(labels().filter((t) => t && ["Home", "Posts", "Projects", "Approvals", "Analytics", "Accounts"].some((l) => t.startsWith(l)))).toHaveLength(6);
   });
 
-  it("says quietly when there are none, and caps the list at twenty", async () => {
-    await mount(platform(null));
+  it("says quietly when there are none, keeps a failed read apart from an empty list, and caps the list at twenty", async () => {
+    await mount(platform([]));
     expect(host.textContent).toContain("No sessions yet");
+    expect(host.textContent).not.toContain("Sessions unavailable");
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await mount(platform(null));
+    expect(host.textContent).toContain("Sessions unavailable");
+    expect(host.textContent).not.toContain("No sessions yet");
     await act(async () => root.unmount());
     root = createRoot(host);
     const many = Array.from({ length: 25 }, (_, i) => ({ id: `ses_${i}`, status: "idle", stop_reason: "end_turn", created_at: "2026-09-01T00:00:00Z", title: `Session ${i}` }));

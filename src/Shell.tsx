@@ -23,15 +23,17 @@ const NAV = [
 const SESSION_ROWS = 20;
 
 /** The rail: an identity head (the channel's tile, name and template), flat nav rows with the
- * selected one on a grey pill, the chat sessions newest first under a label carrying the one
- * tinted control, `New session`, and a foot holding the settings row.
+ * selected one on a grey pill, the one tinted control, `New session`, over the chat sessions
+ * newest first, and a foot holding the settings row.
  *
  * Everything it names is read from the server. The rail is chrome, not a screen, so a failed read
- * simply leaves a count or a list out rather than shouting; the screen behind it reports why. */
+ * simply leaves a count out, or says the list is unavailable, rather than shouting; the screen
+ * behind it reports why. */
 export function Shell() {
   const [pending, setPending] = useState(0);
   const [waiting, setWaiting] = useState(0);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  // `null` is a failed read — not an empty list, which is a claim the rail must not make for it.
+  const [sessions, setSessions] = useState<ChatSession[] | null>([]);
   const [niche, setNiche] = useState<string | null>(null);
   const { pathname } = useLocation();
 
@@ -48,7 +50,8 @@ export function Shell() {
   // Re-read on every route change and whenever the Chat screen says so, so a session opened a
   // moment ago is on the rail as soon as the URL moves to it.
   useEffect(() => {
-    const read = () => apiGet<{ data?: ChatSession[] }>("/chat").then((page) => setSessions((page.data ?? []).slice(0, SESSION_ROWS)), () => {});
+    const read = () =>
+      apiGet<{ data?: ChatSession[] }>("/chat").then((page) => setSessions((page.data ?? []).slice(0, SESSION_ROWS)), () => setSessions(null));
     void read();
     window.addEventListener(SESSIONS_CHANGED, read);
     return () => window.removeEventListener(SESSIONS_CHANGED, read);
@@ -84,21 +87,15 @@ export function Shell() {
           </div>
 
           <section>
-            <h2 className="rail-label">
-              <span className="min-w-0 flex-1">Sessions</span>
-              <NavLink
-                to="/chat"
-                end
-                className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent hover:bg-accent hover:text-on-accent"
-                aria-label="New session"
-                title="New session"
-              >
-                <Plus size={14} strokeWidth={2} />
-              </NavLink>
-            </h2>
+            <h2 className="rail-label">Sessions</h2>
+            <NavLink to="/chat" end className="rail-new mb-1.5" aria-label="New session">
+              <Plus size={14} strokeWidth={2} />
+              <span>New session</span>
+            </NavLink>
             <div className="rail-frame">
-              {sessions.length === 0 ? <div className="px-2.5 py-1.5 text-xs text-ink-3">No sessions yet</div> : null}
-              {sessions.map((s) => (
+              {sessions === null ? <div className="px-2.5 py-1.5 text-xs text-ink-3">Sessions unavailable</div> : null}
+              {sessions?.length === 0 ? <div className="px-2.5 py-1.5 text-xs text-ink-3">No sessions yet</div> : null}
+              {(sessions ?? []).map((s) => (
                 <NavLink key={s.id} to={`/chat/${s.id}`} className="rail-row equip">
                   <span className="grid size-5 shrink-0 place-items-center">
                     <span className={`dot ${sessionState(s).dot}`} />
