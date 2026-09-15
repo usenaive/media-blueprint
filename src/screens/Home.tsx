@@ -153,7 +153,7 @@ export function Home() {
               {home.context.answers.map((answer) => (
                 <div key={answer.key} className="contents">
                   <dt>{answer.label}</dt>
-                  <dd>{Array.isArray(answer.value) ? answer.value.join(", ") : answer.value}</dd>
+                  <dd>{Array.isArray(answer.value) ? answer.value.join(", ") : <Clamp text={answer.value} lines={2} />}</dd>
                 </div>
               ))}
             </dl>

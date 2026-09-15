@@ -92,7 +92,11 @@ const LONG = "Post one short each weekday at 18:00 in the channel's voice. ".rep
 const home: HomeContext = {
   context: {
     template: "faceless",
-    answers: [{ key: "niche", label: "Niche", value: "stoic philosophy" }, { key: "platforms", label: "Platforms", value: ["youtube", "tiktok"] }],
+    answers: [
+      { key: "niche", label: "Niche", value: "stoic philosophy" },
+      { key: "platforms", label: "Platforms", value: ["youtube", "tiktok"] },
+      { key: "audience", label: "Audience", value: LONG },
+    ],
     updated_at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
   },
   team: [{ name: "producer", id: "agt_1" }],
@@ -129,7 +133,14 @@ describe("the Home screen", () => {
     const titles = Array.from(host.querySelectorAll("section.panel h2.card-title")).map((n) => n.textContent);
     expect(titles).toEqual(["Channel setup", "Day one", "Approvals due", "Queue", "Channel plan"]);
 
-    expect(Array.from(host.querySelectorAll(".dl dt")).map((n) => n.textContent)).toEqual(["Niche", "Platforms"]);
+    expect(Array.from(host.querySelectorAll(".dl dt")).map((n) => n.textContent)).toEqual(["Niche", "Platforms", "Audience"]);
+    const answers = Array.from(host.querySelectorAll(".dl dd"));
+    expect(answers[1]?.textContent).toBe("youtube, tiktok");
+    // A long answer folds to two lines behind Read more rather than filling the card.
+    const audience = answers[2]!.querySelector("p")!;
+    expect(audience.className).toContain("line-clamp-2");
+    expect(audience.textContent).toBe(LONG);
+    expect(answers[2]!.querySelector("button")?.textContent).toBe("Read more");
     expect(host.textContent).toContain("Updated 3h ago");
     expect(host.textContent).toContain("1/1 finished");
 
