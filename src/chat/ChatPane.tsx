@@ -31,8 +31,7 @@ export interface SessionRow {
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 const RUNNING = new Set(["queued", "running"]);
-const REOPEN_MS = 2000;
-const REOPEN_LIMIT = 60;
+export const REOPEN_MS = 5000;
 const STALL_LIMIT = 20;
 const SUMMARY_KEYS = ["id", "status", "model", "title"];
 
@@ -41,6 +40,18 @@ const SUMMARY_KEYS = ["id", "status", "model", "title"];
  * day-one intake arrives as a message of yours and is the longest thing in most transcripts. */
 const FOLD_LINES = 6;
 export const isWall = (text: string): boolean => text.length > FOLD_LINES * 110 || text.split("\n").length > FOLD_LINES;
+
+const OPERATOR = "\n\nOperator: ";
+
+/**
+ * A turn the server framed for a seat (`/revise` prefixes the plan, the finishing write and what
+ * not to do): the frame, and the operator's own words after it. Null for a turn typed as it reads.
+ */
+export function framed(text: string): { frame: string; text: string } | null {
+  const i = text.lastIndexOf(OPERATOR);
+  if (i < 0 || !text.startsWith("Revision of ")) return null;
+  return { frame: text.slice(0, i), text: text.slice(i + OPERATOR.length) };
+}
 
 const pause = (ms: number, signal: AbortSignal) =>
   new Promise<void>((done) => {
@@ -51,6 +62,8 @@ const pause = (ms: number, signal: AbortSignal) =>
     });
   });
 
+const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
 /**
  * Follows one session's relay from `afterSeq` (exclusive) and hands every event over, in order.
  *
@@ -59,9 +72,10 @@ const pause = (ms: number, signal: AbortSignal) =>
  * relay was how anyone could read the events of a session this dashboard never created.
  *
  * Ends at `session.idle` unless `keepOpen()` says the session is expected to wake again (a render
- * is still out), in which case it is re-opened after a pause — bounded, so a woken session streams
- * in without a reload but a screen nobody watches does not poll forever. A relay that ends without
- * an idle is re-opened from the last `seq` seen, also bounded. `onIdle` fires at each idle.
+ * is still out), in which case it is re-opened after a pause for as long as that holds — a render
+ * takes minutes, and the woken session streams in only if the relay is open by then — and not
+ * while the tab is hidden: nobody is watching, and the next look re-opens it. A relay that ends
+ * without an idle is re-opened from the last `seq` seen, bounded. `onIdle` fires at each idle.
  */
 export function followStream(
   sessionId: string,
@@ -72,9 +86,16 @@ export function followStream(
 ): () => void {
   const control = new AbortController();
   let last = afterSeq;
+  /** The pause between re-opens, held while the tab is hidden; false once the session is no longer expected to wake. */
+  const rest = async (): Promise<boolean> => {
+    do {
+      if (control.signal.aborted || !keepOpen()) return false;
+      await pause(REOPEN_MS, control.signal);
+    } while (hidden());
+    return !control.signal.aborted && keepOpen();
+  };
   void (async () => {
     let stalls = 0;
-    let reopens = 0;
     while (!control.signal.aborted) {
       let idle = false;
       let terminal = false;
@@ -105,10 +126,8 @@ export function followStream(
       if (terminal || control.signal.aborted) break;
       if (idle) {
         onIdle?.();
-        if (!keepOpen() || reopens >= REOPEN_LIMIT) break;
-        reopens += 1;
         stalls = 0;
-        await pause(REOPEN_MS, control.signal);
+        if (!(await rest())) break;
       } else {
         stalls += 1;
         if (stalls >= STALL_LIMIT) break;
@@ -179,8 +198,10 @@ function Note({ text }: { text: string }) {
 function Bubble({ item }: { item: Extract<Item, { kind: "user" | "assistant" }> }) {
   const you = item.kind === "user";
   const streaming = !you && item.streaming;
+  const split = you ? framed(item.text) : null;
+  const text = split === null ? item.text : split.text;
   return (
-    <div className={you ? "self-end" : undefined}>
+    <div className={you ? "flex flex-col items-end self-end" : undefined}>
       <div
         className={`whitespace-pre-line text-sm leading-relaxed ${you ? "bubble bubble-you max-w-md" : "bubble bubble-agent max-w-2xl"}`}
         data-streaming={streaming || undefined}
@@ -190,12 +211,26 @@ function Bubble({ item }: { item: Extract<Item, { kind: "user" | "assistant" }> 
             {item.text}
             <span className="caret" aria-hidden />
           </>
-        ) : isWall(item.text) ? (
-          <Clamp text={item.text} lines={FOLD_LINES} className={you ? "[&>button]:text-on-accent [&>p]:text-on-accent" : "[&>p]:text-ink"} />
+        ) : isWall(text) ? (
+          <Clamp text={text} lines={FOLD_LINES} className={you ? "[&>button]:text-on-accent [&>p]:text-on-accent" : "[&>p]:text-ink"} />
         ) : (
-          item.text
+          text
         )}
       </div>
+      {split !== null ? <Frame text={split.frame} /> : null}
+    </div>
+  );
+}
+
+/** The server's frame around an operator's note, folded: the words are the turn, the frame is how the seat was told. */
+function Frame({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-1 max-w-md text-xs text-ink-3">
+      <button type="button" className="block w-full text-right hover:text-ink hover:underline" onClick={() => setOpen((o) => !o)}>
+        {open ? "Hide the frame" : "Sent with the plan's frame"}
+      </button>
+      {open ? <p className="mt-1 whitespace-pre-line rounded-md border border-line bg-surface-sunken px-3 py-2 text-left leading-relaxed">{text}</p> : null}
     </div>
   );
 }
@@ -286,9 +321,10 @@ export function ChatPane({
         setStream((s) => reduce(s, event));
         setSent(false);
         if (event.type === "message.completed" && event.data?.role === "user") {
-          const text = event.data.content;
+          const echo = event.data.content;
+          const said = typeof echo === "string" ? (framed(echo)?.text ?? echo) : echo;
           setLocal((l) => {
-            const i = l.findIndex((t) => t.kind === "user" && t.text === text);
+            const i = l.findIndex((t) => t.kind === "user" && t.text === said);
             return i < 0 ? l : [...l.slice(0, i), ...l.slice(i + 1)];
           });
         }

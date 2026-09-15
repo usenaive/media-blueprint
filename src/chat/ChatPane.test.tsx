@@ -13,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api";
-import { ChatPane, argsSummary, followStream, isWall, placeholderFor } from "./ChatPane";
+import { ChatPane, REOPEN_MS, argsSummary, followStream, framed, isWall, placeholderFor } from "./ChatPane";
 import type { WireEvent } from "./stream";
 
 declare global {
@@ -92,7 +92,7 @@ describe("followStream", () => {
     expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(["/api/chat/ses_1/stream?after_seq=12", "/api/chat/ses_1/stream?after_seq=13"]);
   });
 
-  it("re-opens after an idle while keepOpen holds, and not once it lets go", async () => {
+  it("re-opens after an idle for as long as keepOpen holds — no cap, a render takes minutes — and not once it lets go, even mid-pause", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const fetchMock = vi.fn((_url: string) => Promise.resolve(stream(frame("session.idle", { stop_reason: "end_turn" }, 5))));
     vi.stubGlobal("fetch", fetchMock);
@@ -101,15 +101,39 @@ describe("followStream", () => {
     const stop = followStream("ses_1", 4, () => {}, () => open, idle);
     await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(REOPEN_MS);
     await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(2));
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]![0]).toBe("/api/chat/ses_1/stream?after_seq=5");
+    // Past the two minutes the old cap allowed, still re-opening.
+    for (let n = 3; n <= 80; n += 1) {
+      await vi.advanceTimersByTimeAsync(REOPEN_MS);
+      await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(n));
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(80);
     open = false;
-    await vi.advanceTimersByTimeAsync(2000);
-    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(3));
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(REOPEN_MS * 3);
+    expect(fetchMock).toHaveBeenCalledTimes(80);
+    expect(idle).toHaveBeenCalledTimes(80);
+    stop();
+  });
+
+  it("holds the re-open while the tab is hidden, and re-opens on the next look", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const fetchMock = vi.fn((_url: string) => Promise.resolve(stream(frame("session.idle", { stop_reason: "end_turn" }, 5))));
+    vi.stubGlobal("fetch", fetchMock);
+    let visibility = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    const idle = vi.fn();
+    const stop = followStream("ses_1", 4, () => {}, () => true, idle);
+    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(REOPEN_MS * 4);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    visibility = "visible";
+    await vi.advanceTimersByTimeAsync(REOPEN_MS);
+    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    delete (document as unknown as Record<string, unknown>)["visibilityState"];
     stop();
   });
 });
@@ -139,6 +163,16 @@ describe("placeholderFor", () => {
     expect(placeholderFor({ kind: "tool", name: "generate_video" }, "x")).toBe("Send to queue after this turn…");
     expect(placeholderFor({ kind: "approval" }, "x")).toBe("Answer in Approvals, or say something else…");
     expect(placeholderFor({ kind: "rendering", job: { id: "med", kind: "video", startedAt: 0, fileIds: null, failed: false } }, "x")).toBe("x");
+  });
+});
+
+describe("framed", () => {
+  it("splits the server's frame from the operator's words, and leaves a plain turn alone", () => {
+    const frame = "Revision of video project post_1. Read it with channel.get_project post_1; the current video is fil_1. Do not create a second project, do not approve or post anything.";
+    expect(framed(`${frame}\n\nOperator: Make scene 2 dusk`)).toEqual({ frame, text: "Make scene 2 dusk" });
+    expect(framed(`${frame}\n\nOperator: Two lines\n\nOperator: said twice`)).toEqual({ frame: `${frame}\n\nOperator: Two lines`, text: "said twice" });
+    expect(framed("Make scene 2 dusk")).toBeNull();
+    expect(framed("Not a frame\n\nOperator: x")).toBeNull();
   });
 });
 
@@ -320,6 +354,29 @@ describe("the ChatPane", () => {
     await vi.waitFor(() => expect(fetchMock.mock.calls.some((c) => c[0] === "/api/chat/ses_1/stream?after_seq=6")).toBe(true));
     await act(async () => live.push({ seq: 7, type: "message.completed", data: { role: "user", content: "Add captions" }, created_at: at(10) }));
     await vi.waitFor(() => expect(bubbles()).toEqual([[true, "Hi"], [true, "Add captions"]]));
+  });
+
+  it("folds the echo of a note the server framed, and shows the turn as the operator's words with the frame behind a toggle", async () => {
+    const FRAME = "Revision of video project post_1. Read it with channel.get_project post_1; the current video is fil_1. Apply the operator's note below on the same plan. Do not create a second project, do not approve or post anything.";
+    const { fetchMock, live } = serve(SESSION, [{ seq: 1, type: "message.completed", data: { role: "user", content: `${FRAME}\n\nOperator: Tighter` }, created_at: at(0) }]);
+    const send = vi.fn(() => Promise.resolve({ sessionId: "ses_1", acceptedSeq: 6 }));
+    await mount({ send });
+    // The replayed transcript: the words, not the frame.
+    expect(bubbles()).toEqual([[true, "Tighter"]]);
+    expect(host.textContent).not.toContain("channel.get_project");
+
+    await type("Add captions");
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some((c) => c[0] === "/api/chat/ses_1/stream?after_seq=6")).toBe(true));
+    await act(async () => live.push({ seq: 7, type: "message.completed", data: { role: "user", content: `${FRAME}\n\nOperator: Add captions` }, created_at: at(10) }));
+    await vi.waitFor(() => expect(bubbles()).toEqual([[true, "Tighter"], [true, "Add captions"]]));
+
+    const toggles = Array.from(host.querySelectorAll("button")).filter((b) => b.textContent === "Sent with the plan's frame");
+    expect(toggles).toHaveLength(2);
+    await act(async () => toggles[1]!.click());
+    expect(host.textContent).toContain(FRAME);
+    expect(bubbles()).toEqual([[true, "Tighter"], [true, "Add captions"]]);
+    await act(async () => Array.from(host.querySelectorAll("button")).find((b) => b.textContent === "Hide the frame")!.click());
+    expect(host.textContent).not.toContain("channel.get_project");
   });
 
   it("takes a refused send off the transcript and back into the composer", async () => {
