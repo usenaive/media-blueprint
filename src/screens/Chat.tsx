@@ -207,6 +207,7 @@ export function Chat() {
       follow(sessionId, 0);
     } else {
       setLoading(true);
+      setSession(null);
       setTurns([]);
       Promise.all([apiGet<ChatSession>(`/chat/${sessionId}`), apiGet<{ data: WireEvent[] }>(`/chat/${sessionId}/events`)]).then(
         ([s, log]) => {
@@ -232,9 +233,17 @@ export function Chat() {
   const send = () => {
     const text = draft.trim();
     if (!text) return;
-    setTurns((m) => [...m, { you: true, text }]);
+    const turn: Turn = { you: true, text };
+    setTurns((m) => [...m, turn]);
     setDraft("");
     setError(null);
+    // A refused send is not part of the conversation: the turn comes off the screen and back
+    // into the composer, so a retry sends it once rather than showing it twice.
+    const refused = (err: unknown) => {
+      setTurns((m) => m.filter((t) => t !== turn));
+      setDraft((d) => (d === "" ? text : d));
+      setError(messageOf(err));
+    };
     if (sessionId === undefined) {
       apiSend<{ id?: string }>("POST", "/chat", { message: text }).then(
         (created) => {
@@ -244,7 +253,7 @@ export function Chat() {
           sessionsChanged();
           void navigate(`/chat/${created.id}`);
         },
-        (err: unknown) => setError(messageOf(err)),
+        refused,
       );
       return;
     }
@@ -253,7 +262,7 @@ export function Chat() {
         setSession((s) => (s ? { ...s, status: "running", stop_reason: null } : s));
         follow(sessionId, accepted.accepted_seq ?? 0);
       },
-      (err: unknown) => setError(messageOf(err)),
+      refused,
     );
   };
 

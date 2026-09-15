@@ -10,7 +10,7 @@
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Chat, isWall, readFrames, sessionState, streamReplies, turnsFrom } from "./Chat";
 
@@ -127,7 +127,12 @@ describe("isWall", () => {
 const SESSION = { id: "ses_1", status: "idle", stop_reason: "end_turn", created_at: "2026-09-15T05:00:00Z", title: "Clip the interview" };
 
 function Where() {
-  return <output data-where>{useLocation().pathname}</output>;
+  return (
+    <>
+      <output data-where>{useLocation().pathname}</output>
+      <Link to="/chat/ses_2" data-next>next</Link>
+    </>
+  );
 }
 
 async function mount(path: string, fetchMock: ReturnType<typeof vi.fn>) {
@@ -238,6 +243,36 @@ describe("the Chat screen", () => {
     await vi.waitFor(() => expect(fetchMock.mock.calls.some((c) => c[0] === "/api/chat/ses_9/stream")).toBe(true));
     expect(changed).toHaveBeenCalled();
     window.removeEventListener("chat:sessions", changed);
+  });
+
+  it("takes a refused follow-up off the transcript and back into the composer", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/chat/ses_1") return Promise.resolve(json(SESSION));
+      if (url === "/api/chat/ses_1/events") return Promise.resolve(json({ data: LOG }));
+      if (url === "/api/chat/ses_1/messages" && init?.method === "POST") return Promise.resolve(json({ error: "session is busy" }, 409));
+      return Promise.resolve(json({ error: url }, 404));
+    });
+    await mount("/chat/ses_1", fetchMock);
+    const before = bubbles();
+    await type("Add captions");
+    await vi.waitFor(() => expect(host.querySelector(".chip-fail")!.textContent).toContain("session is busy"));
+    expect(bubbles()).toEqual(before);
+    expect(host.querySelector("textarea")!.value).toBe("Add captions");
+    expect(fetchMock.mock.calls.some((c) => /\/stream/.test(c[0] as string))).toBe(false);
+  });
+
+  it("drops the previous session's header while the next one loads", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/chat/ses_1") return Promise.resolve(json(SESSION));
+      if (url === "/api/chat/ses_1/events") return Promise.resolve(json({ data: LOG }));
+      return Promise.resolve(json({ error: "no such session" }, 404));
+    });
+    await mount("/chat/ses_1", fetchMock);
+    expect(host.querySelector("header .font-mono")!.textContent).toBe("ses_1");
+    await act(async () => host.querySelector<HTMLAnchorElement>("[data-next]")!.click());
+    expect(where()).toBe("/chat/ses_2");
+    expect(host.querySelector("header")).toBeNull();
+    expect(host.querySelector(".chip-fail")!.textContent).toContain("no such session");
   });
 
   it("shows a failed read as a chip, not as a line of text", async () => {
