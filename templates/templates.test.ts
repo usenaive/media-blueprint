@@ -276,6 +276,8 @@ describe("the crews", () => {
     expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/do not cut and you do not caption/);
     expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/status rendering, expected_status planned.*channel\.get_project.*clip_video.*status rendered, expected_status rendering/s);
     expect(seat(TEMPLATES.clipping, "clipper")?.schedules?.[0]?.input).toMatch(/status planned, kind clipping.*expected_status planned.*status rendered, expected_status rendering/s);
+    // clip_video takes a URL and picks the clips itself; the plan's timestamps choose among what comes back.
+    expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/clip_video takes the source URL whole — no timestamps.*file the one clip that is the moment the plan names \(its from, to and reason\).*that file id as `media_url`/s);
     // The one who rewrites the caption reads the plan's reasoning, and the gate names both rows.
     expect(seat(TEMPLATES.clipping, "caption-editor")?.system).toMatch(/channel\.get_project on the row's projectId/);
     for (const template of both) for (const agent of template.agents) expect(agent.system).toMatch(/a video project is the plan a video is made from/);
