@@ -1,9 +1,12 @@
+// @vitest-environment jsdom
 /**
  * The approval surface's two decisions: which calls are waiting, and how the arguments a person is
  * being asked to approve are put in front of them.
  */
-import { describe, expect, it } from "vitest";
-import { argRows, keyOf, parked, trimmed, unanswered, type WireSession } from "./Approvals";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Approvals, argRows, keyOf, parked, trimmed, unanswered, wants, type WireSession } from "./Approvals";
 
 const session = (over: Partial<WireSession> & Pick<WireSession, "id">): WireSession => ({
   agent_id: "agt_1",
@@ -69,8 +72,22 @@ describe("argRows", () => {
   it("renders the arguments as prose under the agent's own key names", () => {
     expect(argRows({ content: "Rule two will sting.", platforms: ["x", "threads"] })).toEqual([
       { key: "content", label: "Content", text: "Rule two will sting.", media: [] },
-      { key: "platforms", label: "Platforms", text: "x, threads", media: [] },
+      { key: "platforms", label: "Platforms", text: "x, threads", media: [], list: ["x", "threads"] },
     ]);
+  });
+
+  it("carries a nested object, and a list of them, as rows of their own beside the prose", () => {
+    const [options] = argRows({ options: { schedule_at: "tomorrow", retries: 2 } });
+    expect(options!.rows).toEqual([
+      { key: "schedule_at", label: "Schedule at", text: "tomorrow", media: [] },
+      { key: "retries", label: "Retries", text: "2", media: [] },
+    ]);
+    // One object in a list is that object's rows; several are numbered so their rows stay apart.
+    const [tool] = argRows({ tools: [{ name: "generate_video", permission: "allow" }] });
+    expect(tool!.rows?.map((row) => [row.label, row.text])).toEqual([["Name", "generate_video"], ["Permission", "allow"]]);
+    const [tools] = argRows({ tools: [{ name: "generate_video" }, { name: "clip_video" }] });
+    expect(tools!.rows?.map((row) => [row.label, row.rows?.map((inner) => inner.text)])).toEqual([["Tools 1", ["generate_video"]], ["Tools 2", ["clip_video"]]]);
+    expect(argRows({ content: "hello" })[0]).not.toHaveProperty("rows");
   });
 
   it("pulls media URLs out so the thing being approved can be watched", () => {
@@ -134,5 +151,168 @@ describe("a question", () => {
     // `tool_call_id` is a hash of the name and arguments (§7.1): two producers asking the same
     // question share it, and a card keyed on it alone would answer both at once.
     expect(keyOf({ sessionId: "ses_a", toolCallId: "tc_1" })).not.toBe(keyOf({ sessionId: "ses_b", toolCallId: "tc_1" }));
+  });
+});
+
+describe("wants", () => {
+  it("says in one phrase what the agent is asking for", () => {
+    expect(wants({ tool: "request_tools" })).toBe("asks to be granted tools");
+    expect(wants({ tool: "social.post" })).toBe("asks to post");
+    expect(wants({ tool: "youtube.upload_video" })).toBe("wants to run");
+    expect(wants({ tool: "ask_operator", question: { prompt: "?", fields: [] } })).toBe("asks you a question");
+  });
+});
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+describe("the Approvals screen", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
+  /** GET /sessions and GET /agents answer from the fixtures; every other call goes to `send`. */
+  async function mount(sessions: WireSession[], send: ReturnType<typeof vi.fn> = vi.fn()) {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/sessions") return Promise.resolve(json({ data: sessions }));
+      if (url === "/api/agents") return Promise.resolve(json({ data: [{ id: "agt_1", name: "producer" }] }));
+      return send(url, init) as Promise<Response>;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<Approvals />));
+    return send;
+  }
+
+  const texts = (selector: string) => Array.from(host.querySelectorAll(selector)).map((el) => el.textContent?.trim());
+  const click = async (label: string) => {
+    const button = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === label)!;
+    await act(async () => button.click());
+  };
+
+  it("draws a blocked call as a card: who asks, for what, its arguments as labelled rows, and the decision", async () => {
+    const send = await mount([
+      session({
+        id: "ses_2",
+        stop_reason: "awaiting_approval",
+        pending_actions: [{ ...call, args: { content: "Rule two will sting.", platforms: ["x", "threads"], reason: "The queue is empty." } }],
+      }),
+    ]);
+    send.mockResolvedValueOnce(json({ id: "ses_2" }, 202));
+
+    const head = host.querySelector("section.panel > header")!;
+    expect(head.textContent).toContain("producer");
+    expect(head.textContent).toContain("asks to post");
+    expect(head.querySelector(".chip.font-mono")?.textContent).toBe("social.post");
+    expect(head.textContent).toContain("Waiting for you");
+    expect(head.textContent).toContain("ses_2");
+
+    // The arguments are rows under the agent's own key names, never one paragraph of "Key: value".
+    expect(texts("dl dt")).toEqual(["Content", "Platforms"]);
+    expect(texts("dl dd")[0]).toBe("Rule two will sting.");
+    expect(texts("dl dd .chip")).toEqual(["x", "threads"]);
+    expect(texts(".prop-label")).toEqual(["Arguments", "Reason"]);
+    expect(host.textContent).toContain("The queue is empty.");
+    expect(host.textContent).not.toContain("Reason: The queue is empty.");
+    expect(texts("button")).toEqual(["Approve", "Reject"]);
+    expect(host.textContent).toContain("Approve lets this one call run, exactly as written above.");
+
+    await click("Approve");
+
+    const [url, init] = send.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/sessions/ses_2/tool_confirmations");
+    expect(JSON.parse(init.body as string)).toEqual({ tool_call_id: "call_1", decision: "allow" });
+    expect(host.textContent).toContain("Approved. producer may now run social.post with these arguments");
+    expect(texts("button")).toEqual([]);
+  });
+
+  it("draws a tool request's nested arguments as rows of their own, and a refusal as a failed chip", async () => {
+    const send = await mount([
+      session({
+        id: "ses_3",
+        pending_actions: [{ tool_call_id: "call_r", name: "request_tools", args: { tools: [{ name: "generate_video", permission: "allow" }] } }],
+      }),
+    ]);
+    send.mockResolvedValueOnce(json({ error: { message: "not yours to grant" } }, 403));
+
+    expect(host.textContent).toContain("asks to be granted tools");
+    expect(texts("dl dt")).toEqual(["Tools", "Name", "Permission"]);
+    expect(host.textContent).not.toContain("Name: generate_video");
+
+    await click("Reject");
+
+    expect(host.querySelector("footer .chip-fail")?.textContent).toBe("Not sent");
+    expect(host.textContent).toContain("Nothing was decided — not yours to grant");
+    expect(host.querySelector("header .chip-fail")?.textContent).toBe("Not answered");
+  });
+
+  it("draws a question as its prompt over a labelled form, refuses a blank answer here, and sends a whole one", async () => {
+    const question = {
+      prompt: "I have no generate_video this turn. Which video model may I use?",
+      fields: [
+        { key: "model", label: "Model", type: "choice" as const, options: ["alibaba/wan-3.0"], other: false },
+        { key: "why", label: "Why", type: "text" as const },
+      ],
+    };
+    const send = await mount([
+      session({
+        id: "ses_q",
+        stop_reason: "awaiting_answer",
+        pending_actions: [{ kind: "question", tool_call_id: "tc_q", name: "ask_operator", args: {}, question }],
+      }),
+    ]);
+    send.mockResolvedValueOnce(json({ id: "ses_q" }, 202));
+
+    expect(host.textContent).toContain("asks you a question");
+    expect(host.textContent).toContain(question.prompt);
+    expect(texts(".prop-label")).toEqual(["Question", "Your answer", "Model", "Why"]);
+    expect(texts("button")).toEqual(["alibaba/wan-3.0", "Answer"]);
+
+    await click("Answer");
+    expect(host.textContent).toContain("Nothing was sent — still unanswered: Model, Why.");
+    expect(send).not.toHaveBeenCalled();
+
+    await click("alibaba/wan-3.0");
+    const why = host.querySelector<HTMLInputElement>("input.input")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(why, "  it is pinned ");
+      why.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Answer");
+
+    const [url, init] = send.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/sessions/ses_q/answers");
+    expect(JSON.parse(init.body as string)).toEqual({ tool_call_id: "tc_q", answers: { model: "alibaba/wan-3.0", why: "it is pinned" } });
+    expect(host.textContent).toContain("Answered. producer picks up with your answer.");
+  });
+
+  it("says plainly when nothing is waiting, and when the sessions could not be read", async () => {
+    await mount([session({ id: "ses_done", stop_reason: "end_turn" })]);
+    expect(host.querySelector(".absence")?.textContent).toBe("Nothing is waiting on you.");
+    expect(host.querySelector("section.panel")).toBeNull();
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(json({ error: { message: "platform key missing" } }, 503))));
+    await act(async () => root.render(<Approvals />));
+    expect(host.querySelector("header .chip-fail")?.textContent).toBe("platform key missing");
+    expect(host.querySelector(".absence")?.textContent).toContain("platform key missing");
   });
 });
