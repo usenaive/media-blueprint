@@ -22,7 +22,7 @@ const router = createBrowserRouter([
       // The setup questions are the studio's, asked before the crew exists; the dashboard opens on
       // what they produced (`Home`), not on a form of its own.
       { index: true, Component: Home },
-      { path: "chat", Component: Chat },
+      { path: "chat/:sessionId?", Component: Chat },
       { path: "posts", Component: Posts },
       { path: "projects", Component: Projects },
       { path: "analytics", Component: Analytics },
