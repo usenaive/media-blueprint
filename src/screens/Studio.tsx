@@ -56,6 +56,29 @@ export const versionsOf = (project: VideoProject, post: Post | null): { mediaUrl
   ...(post?.mediaUrl !== undefined ? [{ mediaUrl: post.mediaUrl, at: project.revision?.replaces?.at ?? project.statusAt, current: true }] : []),
 ];
 
+/**
+ * Who hears a note here and what they do with it, by where the plan is: a planned plan's note
+ * edits words and renders nothing; a first render still out folds the note in; a rendered one is
+ * rendered again. One line — it sits under a composer that may be half a window wide.
+ */
+export const voiceOf = (project: VideoProject | null): { seat: string; placeholder: string; does: string; empty: string } => {
+  if (project === null) {
+    return { seat: "channel-manager", placeholder: "Say what to change about this post…", does: "edits the post on your note", empty: "Nothing has been said about this post yet — the channel-manager hears your first note." };
+  }
+  const renderer = RENDERER[project.kind];
+  if (project.status === "planned") {
+    const seat = project.agent ?? "planner";
+    return { seat, placeholder: "Say what to change about this plan…", does: "edits the plan on your note", empty: `No session is bound to this plan yet — your first note opens one with the ${seat}.` };
+  }
+  if (project.status === "dropped") {
+    return { seat: renderer, placeholder: "Dropped — restore the plan to revise it…", does: "hears nothing on a dropped plan", empty: "This plan is dropped — restore it in Projects, and your note reaches its seat." };
+  }
+  if (project.status === "rendering" && project.revision === undefined) {
+    return { seat: renderer, placeholder: "Say what to change about this render…", does: "folds your note into the render that is out", empty: `The render is out and no session is bound to it — a note reaches the ${renderer} once one is.` };
+  }
+  return { seat: renderer, placeholder: "Say what to change about this video…", does: "re-renders on your note", empty: `No session is bound to this plan yet — your first note opens one with the ${renderer}.` };
+};
+
 /** A vertical video, centred and no taller than the drawer allows. */
 function Portrait({ src, label }: { src: string; label: string }) {
   return (
@@ -374,6 +397,7 @@ export function Studio() {
   const tabs = project === null ? TABS.filter((t) => t.key === "post") : TABS;
   const state = session === null ? null : sessionState(session);
   const title = project?.title ?? post?.title ?? id;
+  const voice = voiceOf(project);
 
   return (
     <div className="flex h-full flex-col">
@@ -419,18 +443,12 @@ export function Studio() {
             onSession={setSession}
             onEvent={onEvent}
             keepOpen={rendering}
-            placeholder={project ? "Say what to change about this video…" : "Say what to change about this post…"}
-            empty={
-              project
-                ? `No session is bound to this plan yet — your first note opens one with the ${RENDERER[project.kind]}.`
-                : "Nothing has been said about this post yet — the channel-manager hears your first note."
-            }
+            placeholder={voice.placeholder}
+            empty={voice.empty}
             under={
-              project ? (
-                <>
-                  <span className="font-mono">{RENDERER[project.kind]}</span> · re-renders on your note — approving and publishing stay with you
-                </>
-              ) : undefined
+              <>
+                <span className="font-mono">{voice.seat}</span> · {voice.does} — approve/publish stays yours
+              </>
             }
           />
         </section>

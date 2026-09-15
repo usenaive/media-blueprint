@@ -616,6 +616,7 @@ body:has(dialog[open]) {
  * ───────────────────────────────────────────────────────────────────────── */
 .composer-dock {
   padding: 0.75rem 1.5rem 2.5rem;
+  container-type: inline-size;
 }
 @media (min-width: 640px) {
   .composer-dock {
@@ -712,6 +713,15 @@ body:has(dialog[open]) {
   color: var(--accent);
   border-radius: 0 0 var(--r-2xl) var(--r-2xl);
   border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+}
+/* In a narrow pane (the Studio's chat beside its drawer) the line is one line, cut, rather than
+   a stack under the composer. */
+@container (max-width: 40rem) {
+  .composer-under {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* THE EQUIP PRESS. The one piece of physical feedback in the studio: a chip or

@@ -142,7 +142,8 @@ describe("the Studio", () => {
     // Into the queue on the post's own tab, not the bare list.
     expect(header.querySelector("a[href='/posts?tab=pending']")?.textContent).toBe("Open post");
     expect(host.querySelector(".composer-under")!.textContent).toContain("producer · re-renders on your note");
-    expect(host.querySelector(".composer-under")!.textContent).toContain("approving and publishing stay with you");
+    expect(host.querySelector(".composer-under")!.textContent).toContain("approve/publish stays yours");
+    expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this video…");
 
     expect(tabs()).toEqual(["Video", "Plan", "Post"]);
     expect(players()).toEqual(["/api/files/fil_cur"]);
@@ -159,6 +160,36 @@ describe("the Studio", () => {
     await act(async () => versions()[0]!.click());
     expect(players()).toEqual(["/api/files/fil_old"]);
     expect(versions().map((v) => v.getAttribute("aria-selected"))).toEqual(["true", "false"]);
+  });
+
+  it("words the composer by where the plan is: the planner edits a planned plan, the renderer folds a note into a render still out", async () => {
+    const planned: VideoProject = { ...rendered, status: "planned", agent: "scriptwriter", sessions: [] };
+    await mount(wire(() => json({ project: planned, post: null, session: null })));
+    expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this plan…");
+    expect(host.querySelector(".composer-under")!.textContent).toBe("scriptwriter · edits the plan on your note — approve/publish stays yours");
+    expect(host.querySelector(".absence")!.textContent).toContain("your first note opens one with the scriptwriter");
+    expect(host.textContent).not.toContain("re-renders");
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await mount(wire(() => json({ project: { ...planned, agent: undefined }, post: null, session: null })));
+    expect(host.querySelector(".composer-under")!.textContent).toContain("planner · edits the plan on your note");
+
+    // A first render out: no revision opens, the note is folded into the render that is running.
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    const out: VideoProject = { ...rendered, status: "rendering", statusAt: new Date(Date.now() - 60_000).toISOString(), renders: undefined };
+    await mount(wire(() => json({ project: out, post: { ...post, mediaUrl: undefined, stage: "rendering" }, session: { ...session, status: "running", stop_reason: null } })));
+    expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this render…");
+    expect(host.querySelector(".composer-under")!.textContent).toBe("producer · folds your note into the render that is out — approve/publish stays yours");
+
+    // A render out on the operator's note is a re-render, as a rendered plan's is.
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    const revising: VideoProject = { ...out, revision: { openedAt: out.statusAt, sessionId: "ses_1", note: "dusk" } };
+    await mount(wire(() => json({ project: revising, post: { ...post, stage: "rendering" }, session })));
+    expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this video…");
+    expect(host.querySelector(".composer-under")!.textContent).toBe("producer · re-renders on your note — approve/publish stays yours");
   });
 
   it("switches tabs: the plan's scenes, then the post with Approve and Reject and no publish", async () => {
@@ -299,7 +330,8 @@ describe("the Studio", () => {
 
     expect(host.textContent).toContain("This post has no plan behind it");
     expect(host.querySelector(".absence")!.textContent).toContain("the channel-manager hears your first note");
-    expect(host.querySelector(".composer-under")!.textContent).toContain("channel-manager");
+    expect(host.querySelector(".composer-under")!.textContent).toBe("channel-manager · edits the post on your note — approve/publish stays yours");
+    expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this post…");
     expect(tabs()).toEqual(["Post"]);
     expect(host.textContent).toContain(post.title);
 
