@@ -16,7 +16,7 @@ import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
 import { PROJECT_KINDS, PROJECT_STATUSES, type ClipSource, type ProjectKind, type ProjectSession, type ProjectStatus, type Scene } from "../seed/projects.ts";
 import { ACTIVE } from "../templates/index.ts";
-import { labelOf, VIDEO_MODELS } from "../templates/template.ts";
+import { labelOf, RENDERER, VIDEO_MODELS } from "../templates/template.ts";
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -517,7 +517,8 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         ...(plan.sources === undefined ? {} : { sources: plan.sources }),
         ...(plan.caption === undefined ? {} : { caption: plan.caption }),
       });
-      if (moved !== null && (status === "rendering" || status === "rendered")) await bind(store, whoIsRunning, id, agent, "rendered");
+      // The claim names no seat; the plan's kind does.
+      if (moved !== null && (status === "rendering" || status === "rendered")) await bind(store, whoIsRunning, id, agent ?? RENDERER[project.kind], "rendered");
       return moved;
     }
     case "list_style_templates":

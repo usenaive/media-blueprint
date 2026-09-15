@@ -305,7 +305,7 @@ about that is inferred at read time; it is bound when the write happens:
 |---|---|
 | **Render** (`POST /api/projects/:id/render`) | the session it opened, `{role: "rendered"}`; the create carries `metadata: {project_id}` so the platform's row names the plan too |
 | `create_project` over MCP | the calling session as `{role: "planned"}` |
-| `update_project` moving to `rendering` or `rendered` over MCP | the calling session as `{role: "rendered"}` |
+| `update_project` moving to `rendering` or `rendered` over MCP | the calling session as `{role: "rendered"}`; a claim that names no `agent` is the plan's renderer's (`RENDERER[kind]`) |
 | **Revise** when the last session is over | the fresh renderer session as `{role: "revised"}` |
 
 An MCP call carries no session id, and an agent cannot see its own; the write names its seat

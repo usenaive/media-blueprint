@@ -684,6 +684,27 @@ describe("binding a plan to the session writing it", () => {
     expect(store.read().projects.find((p) => p.id === plan.id)?.sessions.map((s) => [s.id, s.role])).toEqual([["ses_scout", "planned"], ["ses_clipper", "rendered"]]);
   });
 
+  it("binds a claim that names no agent to the plan's renderer seat", async () => {
+    // The renderers' briefs claim with `status rendering, expected_status planned` and no `agent`:
+    // the seat is the plan's kind — clipper for a clipping plan, producer for a generation one.
+    const asked: string[] = [];
+    const who = async (agent: string) => { asked.push(agent); return `ses_${agent}`; };
+    const store = freshStore();
+    const clip = text<{ id: string }>((await file(store, who))!);
+    await handleMcp(call("update_project", { id: clip.id, status: "rendering", expected_status: "planned" }), store, null, who);
+    const made = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", agent: "scriptwriter", title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null, who))!,
+    );
+    await handleMcp(call("update_project", { id: made.id, status: "rendering", expected_status: "planned" }), store, null, who);
+    expect(asked).toEqual(["scout", "clipper", "scriptwriter", "producer"]);
+    const sessions = (id: string) => store.read().projects.find((p) => p.id === id)?.sessions.map((s) => [s.id, s.role]);
+    expect(sessions(clip.id)).toEqual([["ses_scout", "planned"], ["ses_clipper", "rendered"]]);
+    expect(sessions(made.id)).toEqual([["ses_scriptwriter", "planned"], ["ses_producer", "rendered"]]);
+    // A finish that names its seat is asked for as named.
+    await handleMcp(call("update_project", { id: clip.id, status: "rendered", expected_status: "rendering", media_url: "fil_1", agent: "editor" }), store, null, who);
+    expect(asked.at(-1)).toBe("editor");
+  });
+
   it("records nothing when the seat has no running session, several, is not named, or the lookup fails — and the write still lands", async () => {
     for (const who of [async () => null, async () => { throw new Error("upstream down"); }]) {
       const store = freshStore();
