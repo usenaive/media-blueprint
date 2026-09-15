@@ -34,7 +34,7 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
 export const POLL_EVERY = 5_000;
 export const POLL_FOR = 10 * 60_000;
 
-function ProjectStatusChip({ status }: { status: ProjectStatus }) {
+export function ProjectStatusChip({ status }: { status: ProjectStatus }) {
   const cls =
     status === "rendered" ? "chip-credit" : status === "dropped" ? "chip-fail" : status === "planned" ? "chip-absent" : "chip-plain";
   return (
@@ -45,9 +45,9 @@ function ProjectStatusChip({ status }: { status: ProjectStatus }) {
   );
 }
 
-const total = (project: VideoProject) => (project.scenes ?? []).reduce((sum, scene) => sum + scene.seconds, 0);
+export const total = (project: VideoProject) => (project.scenes ?? []).reduce((sum, scene) => sum + scene.seconds, 0);
 
-const rangeOf = (source: ClipSource) =>
+export const rangeOf = (source: ClipSource) =>
   source.from || source.to ? `${source.from ?? "start"} → ${source.to ?? "end"}` : "whole video";
 
 /** A small labelled line under a scene's prompt: `VOICEOVER  Seneca told a rich friend…`. */
@@ -60,7 +60,7 @@ function Line({ label, text }: { label: string; text: string }) {
   );
 }
 
-function Scenes({ scenes }: { scenes: Scene[] }) {
+export function Scenes({ scenes }: { scenes: Scene[] }) {
   return (
     <ol className="list">
       <li className="grid grid-cols-[1.5rem_3rem_minmax(0,1fr)] gap-x-3 px-3 py-1.5 text-xs text-ink-3">
@@ -84,7 +84,7 @@ function Scenes({ scenes }: { scenes: Scene[] }) {
   );
 }
 
-function Sources({ sources }: { sources: ClipSource[] }) {
+export function Sources({ sources }: { sources: ClipSource[] }) {
   return (
     <ul className="space-y-2">
       {sources.map((source, i) => (
@@ -103,7 +103,7 @@ function Sources({ sources }: { sources: ClipSource[] }) {
 }
 
 /** A labelled section of a card's body, counted when it is a list. */
-function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
+export function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <div>
       <div className="prop-label mb-1.5">
@@ -263,7 +263,11 @@ export function Projects() {
           {rows.map((p) => (
             <Card
               key={p.id}
-              title={p.title}
+              title={
+                <Link to={`/studio/${p.id}`} className="hover:underline" title="Open this plan in the Studio: its video, and the session that made it">
+                  {p.title}
+                </Link>
+              }
               meta={
                 <>
                   <span className="chip chip-plain">{p.kind}</span>

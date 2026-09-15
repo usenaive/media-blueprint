@@ -13,6 +13,7 @@ import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
 import { Posts } from "./screens/Posts";
 import { Projects } from "./screens/Projects";
+import { Studio } from "./screens/Studio";
 
 const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ const router = createBrowserRouter([
       { path: "chat/:sessionId?", Component: Chat },
       { path: "posts", Component: Posts },
       { path: "projects", Component: Projects },
+      { path: "studio/:id", Component: Studio },
       { path: "analytics", Component: Analytics },
       { path: "accounts", Component: Accounts },
       { path: "approvals", Component: Approvals },

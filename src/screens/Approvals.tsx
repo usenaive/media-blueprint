@@ -165,6 +165,15 @@ export const wants = (item: Pick<Parked, "tool" | "question">): string =>
 const REASON = "reason";
 
 /**
+ * The queue row a parked call is about, when it names one: `social.post`'s `post_id`, or the
+ * `id` a channel write carries. That is the row (or its plan) the Studio opens on.
+ */
+export const postIdOf = (item: Pick<Parked, "tool" | "args">): string | null => {
+  const id = item.tool === "social.post" ? item.args.post_id : item.tool.startsWith("channel.") ? item.args.id : undefined;
+  return typeof id === "string" && /^(post|proj)_/.test(id) ? id : null;
+};
+
+/**
  * One card's key. `tool_call_id` is derived from the tool name and its arguments (§7.1), so two
  * sessions holding the same call share it; the session id keeps their cards apart.
  */
@@ -348,7 +357,17 @@ export function Approvals() {
                     {item.since ? <span>{ago(item.since)}</span> : null}
                   </>
                 ),
-                aside: <span className="font-mono text-xs text-ink-3">{item.sessionId}</span>,
+                aside: (
+                  <>
+                    {postIdOf(item) !== null ? (
+                      // An anchor, not a Link: this screen is also drawn outside the router.
+                      <a href={`/studio/${postIdOf(item)}`} className="text-xs text-ink-3 hover:text-ink hover:underline" title="Open the post and its video in the Studio">
+                        Open in Studio
+                      </a>
+                    ) : null}
+                    <span className="font-mono text-xs text-ink-3">{item.sessionId}</span>
+                  </>
+                ),
               };
               if (item.question) {
                 const question = item.question;

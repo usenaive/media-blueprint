@@ -194,7 +194,11 @@ export function Posts() {
           {rows.map((p) => (
             <Card
               key={p.id}
-              title={p.title}
+              title={
+                <Link to={`/studio/${p.projectId ?? p.id}`} className="hover:underline" title="Open this post and its video in the Studio">
+                  {p.title}
+                </Link>
+              }
               meta={
                 <>
                   <StatusChip status={p.status} />
