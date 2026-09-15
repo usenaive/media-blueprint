@@ -6,6 +6,7 @@ import {
   dailySeries,
   METRIC_LABEL,
   METRICS,
+  postedDate,
   postedLabel,
   withinDays,
   type DayPoint,
@@ -45,10 +46,16 @@ export function Analytics() {
 
   const everything = channelStats(posts ?? []);
   const platforms = [...new Set(everything.posted.map((p) => p.platform))].sort();
-  const scoped = withinDays(
-    platform === "all" ? everything.posted : everything.posted.filter((p) => p.platform === platform),
-    range,
-  );
+  const onPlatform = platform === "all" ? everything.posted : everything.posted.filter((p) => p.platform === platform);
+  const scoped = withinDays(onPlatform, range);
+  /**
+   * The published rows this dashboard cannot place on a day. `postedAt` is ISO 8601 and has not
+   * always been: a row published before the store stamped one carries a phrase (`"just now"`),
+   * which no finite range can contain and the chart cannot plot (`postedDate`). They are why a
+   * channel with real published history can have an empty window, and an empty window of tiles
+   * reading zero would report that history as nothing. The screen says which it is instead.
+   */
+  const undated = onPlatform.filter((p) => postedDate(p) === null);
   const stats = channelStats(scoped);
   const series = dailySeries(stats.posted, metric, chartDays(range));
   const rows = [...stats.posted].sort((a, b) => (b.postedAt ?? "").localeCompare(a.postedAt ?? ""));
@@ -91,6 +98,15 @@ export function Analytics() {
         <div className="absence">{error === null ? "Loading the channel's posts…" : "No numbers to show."}</div>
       ) : everything.posted.length === 0 ? (
         <div className="absence">Nothing published yet. Approve a post and publish it, and its views and likes appear here.</div>
+      ) : scoped.length === 0 && undated.length > 0 ? (
+        <div className="absence">
+          Nothing datable was published in this range, and {undated.length} published{" "}
+          {undated.length === 1 ? "row carries" : "rows carry"} no readable publish date — filed before the store stamped
+          one, so no range can hold {undated.length === 1 ? "it" : "them"}. Their numbers are under All time.
+          <button type="button" className="btn btn-ghost btn-sm ml-2" onClick={() => setRange(null)}>
+            Show all time
+          </button>
+        </div>
       ) : (
         <>
           <section className="panel mb-4 p-4">
