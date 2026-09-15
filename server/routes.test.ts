@@ -1224,3 +1224,367 @@ describe("every /api/* route is behind the operator's bearer", () => {
     expect(mcp.status).toBe(401);
   });
 });
+
+/**
+ * THE STUDIO. The operator opens a video and talks to the session that made it. The plan remembers
+ * its sessions (the Render button's, the crew's own writes, the operator's revisions); the read
+ * hands back the latest of them live; the revision is the one legitimate way a rendered plan — paid
+ * for, so final to every agent — renders again, and it refuses a video the operator already approved.
+ */
+describe("the Studio", () => {
+  type Hit = { method: string; url: string; body: Record<string, unknown> | null };
+  const seats = ["channel-manager", "producer", "clipper", "scriptwriter", "scout"];
+  const upstream = (answer: (method: string, url: URL, body: Record<string, unknown> | null) => Response | undefined = () => undefined) => {
+    const hits: Hit[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const url = new URL(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null;
+      hits.push({ method, url: `${url.pathname}${url.search}`, body });
+      if (url.pathname === "/v1/agents") return json({ data: seats.map((name) => ({ id: `agt_${name}`, name })) });
+      return answer(method, url, body) ?? json({ error: { code: "unexpected", message: `${method} ${url.pathname}` } }, 500);
+    }));
+    return hits;
+  };
+  const row = (id: string, status: string, extra: Record<string, unknown> = {}) => json({ id, status, stop_reason: status === "idle" ? "end_turn" : null, created_at: "2026-09-15T08:00:00Z", agent_id: "agt_producer", ...extra });
+  const session = (status: string) => (method: string, url: URL) => (method === "GET" && /^\/v1\/sessions\/ses_\w+$/.test(url.pathname) ? row(url.pathname.slice("/v1/sessions/".length), status) : undefined);
+  /** The demo queue with its rendered plan (`post_9f2a`, one id from plan to post) and a brief-born plan under a different post id. */
+  const studioState = () => {
+    const state = demoState();
+    const brief = state.posts.find((p) => p.id === "post_8e1b")!;
+    const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
+    brief.projectId = plan.id;
+    brief.stage = "rendering";
+    plan.postId = brief.id;
+    return state;
+  };
+  const rendered = (state: StoreState) => state.projects.find((p) => p.id === "post_9f2a")!;
+  const post = (state: StoreState, id: string) => state.posts.find((p) => p.id === id)!;
+
+  describe("the read", () => {
+    it("answers the plan and its post by either id, with no session while nothing is configured, and 404 for neither", async () => {
+      const state = studioState();
+      const ctx = ctxOver(state);
+      const byPlan = await handleRequest(req("GET", "/api/studio/proj_b2e1"), ctx);
+      expect(byPlan).toEqual({ status: 200, body: { project: state.projects.find((p) => p.id === "proj_b2e1"), post: post(state, "post_8e1b"), session: null } });
+      expect(await handleRequest(req("GET", "/api/studio/post_8e1b"), ctx)).toEqual(byPlan);
+      expect(await handleRequest(req("GET", "/api/studio/post_9f2a"), ctx)).toEqual({ status: 200, body: { project: rendered(state), post: post(state, "post_9f2a"), session: null } });
+      // A post that was never planned is still a Studio page — with no plan and no session.
+      expect(await handleRequest(req("GET", "/api/studio/post_7d3c"), ctx)).toEqual({ status: 200, body: { project: null, post: post(state, "post_7d3c"), session: null } });
+      // A plan with no post yet.
+      expect((await handleRequest(req("GET", "/api/studio/proj_a1f0"), ctx)).body).toMatchObject({ project: { id: "proj_a1f0" }, post: null, session: null });
+      expect(await handleRequest(req("GET", "/api/studio/nope_1"), ctx)).toEqual({ status: 404, body: { error: "no such project or post" } });
+      expect(await handleRequest(req("DELETE", "/api/studio/post_9f2a"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
+    });
+
+    it("reads the latest of the plan's sessions live — a finished one included — and scans nothing when the plan remembers", async () => {
+      const state = studioState();
+      rendered(state).sessions = [
+        { id: "ses_plan", role: "planned", at: "2026-09-14T08:00:00Z" },
+        { id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" },
+      ];
+      const hits = upstream(session("completed"));
+      const reply = await handleRequest(req("GET", "/api/studio/post_9f2a"), ctxOver(state, CONFIG));
+      expect(reply.body).toMatchObject({ session: { id: "ses_render", status: "completed", stop_reason: null, created_at: "2026-09-15T08:00:00Z" } });
+      expect(hits.map((h) => h.url)).toEqual(["/v1/sessions/ses_render"]);
+      // The platform's row is passed through by its four fields, not whole.
+      expect(Object.keys((reply.body as { session: object }).session)).toEqual(["id", "status", "stop_reason", "created_at"]);
+    });
+
+    it("says null, not 502, when the session cannot be read: the rows are still the operator's", async () => {
+      const state = studioState();
+      rendered(state).sessions = [{ id: "ses_gone", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+      upstream(() => json({ error: { code: "not_found" } }, 404));
+      expect(await handleRequest(req("GET", "/api/studio/post_9f2a"), ctxOver(state, CONFIG))).toEqual({
+        status: 200, body: { project: rendered(state), post: post(state, "post_9f2a"), session: null },
+      });
+    });
+
+    it("backfills a plan made before plans remembered: the renderer's recent sessions, the first whose log names this id, recorded once", async () => {
+      const state = studioState();
+      expect(rendered(state).sessions).toEqual([]);
+      const logs: Record<string, unknown[]> = {
+        ses_other: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "proj_zzz", status: "rendering" } } }],
+        ses_maker: [
+          { seq: 1, type: "message.completed", data: { role: "user", content: "Render video project post_9f2a now" } },
+          { seq: 4, type: "tool.started", data: { name: "channel.update_project", args: { id: "post_9f2a", status: "rendering", expected_status: "planned" } }, created_at: "2026-09-13T10:00:00Z" },
+        ],
+      };
+      const hits = upstream((method, url) => {
+        if (url.pathname === "/v1/sessions") {
+          return json({ data: [
+            { id: "ses_maker", status: "idle", stop_reason: "end_turn", created_at: "2026-09-13T09:00:00Z" },
+            { id: "ses_other", status: "idle", stop_reason: "end_turn", created_at: "2026-09-14T09:00:00Z" },
+          ] });
+        }
+        const log = /^\/v1\/sessions\/(ses_\w+)\/events$/.exec(url.pathname);
+        if (log) return json({ data: logs[log[1]!] ?? [] });
+        return session("idle")(method, url);
+      });
+      const reply = await handleRequest(req("GET", "/api/studio/post_9f2a"), ctxOver(state, CONFIG));
+      expect(reply.body).toMatchObject({ session: { id: "ses_maker", status: "idle", stop_reason: "end_turn" } });
+      expect(rendered(state).sessions).toEqual([{ id: "ses_maker", role: "rendered", at: "2026-09-13T10:00:00Z" }]);
+      // The renderer's sessions, twenty newest; each log read once, bounded; newest first, so the
+      // other session's log was read and passed over before the maker's.
+      const urls = hits.map((h) => h.url).filter((u) => u !== "/v1/agents");
+      expect(urls).toEqual([
+        "/v1/sessions?limit=20&agent_id=agt_producer",
+        "/v1/sessions/ses_other/events?limit=100",
+        "/v1/sessions/ses_maker/events?limit=100",
+        "/v1/sessions/ses_maker",
+      ]);
+      // Remembered: the next open reads the session and scans nothing.
+      hits.length = 0;
+      await handleRequest(req("GET", "/api/studio/post_9f2a"), ctxOver(state, CONFIG));
+      expect(hits.map((h) => h.url)).toEqual(["/v1/sessions/ses_maker"]);
+    });
+
+    it("records a planner's create_project as planned, and records nothing when no log names the plan", async () => {
+      const state = studioState();
+      const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
+      let named = false;
+      upstream((method, url) => {
+        if (url.pathname === "/v1/sessions") return json({ data: [{ id: "ses_s", status: "completed", stop_reason: null, created_at: "2026-09-13T09:00:00Z" }] });
+        if (url.pathname === "/v1/sessions/ses_s/events") {
+          return json({ data: named ? [{ seq: 2, type: "tool.started", data: { name: "channel.create_project", args: { id: plan.id, kind: "generation" } }, created_at: "2026-09-13T09:01:00Z" }] : [] });
+        }
+        return session("completed")(method, url);
+      });
+      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: null });
+      expect(plan.sessions).toEqual([]);
+      named = true;
+      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: { id: "ses_s", status: "completed" } });
+      expect(plan.sessions).toEqual([{ id: "ses_s", role: "planned", at: "2026-09-13T09:01:00Z" }]);
+    });
+  });
+
+  describe("the revision", () => {
+    const revise = (state: StoreState, id: string, message = "Tighter: cut scene two to three seconds.", config: ProxyConfig | null = CONFIG) =>
+      handleRequest(req("POST", `/api/studio/${id}/revise`, JSON.stringify({ message })), ctxOver(state, config));
+    const FRAME = (id: string, media: string, seat: string) =>
+      `Revision of video project ${id}. Read it with channel.get_project ${id}; the current video is ${media}. Apply the operator's note below on the same plan, then finish with channel.update_project id ${id}, status rendered, expected_status rendering, the new video as media_url and "${seat}" as agent. Do not create a second project, do not approve or post anything.\n\nOperator: Tighter: cut scene two to three seconds.`;
+
+    it("refuses without the platform, an unknown id, an empty note and the wrong method — before any upstream call", async () => {
+      const state = studioState();
+      expect(await revise(state, "post_9f2a", "x", null)).toEqual({ status: 503, body: { error: "not configured — set NAIVE_API_KEY" } });
+      const hits = upstream();
+      expect(await revise(state, "nope_1")).toEqual({ status: 404, body: { error: "no such project or post" } });
+      expect(await revise(state, "post_9f2a", "   ")).toEqual({ status: 400, body: { error: "message is required" } });
+      expect(await handleRequest(req("GET", "/api/studio/post_9f2a/revise"), ctxOver(state, CONFIG))).toEqual({ status: 405, body: { error: "method not allowed" } });
+      expect(hits).toEqual([]);
+      expect(state).toEqual(studioState());
+    });
+
+    it("refuses to revise an approved or posted video — reject it first — and one whose revision is already open", async () => {
+      for (const status of ["approved", "posted"] as const) {
+        const state = studioState();
+        post(state, "post_9f2a").status = status;
+        rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+        const hits = upstream(session("idle"));
+        expect(await revise(state, "post_9f2a")).toEqual({ status: 409, body: { error: "reject it first — an approved video is the operator's word" } });
+        expect(hits).toEqual([]);
+        expect(rendered(state)).toMatchObject({ status: "rendered" });
+        expect(rendered(state)).not.toHaveProperty("revision");
+        expect(post(state, "post_9f2a").status).toBe(status);
+      }
+      const state = studioState();
+      rendered(state).status = "rendering";
+      rendered(state).revision = { openedAt: "2026-09-15T07:00:00Z", sessionId: "ses_render", note: "first note" };
+      const hits = upstream(session("idle"));
+      expect((await revise(state, "post_9f2a")).status).toBe(409);
+      expect((await revise(state, "post_9f2a")).body).toMatchObject({ error: expect.stringContaining("a revision is already open") });
+      expect(hits).toEqual([]);
+      expect(rendered(state).revision?.note).toBe("first note");
+    });
+
+    it("reopens a rendered plan on the session that made it: queued, never interrupting, and the post goes back to the crew", async () => {
+      const state = studioState();
+      rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+      const video = post(state, "post_9f2a");
+      video.mediaUrl = "fil_v1";
+      video.status = "rejected";
+      video.rejectedReason = "too long";
+      video.stage = "rendered";
+      const hits = upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages") return json({ session_id: "ses_render", status: "idle", accepted_seq: 41 }, 202);
+        return session("idle")(method, url);
+      });
+      const reply = await revise(state, "post_9f2a");
+      expect(reply).toEqual({ status: 202, body: { session: "ses_render", acceptedSeq: 41, opened: false } });
+      const sent = hits.find((h) => h.method === "POST")!;
+      expect(sent.url).toBe("/v1/sessions/ses_render/messages");
+      expect(sent.body).toEqual({ message: FRAME("post_9f2a", "fil_v1", "producer"), queue: true });
+      expect(hits.filter((h) => h.url === "/v1/sessions")).toEqual([]);
+      // The one way through "a rendered plan is final": the plan is rendering again, on the operator's note.
+      expect(rendered(state)).toMatchObject({ status: "rendering", revision: { sessionId: "ses_render", note: "Tighter: cut scene two to three seconds." } });
+      expect(rendered(state).sessions).toHaveLength(1);
+      expect(video).toMatchObject({ status: "pending", stage: "rendering", mediaUrl: "fil_v1" });
+      expect(video).not.toHaveProperty("rejectedReason");
+      // And the MCP write still refuses to do the same on its own.
+      const mcp = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "proj_b2e1", status: "rendered", media_url: "fil_x", agent: "producer" } } };
+      state.projects.find((p) => p.id === "proj_b2e1")!.status = "rendered";
+      const refused = await handleRequest(req("POST", "/mcp", JSON.stringify(mcp), { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"));
+      expect(JSON.stringify(refused.body)).toContain("cannot go back or be rendered again");
+    });
+
+    it("queues the note on a plan still rendering and changes nothing: the render is paid for", async () => {
+      const state = studioState();
+      const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
+      plan.sessions = [{ id: "ses_busy", role: "rendered", at: "2026-09-15T07:00:00Z" }];
+      const before = structuredClone(state);
+      const hits = upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_busy/messages") return json({ session_id: "ses_busy", status: "running", accepted_seq: 9 }, 202);
+        return session("running")(method, url);
+      });
+      expect(await revise(state, "post_8e1b")).toEqual({ status: 202, body: { session: "ses_busy", acceptedSeq: 9, opened: false } });
+      const sent = hits.find((h) => h.method === "POST")!;
+      expect(sent.body).toEqual({ message: FRAME("proj_b2e1", "none yet", "producer"), queue: true });
+      expect(sent.body).not.toHaveProperty("interrupt");
+      expect(state).toEqual(before);
+    });
+
+    it("sends a planned plan's note to its planning session, and asks for no render", async () => {
+      const state = studioState();
+      const plan = state.projects.find((p) => p.id === "proj_a1f0")!;
+      plan.sessions = [{ id: "ses_writer", role: "planned", at: "2026-09-15T07:00:00Z" }];
+      const before = structuredClone(state);
+      const hits = upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_writer/messages") return json({ session_id: "ses_writer", status: "idle", accepted_seq: 3 }, 202);
+        return session("idle")(method, url);
+      });
+      expect(await revise(state, "proj_a1f0")).toEqual({ status: 202, body: { session: "ses_writer", acceptedSeq: 3, opened: false } });
+      const message = hits.find((h) => h.method === "POST")!.body!.message as string;
+      expect(message).toContain("Revision of video project proj_a1f0");
+      expect(message).toContain("channel.update_project id proj_a1f0");
+      expect(message).not.toContain("status rendered");
+      expect(message).toContain("do not approve or post anything.\n\nOperator: Tighter");
+      expect(state).toEqual(before);
+    });
+
+    it("opens a new renderer session on the plan when the last one is over, stamped with the plan, and records it as the revision's", async () => {
+      for (const sessions of [[{ id: "ses_done", role: "rendered" as const, at: "2026-09-14T09:00:00Z" }], []]) {
+        const state = studioState();
+        rendered(state).sessions = [...sessions];
+        post(state, "post_9f2a").mediaUrl = "fil_v1";
+        const hits = upstream((method, url) => {
+          if (method === "POST" && url.pathname === "/v1/sessions") return json({ id: "ses_fresh", status: "queued" }, 201);
+          return session("completed")(method, url);
+        });
+        expect(await revise(state, "post_9f2a")).toEqual({ status: 202, body: { session: "ses_fresh", acceptedSeq: 0, opened: true } });
+        const created = hits.find((h) => h.method === "POST")!;
+        expect(created.url).toBe("/v1/sessions");
+        expect(created.body).toEqual({ agent_id: "agt_producer", message: FRAME("post_9f2a", "fil_v1", "producer"), metadata: { project_id: "post_9f2a" } });
+        expect(hits.filter((h) => h.url.endsWith("/messages"))).toEqual([]);
+        expect(rendered(state).sessions).toEqual([...sessions, { id: "ses_fresh", role: "revised", at: expect.any(String) }]);
+        expect(rendered(state)).toMatchObject({ status: "rendering", revision: { sessionId: "ses_fresh" } });
+        expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", stage: "rendering" });
+      }
+    });
+
+    it("forwards the platform's refusal and opens nothing when the send did not land", async () => {
+      const state = studioState();
+      rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+      const refusal = { error: { type: "invalid_request", code: "session_terminal", message: "over" } };
+      upstream((method, url) => (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages" ? json(refusal, 409) : session("idle")(method, url)));
+      expect(await revise(state, "post_9f2a")).toEqual({ status: 409, body: refusal });
+      expect(rendered(state)).toMatchObject({ status: "rendered" });
+      expect(rendered(state)).not.toHaveProperty("revision");
+    });
+
+    it("takes a post that was never planned to the channel-manager, with the post in the note, and records nothing", async () => {
+      const state = studioState();
+      const before = structuredClone(state);
+      const hits = upstream((method, url) => (method === "POST" && url.pathname === "/v1/sessions" ? json({ id: "ses_mgr" }, 201) : undefined));
+      expect(await revise(state, "post_7d3c")).toEqual({ status: 202, body: { session: "ses_mgr", acceptedSeq: 0, opened: true } });
+      const created = hits.find((h) => h.method === "POST")!;
+      // The manager's id is whatever the roster said the first time this warm instance asked for it.
+      expect(created.body).toMatchObject({ agent_id: expect.stringMatching(/^agt_/) });
+      expect(created.body).not.toHaveProperty("metadata");
+      const message = created.body!.message as string;
+      expect(message).toContain("post_7d3c");
+      expect(message).toContain(post(state, "post_7d3c").title);
+      expect(message).toContain(post(state, "post_7d3c").caption);
+      expect(message).toContain("Do not approve or post anything");
+      expect(message).toContain("Operator: Tighter");
+      expect(state).toEqual(before);
+    });
+  });
+
+  describe("the bindings the writes leave", () => {
+    it("records the Render button's session on the plan, and stamps the session with the plan", async () => {
+      const state = studioState();
+      const hits = upstream((method, url) => (method === "POST" && url.pathname === "/v1/sessions" ? json({ id: "ses_r1", agent_id: "agt_producer" }, 201) : undefined));
+      expect((await handleRequest(req("POST", "/api/projects/proj_a1f0/render"), ctxOver(state, CONFIG))).status).toBe(202);
+      const created = hits.find((h) => h.method === "POST")!;
+      expect(created.body).toMatchObject({ agent_id: "agt_producer", metadata: { project_id: "proj_a1f0" } });
+      const plan = state.projects.find((p) => p.id === "proj_a1f0")!;
+      expect(plan.sessions).toEqual([{ id: "ses_r1", role: "rendered", at: expect.any(String) }]);
+      // Still the renderer's claim to make.
+      expect(plan.status).toBe("planned");
+    });
+
+    it("records nothing when the platform refused the session", async () => {
+      const state = studioState();
+      upstream((method, url) => (method === "POST" && url.pathname === "/v1/sessions" ? json({ error: { code: "insufficient_credits" } }, 402) : undefined));
+      expect((await handleRequest(req("POST", "/api/projects/proj_a1f0/render"), ctxOver(state, CONFIG))).status).toBe(402);
+      expect(state.projects.find((p) => p.id === "proj_a1f0")!.sessions).toEqual([]);
+    });
+
+    /**
+     * An MCP call names its seat and nothing else. The plan is bound to that seat's one running
+     * session; zero or several running — or a platform that will not say — binds nothing, and the
+     * write lands either way.
+     */
+    it("binds an MCP write to the seat's one running session, and to none when there are none, several, or no answer", async () => {
+      const call = (name: string, args: Record<string, unknown>) => JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+      const running = (...ids: string[]) => ids.map((id) => ({ id, status: "running", stop_reason: null }));
+      const cases: [Response, string[]][] = [
+        [json({ data: running("ses_one") }), ["ses_one"]],
+        [json({ data: running() }), []],
+        [json({ data: running("ses_a", "ses_b") }), []],
+        [json({ error: { code: "internal" } }, 500), []],
+      ];
+      for (const [answer, bound] of cases) {
+        const state = studioState();
+        const hits = upstream((method, url) => (method === "GET" && url.pathname === "/v1/sessions" ? answer.clone() : undefined));
+        const ctx = ctxOver(state, CONFIG, "tok");
+        const claimed = await handleRequest(req("POST", "/mcp", call("update_project", { id: "proj_a1f0", status: "rendering", expected_status: "planned", agent: "producer" }), { authorization: "Bearer tok" }), ctx);
+        expect(claimed.status).toBe(200);
+        expect(JSON.stringify(claimed.body)).not.toContain("isError");
+        const plan = state.projects.find((p) => p.id === "proj_a1f0")!;
+        expect(plan.status, JSON.stringify(bound)).toBe("rendering");
+        expect(plan.sessions.map((s) => s.id)).toEqual(bound);
+        expect(hits.filter((h) => h.url.startsWith("/v1/sessions?")).map((h) => h.url)).toEqual(["/v1/sessions?limit=2&agent_id=agt_producer&status=running"]);
+      }
+      // No platform at all — the local demo — asks nobody and writes as before.
+      const state = studioState();
+      const hits = upstream();
+      const ctx = ctxOver(state, null, "tok");
+      expect((await handleRequest(req("POST", "/mcp", call("update_project", { id: "proj_a1f0", status: "rendering", expected_status: "planned", agent: "producer" }), { authorization: "Bearer tok" }), ctx)).status).toBe(200);
+      expect(hits).toEqual([]);
+      expect(state.projects.find((p) => p.id === "proj_a1f0")!.sessions).toEqual([]);
+    });
+
+    it("keeps the revised render and the file it replaced when the renderer finishes over /mcp, and the post stays pending", async () => {
+      const state = studioState();
+      rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+      post(state, "post_9f2a").mediaUrl = "fil_v1";
+      const wasAt = rendered(state).statusAt;
+      upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages") return json({ accepted_seq: 5 }, 202);
+        if (method === "GET" && url.pathname === "/v1/sessions") return json({ data: [{ id: "ses_render", status: "running", stop_reason: null }] });
+        return session("idle")(method, url);
+      });
+      expect((await handleRequest(req("POST", "/api/studio/post_9f2a/revise", '{"message":"shorter"}'), ctxOver(state, CONFIG))).status).toBe(202);
+      const openedAt = rendered(state).statusAt;
+      const finish = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "post_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } });
+      const answer = await handleRequest(req("POST", "/mcp", finish, { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"));
+      expect(JSON.stringify(answer.body)).not.toContain("isError");
+      expect(rendered(state)).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1", at: openedAt, sessionId: "ses_render" }] });
+      expect(rendered(state)).not.toHaveProperty("revision");
+      expect(rendered(state).sessions.map((s) => s.id)).toEqual(["ses_render"]);
+      expect(Date.parse(openedAt)).toBeGreaterThanOrEqual(Date.parse(wasAt));
+      expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v2" });
+    });
+  });
+});

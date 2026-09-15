@@ -9,10 +9,10 @@
  * `handleRequest` needs no socket and no database to test: the store is opened lazily, through
  * `ctx.store()`, and only by the routes that actually touch it.
  */
-import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches } from "./mcp.ts";
-import { collect, notActivated, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
+import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches, type WhoIsRunning } from "./mcp.ts";
+import { SESSION_CREATE, collect, notActivated, proxyFetch, sessionEvents, sessionList, sessionMessages, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
-import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type PostStatus } from "../seed/posts.ts";
+import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type Post, type PostStatus } from "../seed/posts.ts";
 import type { VideoProject } from "../seed/projects.ts";
 import { RENDERER } from "../templates/template.ts";
 
@@ -137,6 +137,7 @@ const KNOWN = [
   /^\/api\/chat$/,
   /^\/api\/chat\/ses_[\w-]+(\/events|\/messages|\/stream)?$/,
   /^\/api\/sessions$/,
+  /^\/api\/studio\/[\w-]+(\/revise)?$/,
 ];
 
 const parse = (body: string): Record<string, unknown> => {
@@ -168,11 +169,12 @@ interface WireSession {
   created_at?: string;
 }
 
-/** One event of a session's log (§8); only `message.completed` is read here. */
+/** One event of a session's log (§8): `message.completed` for a title, `tool.started` for the plan a session wrote. */
 interface WireEvent {
   seq: number;
   type: string;
-  data?: { role?: string; content?: unknown };
+  data?: { role?: string; content?: unknown; name?: string; args?: { id?: unknown } };
+  created_at?: string;
 }
 
 /** A chat session as the rail lists it: the platform's row plus a title cut from its first message. */
@@ -275,11 +277,180 @@ async function renderProject(store: Store, config: ProxyConfig, id: string): Pro
   if (agent === null) return fail(503, `no ${renderer} agent in this org — run naive up with the ${project.kind === "generation" ? "faceless" : "clipping"} template`);
   const created = await proxyFetch(
     config,
-    { method: "POST", path: "/v1/sessions" },
-    JSON.stringify({ agent_id: agent, message: renderInstruction(project, renderer) }),
+    SESSION_CREATE,
+    JSON.stringify({ agent_id: agent, message: renderInstruction(project, renderer), metadata: { project_id: project.id } }),
   );
-  const session = (await created.json()) as Record<string, unknown>;
+  const session = (await created.json()) as Record<string, unknown> & { id?: string };
+  if (created.ok && typeof session.id === "string") store.recordSession(project.id, { id: session.id, role: "rendered", at: new Date().toISOString() });
   return created.ok ? json(202, { project: project.id, renderer, session }) : json(created.status, session);
+}
+
+/**
+ * `whoIsRunning` for `/mcp`. A tool call names its seat (`agent`) and nothing else, so the session
+ * behind it is the seat's one running session — asked for two so that "several" is told apart from
+ * "one" without a full page. Anything short of exactly one is null; `bind` swallows a throw.
+ */
+const runningSessionOf = (config: ProxyConfig | null): WhoIsRunning => async (name) => {
+  if (config === null) return null;
+  const agent = await agentIdNamed(config, name);
+  if (agent === null) return null;
+  const res = await proxyFetch(config, sessionList({ agent_id: agent, status: "running", limit: 2 }), null);
+  if (!res.ok) return null;
+  const page = (await res.json()) as { data?: WireSession[] };
+  return page.data?.length === 1 ? page.data[0]!.id : null;
+};
+
+/** The statuses a session does not come back from (§5); a send to one is refused `session_terminal`. */
+const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+
+/** The plan and the post behind one Studio id — either one's, since a post's `projectId` is its plan and a plan's `postId` its post. */
+function studioRows(store: Store, id: string): { project: VideoProject | null; post: Post | null } | null {
+  const { posts, projects } = store.read();
+  const post = posts.find((p) => p.id === id) ?? null;
+  const project = projects.find((p) => p.id === id) ?? projects.find((p) => post?.projectId !== undefined && p.id === post.projectId) ?? null;
+  if (project === null && post === null) return null;
+  return { project, post: post ?? posts.find((p) => p.id === project?.postId) ?? null };
+}
+
+async function readSession(config: ProxyConfig, id: string): Promise<WireSession | null> {
+  const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${id}` }, null);
+  if (!res.ok) return null;
+  const row = (await res.json()) as WireSession;
+  return { id: row.id, status: row.status, stop_reason: row.stop_reason ?? null, ...(row.created_at === undefined ? {} : { created_at: row.created_at }) };
+}
+
+/**
+ * A plan made before plans remembered their sessions: the renderer's twenty most recent sessions,
+ * a hundred events each, for the `channel.update_project` or `channel.create_project` call that
+ * named this id — the first hit is recorded and the scan never runs again for that plan. Bounded
+ * on both axes so a busy org cannot turn one Studio open into a crawl.
+ */
+async function backfillSessions(store: Store, config: ProxyConfig, project: VideoProject): Promise<void> {
+  const agent = await agentIdNamed(config, RENDERER[project.kind]);
+  if (agent === null) return;
+  const listed = await proxyFetch(config, sessionList({ agent_id: agent, limit: 20 }), null);
+  if (!listed.ok) return;
+  const page = (await listed.json()) as { data?: WireSession[] };
+  const newest = [...(page.data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  for (const session of newest) {
+    const res = await proxyFetch(config, sessionEvents(session.id), null);
+    if (!res.ok) continue;
+    const events = ((await res.json()) as { data?: WireEvent[] }).data ?? [];
+    const hit = events.find((e) =>
+      e.type === "tool.started" && (e.data?.name === "channel.update_project" || e.data?.name === "channel.create_project") && e.data.args?.id === project.id,
+    );
+    if (hit === undefined) continue;
+    store.recordSession(project.id, {
+      id: session.id,
+      role: hit.data?.name === "channel.create_project" ? "planned" : "rendered",
+      at: hit.created_at ?? session.created_at ?? new Date().toISOString(),
+    });
+    return;
+  }
+}
+
+/**
+ * `GET /api/studio/:id` — the plan, its post and THE SESSION THAT MADE IT, read live so the screen
+ * knows whether it can still be talked to. A terminal one is still the answer: the operator sees
+ * what happened, and the next send opens a new session. Without the platform there is no session
+ * to read, and that is a 200 with `session: null`, not a failure of the rows.
+ */
+async function studioRead(store: Store, config: ProxyConfig | null, id: string): Promise<ApiReply> {
+  const rows = studioRows(store, id);
+  if (rows === null) return fail(404, "no such project or post");
+  if (config === null || rows.project === null) return json(200, { ...rows, session: null });
+  if (rows.project.sessions.length === 0) await backfillSessions(store, config, rows.project);
+  const latest = rows.project.sessions.at(-1);
+  const session = latest === undefined ? null : await readSession(config, latest.id);
+  return json(200, { ...rows, session });
+}
+
+/** What the renderer is told when the operator revises: the same plan, the same finishing write, no second project. */
+export const revisionFrame = (project: VideoProject, post: Post | null, renderer: string, text: string): string =>
+  `Revision of video project ${project.id}. Read it with channel.get_project ${project.id}; the current video is ${post?.mediaUrl ?? "none yet"}. ` +
+  `Apply the operator's note below on the same plan, then finish with channel.update_project id ${project.id}, status rendered, expected_status rendering, ` +
+  `the new video as media_url and "${renderer}" as agent. Do not create a second project, do not approve or post anything.\n\nOperator: ${text}`;
+
+/** A planned plan is words, not a render: its planner is asked to change the plan, and nothing is spent. */
+const planningFrame = (project: VideoProject, text: string): string =>
+  `Revision of video project ${project.id}. Read it with channel.get_project ${project.id} and apply the operator's note below on the same plan with channel.update_project id ${project.id}. Do not render it, do not create a second project, do not approve or post anything.\n\nOperator: ${text}`;
+
+/** A post that was never a plan has no renderer to go back to: the manager takes the note. */
+const managerFrame = (post: Post, text: string): string =>
+  `Revision of post ${post.id} — "${post.title}". Its caption:\n${post.caption}\n\nApply the operator's note below to that post (channel.update_post id ${post.id}). Do not approve or post anything.\n\nOperator: ${text}`;
+
+type Opened = { session: string; acceptedSeq: number; opened: boolean };
+
+/** `POST /v1/sessions/:id/messages`, queued — a running session hears it after its turn; a render is never interrupted. */
+async function queueOn(config: ProxyConfig, sessionId: string, message: string): Promise<Opened | ApiReply> {
+  const sent = await proxyFetch(config, sessionMessages(sessionId), JSON.stringify({ message, queue: true }));
+  const body = (await sent.json()) as { accepted_seq?: number };
+  if (!sent.ok) return json(sent.status, body);
+  return { session: sessionId, acceptedSeq: body.accepted_seq ?? 0, opened: false };
+}
+
+/** `POST /v1/sessions` for a seat, stamped with the plan it is for. Null when the seat is not in the org. */
+async function openFor(config: ProxyConfig, seat: string, message: string, projectId?: string): Promise<Opened | ApiReply | null> {
+  const agent = await agentIdNamed(config, seat);
+  if (agent === null) return null;
+  const created = await proxyFetch(
+    config,
+    SESSION_CREATE,
+    JSON.stringify({ agent_id: agent, message, ...(projectId === undefined ? {} : { metadata: { project_id: projectId } }) }),
+  );
+  const body = (await created.json()) as { id?: string };
+  if (!created.ok || typeof body.id !== "string") return json(created.status, body);
+  return { session: body.id, acceptedSeq: 0, opened: true };
+}
+
+const isReply = (value: Opened | ApiReply): value is ApiReply => "status" in value;
+
+/**
+ * `POST /api/studio/:id/revise` — THE ONE WAY THROUGH "A RENDERED PLAN IS FINAL". The MCP write keeps
+ * refusing rendered → rendering, because an agent must never re-spend on a paid render by accident;
+ * here the operator asks for it by name, and the store opens the revision under the same lock the
+ * claim uses. An approved or posted video is the operator's word already given — reject it first.
+ * The note goes to the session that made the video when it can still hear (queued, never
+ * interrupting a render); a finished one is replaced by a fresh renderer session on the same plan.
+ */
+async function revise(store: Store, config: ProxyConfig, id: string, text: string): Promise<ApiReply> {
+  const rows = studioRows(store, id);
+  if (rows === null) return fail(404, "no such project or post");
+  if (text === "") return fail(400, "message is required");
+  const { project, post } = rows;
+  if (post?.status === "approved" || post?.status === "posted") return fail(409, "reject it first — an approved video is the operator's word");
+  if (project === null) {
+    const opened = await openFor(config, "channel-manager", managerFrame(post!, text));
+    if (opened === null) return fail(503, "no channel-manager agent in this org");
+    return isReply(opened) ? opened : json(202, opened);
+  }
+  if (project.revision !== undefined) return fail(409, "a revision is already open on this project; it lands as the next render");
+  if (project.status === "dropped") return fail(409, "project is dropped; restore it first");
+
+  const latest = project.sessions.at(-1);
+  const live = latest === undefined ? null : await readSession(config, latest.id);
+  const heard = live !== null && !TERMINAL.has(live.status) ? live.id : null;
+  let target: Opened | ApiReply | null;
+  if (project.status === "planned") {
+    // No render is asked for here, so no renderer is opened: the planner's own session, or the
+    // seat that wrote the plan when that session is over.
+    const frame = planningFrame(project, text);
+    if (heard !== null) target = await queueOn(config, heard, frame);
+    else target = project.agent === undefined ? null : await openFor(config, project.agent, frame, project.id);
+    if (target === null) return fail(409, "the plan's session is over and no seat signed it; edit the plan, or press Render");
+  } else {
+    const renderer = RENDERER[project.kind];
+    const frame = revisionFrame(project, post, renderer, text);
+    target = heard !== null ? await queueOn(config, heard, frame) : await openFor(config, renderer, frame, project.id);
+    if (target === null) return fail(503, `no ${renderer} agent in this org`);
+  }
+  if (isReply(target)) return target;
+  const now = new Date().toISOString();
+  if (target.opened) store.recordSession(project.id, { id: target.session, role: "revised", at: now });
+  if (project.status === "rendered" && store.openRevision(project.id, target.session, text) === null) {
+    return fail(409, "a revision is already open on this project; it lands as the next render");
+  }
+  return json(202, target);
 }
 
 /**
@@ -640,7 +811,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     if (req.method !== "POST") return fail(405, "POST only");
     const refused = authError(ctx.mcpToken ?? null, req.headers.authorization);
     if (refused !== null) return json(401, refused);
-    const answer = await handleMcp(req.body, store, ctx.config);
+    const answer = await handleMcp(req.body, store, ctx.config, runningSessionOf(ctx.config));
     // A notification has no reply: 202 with no body, as the streamable-HTTP transport asks.
     return answer === null ? { status: 202 } : json(200, answer);
   }
@@ -654,6 +825,16 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   const stored = await storeRoutes(req, ctx);
   if (stored !== null) return stored;
 
+  // The read stands without the platform (the rows are the store's; the session is then null);
+  // the revision does not, since its whole point is a session.
+  const studio = /^\/api\/studio\/([\w-]+)(\/revise)?$/.exec(req.path);
+  if (studio) {
+    if (studio[2] === undefined) return req.method === "GET" ? studioRead(await ctx.store(), ctx.config, studio[1]!) : fail(405, "method not allowed");
+    if (req.method !== "POST") return fail(405, "method not allowed");
+    if (ctx.config === null) return fail(503, NOT_CONFIGURED);
+    return revise(await ctx.store(), ctx.config, studio[1]!, textOf(parse(req.body).message).trim());
+  }
+
   if (ctx.config === null) return fail(503, NOT_CONFIGURED);
 
   if (req.path === "/api/context") {
@@ -666,11 +847,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     const agent = await agentIdNamed(ctx.config, "channel-manager");
     if (agent === null) return fail(503, "no channel-manager agent in this org");
     const message = parse(req.body).message;
-    const created = await proxyFetch(
-      ctx.config,
-      { method: "POST", path: "/v1/sessions" },
-      JSON.stringify({ agent_id: agent, message: textOf(message) }),
-    );
+    const created = await proxyFetch(ctx.config, SESSION_CREATE, JSON.stringify({ agent_id: agent, message: textOf(message) }));
     return json(created.status, await created.json());
   }
   const one = /^\/api\/chat\/(ses_[\w-]+)$/.exec(req.path);
