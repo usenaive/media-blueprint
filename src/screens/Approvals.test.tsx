@@ -328,6 +328,8 @@ describe("the Approvals screen", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(json({ error: { message: "platform key missing" } }, 503))));
     await act(async () => root.render(<Approvals />));
     expect(host.querySelector("header .chip-fail")?.textContent).toBe("platform key missing");
-    expect(host.querySelector(".absence")?.textContent).toContain("platform key missing");
+    // The error is a chip inside the absence, not a clause of its sentence.
+    expect(host.querySelector(".absence .chip-fail")?.textContent).toBe("platform key missing");
+    expect(host.querySelector(".absence")?.textContent).toContain("could not be read");
   });
 });

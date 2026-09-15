@@ -305,8 +305,8 @@ export function Approvals() {
 
       {sessions === null && error !== null ? (
         <div className="absence">
-          The channel&apos;s sessions could not be read, so nothing can be said about what is waiting:{" "}
-          {error}
+          <span className="chip chip-fail">{error}</span>
+          <div className="mt-2">The channel&apos;s sessions could not be read, so nothing can be said about what is waiting.</div>
         </div>
       ) : sessions === null ? (
         <div className="absence">Looking for agents waiting on you…</div>
