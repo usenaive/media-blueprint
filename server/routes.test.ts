@@ -239,7 +239,7 @@ describe("the store routes", () => {
       expect(reply).toEqual({ status: 202, body: { project: planned.id, renderer: "clipper", session: { id: "ses_2" } } });
       const [, session] = calls(fetchMock);
       expect(session?.body?.agent_id).toBe("agt_clipper");
-      expect(session?.body?.message).toContain("clip_video on the source URL, then the one clip");
+      expect(session?.body?.message).toContain("clip_video on the source URL, then, by the titles the clips come back with, the one clip");
       expect(session?.body?.message).toContain(planned.sources![0]!.url);
       expect(session?.body?.message).toContain(planned.sources![0]!.reason);
 
