@@ -119,4 +119,14 @@ describe("the Posts screen", () => {
     await act(async () => tab.click());
     expect(host.querySelector(".absence")?.textContent).toContain("Nothing rejected right now.");
   });
+
+  it("labels a rejected row's reason in the fail tone", async () => {
+    const rejected: Post = { ...pending, id: "post_no", status: "rejected", rejectedReason: "The hook restates the title." };
+    await mount(wire([rejected]));
+    const tab = Array.from(host.querySelectorAll<HTMLButtonElement>("[role=tab]")).find((b) => b.textContent?.startsWith("Rejected"))!;
+    await act(async () => tab.click());
+    const label = Array.from(host.querySelectorAll(".prop-label")).find((n) => n.textContent === "Rejected because")!;
+    expect(label.className).toContain("text-fail");
+    expect(host.textContent).toContain("The hook restates the title.");
+  });
 });

@@ -214,7 +214,7 @@ export function Posts() {
                   <Facts items={postFacts(p)} cols={4} />
                   {p.rejectedReason ? (
                     <div>
-                      <div className="prop-label mb-1 text-tone-fail">Rejected because</div>
+                      <div className="prop-label mb-1 text-fail">Rejected because</div>
                       <Clamp text={p.rejectedReason} lines={2} />
                     </div>
                   ) : null}
