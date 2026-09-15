@@ -366,7 +366,7 @@ first"*, which `channel.update_post` can do.
 | Screen | What it does |
 |---|---|
 | Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
-| Chat | Talk to the channel manager — brief it, ask for clips or productions, adjust the plan |
+| Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
 | Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |

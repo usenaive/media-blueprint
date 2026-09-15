@@ -127,7 +127,17 @@ function cookieValues(header: string | undefined, name: string): string[] {
 }
 
 /** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
-const KNOWN = [/^\/api\/posts$/, /^\/api\/projects$/, /^\/api\/templates$/, /^\/api\/context$/, /^\/api\/agents$/, /^\/api\/deployments$/, /^\/api\/chat$/, /^\/api\/sessions$/];
+const KNOWN = [
+  /^\/api\/posts$/,
+  /^\/api\/projects$/,
+  /^\/api\/templates$/,
+  /^\/api\/context$/,
+  /^\/api\/agents$/,
+  /^\/api\/deployments$/,
+  /^\/api\/chat$/,
+  /^\/api\/chat\/ses_[\w-]+(\/events|\/messages|\/stream)?$/,
+  /^\/api\/sessions$/,
+];
 
 const parse = (body: string): Record<string, unknown> => {
   try {
@@ -148,6 +158,86 @@ async function agentIdNamed(config: ProxyConfig, name: string): Promise<string |
   const id = list.data?.find((a) => a.name === name)?.id;
   if (id !== undefined) agentIds.set(name, id);
   return id ?? null;
+}
+
+/** The fields of a session the rail and the chat header read (`canonical-spec §5`). */
+interface WireSession {
+  id: string;
+  status: string;
+  stop_reason: string | null;
+  created_at?: string;
+}
+
+/** One event of a session's log (§8); only `message.completed` is read here. */
+interface WireEvent {
+  seq: number;
+  type: string;
+  data?: { role?: string; content?: unknown };
+}
+
+/** A chat session as the rail lists it: the platform's row plus a title cut from its first message. */
+export interface ChatSession extends WireSession {
+  title: string;
+}
+
+const UNTITLED = "New session";
+const TITLE_CHARS = 60;
+const textOf = (value: unknown): string => (typeof value === "string" ? value : "");
+
+/**
+ * The first line of the caller's first message, cut to a rail row — or null when the log holds no
+ * caller message yet. The stream carries both sides (§8): the caller's turn is `message.completed`
+ * with `role: "user"`, stamped when its turn begins, so a session opened a moment ago may not
+ * have it yet.
+ */
+export function titleFrom(events: readonly WireEvent[]): string | null {
+  const first = events.find((e) => e.type === "message.completed" && e.data?.role === "user" && typeof e.data.content === "string");
+  const line = (first?.data?.content as string | undefined)?.trim().split("\n")[0]?.trim() ?? "";
+  if (line === "") return null;
+  return line.length > TITLE_CHARS ? `${line.slice(0, TITLE_CHARS - 1).trimEnd()}…` : line;
+}
+
+/**
+ * A session's first message never changes, so its title is read once per warm instance (like
+ * `agentIds`): the rail would otherwise cost one upstream read per row on every page. Only a found
+ * title is kept — a session whose first turn has not opened yet is asked again next time.
+ */
+const titles = new Map<string, string>();
+async function titleOf(config: ProxyConfig, id: string): Promise<string> {
+  const known = titles.get(id);
+  if (known !== undefined) return known;
+  const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${id}/events?limit=100` }, null);
+  if (!res.ok) return UNTITLED;
+  const page = (await res.json()) as { data?: WireEvent[] };
+  const title = titleFrom(page.data ?? []);
+  if (title !== null) titles.set(id, title);
+  return title ?? UNTITLED;
+}
+
+const chatSession = async (config: ProxyConfig, s: WireSession): Promise<ChatSession> => ({
+  id: s.id,
+  status: s.status,
+  stop_reason: s.stop_reason ?? null,
+  ...(s.created_at === undefined ? {} : { created_at: s.created_at }),
+  title: await titleOf(config, s.id),
+});
+
+/** `GET /api/chat` — the channel-manager's twenty most recent sessions, newest first, titled. */
+async function chatSessions(config: ProxyConfig): Promise<ApiReply> {
+  const agent = await agentIdNamed(config, "channel-manager");
+  if (agent === null) return fail(503, "no channel-manager agent in this org");
+  const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions?limit=20&agent_id=${encodeURIComponent(agent)}` }, null);
+  if (!res.ok) return json(res.status, await res.json());
+  const page = (await res.json()) as { data?: WireSession[] };
+  const rows = [...(page.data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  return json(200, { data: await Promise.all(rows.map((s) => chatSession(config, s))), has_more: false, next_cursor: null });
+}
+
+/** `GET /api/chat/:id` — one session in the rail's shape, for the header of a resumed chat. */
+async function chatSessionById(config: ProxyConfig, id: string): Promise<ApiReply> {
+  const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${id}` }, null);
+  const body = await res.json();
+  return res.ok ? json(200, await chatSession(config, body as WireSession)) : json(res.status, body);
 }
 
 /**
@@ -571,6 +661,7 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
 
   if (req.path === "/api/chat") {
+    if (req.method === "GET") return chatSessions(ctx.config);
     if (req.method !== "POST") return fail(405, "method not allowed");
     const agent = await agentIdNamed(ctx.config, "channel-manager");
     if (agent === null) return fail(503, "no channel-manager agent in this org");
@@ -578,10 +669,12 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     const created = await proxyFetch(
       ctx.config,
       { method: "POST", path: "/v1/sessions" },
-      JSON.stringify({ agent_id: agent, message: typeof message === "string" ? message : "" }),
+      JSON.stringify({ agent_id: agent, message: textOf(message) }),
     );
     return json(created.status, await created.json());
   }
+  const one = /^\/api\/chat\/(ses_[\w-]+)$/.exec(req.path);
+  if (one) return req.method === "GET" ? chatSessionById(ctx.config, one[1]!) : fail(405, "method not allowed");
 
   const render = /^\/api\/projects\/([\w-]+)\/render$/.exec(req.path);
   if (render) {
@@ -595,6 +688,10 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
   if (req.path === "/api/agents" || req.path === "/api/deployments") {
     const rows = await collect(ctx.config, upstream);
+    return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
+  }
+  if (/^\/api\/chat\/ses_[\w-]+\/events$/.test(req.path)) {
+    const rows = await collect(ctx.config, upstream, fetch, "after_seq");
     return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
   }
   /**
@@ -620,7 +717,10 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
     ).catch(() => undefined);
   }
 
-  const body = req.method === "GET" ? null : req.body || "{}";
+  // A follow-up is queued (§7): a plain send on an idle session, held for the next turn on a
+  // running one — the operator is never answered `session_running`.
+  const follow = /^\/api\/chat\/ses_[\w-]+\/messages$/.test(req.path);
+  const body = req.method === "GET" ? null : follow ? JSON.stringify({ message: textOf(parse(req.body).message), queue: true }) : req.body || "{}";
   const answer = await proxyFetch(ctx.config, upstream, body);
   if (upstream.sse) return { status: answer.status, stream: answer, sse: true };
   if (upstream.raw) return answer.ok ? { status: answer.status, stream: answer } : fail(answer.status, "file unavailable");
