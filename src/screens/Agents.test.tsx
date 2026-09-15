@@ -1,10 +1,13 @@
+// @vitest-environment jsdom
 /**
- * The roster row: what an agent runs on, what it may spend, what it may call, and what it has been
+ * The roster card: what an agent runs on, what it may spend, what it may call, and what it has been
  * doing. It used to be four fields with none of that in them, while every one of these facts was
- * already on the wire the screen was reading.
+ * already on the wire the screen was reading — and then one long row that printed all of it at once.
  */
-import { describe, expect, it } from "vitest";
-import { historyOf, runLine, toRoster, type Run } from "./Agents";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Agents, asksYou, historyOf, outcomeOf, runLine, toRoster, type Run } from "./Agents";
 
 describe("toRoster", () => {
   it("carries the model and the budget the roster row already had on the wire", () => {
@@ -39,18 +42,19 @@ describe("toRoster", () => {
     // "may publish" and "may publish, with your approval" are different sentences; the roster
     // printed both the same, and printed denied built-ins as though they were granted.
     expect(agent!.tools).toEqual(["social.post (asks you)", "social.accounts"]);
+    expect(agent!.tools.map(asksYou)).toEqual([true, false]);
   });
 });
 
-describe("an agent's history", () => {
-  const run = (over: Partial<Run> & Pick<Run, "id">): Run => ({
-    agent_id: "agt_1",
-    status: "idle",
-    stop_reason: "end_turn",
-    created_at: "2026-01-01T00:00:00.000Z",
-    ...over,
-  });
+const run = (over: Partial<Run> & Pick<Run, "id">): Run => ({
+  agent_id: "agt_1",
+  status: "idle",
+  stop_reason: "end_turn",
+  created_at: "2026-01-01T00:00:00.000Z",
+  ...over,
+});
 
+describe("an agent's history", () => {
   it("is that agent's own sessions, newest first", () => {
     const rows = historyOf(
       [
@@ -71,5 +75,118 @@ describe("an agent's history", () => {
     // than dropped — the operator sees the platform's own word instead of nothing.
     expect(runLine(run({ id: "ses_1", stop_reason: "something_new" }))).toContain("something_new");
     expect(runLine(run({ id: "ses_1", stop_reason: null, status: "running" }))).toContain("running");
+  });
+
+  it("gives each ending a tone: done, parked on someone, stopped short, or still going", () => {
+    expect(outcomeOf(run({ id: "s", stop_reason: "end_turn" }))).toEqual({ word: "finished", tone: "ok" });
+    expect(outcomeOf(run({ id: "s", stop_reason: "awaiting_approval" }))).toEqual({ word: "waiting for your approval", tone: "wait" });
+    expect(outcomeOf(run({ id: "s", stop_reason: "error" }))).toEqual({ word: "stopped on an error", tone: "fail" });
+    expect(outcomeOf(run({ id: "s", stop_reason: null, status: "running" }))).toEqual({ word: "running", tone: "run" });
+    expect(outcomeOf(run({ id: "s", stop_reason: "something_new" }))).toEqual({ word: "something_new", tone: "run" });
+  });
+});
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+let host: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  host.remove();
+  vi.unstubAllGlobals();
+});
+
+async function mount(answers: Record<string, Response | Error>) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) => {
+      const answer = answers[url];
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer ?? json({ error: "no route" }, 404));
+    }),
+  );
+  await act(async () => root.render(<Agents />));
+}
+
+const producer = {
+  id: "agt_1",
+  name: "producer",
+  description: "Produces original short videos for the channel, one a day.",
+  model: "test/model",
+  budget: { cap_micro_usd: 10_000_000, max_task_micro_usd: 2_000_000, period: "day" },
+  tools: { configs: { "social.post": { enabled: true, permission: "ask" }, "social.accounts": { enabled: true } } },
+};
+
+describe("the Channel settings screen", () => {
+  it("draws each agent as a card: facts, folded tools, and its last runs with the newest one's word as a chip", async () => {
+    await mount({
+      "/api/agents": json({ data: [producer] }),
+      "/api/sessions": json({
+        data: [
+          run({ id: "ses_1", stop_reason: "end_turn", consumed_micro_usd: 50_000 }),
+          run({ id: "ses_2", stop_reason: "awaiting_approval", created_at: "2026-02-01T00:00:00.000Z", consumed_micro_usd: 120_000 }),
+        ],
+      }),
+    });
+
+    const text = host.textContent ?? "";
+    expect(text).toContain("producer");
+    expect(text).toContain("agt_1");
+    expect(text).toContain("test/model");
+    expect(text).toContain("Budget/day");
+    expect(text).toContain("$10.00");
+    expect(text).toContain("$2.00");
+
+    // The newest run's ending, on the card's head — and tinted for what it is.
+    const waiting = Array.from(host.querySelectorAll(".chip")).find((chip) => chip.textContent === "waiting for your approval");
+    expect(waiting?.className).toContain("chip-absent");
+
+    // The tools fold closed, summarised by their count, and the one that stops for the operator is told apart.
+    const fold = Array.from(host.querySelectorAll("details")).find((d) => d.querySelector("summary")?.textContent === "Tools (2)")!;
+    expect(fold.open).toBe(false);
+    const asks = fold.querySelector(".chip-absent");
+    expect(asks?.textContent).toBe("social.post (asks you)");
+    expect(fold.querySelector(".chip-plain")?.textContent).toBe("social.accounts");
+
+    // Both runs, newest first, each with its spend.
+    const rows = Array.from(host.querySelectorAll("li")).map((li) => li.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("waiting for your approval");
+    expect(rows[0]).toContain("$0.12");
+    expect(rows[1]).toContain("finished");
+    expect(rows[1]).toContain("$0.05");
+  });
+
+  it("says when the runs could not be read, rather than showing an agent with no history", async () => {
+    await mount({ "/api/agents": json({ data: [producer] }), "/api/sessions": json({ error: "no key" }, 401) });
+    expect(host.textContent).toContain("runs unread");
+    expect(host.textContent).toContain("Its runs could not be read.");
+  });
+
+  it("keeps the switch-template explanation folded and shows the template's facts instead", async () => {
+    await mount({ "/api/agents": json({ data: [] }) });
+    const fold = Array.from(host.querySelectorAll("details")).find((d) => d.querySelector("summary")?.textContent === "How to switch template")!;
+    expect(fold.open).toBe(false);
+    expect(fold.textContent).toContain("naive up");
+    expect(host.textContent).toContain("No agents in this organization yet");
+  });
+
+  it("puts a failed roster read in the header and draws the absence, not a bare sentence", async () => {
+    await mount({ "/api/agents": json({ error: "no platform key" }, 401) });
+    expect(host.querySelector(".chip-fail")?.textContent).toBe("no platform key");
+    expect(host.querySelector(".absence")?.textContent).toBe("No roster to show.");
   });
 });
