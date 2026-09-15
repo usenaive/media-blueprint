@@ -47,10 +47,13 @@ const KIND_LABEL = { generation: "Generated", clipping: "Clip" } as const;
 /** `2:10` of rendering so far, from when the status changed — the same clock as the pane's status line. */
 export const elapsed = (sinceIso: string, now: number = Date.now()): string => clock(now - new Date(sinceIso).getTime());
 
-/** Every cut of this project, oldest first: `renders[]` are the earlier ones, the post's file is the current one. */
+/**
+ * Every cut of this project, oldest first: `renders[]` are the earlier ones, the post's file is the
+ * current one. Mid-revision `statusAt` is when the revision opened; the current cut landed at `replaces.at`.
+ */
 export const versionsOf = (project: VideoProject, post: Post | null): { mediaUrl: string; at: string; current: boolean }[] => [
   ...(project.renders ?? []).map((r) => ({ mediaUrl: r.mediaUrl, at: r.at, current: false })),
-  ...(post?.mediaUrl !== undefined ? [{ mediaUrl: post.mediaUrl, at: project.statusAt, current: true }] : []),
+  ...(post?.mediaUrl !== undefined ? [{ mediaUrl: post.mediaUrl, at: project.revision?.replaces?.at ?? project.statusAt, current: true }] : []),
 ];
 
 /** A vertical video, centred and no taller than the drawer allows. */

@@ -398,6 +398,20 @@ describe("versionsOf and elapsed", () => {
     expect(versionsOf({ ...rendered, renders: undefined }, null)).toEqual([]);
   });
 
+  it("dates the current cut by when it landed, not by the revision that opened on it", () => {
+    const opened = new Date().toISOString();
+    const revising: VideoProject = {
+      ...rendered,
+      status: "rendering",
+      statusAt: opened,
+      revision: { openedAt: opened, sessionId: "ses_1", note: "dusk", replaces: { mediaUrl: "fil_cur", at: rendered.statusAt, sessionId: "ses_1" } },
+    };
+    expect(versionsOf(revising, post).at(-1)).toEqual({ mediaUrl: "fil_cur", at: rendered.statusAt, current: true });
+    // A revision with nothing to replace (no file was on the post) falls back to the status change.
+    expect(versionsOf({ ...revising, revision: { openedAt: opened, sessionId: "ses_1", note: "dusk" } }, post).at(-1)?.at).toBe(opened);
+    expect(versionsOf(rendered, post).at(-1)?.at).toBe(rendered.statusAt);
+  });
+
   it("says the time rendering as seconds, then minutes and seconds", () => {
     const t0 = Date.parse("2026-01-01T00:00:00Z");
     expect(elapsed(new Date(t0).toISOString(), t0 + 42_000)).toBe("0:42");
