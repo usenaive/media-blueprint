@@ -110,6 +110,7 @@ describe("the Projects screen", () => {
 
     expect(host.querySelectorAll("section.panel")).toHaveLength(1);
     expect(card().querySelector("h2.card-title")?.textContent).toBe(planned.title);
+    expect(card().querySelector("h2.card-title a")?.getAttribute("href")).toBe(`/studio/${planned.id}`);
     expect(card().querySelector(".chip-absent")?.textContent).toBe("Planned — waiting for a render");
     expect(labels()).toEqual(["Platform", "Planned by", "Model", "Total seconds", "Style template", "Post"]);
     const seconds = planned.scenes!.reduce((sum, s) => sum + s.seconds, 0);

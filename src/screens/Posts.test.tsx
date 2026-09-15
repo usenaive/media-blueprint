@@ -80,6 +80,8 @@ describe("the Posts screen", () => {
 
     const card = host.querySelector("section.panel")!;
     expect(card.querySelector("h2.card-title")?.textContent).toBe(pending.title);
+    // The title opens the Studio on the plan behind the row.
+    expect(card.querySelector("h2.card-title a")?.getAttribute("href")).toBe("/studio/proj_1");
     expect(card.textContent).toContain("Pending review");
     expect(card.textContent).toContain("youtube");
 
@@ -114,6 +116,8 @@ describe("the Posts screen", () => {
 
     const chips = Array.from(host.querySelectorAll("dd .chip-absent")).map((n) => n.textContent);
     expect(chips).toEqual(["none chosen", "no plan"]);
+    // No plan: the Studio opens on the post itself.
+    expect(host.querySelector("h2.card-title a")?.getAttribute("href")).toBe("/studio/post_bare");
 
     const tab = Array.from(host.querySelectorAll<HTMLButtonElement>("[role=tab]")).find((b) => b.textContent?.startsWith("Rejected"))!;
     await act(async () => tab.click());
