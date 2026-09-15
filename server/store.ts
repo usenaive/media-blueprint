@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStage, type PostStatus } from "../seed/posts.ts";
-import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, type ProjectSession, type ProjectStatus, type VideoProject } from "../seed/projects.ts";
+import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, type ProjectSession, type ProjectStatus, type Render, type VideoProject } from "../seed/projects.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
 import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
 
@@ -78,14 +78,27 @@ export interface Store {
   updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "platform" | "stage">>): Post | null;
   createProject(input: NewProjectInput): VideoProject;
   updateProject(id: string, patch: ProjectPatch): VideoProject | null;
-  /** Binds a session to a plan; a session already on it is left as first recorded. Null for no such plan. */
+  /**
+   * Binds a session to a plan; a session already on it is left as first recorded. A `revised`
+   * session recorded while a revision waits for its session becomes that revision's. Null for no such plan.
+   */
   recordSession(id: string, session: ProjectSession): VideoProject | null;
   /**
    * THE OPERATOR'S REVISION: the one move that takes a rendered plan back to `rendering`, under the
    * same lock as the claim. Null when there is no such plan, it is not rendered, a revision is
    * already open, or its post is approved or posted — an approved video is the operator's word.
+   * `sessionId` is null when the session that will hear the note is not open yet.
    */
-  openRevision(id: string, sessionId: string, note: string): VideoProject | null;
+  openRevision(id: string, sessionId: string | null, note: string): VideoProject | null;
+  /**
+   * Gives the claim back when the note never reached a session: the plan is `rendered` again as
+   * of the render it has, its post back at `rendered`. The verdict the opening spent (a `ready`
+   * or `rejected` post went `pending`) is not restored — the operator gives it again. Null when
+   * there is no such plan or no revision is open.
+   */
+  closeRevision(id: string): VideoProject | null;
+  /** Stamps a plan as scanned for the sessions it was made in, and found in none; the scan does not run again. */
+  markBackfilled(id: string): VideoProject | null;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
@@ -273,7 +286,6 @@ export function openStoreOver(
     updateProject(id, patch) {
       const project = state.projects.find((p) => p.id === id);
       if (!project) return null;
-      const before = project.statusAt;
       if (patch.title !== undefined) project.title = patch.title;
       if (patch.brief !== undefined) project.brief = patch.brief;
       if (patch.account !== undefined) project.account = patch.account;
@@ -317,12 +329,8 @@ export function openStoreOver(
           project.postId = filed.id;
         } else {
           // A revised render supersedes the file the post carried: that render was paid for too,
-          // so it is kept, with the session that made it, rather than overwritten.
-          if (project.revision !== undefined && post.mediaUrl !== undefined) {
-            const opened = project.revision.openedAt;
-            const prior = [...project.sessions].reverse().find((s) => s.role !== "planned" && s.at < opened);
-            project.renders = [...(project.renders ?? []), { mediaUrl: post.mediaUrl, at: before, ...(prior === undefined ? {} : { sessionId: prior.id }) }];
-          }
+          // so it is kept, as the revision found it, rather than overwritten.
+          if (project.revision?.replaces !== undefined) project.renders = [...(project.renders ?? []), project.revision.replaces];
           post.mediaUrl = patch.mediaUrl;
           if (project.caption !== undefined) {
             post.caption = project.caption;
@@ -341,6 +349,7 @@ export function openStoreOver(
       if (!project) return null;
       if (project.sessions.some((s) => s.id === session.id)) return project;
       project.sessions.push(session);
+      if (session.role === "revised" && project.revision !== undefined && project.revision.sessionId === null) project.revision.sessionId = session.id;
       save();
       return project;
     },
@@ -349,7 +358,11 @@ export function openStoreOver(
       if (!project || project.status !== "rendered" || project.revision !== undefined) return null;
       const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
       if (post?.status === "approved" || post?.status === "posted") return null;
-      project.revision = { openedAt: now(), sessionId, note };
+      // The render being replaced, as it stands now: the sessions recorded from here on are the revision's.
+      const made = [...project.sessions].reverse().find((s) => s.role !== "planned");
+      const replaces: Render | undefined =
+        post?.mediaUrl === undefined ? undefined : { mediaUrl: post.mediaUrl, at: project.statusAt, ...(made === undefined ? {} : { sessionId: made.id }) };
+      project.revision = { openedAt: now(), sessionId, note, ...(replaces === undefined ? {} : { replaces }) };
       setStatus(project, "rendering");
       if (post !== undefined) {
         setStage(post, "rendering");
@@ -359,6 +372,25 @@ export function openStoreOver(
           delete post.rejectedReason;
         }
       }
+      save();
+      return project;
+    },
+    closeRevision(id) {
+      const project = state.projects.find((p) => p.id === id);
+      if (!project || project.revision === undefined) return null;
+      const { replaces } = project.revision;
+      delete project.revision;
+      setStatus(project, "rendered");
+      if (replaces !== undefined) project.statusAt = replaces.at;
+      const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
+      setStage(post, "rendered");
+      save();
+      return project;
+    },
+    markBackfilled(id) {
+      const project = state.projects.find((p) => p.id === id);
+      if (!project) return null;
+      project.backfilledAt = now();
       save();
       return project;
     },

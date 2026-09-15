@@ -302,30 +302,36 @@ describe("the sessions a plan remembers, and the operator's revision", () => {
     }
   });
 
-  it("keeps the render a revision replaced, and files the new one on a post that stays pending", () => {
+  it("keeps the render a revision replaced — as it landed, by the session that made it — and files the new one on a post that stays pending", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-02T09:00:00.000Z"));
+    vi.setSystemTime(new Date("2026-01-02T08:00:00.000Z"));
     const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
     const id = rendered(store);
-    store.openRevision(id, "ses_render1", "cut it shorter");
-    // The revision went to a new session, recorded after it opened.
-    const { revision, statusAt: first } = store.read().projects[0]!;
+    const first = store.read().projects[0]!.statusAt;
+    // The revision goes to a new session: claimed before it is opened, bound when it is recorded.
+    vi.setSystemTime(new Date("2026-01-02T09:00:00.000Z"));
+    store.openRevision(id, null, "cut it shorter");
+    const { revision } = store.read().projects[0]!;
     expect(revision?.openedAt).toBe("2026-01-02T09:00:00.000Z");
+    expect(revision).toMatchObject({ sessionId: null, replaces: { mediaUrl: "fil_v1", at: first, sessionId: "ses_render1" } });
     vi.setSystemTime(new Date("2026-01-02T09:00:01.000Z"));
     store.recordSession(id, { id: "ses_revise", role: "revised", at: new Date().toISOString() });
+    expect(store.read().projects[0]?.revision?.sessionId).toBe("ses_revise");
 
     const done = store.updateProject(id, { status: "rendered", mediaUrl: "fil_v2", renderedBy: "clipper" })!;
     expect(done.status).toBe("rendered");
     expect(done).not.toHaveProperty("revision");
-    expect(done.renders).toEqual([{ mediaUrl: "fil_v1", at: first, sessionId: "ses_render1" }]);
+    // Archived as it landed, not as of the claim that replaced it.
+    expect(done.renders).toEqual([{ mediaUrl: "fil_v1", at: "2026-01-02T08:00:00.000Z", sessionId: "ses_render1" }]);
     expect(done.sessions.map((s) => s.id)).toEqual(["ses_render1", "ses_revise"]);
     expect(store.read().posts[0]).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v2" });
     expect(store.read().posts).toHaveLength(1);
 
     // Revised again, this time on the session that made the last render: it is the prior render's session.
+    const second = store.read().projects[0]!.statusAt;
     vi.setSystemTime(new Date("2026-01-03T09:00:00.000Z"));
     store.openRevision(id, "ses_revise", "once more");
-    const second = store.read().projects[0]!.statusAt;
+    expect(store.read().projects[0]?.statusAt).toBe("2026-01-03T09:00:00.000Z");
     store.updateProject(id, { status: "rendered", mediaUrl: "fil_v3", renderedBy: "clipper" });
     expect(store.read().projects[0]?.renders).toEqual([
       { mediaUrl: "fil_v1", at: first, sessionId: "ses_render1" },
@@ -333,6 +339,38 @@ describe("the sessions a plan remembers, and the operator's revision", () => {
     ]);
     expect(store.read().posts[0]).toMatchObject({ status: "pending", mediaUrl: "fil_v3" });
     vi.useRealTimers();
+  });
+
+  it("closes a revision whose note never landed: rendered again as of its render, nothing archived, and null with none open", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-02T09:00:00.000Z"));
+    const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
+    const id = rendered(store);
+    const landed = store.read().projects[0]!.statusAt;
+    expect(store.closeRevision(id)).toBeNull();
+
+    vi.setSystemTime(new Date("2026-01-02T09:05:00.000Z"));
+    store.openRevision(id, "ses_render1", "cut it shorter");
+    expect(store.read().posts[0]).toMatchObject({ stage: "rendering" });
+    const closed = store.closeRevision(id)!;
+    expect(closed).toMatchObject({ status: "rendered", statusAt: landed });
+    expect(closed).not.toHaveProperty("revision");
+    expect(closed).not.toHaveProperty("renders");
+    expect(store.read().posts[0]).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v1" });
+    // Open again: the claim is free.
+    expect(store.openRevision(id, "ses_render1", "again")).not.toBeNull();
+    expect(store.closeRevision("proj_nope")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("stamps a plan scanned for its sessions and found in none, and null for a plan it does not have", () => {
+    const file = storeFile();
+    const store = openStore(file, TEMPLATES.faceless);
+    const id = store.read().projects[0]!.id;
+    expect(store.read().projects[0]).not.toHaveProperty("backfilledAt");
+    expect(typeof store.markBackfilled(id)?.backfilledAt).toBe("string");
+    expect(store.markBackfilled("proj_nope")).toBeNull();
+    expect(openStore(file, TEMPLATES.faceless).read().projects[0]?.backfilledAt).toBeDefined();
   });
 });
 

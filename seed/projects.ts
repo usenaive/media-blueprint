@@ -63,7 +63,7 @@ export interface ProjectSession {
   at: string;
 }
 
-/** A render a revision replaced: the file, the plan's `statusAt` as the new render landed over it, and the session that made it. */
+/** A render a revision replaced: the file, when it landed (the plan's `statusAt` while it was current), and the session that made it. */
 export interface Render {
   mediaUrl: string;
   at: string;
@@ -99,11 +99,16 @@ export interface VideoProject {
   sessions: ProjectSession[];
   /** Earlier renders, superseded by a revision; the current one is the post's `mediaUrl`. */
   renders?: Render[];
+  /** Stamped when a scan of the renderer's sessions found none for this plan, so a plan from before plans remembered is scanned once. */
+  backfilledAt?: string;
   /**
    * The operator's open revision: the one way a rendered plan renders again. Set by
    * `POST /api/studio/:id/revise`, cleared by the `rendered` write that lands the new video.
+   * `sessionId` is the session that hears the note — null until the fresh session opened for it
+   * is recorded. `replaces` is the render it supersedes, taken as the revision opens and pushed
+   * onto `renders[]` when the new one lands.
    */
-  revision?: { openedAt: string; sessionId: string; note: string };
+  revision?: { openedAt: string; sessionId: string | null; note: string; replaces?: Render };
 }
 
 const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
