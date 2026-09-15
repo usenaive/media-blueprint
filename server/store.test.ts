@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FACELESS_SEEDS } from "../seed/posts";
+import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS } from "../seed/projects";
 import { ACTIVE, TEMPLATES } from "../templates/index.ts";
-import { emptyState, openStore, openStoreOver, seedState } from "./store";
+import { emptyState, openStore, openStoreOver, seedState, type StoreState } from "./store";
 
 const dirs: string[] = [];
 const storeFile = () => {
@@ -22,6 +23,7 @@ describe("emptyState", () => {
     // present nine invented posts as the operator's own queue; the presets stay because they are
     // the blueprint's shipped catalogue, offered to the producer from its first turn.
     expect(emptyState().posts).toEqual([]);
+    expect(emptyState().projects).toEqual([]);
     expect(emptyState().templates).toEqual(seedState().templates);
     expect(emptyState().templates.length).toBeGreaterThan(0);
   });
@@ -30,8 +32,22 @@ describe("emptyState", () => {
     // The store used to carry an `onboarding` profile the dashboard asked for on a screen of its
     // own. The studio asks the template's questions before the crew exists, so a second copy here
     // could only ever disagree with the one the agents read via `project_context`.
-    expect(Object.keys(emptyState())).toEqual(["posts", "templates"]);
-    expect(Object.keys(seedState(TEMPLATES.clipping))).toEqual(["posts", "templates"]);
+    expect(Object.keys(emptyState())).toEqual(["posts", "projects", "templates"]);
+    expect(Object.keys(seedState(TEMPLATES.clipping))).toEqual(["posts", "projects", "templates"]);
+  });
+
+  it("reads a document written before plans existed, and gives it an empty list of them", () => {
+    // The deployed row is one JSONB document; the ones already out there have `posts` and
+    // `templates` and nothing else. Opening one must not throw on `projects`, and the first plan
+    // filed into it must persist alongside the posts it already holds.
+    const legacy = { posts: FACELESS_SEEDS, templates: emptyState().templates } as unknown as StoreState;
+    let written: StoreState | undefined;
+    const store = openStoreOver(legacy, (next) => { written = next; }, TEMPLATES.faceless);
+    expect(store.read().projects).toEqual([]);
+    expect(written).toBeUndefined();
+    const plan = store.createProject({ kind: "generation", title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 3 }] });
+    expect(written?.projects).toEqual([plan]);
+    expect(written?.posts).toBe(legacy.posts);
   });
 });
 
@@ -40,6 +56,10 @@ describe("the template's own state", () => {
     expect(seedState(TEMPLATES.faceless).posts).toEqual(FACELESS_SEEDS);
     expect(seedState(TEMPLATES.clipping).posts.every((post) => post.kind === "clip")).toBe(true);
     expect(seedState(TEMPLATES.clipping).posts.every((post) => post.agent === "clipper")).toBe(true);
+    expect(seedState(TEMPLATES.faceless).projects).toEqual(FACELESS_PROJECT_SEEDS);
+    expect(seedState(TEMPLATES.clipping).projects).toEqual(CLIPPING_PROJECT_SEEDS);
+    expect(FACELESS_PROJECT_SEEDS.every((p) => p.kind === "generation" && (p.scenes?.length ?? 0) > 0)).toBe(true);
+    expect(CLIPPING_PROJECT_SEEDS.every((p) => p.kind === "clipping" && (p.sources?.length ?? 0) > 0)).toBe(true);
   });
 
   it("records who filed a post, what for and what from — and invents none of the three", () => {
@@ -134,6 +154,76 @@ describe("openStore", () => {
 
   it("returns null for an unknown post", () => {
     expect(openStore(storeFile()).updatePost("post_nope", { status: "approved" })).toBeNull();
+    expect(openStore(storeFile()).updateProject("proj_nope", { status: "dropped" })).toBeNull();
+  });
+
+  /**
+   * THE PLAN AND THE ROW IT IS FOR. A generation plan is written on a brief and moves that brief
+   * to scripted; its status is mirrored onto the row's stage as it is claimed, freed and finished,
+   * so the Posts screen and the Projects screen never tell two stories about one piece.
+   */
+  it("writes a generation plan on its brief and mirrors the plan's life onto the row, across reopen", () => {
+    const file = storeFile();
+    const store = openStore(file, TEMPLATES.faceless);
+    const brief = store.createPost({ caption: "Why the Stoics slept on the floor", status: "pending", stage: "brief", agent: "trend-scout" });
+    const plan = store.createProject({
+      kind: "generation", postId: brief.id, agent: "scriptwriter", title: "Sleep on the floor", brief: "Comfort is the trap.",
+      styleTemplate: "Sunlit stoic", model: "alibaba/wan-3.0", caption: "Seneca slept on the floor. #stoicism",
+      scenes: [{ prompt: "A stone floor at dawn", seconds: 4, voiceover: "He chose the floor.", text: "on purpose" }, { prompt: "A mattress pushed away", seconds: 5 }],
+    });
+    expect(plan.id).toMatch(/^proj_[0-9a-f]{4}$/);
+    expect(plan).toMatchObject({ status: "planned", postId: brief.id, platform: brief.platform, agent: "scriptwriter" });
+    expect(Date.parse(plan.createdAt)).toBeGreaterThan(Date.now() - 60_000);
+    expect(plan.statusAt).toBe(plan.createdAt);
+    expect(store.read().projects[0]).toBe(plan);
+    const row = () => store.read().posts.find((p) => p.id === brief.id);
+    expect(row()).toMatchObject({ stage: "scripted", projectId: plan.id });
+
+    expect(store.updateProject(plan.id, { status: "rendering" })?.status).toBe("rendering");
+    expect(row()?.stage).toBe("rendering");
+    expect(store.updateProject(plan.id, { status: "planned" })?.status).toBe("planned");
+    expect(row()?.stage).toBe("scripted");
+    // Editing the plan leaves its status and stamp alone.
+    const { statusAt } = store.read().projects[0]!;
+    expect(store.updateProject(plan.id, { title: "Floor, not bed", scenes: [{ prompt: "Only one shot", seconds: 6 }] })).toMatchObject({ title: "Floor, not bed", status: "planned", statusAt });
+    expect(store.read().projects[0]?.scenes).toHaveLength(1);
+
+    const posts = store.read().posts.length;
+    store.updateProject(plan.id, { status: "rendering" });
+    const done = store.updateProject(plan.id, { status: "rendered", mediaUrl: "https://cdn.example/floor.mp4", renderedBy: "producer" });
+    expect(done?.status).toBe("rendered");
+    expect(store.read().posts).toHaveLength(posts);
+    expect(row()).toMatchObject({
+      status: "pending", stage: "rendered", mediaUrl: "https://cdn.example/floor.mp4", agent: "producer",
+      caption: "Seneca slept on the floor. #stoicism", title: "Seneca slept on the floor. #stoicism", projectId: plan.id,
+    });
+
+    const reopened = openStore(file, TEMPLATES.faceless).read();
+    expect(reopened.projects.find((p) => p.id === plan.id)).toEqual(store.read().projects.find((p) => p.id === plan.id));
+    expect(reopened.posts.find((p) => p.id === brief.id)?.projectId).toBe(plan.id);
+  });
+
+  it("files the post for a plan that has none when its render lands, and not before", () => {
+    const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
+    const plan = store.createProject({
+      kind: "clipping", agent: "scout", account: "@clips", title: "The gravel hill", brief: "Goggins on why the hill matters.",
+      sources: [{ url: "https://www.youtube.com/watch?v=abc123", from: "12:04", to: "12:41", reason: "The line lands cold." }],
+    });
+    // No network named: the customer's own setup answer, as a post takes it.
+    expect(plan.platform).toBe("tiktok");
+    expect(plan.postId).toBeUndefined();
+    expect(plan.model).toBeUndefined();
+    store.updateProject(plan.id, { status: "rendering" });
+    expect(store.read().posts).toEqual([]);
+    const done = store.updateProject(plan.id, { status: "rendered", mediaUrl: "https://cdn.example/hill.mp4", renderedBy: "clipper" });
+    expect(store.read().posts).toHaveLength(1);
+    const filed = store.read().posts[0]!;
+    expect(done?.postId).toBe(filed.id);
+    expect(filed).toMatchObject({
+      status: "pending", stage: "rendered", kind: "clip", platform: "tiktok", account: "@clips", agent: "clipper",
+      mediaUrl: "https://cdn.example/hill.mp4", projectId: plan.id, source: `The gravel hill (${plan.id})`, title: "The gravel hill",
+    });
+    expect(filed.caption).toBe("The gravel hill\n\nGoggins on why the hill matters.");
   });
 });
 

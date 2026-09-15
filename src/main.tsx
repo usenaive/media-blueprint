@@ -12,6 +12,7 @@ import { Analytics } from "./screens/Analytics";
 import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
 import { Posts } from "./screens/Posts";
+import { Projects } from "./screens/Projects";
 
 const router = createBrowserRouter([
   {
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { index: true, Component: Home },
       { path: "chat", Component: Chat },
       { path: "posts", Component: Posts },
+      { path: "projects", Component: Projects },
       { path: "analytics", Component: Analytics },
       { path: "accounts", Component: Accounts },
       { path: "approvals", Component: Approvals },

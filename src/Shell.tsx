@@ -1,4 +1,4 @@
-import { BarChart3, Home as HomeIcon, Link2, ListVideo, MessageSquare, Plus, Settings2, ShieldQuestion } from "lucide-react";
+import { BarChart3, Clapperboard, Home as HomeIcon, Link2, ListVideo, MessageSquare, Plus, Settings2, ShieldQuestion } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { apiGet } from "./api";
@@ -12,6 +12,7 @@ const NAV = [
   { to: "/", label: "Home", Icon: HomeIcon },
   { to: "/chat", label: "Chat", Icon: MessageSquare },
   { to: "/posts", label: "Posts", Icon: ListVideo },
+  { to: "/projects", label: "Projects", Icon: Clapperboard },
   // An agent that has parked on an approval is blocked until a person answers, so the count that
   // matters most is the one that used to be nowhere at all.
   { to: "/approvals", label: "Approvals", Icon: ShieldQuestion },

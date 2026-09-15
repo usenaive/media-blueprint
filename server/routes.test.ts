@@ -111,10 +111,43 @@ describe("the store routes", () => {
     expect(row.postedAt).toBeUndefined();
   });
 
+  it("serves the plans, and lets the operator drop one or put it back — never call it rendered", async () => {
+    // Claiming and finishing a plan are the crew's, over /mcp, where the video travels with the
+    // write. The dashboard's two moves are the ones that cost nothing.
+    const state = demoState();
+    const ctx = ctxOver(state);
+    const listed = await handleRequest(req("GET", "/api/projects"), ctx);
+    expect(listed.status).toBe(200);
+    expect(listed.body).toEqual(state.projects);
+    const planned = state.projects.find((p) => p.status === "planned")!;
+    const rendered = state.projects.find((p) => p.status === "rendered")!;
+    expect(await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"rendered"}'), ctx)).toEqual({
+      status: 400,
+      body: { error: "status must be dropped or planned" },
+    });
+    expect(await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"rendering"}'), ctx)).toEqual({
+      status: 400,
+      body: { error: "status must be dropped or planned" },
+    });
+    expect(await handleRequest(req("PATCH", "/api/projects/proj_nope", '{"status":"dropped"}'), ctx)).toEqual({
+      status: 404,
+      body: { error: "no such project" },
+    });
+    expect((await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"dropped"}'), ctx)).body).toMatchObject({ id: planned.id, status: "dropped" });
+    expect((await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"planned"}'), ctx)).body).toMatchObject({ id: planned.id, status: "planned" });
+    expect(await handleRequest(req("PATCH", `/api/projects/${rendered.id}`, '{"status":"dropped"}'), ctx)).toEqual({
+      status: 409,
+      body: { error: "project is rendered; reject its post instead" },
+    });
+    expect(state.projects.find((p) => p.id === rendered.id)?.status).toBe("rendered");
+    expect(await handleRequest(req("GET", `/api/projects/${planned.id}`), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
+  });
+
   it("answers 405 for a known path with the wrong method and 404 for an unknown one", async () => {
     const ctx = ctxOver(demoState(), CONFIG);
     expect(await handleRequest(req("DELETE", "/api/posts"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
     expect(await handleRequest(req("GET", "/api/posts/post_9f2a"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
+    expect(await handleRequest(req("DELETE", "/api/projects"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
     expect(await handleRequest(req("GET", "/api/nope"), ctx)).toEqual({ status: 404, body: { error: "no such route" } });
   });
 });
@@ -551,6 +584,8 @@ describe("every /api/* route is behind the operator's bearer", () => {
     ["GET", "/api/deployments", ""],
     ["PATCH", "/api/posts/post_9f2a", '{"status":"posted"}'],
     ["POST", "/api/posts/post_4a6f/post-now", ""],
+    ["GET", "/api/projects", ""],
+    ["PATCH", "/api/projects/proj_a1f0", '{"status":"dropped"}'],
     ["GET", "/api/agents", ""],
     ["POST", "/api/chat", '{"message":"hi"}'],
     ["GET", "/api/chat/ses_1/stream", ""],

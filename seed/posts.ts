@@ -100,6 +100,8 @@ export interface Post {
   kind: PostKind;
   /** How far along a piece is; absent on a row that is not a piece. */
   stage?: PostStage;
+  /** The video project (`seed/projects.ts`) this piece is planned in, once one is. */
+  projectId?: string;
   /** When `stage` last changed (ISO 8601), so a claim a dead session left behind can be aged out. */
   stageAt?: string;
   /** The finished piece's running time, when it is known. */
@@ -146,7 +148,7 @@ const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_00
 
 /** The `faceless` demo queue: original video the producer made, in one niche. */
 export const FACELESS_SEEDS: Post[] = [
-  { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "youtube", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:41" },
+  { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "youtube", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:41", projectId: "proj_e5b2" },
   { id: "post_8e1b", title: "Marcus Aurelius on mornings", caption: "The 5am debate, settled 1,900 years ago.", platform: "instagram", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:58" },
   { id: "post_7d3c", title: "Why comfort is a trap", caption: "Seneca said it better than any podcast.", platform: "tiktok", account: "@dailystoic", status: "ready", agent: "producer", kind: "produced", duration: "0:36" },
   { id: "post_6c4d", title: "Dichotomy of control, animated", caption: "Part 1 of 3 — the only flowchart you need.", platform: "youtube", account: "@dailystoic", status: "ready", agent: "producer", kind: "multi", duration: "0:52" },

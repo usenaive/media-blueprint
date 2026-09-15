@@ -147,33 +147,36 @@ describe("the crews", () => {
     // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.
     expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, send_to_agent the scriptwriter once — wait false.*post ids.*handoff_key/s);
     expect(seat("trend-scout")?.system).toMatch(/only then.*send_to_agent the scriptwriter once, wait false.*Filed nothing, hand on nothing/s);
-    // The next two claim a row (`expected_stage`) before they spend on it, so a handoff and the cron
-    // that overlaps it cannot both script or render the same piece, and hand on only what they claimed.
-    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*`stage` scripted.*send_to_agent the producer once, wait false.*claimed nothing, hand on nothing/s);
-    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*stage rendering and expected_stage scripted.*`stage` rendered.*you hand on to nobody/s);
-    // The timers are the fallback, by stage, claim the same way, and no seat's intake is told another intake is running.
-    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*send_to_agent the producer once, wait false/s);
-    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendering, expected_stage scripted.*stage rendered/s);
+    // The writer claims the brief row (`expected_stage`) before it plans, and its plan is a video
+    // project on that row; the producer claims the plan (`expected_status`) before it renders. So a
+    // handoff and the cron that overlaps it cannot both plan or render the same piece, and each
+    // hands on only what it claimed.
+    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*channel\.create_project, kind generation, post_id the row.*`stage` scripted.*send_to_agent the producer once, wait false.*project ids.*claimed nothing, hand on nothing/s);
+    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*you hand on to nobody/s);
+    // The timers are the fallback, by stage and status, claim the same way, and no seat's intake is told another intake is running.
+    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*channel\.create_project \(kind generation, post_id the row\).*send_to_agent the producer once, wait false.*project ids/s);
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/status planned, kind generation.*status rendering, expected_status planned.*status rendered, expected_status rendering/s);
     /**
      * AND THE RENDER IS GUARDED AT BOTH ENDS, in the only seat that spends on one.
      *
      * A claim on the way in and nothing on the way out is half a guard: the producer's completion
-     * write landed whatever had happened to the row while it rendered, so a stale session could
+     * write landed whatever had happened to the plan while it rendered, so a stale session could
      * overwrite the render that replaced it, and neither the producer nor the manager was told that
-     * a row with a video attached is a row the channel has already paid ~$3.32 for. Both are said
-     * in the brief and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat
-     * only after it has spent the money.
+     * a rendered plan is one the channel has already paid ~$3.32 for. Both are said in the brief
+     * and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat only after it
+     * has spent the money.
      */
     for (const prompt of [seat("producer")?.system, seat("producer")?.schedules?.[0]?.input]) {
-      expect(prompt).toMatch(/`?expected_stage`? rendering.*(no longer yours|moved on).*(twice|second time)/s);
+      expect(prompt).toMatch(/`?expected_status`? rendering.*(no longer yours|moved on).*(twice|second time)/s);
     }
     // The sentence about the receipt itself is on the timer, not in the brief: the producer's
     // `system` is at the 400-word ceiling to the word, and the tool refuses the claim — before the
-    // render, not after — with the same sentence on it (`update_post`, `server/mcp.ts`).
-    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/already carries a media_url.*paid.*never render it again/s);
+    // render, not after — with the same sentence on it (`update_project`, `server/mcp.ts`).
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/rendered plan.*paid.*never render it again/s);
     // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that
-    // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not back.
-    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered/s);
+    // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not
+    // back, and a rendered plan is final.
+    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered.*channel\.list_projects.*rendering whose statusAt is more than a day old.*back to planned.*expected_status rendering.*rendered one is final/s);
     for (const agent of TEMPLATES.faceless.agents) expect(agent.intake?.message, agent.name).not.toMatch(/alongside yours|running alongside/);
   });
 
@@ -246,6 +249,34 @@ describe("the crews", () => {
   it("pins nothing on a crew that does not render", () => {
     expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.tools?.configs["generate_video"])
       .toEqual({ enabled: false, permission: "deny" });
+  });
+
+  /**
+   * The plan is a row of its own (`seed/projects.ts`): the seat that plans a video never spends
+   * on it, and the seat that spends reads the plan rather than writing one. Every seat may read
+   * and write plans through the dashboard tools — the manager sweeps them, the caption-editor
+   * reads the why — but the render and the cut are still the two seats' alone.
+   */
+  it("plans a video before anyone renders it: planners write projects, executors claim and finish them", () => {
+    const PROJECT_TOOLS = ["channel.list_projects", "channel.get_project", "channel.create_project", "channel.update_project"];
+    for (const template of both) {
+      for (const agent of template.agents) {
+        for (const tool of PROJECT_TOOLS) expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual({ enabled: true, permission: "allow" });
+      }
+    }
+    const seat = (template: MediaTemplate, name: string) => template.agents.find((a) => a.name === name);
+    // Faceless: the scriptwriter writes a generation plan on the brief; the producer renders it.
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/channel\.create_project, kind generation.*scenes in order.*seconds.*voiceover.*on-screen text/s);
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/neither render nor find topics/);
+    expect(seat(TEMPLATES.faceless, "producer")?.system).toMatch(/channel\.get_project.*generate_video.*Do not rewrite the plan/s);
+    // Clipping: the scout writes a clipping plan — URL, timestamps, why; the clipper cuts it.
+    expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/channel\.create_project, kind clipping.*URL.*starts and ends.*why this moment/s);
+    expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/do not cut and you do not caption/);
+    expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/status rendering, expected_status planned.*channel\.get_project.*clip_video.*status rendered, expected_status rendering/s);
+    expect(seat(TEMPLATES.clipping, "clipper")?.schedules?.[0]?.input).toMatch(/status planned, kind clipping.*expected_status planned.*status rendered, expected_status rendering/s);
+    // The one who rewrites the caption reads the plan's reasoning, and the gate names both rows.
+    expect(seat(TEMPLATES.clipping, "caption-editor")?.system).toMatch(/channel\.get_project on the row's projectId/);
+    for (const template of both) for (const agent of template.agents) expect(agent.system).toMatch(/a video project is the plan a video is made from/);
   });
 
   it("files each agent's work through the dashboard queue, under the same gate", () => {

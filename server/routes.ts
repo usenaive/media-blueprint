@@ -125,7 +125,7 @@ function cookieValues(header: string | undefined, name: string): string[] {
 }
 
 /** Paths that exist but not for this method — a 405 is the honest answer, not a 404. */
-const KNOWN = [/^\/api\/posts$/, /^\/api\/templates$/, /^\/api\/context$/, /^\/api\/agents$/, /^\/api\/deployments$/, /^\/api\/chat$/, /^\/api\/sessions$/];
+const KNOWN = [/^\/api\/posts$/, /^\/api\/projects$/, /^\/api\/templates$/, /^\/api\/context$/, /^\/api\/agents$/, /^\/api\/deployments$/, /^\/api\/chat$/, /^\/api\/sessions$/];
 
 const parse = (body: string): Record<string, unknown> => {
   try {
@@ -322,6 +322,21 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
   if (now) {
     if (method !== "POST") return fail(405, "method not allowed");
     return postNow(await ctx.store(), ctx.config, now[1]!);
+  }
+  if (method === "GET" && path === "/api/projects") return json(200, (await ctx.store()).read().projects);
+  const project = /^\/api\/projects\/([\w-]+)$/.exec(path);
+  if (project) {
+    if (method !== "PATCH") return fail(405, "method not allowed");
+    const body = parse(req.body) as { status?: string };
+    // The operator's two moves on a plan: drop one that should not be made, or put a dropped one
+    // back. Claiming and finishing are the crew's, over `/mcp`, where the video that proves a
+    // render travels with the write; nothing here can mark a plan rendered without one.
+    if (body.status !== "dropped" && body.status !== "planned") return fail(400, "status must be dropped or planned");
+    const store = await ctx.store();
+    const current = store.read().projects.find((p) => p.id === project[1]);
+    if (!current) return fail(404, "no such project");
+    if (current.status === "rendered") return fail(409, "project is rendered; reject its post instead");
+    return json(200, store.updateProject(current.id, { status: body.status }));
   }
   return null;
 }

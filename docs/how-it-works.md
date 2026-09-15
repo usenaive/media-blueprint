@@ -51,10 +51,14 @@ $60/day and $20/task (`templates/template.ts`, sized around one ~$3.32 render).
 | analyst | Performance | — | — | — | Mon 07:30 |
 
 Pipeline: scout files briefs at `stage: brief` → `send_to_agent(scriptwriter, wait:false)` with
-the ids → scriptwriter claims (`scripting`, `expected_stage: brief`), writes hook/script/caption
-into the row, moves to `scripted`, hands to producer → producer claims (`rendering`,
-`expected_stage: scripted`), renders one <15s vertical video in the named style template, attaches
-`media_url`, moves to `rendered`. Crons are the fallback that picks up whatever a handoff missed.
+the ids → scriptwriter claims the brief (`scripting`, `expected_stage: brief`) and writes the
+**video project** for it (`channel.create_project`, `kind: generation`, `post_id` the brief:
+scenes with prompt/seconds/voiceover/on-screen text, model, style template, caption) — that write
+moves the brief to `scripted` — and hands the project ids to the producer → producer claims the
+plan (`channel.update_project`, `status: rendering`, `expected_status: planned`), renders the
+scenes with `generate_video`, and finishes it (`status: rendered`, `expected_status: rendering`,
+`media_url`) — that write puts the video and caption on the brief's row at `stage: rendered`.
+Crons are the fallback that picks up whatever a handoff missed.
 
 ### clipping
 
@@ -66,8 +70,14 @@ into the row, moves to `scripted`, hands to producer → producer claims (`rende
 | caption-editor | Captions & titles | web_search | caption-writing, short-video-hooks | daily 07:30 |
 | analyst | Performance | — | — | Mon 07:30 |
 
-No handoffs here; the chain is ordered purely by cron time (briefs → cuts → captions). The one rule
-every seat repeats: cut only from reference channels the context names.
+No handoffs here; the chain is ordered purely by cron time (plans → cuts → captions). The scout
+files each moment as a **clipping project** (`channel.create_project`, `kind: clipping`: the
+source URL, `from`/`to`, and the *reason* the moment travels); the clipper claims it
+(`status: rendering`, `expected_status: planned`), cuts with `clip_video`, and finishes it
+(`status: rendered`, `media_url`) — since a clipping plan has no brief row, that write **creates**
+the pending post; the caption-editor then reads the plan (`channel.get_project`) for the source
+and reasoning before rewriting the post's caption. The one rule every seat repeats: cut only from
+reference channels the context names.
 
 ## 4. What the prompts say
 
@@ -78,15 +88,18 @@ Every `system` is composed by `agent()` in `templates/template.ts` as
   missing one, ask the operator instead.
 - The seat's own `brief` (quoted in full in each template file).
 - `approvalGate` — file every finished piece as a *pending* post via `channel.create_post`, never
-  publish yourself; sign it (`agent`, `account`, `media_url`, `source`, `platform`); the tools
-  offered this turn are the complete list; request a missing one once with `request_tools`; ask
-  the operator once with `ask_operator`; never describe a video you did not render.
+  publish yourself; sign it (`agent`, `account`, `media_url`, `source`, `platform`); a brief is a
+  pending post with no media, a video project is the plan a video is made from — another seat
+  renders or cuts it, and that files the post; the tools offered this turn are the complete list;
+  request a missing one once with `request_tools`; ask the operator once with `ask_operator`;
+  never describe a video you did not render.
 
 Every intake message gets `DAY_ONE_ORDER` appended: all intakes open simultaneously, so an empty
 queue on day one is not a finding — file what you can alone, hand on by name, leave the rest to
 the timers. Day-one work per seat is set-up, filed as notes into the queue (`source` = "channel
 plan", "style choice", "hook style", "report skeleton", "clipper check", "caption style"); the
-trend-scout is the exception and files five real briefs.
+trend-scout is the exception and files five real briefs, as the clipping scout files five real
+clipping projects.
 
 ## 5. Tool permissions
 
@@ -98,8 +111,11 @@ trend-scout is the exception and files five real briefs.
 - Every `BUILTIN_TOOLS` entry the seat was not granted is `deny` by name — including all sandbox
   tools (bash/read/write/…), so no session provisions a machine.
 - Granted `allow`: `project_context`, `read_skill` (if the seat has skills), the seat's own tools,
-  `social.accounts`, and the six dashboard tools `channel.list_posts / get_post / create_post /
-  update_post / list_style_templates / list_accounts`.
+  `social.accounts`, and the ten dashboard tools `channel.list_posts / get_post / create_post /
+  update_post / list_projects / get_project / create_project / update_project /
+  list_style_templates / list_accounts`. Planner and executor are separated by the *other* tools,
+  not these: the scriptwriter and scout have no `generate_video` / `clip_video`, so they can only
+  write the plan; the producer and clipper have them, and are told the plan is not theirs to write.
 - Granted `ask`: `social.post` (the one outward act), `ask_operator`, `request_tools`.
 - Seats with `handoffs` also get `send_to_agent` and `list_agents` at `allow`.
 
@@ -118,6 +134,10 @@ Nothing here approves, rejects or publishes.
 | `get_post {id}` | one row |
 | `create_post {caption, media_url?, platform?, agent?, account?, source?, stage?, status?}` | lands `pending` (or `ready`); `platform` refused if not in `POST_PLATFORMS`, defaults to the customer's first setup pick (`server/channel.ts`) |
 | `update_post {id, title?, caption?, media_url?, platform?, stage?, expected_stage?}` | only `pending`/`ready` rows; `expected_stage` mismatch → refused (atomic claim under the store lock); a row with media cannot move to a stage before `rendered`; `rendered` requires media |
+| `list_projects {status?, kind?}` | the plans, filtered |
+| `get_project {id}` | one plan |
+| `create_project {kind, title, brief, post_id?, agent?, platform?, account?, style_template?, model?, scenes?, sources?, caption?}` | lands `planned`; `generation` requires `scenes[]` (`prompt`, `seconds > 0`, `voiceover?`, `text?`, `model?`), `clipping` requires `sources[]` (`url` http(s), `reason`, `from?`, `to?`); `model` must be one of `VIDEO_MODELS` (defaults to the first for generation); a `post_id` must be a post with no plan and no media yet, and the post moves to `stage: scripted` |
+| `update_project {id, status?, expected_status?, media_url?, agent?, …plan fields}` | `expected_status` mismatch → refused (the claim); `rendered` requires `media_url` and is final — never back to `planned`/`dropped`; `dropped` can only return to `planned`; finishing writes media, caption and `stage: rendered` onto the linked post, or creates a pending post when the plan has none |
 | `list_style_templates` | the channel's style library |
 | `list_accounts` | platform's connected accounts, or the accounts the queue names when social isn't activated; a 401/403/500 is an error, never an empty list |
 
@@ -129,7 +149,7 @@ The `create_post.platform` description is generated per request from the custome
 There is **no relational schema for posts**. The whole store is one JSON document:
 
 ```ts
-interface StoreState { posts: Post[]; templates: StyleTemplateSeed[] }
+interface StoreState { posts: Post[]; projects: VideoProject[]; templates: StyleTemplateSeed[] }
 ```
 
 - **Local (`pnpm serve`)** — `server/store.ts` persists it as one JSON file under `data/`, seeded
@@ -144,8 +164,9 @@ interface StoreState { posts: Post[]; templates: StyleTemplateSeed[] }
 
   Every request does `begin` → `select … for update` → run the handler over the in-memory state →
   `update … set state` (if dirty) → `commit`. The row lock is what serialises concurrent
-  `create_post` calls. A fresh deployment starts empty (no demo rows reach the bundle —
-  `src/no-seed.test.ts`).
+  `create_post` calls and makes an `expected_status` claim on a project atomic. A fresh
+  deployment starts empty (no demo rows reach the bundle — `src/no-seed.test.ts`); a document
+  written before projects existed is read with `projects ??= []`.
 
 Style templates (`seed/style-templates.ts`: `{name, prompt, trend, image}`) live in the same
 document. Connected accounts, agents, sessions and deployments are **not** stored here — they are
@@ -173,6 +194,7 @@ interface Post {
   rejectedReason?: string;
   views?: number;
   likes?: number;
+  projectId?: string;         // the plan this row was made from, when there is one
 }
 ```
 
@@ -180,12 +202,54 @@ interface Post {
 neither stage nor media is a *note* (plan, report, style choice) and belongs to no pipeline. The
 UI's `rowKind()` (`src/data.ts`) maps rows to `piece | production | note` from the same fields.
 
+### The `VideoProject` row (`seed/projects.ts`)
+
+The plan a video is made from — one per piece, written before anything is rendered or cut, and
+the only thing an execution seat reads before it spends.
+
+```ts
+interface VideoProject {
+  id: string;                 // proj_…
+  kind: "generation" | "clipping";
+  status: "planned" | "rendering" | "rendered" | "dropped";
+  statusAt: string;           // ISO; lets the 08:00 sweep age out a dead claim
+  createdAt: string;
+  title: string;
+  brief: string;              // the reasoning: why this piece, for whom
+  platform: "instagram" | "tiktok" | "youtube";
+  account?: string;
+  agent?: string;             // who planned it
+  postId?: string;            // the brief it was written on, or the post its render created
+  styleTemplate?: string;     // generation: the look, from channel.list_style_templates
+  model?: string;             // generation: one of VIDEO_MODELS; a scene may override
+  scenes?: Scene[];           // generation: the shots, in order
+  sources?: ClipSource[];     // clipping: the videos to cut from, and why
+  caption?: string;           // the publishable caption, copied to the post when the render lands
+}
+interface Scene      { prompt: string; seconds: number; voiceover?: string; text?: string; model?: string }
+interface ClipSource { url: string; from?: string; to?: string; reason: string }
+```
+
+Characters and narrators are not modelled yet — a scene carries the narration as text
+(`voiceover`) and the look as a style template plus model, which is what `generate_video` can
+take today. When the platform grows named voices or characters they belong on `Scene`.
+
+Status is mirrored onto the linked post's `stage`: `rendering` ↔ `rendering`, `planned` ↔
+`scripted`, `rendered` (with media) ↔ `rendered`. The operator's moves on a plan are
+`PATCH /api/projects/:id {status: dropped | planned}` from the Projects screen — never `rendered`,
+which only the finishing `update_project` (with its `media_url`) can write; a rendered plan is
+refused there with a 409.
+
 ## 8. Post lifecycle end to end
 
-1. Agent files → `channel.create_post` → `status: pending` (agents can also send `ready`).
-2. Seats move `stage` forward with claims (`expected_stage`); the manager's 08:00 sweep tidies
-   captions/kind/day and returns stale `-ing` claims (>1 day) to the prior stage — but never a row
-   with media.
+1. Agent files → `channel.create_post` → `status: pending` (agents can also send `ready`). A
+   faceless piece starts as a brief (`stage: brief`, no media); a clip starts as a plan alone.
+2. A planner writes the video project (`channel.create_project`) — on the brief for generation,
+   standalone for clipping. An executor claims it (`update_project`, `expected_status: planned`),
+   renders or cuts, and finishes it with `media_url`; that write puts the video on the post (or
+   creates the post) at `stage: rendered`. The manager's 08:00 sweep tidies captions/kind/day,
+   returns stale `-ing` claims (>1 day) on posts and plans to the prior state — but never a row
+   with media or a rendered plan.
 3. Operator, on Posts: `PATCH /api/posts/:id` moves between `pending / ready / approved /
    rejected` (`posted` is refused there with a 409).
 4. Operator presses Post now → `POST /api/posts/:id/post-now` (`routes.ts` `postNow`): requires
