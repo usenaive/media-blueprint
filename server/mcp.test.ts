@@ -628,3 +628,55 @@ describe("mcp tools", () => {
     }
   });
 });
+
+/**
+ * THE SESSION THAT MADE IT. An MCP call carries no session id, so the plan is bound to the seat's
+ * one running session — and only then. The write always lands: the binding is for the Studio,
+ * and a lookup that fails or cannot be sure records nothing rather than guessing.
+ */
+describe("binding a plan to the session writing it", () => {
+  const sources = [{ url: "https://www.youtube.com/watch?v=abc123", from: "12:04", to: "12:41", reason: "The line lands cold." }];
+  const file = (store: Store, who: (agent: string) => Promise<string | null>) =>
+    handleMcp(call("create_project", { kind: "clipping", agent: "scout", title: "The hill", brief: "Why the hill.", sources }), store, null, who);
+
+  it("records the one running session of the named seat on the plan's writes, once", async () => {
+    const store = freshStore();
+    const asked: string[] = [];
+    const who = async (agent: string) => { asked.push(agent); return agent === "scout" ? "ses_scout" : "ses_clipper"; };
+    const plan = text<{ id: string; sessions: unknown[] }>((await file(store, who))!);
+    expect(asked).toEqual(["scout"]);
+    expect(plan.sessions).toEqual([{ id: "ses_scout", role: "planned", at: expect.any(String) }]);
+
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned", agent: "clipper" }), store, null, who);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_1", agent: "clipper" }), store, null, who);
+    // An edit is not a move: nobody is asked for it.
+    await handleMcp(call("update_project", { id: plan.id, title: "The gravel hill", agent: "scout" }), store, null, who);
+    expect(asked).toEqual(["scout", "clipper", "clipper"]);
+    expect(store.read().projects.find((p) => p.id === plan.id)?.sessions.map((s) => [s.id, s.role])).toEqual([["ses_scout", "planned"], ["ses_clipper", "rendered"]]);
+  });
+
+  it("records nothing when the seat has no running session, several, is not named, or the lookup fails — and the write still lands", async () => {
+    for (const who of [async () => null, async () => { throw new Error("upstream down"); }]) {
+      const store = freshStore();
+      const plan = text<{ id: string; status: string; sessions: unknown[] }>((await file(store, who))!);
+      expect(plan.status).toBe("planned");
+      expect(plan.sessions).toEqual([]);
+      const claimed = text<{ status: string; sessions: unknown[] }>(
+        (await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned", agent: "clipper" }), store, null, who))!,
+      );
+      expect(claimed).toMatchObject({ status: "rendering", sessions: [] });
+    }
+    const store = freshStore();
+    const who = vi.fn(async () => "ses_x");
+    const unsigned = text<{ id: string; sessions: unknown[] }>(
+      (await handleMcp(call("create_project", { kind: "clipping", title: "The hill", brief: "Why.", sources }), store, null, who))!,
+    );
+    expect(who).not.toHaveBeenCalled();
+    expect(unsigned.sessions).toEqual([]);
+    // A refused write asks nobody.
+    await handleMcp(call("update_project", { id: unsigned.id, status: "rendered", expected_status: "planned", agent: "clipper" }), store, null, who);
+    expect(who).not.toHaveBeenCalled();
+    // Without a lookup at all — the local demo — the tools work as before.
+    expect(text<{ sessions: unknown[] }>((await handleMcp(call("update_project", { id: unsigned.id, status: "rendering", agent: "clipper" }), store, null))!).sessions).toEqual([]);
+  });
+});

@@ -14,7 +14,7 @@ import { channelPlatform, channelPlatforms } from "./channel.ts";
 import { notActivated, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
-import { PROJECT_KINDS, PROJECT_STATUSES, type ClipSource, type ProjectKind, type ProjectStatus, type Scene } from "../seed/projects.ts";
+import { PROJECT_KINDS, PROJECT_STATUSES, type ClipSource, type ProjectKind, type ProjectSession, type ProjectStatus, type Scene } from "../seed/projects.ts";
 import { ACTIVE } from "../templates/index.ts";
 import { labelOf, VIDEO_MODELS } from "../templates/template.ts";
 
@@ -304,7 +304,31 @@ async function listAccounts(store: Store, config: ProxyConfig | null): Promise<u
   return [...seen.values()];
 }
 
-async function callTool(name: string, params: Record<string, unknown>, store: Store, config: ProxyConfig | null): Promise<unknown> {
+/**
+ * The id of the one session of a seat that is running right now, or null. An MCP call carries no
+ * session id and an agent cannot see its own, so a plan is bound to the session writing it by
+ * inference — and only when the inference cannot be wrong: zero or several running, null.
+ */
+export type WhoIsRunning = (agentName: string) => Promise<string | null>;
+
+const nobody: WhoIsRunning = async () => null;
+
+/**
+ * Best-effort: the write is the point, the binding is a convenience for the Studio. A lookup that
+ * fails or finds no single session records nothing and never fails the tool call.
+ */
+async function bind(store: Store, whoIsRunning: WhoIsRunning, id: string, agent: string | undefined, role: ProjectSession["role"]): Promise<void> {
+  if (agent === undefined) return;
+  let session: string | null;
+  try {
+    session = await whoIsRunning(agent);
+  } catch {
+    return;
+  }
+  if (session !== null) store.recordSession(id, { id: session, role, at: new Date().toISOString() });
+}
+
+async function callTool(name: string, params: Record<string, unknown>, store: Store, config: ProxyConfig | null, whoIsRunning: WhoIsRunning): Promise<unknown> {
   switch (name) {
     case "list_posts": {
       const stage = stageOf(params);
@@ -427,7 +451,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         if (brief.status !== "pending" && brief.status !== "ready") throw new ToolError(`post is ${brief.status}; a plan is written on a pending or ready brief`);
       }
       const agent = optional(params, "agent");
-      return store.createProject({
+      const filed = store.createProject({
         kind,
         title: need(params, "title"),
         brief: need(params, "brief"),
@@ -443,6 +467,8 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         ...(plan.sources === undefined ? {} : { sources: plan.sources }),
         ...(plan.caption === undefined ? {} : { caption: plan.caption }),
       });
+      await bind(store, whoIsRunning, filed.id, agent, "planned");
+      return filed;
     }
     case "update_project": {
       const id = need(params, "id");
@@ -473,7 +499,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       }
       const plan = planOf(params);
       const agent = optional(params, "agent");
-      return store.updateProject(id, {
+      const moved = store.updateProject(id, {
         ...(status === undefined ? {} : { status }),
         ...(status === "rendered" && media !== undefined ? { mediaUrl: media } : {}),
         ...(status === "rendered" && agent !== undefined ? { renderedBy: agent } : {}),
@@ -487,6 +513,8 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         ...(plan.sources === undefined ? {} : { sources: plan.sources }),
         ...(plan.caption === undefined ? {} : { caption: plan.caption }),
       });
+      if (moved !== null && (status === "rendering" || status === "rendered")) await bind(store, whoIsRunning, id, agent, "rendered");
+      return moved;
     }
     case "list_style_templates":
       return store.read().templates;
@@ -501,7 +529,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
  * Handles one JSON-RPC message. Answers null for notifications (the caller
  * responds 202 with no body, per the streamable-HTTP transport).
  */
-export async function handleMcp(raw: string, store: Store, config: ProxyConfig | null): Promise<object | null> {
+export async function handleMcp(raw: string, store: Store, config: ProxyConfig | null, whoIsRunning: WhoIsRunning = nobody): Promise<object | null> {
   let msg: JsonRpcRequest;
   try {
     msg = JSON.parse(raw) as JsonRpcRequest;
@@ -523,7 +551,7 @@ export async function handleMcp(raw: string, store: Store, config: ProxyConfig |
   if (msg.method === "tools/call") {
     const { name, arguments: args } = (msg.params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
     try {
-      const result = await callTool(name ?? "", args ?? {}, store, config);
+      const result = await callTool(name ?? "", args ?? {}, store, config, whoIsRunning);
       return rpcResult(msg.id, { content: [{ type: "text", text: JSON.stringify(result) }] });
     } catch (err) {
       if (err instanceof ToolError) {

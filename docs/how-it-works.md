@@ -225,10 +225,17 @@ interface VideoProject {
   scenes?: Scene[];           // generation: the shots, in order
   sources?: ClipSource[];     // clipping: the videos to cut from, and why
   caption?: string;           // the publishable caption, copied to the post when the render lands
+  sessions: ProjectSession[]; // the sessions that touched it — the one the Studio talks to is the last
+  renders?: Render[];         // the videos a revision replaced, oldest first
+  revision?: { openedAt: string; sessionId: string; note: string }; // the operator's open revision, while it renders
 }
 interface Scene      { prompt: string; seconds: number; voiceover?: string; text?: string; model?: string }
 interface ClipSource { url: string; from?: string; to?: string; reason: string }
+interface ProjectSession { id: string; role: "planned" | "rendered" | "revised"; at: string }
+interface Render         { mediaUrl: string; at: string; sessionId?: string }
 ```
+
+`sessions` is migrated on read (`project.sessions ??= []`), the way `state.projects ??= []` is.
 
 Characters and narrators are not modelled yet — a scene carries the narration as text
 (`voiceover`) and the look as a style template plus model, which is what `generate_video` can
@@ -252,6 +259,75 @@ one, which its executor holds until the render lands or the manager's sweep free
 post from the Posts screen drops the unrendered plan written on it, and `create_project` refuses
 a `post_id` that is not pending or ready, so a rejected brief is never rendered. Retargeting a
 plan (`platform`/`account`) retargets its pending or ready post with it.
+
+### The lifecycle, with the revision loop
+
+```
+planned → rendering → rendered ⟲ revise
+                ↑          |
+                └──────────┘  POST /api/studio/:id/revise (the operator, from the Studio)
+```
+
+`rendered` is final to every agent: the media on the row is the receipt for a paid render, and
+`update_project` refuses to move a rendered plan anywhere or to take a second `media_url`. The one
+way back through that guard is the operator's, by name: `POST /api/studio/:id/revise` opens a
+revision (`openRevision` in `server/store.ts`, under the same lock as the claim) — `revision =
+{openedAt, sessionId, note}`, `rendered → rendering`, the post's `stage` back to `rendering` and a
+`ready` or `rejected` post back to `pending` (its `rejectedReason` cleared). The renderer then
+finishes exactly as it did the first time (`status: rendered`, `expected_status: rendering`,
+`media_url`); because a revision is open, the store pushes the previous video onto `renders[]`
+(`{mediaUrl, at: the previous statusAt, sessionId: the previous render's session}`), clears the
+revision, puts the new file on the post at `stage: rendered` — and leaves the post `pending`.
+Approval is the operator's, every time.
+
+## 7b. The Studio
+
+The Studio is where the operator opens one video and talks to THE SESSION THAT MADE IT. Nothing
+about that is inferred at read time; it is bound when the write happens:
+
+| Who writes | What is recorded on `project.sessions` |
+|---|---|
+| **Render** (`POST /api/projects/:id/render`) | the session it opened, `{role: "rendered"}`; the create carries `metadata: {project_id}` so the platform's row names the plan too |
+| `create_project` over MCP | the calling session as `{role: "planned"}` |
+| `update_project` moving to `rendering` or `rendered` over MCP | the calling session as `{role: "rendered"}` |
+| **Revise** when the last session is over | the fresh renderer session as `{role: "revised"}` |
+
+An MCP call carries no session id, and an agent cannot see its own; the write names its seat
+(`agent`). So the server asks the platform for that seat's running sessions
+(`GET /v1/sessions?agent_id=&status=running&limit=2`) and records the one it finds when there is
+exactly one — zero or several, and it records nothing rather than guess. The lookup is best-effort:
+it can fail, and the write still lands, because the write is the point and the binding is a
+convenience.
+
+`GET /api/studio/:id` (a project id or a post id — a post's `projectId` resolves its plan) answers
+`{project, post, session}`, with `session` the LATEST of `project.sessions` read live from
+`GET /v1/sessions/:id` as `{id, status, stop_reason, created_at}`. A terminal one (`completed`,
+`failed`, `cancelled`) is still returned — the screen shows what happened, and the next send opens
+a new session. With no platform configured, `session` is `null` and the rows are still 200. A plan
+made before plans remembered their sessions is backfilled once: the renderer's twenty newest
+sessions, a hundred events each, for a `tool.started` `channel.update_project` or
+`channel.create_project` whose `args.id` is this plan; the first hit is recorded (`rendered` or
+`planned`) and the scan never runs again for it.
+
+`POST /api/studio/:id/revise {message}` → `202 {session, acceptedSeq, opened}`. It refuses (409):
+
+- a post that is `approved` or `posted` — "reject it first — an approved video is the operator's
+  word": an approval is a decision already given, and a revision under it would publish something
+  the operator never saw;
+- a plan whose revision is already open — the note it carries lands as the next render; a second
+  one would pile a second render on the first.
+
+Otherwise the note goes to the plan's latest session when it is not terminal — queued
+(`queue: true`), never interrupting, because a running render is paid for — or a new renderer
+session is opened on the plan (`metadata: {project_id}`, recorded `revised`, `opened: true`). A
+`rendered` plan is reopened as above; a `rendering` one changes no state (the note reaches the
+session that holds it); a `planned` one sends the note to its planning session and asks for no
+render; a post with no plan at all goes to the channel-manager, carrying the post's title, caption
+and id, and nothing is recorded. The renderer's note is framed so it stays on the same plan:
+"Revision of video project `<id>`. Read it with channel.get_project … finish with
+channel.update_project id `<id>`, status rendered, expected_status rendering … Do not create a
+second project, do not approve or post anything." The producer's and clipper's briefs say the same
+(`templates/`), and the manager's says a revision is the operator's move, never its own.
 
 ## 8. Post lifecycle end to end
 
