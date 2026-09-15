@@ -183,6 +183,44 @@ describe("the crews", () => {
   });
 
   /**
+   * THE ROWS THE UPGRADE WOULD HAVE STRANDED, and the one fire that goes back for them.
+   *
+   * Before the plan existed, the scriptwriter wrote the script into the row's caption and moved the
+   * row to `scripted`, and the producer's 07:00 fire read exactly that (`channel.list_posts with
+   * stage scripted`). It reads plans now (`channel.list_projects`, status planned, kind generation),
+   * so on any channel upgraded past that commit the rows the old chain had already scripted match
+   * nobody's list: the writer's fire looks for `brief`, the producer's for a plan that was never
+   * written. They are not lost, they are worse — they sit on the production strip looking like work
+   * in flight, forever, and the manager's 08:00 sweep keeps feeding more in, because freeing a dead
+   * `rendering` claim puts a row back at `scripted`.
+   *
+   * So the 06:30 fire goes back for them, and it is the only place that can: it is the seat that
+   * writes plans. `list_posts` filters on status and stage and nothing else (`server/mcp.ts`), so
+   * "no plan" cannot be a filter — it is `projectId`, absent on the rows the stage filter returns,
+   * and absent on exactly the rows whose plan was never written (`create_project` sets it on every
+   * row it plans, and refuses a second plan on a row that has one). The claim discriminates for the
+   * same reason the `brief` one does: `scripting` with `expected_stage scripted` is a transition, so
+   * of two sessions that both saw `scripted` only the first lands. `scripting` itself is left out —
+   * a row there may be a live claim that `expected_stage scripting` could not tell from a dead one,
+   * and the manager's sweep already ages a dead one back to `brief`.
+   */
+  it("sends the scriptwriter's 06:30 fire back for rows the old chain left at scripted with no plan", () => {
+    const fire = TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")?.schedules?.[0];
+    expect(fire?.cron).toBe("30 6 * * *");
+    // Read `scripted`, keep only the ones with no `projectId`, claim off `scripted` — not off `brief`.
+    expect(fire?.input).toMatch(/channel\.list_posts, stage scripted.*no projectId.*channel\.update_post, stage scripting, expected_stage scripted/s);
+    // And plan from what the row already carries: the old chain's script is its caption.
+    expect(fire?.input).toMatch(/plan it from the caption already on the row/);
+    // The rescue is the second pass, after the briefs — the fire that drops its own brief list to
+    // chase orphans is a fire that stops planning the day's work.
+    expect(fire?.input.indexOf("stage scripting, expected_stage brief")).toBeLessThan(fire?.input.indexOf("stage scripting, expected_stage scripted") ?? -1);
+    // A rescued row lands back where it was, with the plan on it this time — so the producer's
+    // 07:00 fire, which reads plans, finally sees it.
+    expect(fire?.input).toMatch(/puts the row back at stage scripted with the plan on it/);
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "producer")?.schedules?.[0]?.input).toContain("channel.list_projects, status planned, kind generation");
+  });
+
+  /**
    * #6 — day one produced nothing, because the five intakes race each other.
    *
    * MEASURED IN PRODUCTION, 2026-09-09: the scriptwriter's day-one session read
