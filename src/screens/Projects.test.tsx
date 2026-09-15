@@ -74,8 +74,8 @@ describe("the Projects screen", () => {
     expect(buttons()).toEqual(expect.arrayContaining(["Render", "Drop"]));
     expect(host.textContent).toContain(planned.id);
     expect(host.textContent).toContain(planned.title);
-    // No Studio yet: nothing has been said to a renderer about this plan.
-    expect(card().querySelector("header a.btn")).toBeNull();
+    // The Studio takes a planned plan too: a note there goes to its planner.
+    expect(card().querySelector("header a.btn")?.getAttribute("href")).toBe(`/studio/${planned.id}`);
 
     await click("Render");
 
@@ -156,11 +156,16 @@ describe("the Projects screen", () => {
     expect(card().textContent).toContain(source.reason);
   });
 
-  it("tones the status chip by state, offers Open in Studio on a plan being or already rendered, and Restore on a dropped plan", async () => {
+  it("tones the status chip by state, offers Open in Studio on every plan but a dropped one, and Restore on a dropped plan", async () => {
     await mount(vi.fn().mockResolvedValueOnce(json([...FACELESS_PROJECT_SEEDS, ...CLIPPING_PROJECT_SEEDS])));
 
     const studio = () => card().querySelector<HTMLAnchorElement>("header a.btn");
     expect(tabCount("Planned")).toBe(2);
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    expect(studio()?.textContent?.trim()).toBe("Open in Studio");
+    expect(studio()?.className).toContain("btn-ghost");
+    expect(studio()?.getAttribute("href")).toBe(`/studio/${planned.id}`);
+    expect(buttons()).toEqual(expect.arrayContaining(["Render", "Drop"]));
     await act(async () => tab("In progress").click());
     expect(card().querySelector(".chip-plain .dot-run")).not.toBeNull();
     expect(card().textContent).toContain("Rendering");

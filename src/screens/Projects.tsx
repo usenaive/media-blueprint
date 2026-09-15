@@ -220,7 +220,7 @@ export function Projects() {
             <RotateCcw size={14} strokeWidth={1.75} /> Restore
           </button>
         ) : null}
-        {p.status === "rendered" || p.status === "rendering" ? (
+        {p.status !== "dropped" ? (
           <Link to={`/studio/${p.id}`} className="btn btn-ghost btn-sm" title="Open this plan in the Studio: its video, and the session that made it">
             <Clapperboard size={14} strokeWidth={1.75} /> Open in Studio
           </Link>
