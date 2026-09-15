@@ -308,14 +308,14 @@ describe("the crews", () => {
     // Faceless: the scriptwriter writes a generation plan on the brief; the producer renders it.
     expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/channel\.create_project, kind generation.*scenes in order.*seconds.*voiceover.*on-screen text/s);
     expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/neither render nor find topics/);
-    expect(seat(TEMPLATES.faceless, "producer")?.system).toMatch(/channel\.get_project.*generate_video.*Do not rewrite the plan/s);
+    expect(seat(TEMPLATES.faceless, "producer")?.system).toMatch(/channel\.get_project.*generate_video.*Do not rewrite it/s);
     // Clipping: the scout writes a clipping plan — URL, timestamps, why; the clipper cuts it.
     expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/channel\.create_project, kind clipping.*URL.*starts and ends.*why this moment/s);
     expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/neither cut nor caption/);
     expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/status rendering, expected_status planned.*channel\.get_project.*clip_video.*status rendered, expected_status rendering/s);
     expect(seat(TEMPLATES.clipping, "clipper")?.schedules?.[0]?.input).toMatch(/status planned, kind clipping.*expected_status planned.*status rendered, expected_status rendering/s);
     // clip_video takes a URL and picks the clips itself; the plan's timestamps choose among what comes back.
-    expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/clip_video takes the source URL whole — no timestamps.*pick by those titles — you have no tool to open a file — the one clip that is the moment the plan names \(its from, to and reason\).*that file id as `media_url`/s);
+    expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/clip_video takes the whole source URL, no timestamps.*pick by title \(you cannot open a file\) the clip that is the plan's moment.*that file id as `media_url`/s);
     // The one who rewrites the caption reads the plan's reasoning, and the gate names both rows.
     expect(seat(TEMPLATES.clipping, "caption-editor")?.system).toMatch(/channel\.get_project on the row's projectId/);
     for (const template of both) for (const agent of template.agents) expect(agent.system).toMatch(/a video project is the plan a video is made from/);
@@ -331,6 +331,28 @@ describe("the crews", () => {
     // Both are briefed to take a plan named to them, which is what the button's message does.
     expect(producer?.system).toMatch(/one named to you/);
     expect(clipper?.system).toMatch(/named to you/);
+  });
+
+  /**
+   * The Studio's revision (`POST /api/studio/:id/revise`, `server/routes.ts`) is a message on the
+   * session that made the video, so each renderer is told what one is: the same plan, re-read, and
+   * the same finishing write — never a second project, which would be a second render nobody asked
+   * for. Opening a rendered plan again is the operator's alone; the manager is told so, in the one
+   * brief the operator's Chat reaches, so it never asks a seat to do it.
+   */
+  it("briefs each renderer for the operator's revision on the same plan, and tells the manager the revision is not its move", () => {
+    const REVISION = /A revision arrives as a message on your session: re-read the plan with channel\.get_project, apply the operator's note, finish with the same update_project write, changed (scenes|sources) on it\. Never open a second project\./;
+    for (const [template, seat] of [[TEMPLATES.faceless, RENDERER.generation], [TEMPLATES.clipping, RENDERER.clipping]] as const) {
+      const renderer = template.agents.find((a) => a.name === seat);
+      expect(renderer?.system, seat).toMatch(REVISION);
+      // The revision is finished by the same guarded write, not a new one, and still never published.
+      expect(renderer?.system).toMatch(/status rendered, expected_status rendering.*A revision arrives.*never publish it yourself/s);
+      // Nobody else is briefed for it: a revision reaches the seat that rendered, not the crew.
+      for (const agent of template.agents) if (agent.name !== seat) expect(agent.system, agent.name).not.toContain("A revision arrives");
+    }
+    for (const template of both) {
+      expect(template.agents.find((a) => a.name === "channel-manager")?.system).toMatch(/revising a rendered one is the operator's move, never yours/);
+    }
   });
 
   it("files each agent's work through the dashboard queue, under the same gate", () => {

@@ -256,6 +256,12 @@ export function ago(iso: string | undefined, now: number = Date.now()): string {
   return d < 30 ? `${d}d ago` : new Date(iso).toLocaleDateString();
 }
 
+/** "2:10" — a running timer, for something the operator is waiting on right now. */
+export function clock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export function fmt(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
 }

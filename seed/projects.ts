@@ -52,6 +52,24 @@ export interface ClipSource {
   reason: string;
 }
 
+/**
+ * One session that worked on the plan, and what it did: `planned` wrote it (`create_project`),
+ * `rendered` claimed or finished a render, `revised` was opened by the operator's revision. The
+ * Studio talks to the latest of these — the session that made the video, not a fresh stranger.
+ */
+export interface ProjectSession {
+  id: string;
+  role: "planned" | "rendered" | "revised";
+  at: string;
+}
+
+/** A render a revision replaced: the file, when it landed (the plan's `statusAt` while it was current), and the session that made it. */
+export interface Render {
+  mediaUrl: string;
+  at: string;
+  sessionId?: string;
+}
+
 export interface VideoProject {
   id: string;
   kind: ProjectKind;
@@ -77,6 +95,20 @@ export interface VideoProject {
   sources?: ClipSource[];
   /** The publishable caption the planner drafted; it goes on the post when the render lands. */
   caption?: string;
+  /** The sessions bound to this plan, oldest first (`server/store.ts` `recordSession`). */
+  sessions: ProjectSession[];
+  /** Earlier renders, superseded by a revision; the current one is the post's `mediaUrl`. */
+  renders?: Render[];
+  /** Stamped when a scan of the renderer's sessions found none for this plan, so a plan from before plans remembered is scanned once. */
+  backfilledAt?: string;
+  /**
+   * The operator's open revision: the one way a rendered plan renders again. Set by
+   * `POST /api/studio/:id/revise`, cleared by the `rendered` write that lands the new video.
+   * `sessionId` is the session that hears the note — null until the fresh session opened for it
+   * is recorded. `replaces` is the render it supersedes, taken as the revision opens and pushed
+   * onto `renders[]` when the new one lands.
+   */
+  revision?: { openedAt: string; sessionId: string | null; note: string; replaces?: Render };
 }
 
 const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
@@ -84,7 +116,7 @@ const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_00
 /** The `faceless` demo plans: what the scriptwriter wrote for the producer. */
 export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
   {
-    id: "proj_a1f0", kind: "generation", status: "planned", statusAt: daysAgo(0), createdAt: daysAgo(0),
+    id: "proj_a1f0", kind: "generation", status: "planned", statusAt: daysAgo(0), createdAt: daysAgo(0), sessions: [],
     title: "Seneca on the fear of losing everything", agent: "scriptwriter", platform: "youtube", account: "@dailystoic",
     brief: "Letter 18 — practise poverty on purpose. Money anxiety is the niche's top question this week; the hook flips it: rehearse the loss so it stops owning you.",
     styleTemplate: "Marble & ink", model: "alibaba/wan-3.0",
@@ -96,7 +128,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     caption: "Rehearse losing it all — Seneca's cheapest cure for money fear. #stoicism #seneca #discipline",
   },
   {
-    id: "proj_b2e1", kind: "generation", status: "rendering", statusAt: daysAgo(0), createdAt: daysAgo(1),
+    id: "proj_b2e1", kind: "generation", status: "rendering", statusAt: daysAgo(0), createdAt: daysAgo(1), sessions: [],
     title: "Marcus Aurelius and the morning argument", agent: "scriptwriter", platform: "instagram", account: "@dailystoic",
     brief: "Meditations 5.1 — the emperor arguing with himself about getting out of bed. The 5am-club debate is trending; the ancient version is funnier and lands harder.",
     styleTemplate: "Ghibli dusk", model: "alibaba/wan-3.0",
@@ -107,7 +139,8 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     caption: "The 5am debate, settled 1,900 years ago. #stoicism #marcusaurelius",
   },
   {
-    id: "post_9f2a", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(2),
+    id: "post_9f2a", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(2), sessions: [],
+    renders: [{ mediaUrl: "fil_9f2a_v1", at: daysAgo(1.5) }],
     title: "3 stoic rules nobody follows", agent: "scriptwriter", platform: "youtube", account: "@dailystoic", postId: "post_9f2a",
     brief: "Three rules from the Enchiridion the niche quotes and does not keep. Rule two is the one that stings, so it goes in the middle.",
     styleTemplate: "Marble & ink", model: "alibaba/wan-3.0",
@@ -123,7 +156,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
 /** The `clipping` demo plans: the moments the scout picked for the clipper, with the reasoning. */
 export const CLIPPING_PROJECT_SEEDS: VideoProject[] = [
   {
-    id: "proj_c3d2", kind: "clipping", status: "planned", statusAt: daysAgo(0), createdAt: daysAgo(0),
+    id: "proj_c3d2", kind: "clipping", status: "planned", statusAt: daysAgo(0), createdAt: daysAgo(0), sessions: [],
     title: "The founder answer that ended the debate", agent: "scout", platform: "youtube", account: "@longformcuts",
     brief: "Episode 216, the hiring segment. One uninterrupted ninety-second answer with a clean hook in the first sentence and a hard stop — it stands alone without context.",
     sources: [
@@ -131,7 +164,7 @@ export const CLIPPING_PROJECT_SEEDS: VideoProject[] = [
     ],
   },
   {
-    id: "proj_d4c3", kind: "clipping", status: "dropped", statusAt: daysAgo(1), createdAt: daysAgo(2),
+    id: "proj_d4c3", kind: "clipping", status: "dropped", statusAt: daysAgo(1), createdAt: daysAgo(2), sessions: [],
     title: "The cold open everyone quoted", agent: "scout", platform: "instagram", account: "@longformcuts",
     brief: "Episode 214's opening line. Quoted across the niche this week, so it travels — but the source is not one of our cleared reference channels yet.",
     sources: [

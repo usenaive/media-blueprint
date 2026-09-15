@@ -319,14 +319,18 @@ export default async function handler(req: Request, res: Response): Promise<void
       async store() {
         if (open.document) return open.document.store;
         try {
-          const client = await connect();
-          open.client = client;
-          open.document = await openDocument(client, await channelPlatform(config));
+          open.client ??= await connect();
+          open.document = await openDocument(open.client, await channelPlatform(config));
         } catch (error) {
           open.down = true;
           throw error;
         }
         return open.document.store;
+      },
+      async release() {
+        const held = open.document;
+        open.document = undefined;
+        await held?.commit();
       },
       config,
       mcpToken: process.env["VETTA_MCP_TOKEN"],
