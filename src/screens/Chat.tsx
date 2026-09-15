@@ -29,8 +29,9 @@ export interface WireEvent {
 export const SESSIONS_CHANGED = "chat:sessions";
 const sessionsChanged = () => window.dispatchEvent(new Event(SESSIONS_CHANGED));
 
-/** A reply past this many lines is folded to them; the operator opens the rest. Sized to `Clamp`'s
- * own measure of "long", so a folded reply always carries its `Read more`. */
+/** A turn past this many lines is folded to them; the operator opens the rest. Sized to `Clamp`'s
+ * own measure of "long", so a folded turn always carries its `Read more`. Both sides fold: the
+ * day-one intake arrives as a message of yours and is the longest thing in most transcripts. */
 const FOLD_LINES = 6;
 export const isWall = (text: string): boolean => text.length > FOLD_LINES * 110 || text.split("\n").length > FOLD_LINES;
 
@@ -272,7 +273,11 @@ export function Chat() {
           {turns.map((turn, i) => (
             <div key={i} className={turn.you ? "self-end" : undefined}>
               <div className={`whitespace-pre-line text-sm leading-relaxed ${turn.you ? "bubble bubble-you max-w-md" : "bubble bubble-agent max-w-2xl"}`}>
-                {!turn.you && isWall(turn.text) ? <Clamp text={turn.text} lines={FOLD_LINES} className="[&>p]:text-ink" /> : turn.text}
+                {isWall(turn.text) ? (
+                  <Clamp text={turn.text} lines={FOLD_LINES} className={turn.you ? "[&>button]:text-on-accent [&>p]:text-on-accent" : "[&>p]:text-ink"} />
+                ) : (
+                  turn.text
+                )}
               </div>
             </div>
           ))}

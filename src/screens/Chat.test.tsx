@@ -175,7 +175,7 @@ describe("the Chat screen", () => {
     expect(fetchMock.mock.calls.some((c) => /\/stream/.test(c[0] as string))).toBe(false);
   });
 
-  it("folds a long agent reply to six lines with a Read more, and leaves a long message of yours whole", async () => {
+  it("folds a long turn of either side to six lines with a Read more, and leaves a short one whole", async () => {
     const wall = "The plan for the week, in detail. ".repeat(30).trim();
     const log = [
       { seq: 1, type: "message.completed", data: { role: "user", content: wall } },
@@ -187,8 +187,10 @@ describe("the Chat screen", () => {
     );
     await mount("/chat/ses_1", fetchMock);
     const [yours, agent, short] = Array.from(host.querySelectorAll(".bubble"));
-    expect(yours!.querySelector("p")).toBeNull();
-    expect(yours!.textContent).toBe(wall);
+    expect(yours!.querySelector("p")!.className).toContain("line-clamp-6");
+    expect(yours!.querySelector("p")!.textContent).toBe(wall);
+    expect(yours!.querySelector("button")!.textContent).toBe("Read more");
+    expect(yours!.className).toContain("bubble-you");
     expect(agent!.querySelector("p")!.className).toContain("line-clamp-6");
     expect(agent!.querySelector("p")!.textContent).toBe(wall);
     expect(agent!.querySelector("button")!.textContent).toBe("Read more");
