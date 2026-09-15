@@ -55,7 +55,11 @@ describe("mcp protocol", () => {
   it("lists the read-and-file tools and no approve/reject/post tool", async () => {
     const answer = (await handleMcp(rpc("tools/list"), freshStore(), null)) as { result: { tools: { name: string; description: string }[] } };
     const names = answer.result.tools.map((t) => t.name);
-    expect(names).toEqual(["list_posts", "get_post", "create_post", "update_post", "list_style_templates", "list_accounts"]);
+    expect(names).toEqual([
+      "list_posts", "get_post", "create_post", "update_post",
+      "list_projects", "get_project", "create_project", "update_project",
+      "list_style_templates", "list_accounts",
+    ]);
     expect(names).toEqual(TOOLS.map((t) => t.name));
     // The setup answers reach an agent through the platform's own `project_context` tool, not a
     // second copy served from this store.
@@ -383,6 +387,193 @@ describe("mcp tools", () => {
     // The call that attaches the video is the call that may say it, and the skips that cost nothing stay legal.
     expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: brief.id, caption: "Hook: ease is the trap.", stage: "scripted" }), store, null))!).stage).toBe("scripted");
     expect(text<{ stage?: string }>((await handleMcp(call("update_post", { id: brief.id, media_url: "https://cdn.example/ease.mp4", stage: "rendered" }), store, null))!).stage).toBe("rendered");
+  });
+
+  /**
+   * THE PLAN COMES BEFORE THE RENDER. A video project is the row the scriptwriter (or the clipping
+   * scout) writes and the producer (or clipper) spends against; it is filed on the brief it came
+   * from, and the brief moves to scripted by that write — the writer's work is the plan.
+   */
+  it("create_project files a generation plan on its brief, which moves to scripted with the plan on it", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>(
+      (await handleMcp(call("create_post", { caption: "Why the Stoics slept on the floor", agent: "trend-scout", stage: "brief" }), store, null))!,
+    );
+    const scenes = [
+      { prompt: "A bare stone floor at dawn, one thin blanket", seconds: 4, voiceover: "Seneca slept on the floor on purpose.", text: "on purpose" },
+      { prompt: "A hand pushing a soft mattress away", seconds: 5, voiceover: "Comfort, he said, is the thing you should fear.", model: "alibaba/wan-3.0-prime" },
+    ];
+    const plan = text<{ id: string; kind: string; status: string; statusAt: string; postId?: string; model?: string; platform: string; scenes: unknown[]; agent?: string }>(
+      (await handleMcp(call("create_project", {
+        kind: "generation", post_id: brief.id, agent: "scriptwriter", title: "Sleep on the floor", brief: "Comfort is the trap.",
+        style_template: "Sunlit stoic", scenes, caption: "Seneca slept on the floor. #stoicism",
+      }), store, null))!,
+    );
+    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: "alibaba/wan-3.0", agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
+    expect(plan.id).toBe(brief.id);
+    expect(plan.statusAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(plan.scenes).toEqual(scenes);
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "scripted", projectId: plan.id });
+    expect(text<{ id: string }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!).id).toBe(plan.id);
+    expect(text<{ id: string }[]>((await handleMcp(call("list_projects", { status: "planned", kind: "generation" }), store, null))!).map((p) => p.id)).toContain(plan.id);
+    expect(text<{ id: string }[]>((await handleMcp(call("list_projects", { kind: "clipping" }), store, null))!).map((p) => p.id)).not.toContain(plan.id);
+
+    // One plan per brief, and none on a row that is already rendered.
+    const second = (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Again", brief: "x", scenes }), store, null)) as CallResult;
+    expect(second.result.isError).toBe(true);
+    expect(second.result.content[0]!.text).toMatch(/already has a plan/);
+    const rendered = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Done", media_url: "https://cdn.example/d.mp4" }), store, null))!);
+    const onRendered = (await handleMcp(call("create_project", { kind: "generation", post_id: rendered.id, title: "Again", brief: "x", scenes }), store, null)) as CallResult;
+    expect(onRendered.result.content[0]!.text).toMatch(/already has media attached/);
+  });
+
+  it("refuses a plan with nothing to make it from: no kind, no scenes, no sources, a bad scene, a bad url", async () => {
+    const store = freshStore();
+    const before = store.read().projects.length;
+    const refused = async (args: Record<string, unknown>) => {
+      const answer = (await handleMcp(call("create_project", args), store, null)) as CallResult;
+      expect(answer.result.isError).toBe(true);
+      return answer.result.content[0]!.text;
+    };
+    expect(await refused({ title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 3 }] })).toMatch(/kind must be one of generation, clipping/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b" })).toMatch(/generation plan needs scenes/);
+    expect(await refused({ kind: "clipping", title: "t", brief: "b" })).toMatch(/clipping plan needs sources/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: [] })).toMatch(/scenes must be a non-empty array/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 0 }] })).toMatch(/scenes\[0\]\.seconds must be a positive number/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: [{ seconds: 3 }] })).toMatch(/scenes\[0\]\.prompt/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 3 }], model: "openai/sora" })).toMatch(/model must be one of/);
+    expect(await refused({ kind: "clipping", title: "t", brief: "b", sources: [{ url: "ftp://x", reason: "r" }] })).toMatch(/sources\[0\]\.url must be an http\(s\) URL/);
+    expect(await refused({ kind: "clipping", title: "t", brief: "b", sources: [{ url: "https://youtu.be/x" }] })).toMatch(/sources\[0\]\.reason/);
+    expect(await refused({ kind: "generation", post_id: "post_nope", title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 3 }] })).toMatch(/no such post/);
+    expect(store.read().projects).toHaveLength(before);
+  });
+
+  /**
+   * THE CLAIM, THEN THE RENDER, THEN THE POST. One session's `rendering` lands and the second is
+   * refused before it spends; `rendered` needs the video it paid for and is final; and a clipping
+   * plan, which has no brief row, gets its pending post from the finishing write itself.
+   */
+  it("lets one session claim a plan with expected_status, refuses the second, and files the post when the render lands", async () => {
+    const store = freshStore();
+    const plan = text<{ id: string; postId?: string }>(
+      (await handleMcp(call("create_project", {
+        kind: "clipping", agent: "scout", title: "The gravel hill", brief: "Goggins on why the hill matters.", platform: "tiktok", account: "@clips",
+        sources: [{ url: "https://www.youtube.com/watch?v=abc123", from: "12:04", to: "12:41", reason: "The line lands cold and the room goes quiet." }],
+      }), store, null))!,
+    );
+    expect(plan.postId).toBeUndefined();
+    const claimed = text<{ status: string; statusAt: string }>(
+      (await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null))!,
+    );
+    expect(claimed.status).toBe("rendering");
+    const second = (await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null)) as CallResult;
+    expect(second.result.isError).toBe(true);
+    expect(second.result.content[0]!.text).toMatch(/project is rendering, not planned; another session has it/);
+    expect(store.read().projects.find((p) => p.id === plan.id)).toMatchObject({ status: "rendering", statusAt: claimed.statusAt });
+
+    // No video, no `rendered`.
+    const early = (await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering" }), store, null)) as CallResult;
+    expect(early.result.content[0]!.text).toMatch(/reaches rendered by having its video attached/);
+
+    const posts = store.read().posts.length;
+    const done = text<{ status: string; postId?: string }>(
+      (await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "https://cdn.example/hill.mp4", agent: "clipper" }), store, null))!,
+    );
+    expect(done.status).toBe("rendered");
+    expect(store.read().posts).toHaveLength(posts + 1);
+    const filed = store.read().posts.find((p) => p.id === done.postId);
+    expect(filed?.id).toBe(plan.id);
+    expect(filed).toMatchObject({
+      status: "pending", stage: "rendered", mediaUrl: "https://cdn.example/hill.mp4", platform: "tiktok", account: "@clips", agent: "clipper", projectId: plan.id,
+    });
+    expect(filed?.caption).toMatch(/The gravel hill/);
+
+    // Paid for, so final: not back to planned, not dropped, not a second claim — and not a second
+    // render, which would swap the video out from under a row the operator may have approved.
+    for (const status of ["planned", "rendering", "dropped", "rendered"]) {
+      const back = (await handleMcp(call("update_project", { id: plan.id, status, media_url: "https://cdn.example/other.mp4" }), store, null)) as CallResult;
+      expect(back.result.isError, status).toBe(true);
+      expect(back.result.content[0]!.text).toMatch(/cannot go back or be rendered again/);
+    }
+    const swap = (await handleMcp(call("update_project", { id: plan.id, media_url: "https://cdn.example/other.mp4" }), store, null)) as CallResult;
+    expect(swap.result.isError).toBe(true);
+    expect(filed?.mediaUrl).toBe("https://cdn.example/hill.mp4");
+    // The words are still the planner's to fix.
+    expect(text<{ title: string }>((await handleMcp(call("update_project", { id: plan.id, title: "The hill" }), store, null))!).title).toBe("The hill");
+    const bad = (await handleMcp(call("update_project", { id: plan.id, expected_status: "claimed" }), store, null)) as CallResult;
+    expect(bad.result.content[0]!.text).toMatch(/expected_status must be one of/);
+    expect(((await handleMcp(call("update_project", { id: "proj_nope", status: "dropped" }), store, null)) as CallResult).result.content[0]!.text).toMatch(/no such project/);
+    expect(TOOLS.find((t) => t.name === "update_project")?.inputSchema.properties).toHaveProperty("expected_status");
+  });
+
+  it("finishes a generation plan onto the brief it was written from, and mirrors claim and release on that row", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }], caption: "Final caption. #stoicism" }), store, null))!,
+    );
+    const row = () => store.read().posts.find((p) => p.id === brief.id);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    expect(row()?.stage).toBe("rendering");
+    // The manager's sweep frees a dead claim: the plan goes back to planned and the row to scripted.
+    await handleMcp(call("update_project", { id: plan.id, status: "planned", expected_status: "rendering" }), store, null);
+    expect(row()?.stage).toBe("scripted");
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    const posts = store.read().posts.length;
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "https://cdn.example/floor.mp4", agent: "producer" }), store, null);
+    expect(store.read().posts).toHaveLength(posts);
+    expect(row()).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "https://cdn.example/floor.mp4", caption: "Final caption. #stoicism", title: "Final caption. #stoicism", agent: "producer", projectId: plan.id });
+    // A dropped plan can only come back to planned.
+    const dropped = text<{ id: string }>((await handleMcp(call("create_project", { kind: "generation", title: "Drop me", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!);
+    await handleMcp(call("update_project", { id: dropped.id, status: "dropped" }), store, null);
+    const claim = (await handleMcp(call("update_project", { id: dropped.id, status: "rendering" }), store, null)) as CallResult;
+    expect(claim.result.content[0]!.text).toMatch(/project is dropped; put it back to planned first/);
+    expect(text<{ status: string }>((await handleMcp(call("update_project", { id: dropped.id, status: "planned" }), store, null))!).status).toBe("planned");
+  });
+
+  it("retargets the brief with its plan while the row is the crew's, and keeps an approved row where the operator put it", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "T", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+    );
+    const row = () => store.read().posts.find((p) => p.id === brief.id);
+    await handleMcp(call("update_project", { id: plan.id, platform: "tiktok", account: "@clips" }), store, null);
+    expect(row()).toMatchObject({ platform: "tiktok", account: "@clips" });
+    store.updatePost(brief.id, { status: "approved" });
+    await handleMcp(call("update_project", { id: plan.id, platform: "youtube" }), store, null);
+    expect(row()?.platform).toBe("tiktok");
+  });
+
+  it("drops the plan when its brief is rejected, and writes no plan on a rejected brief", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "T", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+    );
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    // The operator rejects the scripted brief before the 07:00 run lands: the plan goes with it,
+    // and the render that was in flight has nowhere to land.
+    store.updatePost(brief.id, { status: "rejected", rejectedReason: "Off-niche" });
+    expect(store.read().projects.find((p) => p.id === plan.id)?.status).toBe("dropped");
+    const claim = (await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null)) as CallResult;
+    expect(claim.result.isError).toBe(true);
+    store.updateProject(plan.id, { status: "planned" });
+    const finish = (await handleMcp(call("update_project", { id: plan.id, status: "rendered", media_url: "https://cdn.example/x.mp4" }), store, null)) as CallResult;
+    expect(finish.result.content[0]!.text).toMatch(/was rejected \(Off-niche\); its plan is not made/);
+    expect(store.read().posts.find((p) => p.id === brief.id)?.mediaUrl).toBeUndefined();
+
+    const other = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Other", agent: "trend-scout", stage: "brief" }), store, null))!);
+    store.updatePost(other.id, { status: "rejected" });
+    const late = (await handleMcp(call("create_project", { kind: "generation", post_id: other.id, title: "T", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null)) as CallResult;
+    expect(late.result.content[0]!.text).toMatch(/post is rejected; a plan is written on a pending or ready brief/);
+    // A rendered plan stays rendered when its post is rejected: the money is spent, the record stands.
+    const cut = text<{ id: string; postId: string }>(
+      (await handleMcp(call("create_project", { kind: "clipping", title: "C", brief: "b", sources: [{ url: "https://youtu.be/x", reason: "r" }] }), store, null))!,
+    );
+    const done = text<{ postId: string }>((await handleMcp(call("update_project", { id: cut.id, status: "rendered", media_url: "https://cdn.example/c.mp4" }), store, null))!);
+    store.updatePost(done.postId, { status: "rejected" });
+    expect(store.read().projects.find((p) => p.id === cut.id)?.status).toBe("rendered");
   });
 
   it("reads posts by status, templates and accounts from the store", async () => {

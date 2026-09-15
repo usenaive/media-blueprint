@@ -111,10 +111,161 @@ describe("the store routes", () => {
     expect(row.postedAt).toBeUndefined();
   });
 
+  it("serves the plans, and lets the operator drop one or put it back — never call it rendered", async () => {
+    // Claiming and finishing a plan are the crew's, over /mcp, where the video travels with the
+    // write. The dashboard's two moves are the ones that cost nothing.
+    const state = demoState();
+    const ctx = ctxOver(state);
+    const listed = await handleRequest(req("GET", "/api/projects"), ctx);
+    expect(listed.status).toBe(200);
+    expect(listed.body).toEqual(state.projects);
+    const planned = state.projects.find((p) => p.status === "planned")!;
+    const rendered = state.projects.find((p) => p.status === "rendered")!;
+    expect(await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"rendered"}'), ctx)).toEqual({
+      status: 400,
+      body: { error: "status must be dropped or planned" },
+    });
+    expect(await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"rendering"}'), ctx)).toEqual({
+      status: 400,
+      body: { error: "status must be dropped or planned" },
+    });
+    expect(await handleRequest(req("PATCH", "/api/projects/proj_nope", '{"status":"dropped"}'), ctx)).toEqual({
+      status: 404,
+      body: { error: "no such project" },
+    });
+    expect((await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"dropped"}'), ctx)).body).toMatchObject({ id: planned.id, status: "dropped" });
+    expect((await handleRequest(req("PATCH", `/api/projects/${planned.id}`, '{"status":"planned"}'), ctx)).body).toMatchObject({ id: planned.id, status: "planned" });
+    expect(await handleRequest(req("PATCH", `/api/projects/${rendered.id}`, '{"status":"dropped"}'), ctx)).toEqual({
+      status: 409,
+      body: { error: "project is rendered; reject its post instead" },
+    });
+    expect(state.projects.find((p) => p.id === rendered.id)?.status).toBe("rendered");
+    // A claimed plan is its executor's: dropping or resetting it under a running render would
+    // refuse the completion that carries the paid video.
+    const rendering = state.projects.find((p) => p.status === "rendering")!;
+    for (const status of ["dropped", "planned"]) {
+      const held = await handleRequest(req("PATCH", `/api/projects/${rendering.id}`, JSON.stringify({ status })), ctx);
+      expect(held.status, status).toBe(409);
+      expect(held.body).toEqual({ error: "project is being rendered; its executor holds it until the render lands or the manager frees it" });
+    }
+    expect(state.projects.find((p) => p.id === rendering.id)?.status).toBe("rendering");
+    expect(await handleRequest(req("GET", `/api/projects/${planned.id}`), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
+  });
+
+  describe("the Render button", () => {
+    const roster = (...names: string[]) => json({ data: names.map((name) => ({ id: `agt_${name}`, name })) });
+    /** The upstream calls in order: what `/v1/agents` was asked, then what `/v1/sessions` was sent. */
+    const calls = (fetchMock: ReturnType<typeof vi.fn>) =>
+      fetchMock.mock.calls.map((call) => {
+        const body: unknown = (call[1] as RequestInit | undefined)?.body;
+        return { url: String(call[0]), body: typeof body === "string" ? (JSON.parse(body) as { agent_id?: string; message?: string }) : null };
+      });
+
+    it("refuses without the platform, for a plan that is not planned, and for the wrong method — before any upstream call", async () => {
+      const state = demoState();
+      const planned = state.projects.find((p) => p.status === "planned")!;
+      expect(await handleRequest(req("POST", `/api/projects/${planned.id}/render`), ctxOver(state))).toEqual({
+        status: 503,
+        body: { error: "not configured — set NAIVE_API_KEY" },
+      });
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const ctx = ctxOver(state, CONFIG);
+      expect(await handleRequest(req("POST", "/api/projects/proj_nope/render"), ctx)).toEqual({ status: 404, body: { error: "no such project" } });
+      expect(await handleRequest(req("GET", `/api/projects/${planned.id}/render`), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
+      const rendering = state.projects.find((p) => p.status === "rendering")!;
+      expect(await handleRequest(req("POST", `/api/projects/${rendering.id}/render`), ctx)).toEqual({
+        status: 409,
+        body: { error: "project is rendering; a plan is rendered once" },
+      });
+      const rendered = state.projects.find((p) => p.status === "rendered")!;
+      expect(await handleRequest(req("POST", `/api/projects/${rendered.id}/render`), ctx)).toEqual({
+        status: 409,
+        body: { error: "project is rendered; a plan is rendered once" },
+      });
+      planned.status = "dropped";
+      expect(await handleRequest(req("POST", `/api/projects/${planned.id}/render`), ctx)).toEqual({
+        status: 409,
+        body: { error: "project is dropped; restore it first" },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(state.projects.find((p) => p.id === planned.id)?.status).toBe("dropped");
+    });
+
+    it("says which crew is missing when the plan's renderer is not in the org", async () => {
+      const state = seedState(TEMPLATES.clipping);
+      const planned = state.projects.find((p) => p.status === "planned" && p.kind === "clipping")!;
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(roster("channel-manager", "producer")));
+      expect(await handleRequest(req("POST", `/api/projects/${planned.id}/render`), ctxOver(state, CONFIG))).toEqual({
+        status: 503,
+        body: { error: "no clipper agent in this org — run naive up with the clipping template" },
+      });
+    });
+
+    it("sends a generation plan to the producer: the id, the guarded claim and finish on that id, and the plan itself", async () => {
+      const state = demoState();
+      const planned = state.projects.find((p) => p.status === "planned" && p.kind === "generation")!;
+      const fetchMock = vi.fn().mockResolvedValueOnce(roster("channel-manager", "producer", "clipper")).mockResolvedValueOnce(json({ id: "ses_1", agent_id: "agt_producer" }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const reply = await handleRequest(req("POST", `/api/projects/${planned.id}/render`), ctxOver(state, CONFIG));
+
+      expect(reply).toEqual({ status: 202, body: { project: planned.id, renderer: "producer", session: { id: "ses_1", agent_id: "agt_producer" } } });
+      const [agents, session] = calls(fetchMock);
+      expect(agents?.url).toBe("https://api.test/v1/agents");
+      expect(session?.url).toBe("https://api.test/v1/sessions");
+      expect(session?.body?.agent_id).toBe("agt_producer");
+      const message = session?.body?.message ?? "";
+      expect(message).toContain(`Render video project ${planned.id} now`);
+      expect(message).toContain(`channel.update_project id ${planned.id}, status rendering, expected_status planned`);
+      expect(message).toContain(`channel.update_project id ${planned.id}, status rendered, expected_status rendering`);
+      expect(message).toContain('"producer" as agent');
+      expect(message).toContain("every scene in order");
+      expect(message).toContain(planned.scenes![0]!.prompt);
+      expect(message).toContain(planned.model!);
+      expect(message).not.toContain("approve");
+      // The route opens the session and nothing else: the claim is the producer's own guarded write.
+      expect(state.projects.find((p) => p.id === planned.id)?.status).toBe("planned");
+    });
+
+    it("sends a clipping plan to the clipper, and remembers the roster between presses", async () => {
+      const state = seedState(TEMPLATES.clipping);
+      const planned = state.projects.find((p) => p.status === "planned" && p.kind === "clipping")!;
+      const fetchMock = vi.fn().mockResolvedValueOnce(roster("channel-manager", "clipper")).mockResolvedValueOnce(json({ id: "ses_2" }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const reply = await handleRequest(req("POST", `/api/projects/${planned.id}/render`), ctxOver(state, CONFIG));
+
+      expect(reply).toEqual({ status: 202, body: { project: planned.id, renderer: "clipper", session: { id: "ses_2" } } });
+      const [, session] = calls(fetchMock);
+      expect(session?.body?.agent_id).toBe("agt_clipper");
+      expect(session?.body?.message).toContain("clip_video on the source URL, then, by the titles the clips come back with, the one clip");
+      expect(session?.body?.message).toContain(planned.sources![0]!.url);
+      expect(session?.body?.message).toContain(planned.sources![0]!.reason);
+
+      // Pressed again on another planned clipping plan: the clipper's id is known, so one call, not two.
+      state.projects.push({ ...planned, id: "proj_next" });
+      const again = vi.fn().mockResolvedValueOnce(json({ id: "ses_3" }, 201));
+      vi.stubGlobal("fetch", again);
+      expect((await handleRequest(req("POST", "/api/projects/proj_next/render"), ctxOver(state, CONFIG))).status).toBe(202);
+      expect(calls(again).map((c) => c.url)).toEqual(["https://api.test/v1/sessions"]);
+    });
+
+    it("forwards the platform's refusal of the session as-is", async () => {
+      const state = demoState();
+      const planned = state.projects.find((p) => p.status === "planned" && p.kind === "generation")!;
+      const refusal = { error: { type: "insufficient_credits", code: "insufficient_credits", message: "top up" } };
+      // The producer's id is remembered from the press above, so the only call is the session.
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(refusal, 402)));
+      expect(await handleRequest(req("POST", `/api/projects/${planned.id}/render`), ctxOver(state, CONFIG))).toEqual({ status: 402, body: refusal });
+    });
+  });
+
   it("answers 405 for a known path with the wrong method and 404 for an unknown one", async () => {
     const ctx = ctxOver(demoState(), CONFIG);
     expect(await handleRequest(req("DELETE", "/api/posts"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
     expect(await handleRequest(req("GET", "/api/posts/post_9f2a"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
+    expect(await handleRequest(req("DELETE", "/api/projects"), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
     expect(await handleRequest(req("GET", "/api/nope"), ctx)).toEqual({ status: 404, body: { error: "no such route" } });
   });
 });
@@ -551,6 +702,8 @@ describe("every /api/* route is behind the operator's bearer", () => {
     ["GET", "/api/deployments", ""],
     ["PATCH", "/api/posts/post_9f2a", '{"status":"posted"}'],
     ["POST", "/api/posts/post_4a6f/post-now", ""],
+    ["GET", "/api/projects", ""],
+    ["PATCH", "/api/projects/proj_a1f0", '{"status":"dropped"}'],
     ["GET", "/api/agents", ""],
     ["POST", "/api/chat", '{"message":"hi"}'],
     ["GET", "/api/chat/ses_1/stream", ""],

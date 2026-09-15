@@ -2,9 +2,11 @@
  * `faceless` — a channel that generates original short-form video in one niche.
  *
  * Five seats. The trend-scout finds what is moving in the niche and files briefs; the scriptwriter
- * puts a hook and a script on each; the producer renders it (`generate_video`, `generate_image`,
- * conditioned on the channel's style templates); the analyst reports weekly per post kind; the
- * channel manager plans the week from the cadence answer and keeps the queue and the comments.
+ * turns each into a video project — the plan: scenes, prompts, voiceover, model, look, caption
+ * (`channel.create_project`); the producer renders that plan (`generate_video`, `generate_image`,
+ * conditioned on the channel's style templates) and finishes it, which files the post; the analyst
+ * reports weekly per post kind; the channel manager plans the week from the cadence answer and
+ * keeps the queue and the comments.
  * Nothing here is code: swap this template for `clipping` and the same screens, routes and store
  * serve the other crew.
  *
@@ -16,16 +18,18 @@
  * The pieces move as a chain, not a race. The apply opens every intake at once — declaration order
  * is not execution order — so no seat's first session reads another's; the intakes are set-up, and
  * the pipeline is ordered by handoffs (`handoffs`; `send_to_agent` with `wait: false`): the scout files briefs at
- * `stage: brief` and names their ids to the scriptwriter, who writes into those rows, moves them to
- * `scripted` and names them to the producer, who renders and moves them to `rendered`. The crons are
- * the fallback — 06:00 briefs, 06:30 scripts, 07:00 render — and pick up, by stage, whatever a
- * handoff did not carry. A handoff and a cron can overlap, so a seat claims a row before it spends
- * on it (`scripting` / `rendering`, with `expected_stage`): the claim is one locked write, one
- * session wins it, and the other is refused before the work — not after the render. The render is
- * also the one step that cannot be replayed, so the claim is guarded at both ends: the producer's
- * completion write carries `expected_stage` too, and the media on a row is the receipt for the
- * render, which nothing — the producer, or the sweep freeing a dead session's claim — may send back
- * to a stage before `rendered` (`server/mcp.ts`).
+ * `stage: brief` and names their ids to the scriptwriter, who writes a video project against each
+ * (the row moves to `scripted` with the plan on it) and names the project ids to the producer, who
+ * renders the plan and finishes it (`rendered`, on the project and the row). The crons are the
+ * fallback — 06:00 briefs, 06:30 plans, 07:00 render — and pick up, by stage and by status,
+ * whatever a handoff did not carry. A handoff and a cron can overlap, so a seat claims before it
+ * spends: the writer claims the row (`scripting`, `expected_stage: brief`), the producer claims the
+ * plan (`rendering`, `expected_status: planned`); each claim is one locked write, one session wins
+ * it, and the other is refused before the work — not after the render. The render is also the one
+ * step that cannot be replayed, so the claim is guarded at both ends: the producer's completion
+ * write carries `expected_status` too, and a rendered plan — and the media on its row — is the
+ * receipt for the render, which nothing — the producer, or the sweep freeing a dead session's
+ * claim — may send back (`server/mcp.ts`).
  */
 import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
 
@@ -42,21 +46,21 @@ export const FACELESS: MediaTemplate = {
       name: "producer",
       role: "Video production",
       description:
-        "Renders each scripted brief into one original vertical video in the style template it names. Files the finished piece for approval; never publishes.",
+        "Renders each planned video project into one original vertical video — one render, every scene in it — in the model and style template the plan names. Finishing the plan files the piece for approval; never publishes.",
       brief:
-        "You are the producer. Your work is the render: take a scripted row — one the scriptwriter named to you in a handoff, or else the next at `stage` scripted (channel.list_posts) — and claim it before you spend anything: channel.update_post with stage rendering and expected_stage scripted. A refusal means another session has it: take the next, or stop. Then produce one original vertical video, under fifteen seconds, in the style template the row names (channel.list_style_templates). Stay inside that look: the reference image and prompt are the channel's identity. The first three seconds carry the hook; render for it. Attach the video to the row with channel.update_post: `media_url`, the publishable caption the scriptwriter wrote, `stage` rendered and `expected_stage` rendering — refused there, the row is no longer yours: stop rather than render it twice. One piece per session: a handoff's other rows wait for your 07:00 fires; if nothing is at scripted, file nothing and stop. You are the end of the chain; you hand on to nobody.",
+        "You are the producer; the plan is not yours to write, the render is. Take a planned generation project — one named to you by the operator or a handoff, or the next planned (channel.list_projects) — and claim it before you spend anything: channel.update_project, status rendering and expected_status planned. A refusal means another session has it: take the next, or stop. Read the plan (channel.get_project) and its style template (channel.list_style_templates). Render it as one generate_video call — nothing here joins clips: the prompt is the scenes in order, each with its seconds, voiceover and on-screen text, plus the look; seconds their sum; aspect_ratio 9:16; the plan's model. Wait for the file. Do not rewrite the plan. Finish with channel.update_project: status rendered, expected_status rendering, the video as `media_url`, your name as `agent` — that puts video and caption on the post. Refused there, the plan is no longer yours: stop rather than render twice. One plan per session; nothing planned, render nothing. You end the chain.",
       tools: ["generate_video", "generate_image"],
       skills: ["naive/short-video-hooks"],
       intake: {
         message:
-          "Day one is set-up, not a render. Do not read the queue for work: the first scripted piece reaches you as a handoff from the scriptwriter, in its own session, naming the row to render. Read project_context for the niche, the tone and the audience, then the style templates (channel.list_style_templates). Choose the one or two templates whose look fits the tone answer and file the choice as a pending post with no media and no stage, `source` \"style choice\", one line on why for each. Then check that generate_video is among your tools; if it is not, request exactly it with request_tools, once. Render nothing in this session.",
+          "Day one is set-up, not a render. Do not read the queue for work: the first plan reaches you as a handoff from the scriptwriter, in its own session, naming the video project to render. Read project_context for the niche, the tone and the audience, then the style templates (channel.list_style_templates). Choose the one or two templates whose look fits the tone answer and file the choice as a pending post with no media and no stage, `source` \"style choice\", one line on why for each. Then check that generate_video is among your tools; if it is not, request exactly it with request_tools, once. Render nothing in this session.",
         budget_micro_usd: 8_000_000,
       },
       schedules: [
         schedule({
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
           input:
-            "Make the next piece. Read the niche and tone (project_context) and the scripted rows (channel.list_posts with stage scripted); claim the next one — channel.update_post, stage rendering, expected_stage scripted; refused means it is not yours, take the next; and a row that already carries a media_url is one the channel has paid to render, so never render it again — and produce one original vertical video in the style template that row names (channel.list_style_templates). Attach it to the row with channel.update_post — media_url, the publishable caption, stage rendered, expected_stage rendering; refused there means the row moved on while you rendered, so say so and stop rather than render a second time. If nothing is at scripted, file nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
+            "Make the next piece. Read the niche and tone (project_context) and the planned generation projects (channel.list_projects, status planned, kind generation); claim the next one — channel.update_project, status rendering, expected_status planned; refused means it is not yours, take the next; and a rendered plan is one the channel has paid for, so never render it again. Read the plan in full (channel.get_project) and render it as one generate_video call — nothing joins clips: prompt the scenes in order with their seconds, voiceover and on-screen text and the look of the style template it names (channel.list_style_templates); seconds their sum; aspect_ratio 9:16; its model. Wait for the file. Finish it with channel.update_project — status rendered, expected_status rendering, media_url, your name as agent; refused there means the plan moved on while you rendered, so say so and stop rather than render a second time. If nothing is planned, render nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
           budget_micro_usd: 10_000_000, // $10 — one generated video plus the turns that brief and file it.
         }),
       ],
@@ -67,7 +71,7 @@ export const FACELESS: MediaTemplate = {
       description:
         "Finds the formats and topics moving in the channel's niche this week and files each as a brief for the scriptwriter and producer to work from.",
       brief:
-        "You are the trend-scout, the head of the chain. You watch the niche, not the whole internet: read what is moving in it this week (web_search, web_fetch) — formats getting picked up, questions the audience asks, moments worth a short — and brief the best. A brief is a pending post with no media, filed with `stage` brief: its caption states the topic, the format, why now, the hook direction and the style template it should be rendered in, and its `source` names where you saw it. File only what the cadence calls for; five good briefs beat twenty thin ones. Do not restate a topic already queued or posted (channel.list_posts). When the last brief is filed — and only then — send_to_agent the scriptwriter once, wait false: the exact post ids you filed, the instruction to script them, a handoff_key naming today's date. Filed nothing, hand on nothing. You never script or render — the scriptwriter and producer take it from your brief.",
+        "You are the trend-scout, the head of the chain. You watch the niche, not the whole internet: read what is moving in it this week (web_search, web_fetch) — formats getting picked up, questions the audience asks, moments worth a short — and brief the best. A brief is a pending post with no media, filed with `stage` brief: its caption states the topic, the format, why now, the hook direction and the style template to render in; its `source` names where you saw it. File only what the cadence calls for; five good briefs beat twenty thin ones. Do not restate a topic already queued or posted (channel.list_posts). When the last brief is filed — and only then — send_to_agent the scriptwriter once, wait false: the exact post ids, the instruction to plan them, a handoff_key naming today's date. Filed nothing, hand on nothing. You never plan or render — the scriptwriter and producer take it from your brief.",
       tools: ["web_search", "web_fetch"],
       skills: ["naive/seo-content-brief", "naive/short-video-hooks"],
       handoffs: ["scriptwriter"],
@@ -89,22 +93,32 @@ export const FACELESS: MediaTemplate = {
       name: "scriptwriter",
       role: "Hooks & scripts",
       description:
-        "Writes the hook, the script and the publishable caption for every brief before the producer renders it.",
+        "Turns every brief into a video project — the scene plan, the prompts, the voiceover, the model, the look and the publishable caption — before the producer renders it.",
       brief:
-        "You are the scriptwriter. Briefs reach you two ways: named by id in a handoff from the trend-scout, or at `stage` brief on your 06:30 fire (channel.list_posts, stage brief). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row. Each row you claimed gets a hook that lands in the first three seconds, a script for a piece under fifteen seconds in the channel's tone, and the hashtagged caption that goes out with it (`naive/short-video-hooks`, `naive/caption-writing`), written into the row with channel.update_post — caption and `stage` scripted — keeping the brief's topic, format and style template. Write for the audience the context names, in its words, never a general one. When the last claimed row is scripted, send_to_agent the producer once, wait false: those ids, the instruction to render, the handoff_key you were handed or today's date; claimed nothing, hand on nothing. You neither render nor file topics — the trend-scout finds them, the producer makes them.",
+        "You are the scriptwriter; what you write is the plan. Briefs reach you named by id in a handoff from the trend-scout, or at `stage` brief on your 06:30 fire (channel.list_posts). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row. Each claimed row becomes one video project (channel.create_project, kind generation, post_id the row, your name as agent): title; the brief's reasoning; style template (channel.list_style_templates) and video model; the scenes in order — render prompt inside that look, seconds, voiceover line, on-screen text — hook in the first scene, under fifteen seconds in all; the hashtagged caption (`naive/short-video-hooks`, `naive/caption-writing`). Filing it moves the row to `stage` scripted. Write for the audience the context names, in its words. When the last row is planned, send_to_agent the producer once, wait false: the project ids, the instruction to render, the handoff_key you were handed or today's date; claimed nothing, hand on nothing. You neither render nor find topics.",
       tools: ["web_search", "web_fetch"],
       skills: ["naive/short-video-hooks", "naive/caption-writing"],
       handoffs: ["producer"],
       intake: {
         message:
-          "Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, `source` \"hook style\", so the team works to one voice. Do not read the queue for briefs and do not invent one: the trend-scout's first five reach you as a handoff naming their ids, in a session of your own, and that is where you script them — each claimed first (stage scripting, expected_stage brief), three candidate hooks, the strongest picked, hook, script and caption written into the row with stage scripted, then one send_to_agent to the producer, wait false, with the ids. Stop here.",
+          "Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, `source` \"hook style\", so the team works to one voice. Do not read the queue for briefs and do not invent one: the trend-scout's first five reach you as a handoff naming their ids, in a session of your own, and that is where you plan them — each claimed first (stage scripting, expected_stage brief), three candidate hooks, the strongest picked, then one video project per row (channel.create_project: kind generation, post_id, title, brief, style template, model, scenes with prompt, seconds, voiceover and on-screen text, caption), then one send_to_agent to the producer, wait false, with the project ids. Stop here.",
         budget_micro_usd: 8_000_000,
       },
       schedules: [
         schedule({
-          cron: "30 6 * * *", // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render.
+          // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render, and the
+          // only seat that rescues a row stranded at `scripted` with no plan on it. The producer now
+          // reads plans (`channel.list_projects`), not rows, so a row the old chain moved to
+          // `scripted` by writing the script into its caption is read by nobody: the writer's list
+          // (stage brief) skips it and the producer's (status planned) never sees it. `list_posts`
+          // filters on status and stage only, so the missing plan is not a filter — it is `projectId`
+          // on the rows that come back, which is why the fire is told to read stage `scripted` and
+          // then drop the ones that carry one. `scripting` is left out on purpose: a row there may
+          // be a live claim, and `expected_stage scripting` would not tell the two apart, so a stale
+          // one is aged back to `brief` by the manager's 08:00 sweep and picked up here on the next fire.
+          cron: "30 6 * * *",
           input:
-            "Script what the handoffs missed. Read project_context, then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused — and write hook, script and publishable caption into it with channel.update_post, stage scripted, in the channel's tone, for its audience. Then send_to_agent the producer once, wait false, with the ids you scripted, handoff_key scripts-<today's date>. Nothing claimed means nothing to do, and no trigger.",
+            "Plan what the handoffs missed. Read project_context, then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused. Then the rows nothing else will ever take: channel.list_posts, stage scripted, keeping only those that carry no projectId — their plan was never written, so no producer can render them; claim each the same way, channel.update_post, stage scripting, expected_stage scripted, and plan it from the caption already on the row rather than inventing a new topic. Write every claimed row's video project with channel.create_project (kind generation, post_id the row): title, brief, style template, video model, the scenes in order with prompt, seconds, voiceover and on-screen text, and the publishable caption, in the channel's tone, for its audience; filing it puts the row back at stage scripted with the plan on it. Then send_to_agent the producer once, wait false, with the project ids you planned, handoff_key plans-<today's date>. Nothing claimed means nothing to do, and no trigger.",
           budget_micro_usd: 10_000_000, // $10 — a read and a few rewrites.
         }),
       ],
@@ -173,5 +187,7 @@ export const FACELESS: MediaTemplate = {
   words: {
     queueSubtitle: "Everything the producer made, on its way to your accounts.",
     queueEmpty: "Brief the producer in Chat and each finished video lands here for review.",
+    plansSubtitle: "Every scene plan the scriptwriter wrote, and what the producer has made of it.",
+    plansEmpty: "The scriptwriter plans each brief here — scenes, prompts, model and look — before the producer spends a render on it.",
   },
 };

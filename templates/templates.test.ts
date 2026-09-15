@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -147,34 +147,77 @@ describe("the crews", () => {
     // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.
     expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, send_to_agent the scriptwriter once — wait false.*post ids.*handoff_key/s);
     expect(seat("trend-scout")?.system).toMatch(/only then.*send_to_agent the scriptwriter once, wait false.*Filed nothing, hand on nothing/s);
-    // The next two claim a row (`expected_stage`) before they spend on it, so a handoff and the cron
-    // that overlaps it cannot both script or render the same piece, and hand on only what they claimed.
-    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*`stage` scripted.*send_to_agent the producer once, wait false.*claimed nothing, hand on nothing/s);
-    expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*stage rendering and expected_stage scripted.*`stage` rendered.*you hand on to nobody/s);
-    // The timers are the fallback, by stage, claim the same way, and no seat's intake is told another intake is running.
-    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*send_to_agent the producer once, wait false/s);
-    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendering, expected_stage scripted.*stage rendered/s);
+    // The writer claims the brief row (`expected_stage`) before it plans, and its plan is a video
+    // project on that row; the producer claims the plan (`expected_status`) before it renders. So a
+    // handoff and the cron that overlaps it cannot both plan or render the same piece, and each
+    // hands on only what it claimed.
+    expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*channel\.create_project, kind generation, post_id the row.*`stage` scripted.*send_to_agent the producer once, wait false.*project ids.*claimed nothing, hand on nothing/s);
+    expect(seat("producer")?.system).toMatch(/named to you by the operator or a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*You end the chain/s);
+    // Nothing on the platform joins clips, so a multi-scene plan is one render, not one per scene.
+    expect(seat("producer")?.system).toContain("one generate_video call — nothing here joins clips");
+    // The timers are the fallback, by stage and status, claim the same way, and no seat's intake is told another intake is running.
+    expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*channel\.create_project \(kind generation, post_id the row\).*send_to_agent the producer once, wait false.*project ids/s);
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/status planned, kind generation.*status rendering, expected_status planned.*status rendered, expected_status rendering/s);
     /**
      * AND THE RENDER IS GUARDED AT BOTH ENDS, in the only seat that spends on one.
      *
      * A claim on the way in and nothing on the way out is half a guard: the producer's completion
-     * write landed whatever had happened to the row while it rendered, so a stale session could
+     * write landed whatever had happened to the plan while it rendered, so a stale session could
      * overwrite the render that replaced it, and neither the producer nor the manager was told that
-     * a row with a video attached is a row the channel has already paid ~$3.32 for. Both are said
-     * in the brief and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat
-     * only after it has spent the money.
+     * a rendered plan is one the channel has already paid ~$3.32 for. Both are said in the brief
+     * and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat only after it
+     * has spent the money.
      */
     for (const prompt of [seat("producer")?.system, seat("producer")?.schedules?.[0]?.input]) {
-      expect(prompt).toMatch(/`?expected_stage`? rendering.*(no longer yours|moved on).*(twice|second time)/s);
+      expect(prompt).toMatch(/`?expected_status`? rendering.*(no longer yours|moved on).*(twice|second time)/s);
     }
     // The sentence about the receipt itself is on the timer, not in the brief: the producer's
     // `system` is at the 400-word ceiling to the word, and the tool refuses the claim — before the
-    // render, not after — with the same sentence on it (`update_post`, `server/mcp.ts`).
-    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/already carries a media_url.*paid.*never render it again/s);
+    // render, not after — with the same sentence on it (`update_project`, `server/mcp.ts`).
+    expect(seat("producer")?.schedules?.[0]?.input).toMatch(/rendered plan.*paid.*never render it again/s);
     // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that
-    // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not back.
-    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered/s);
+    // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not
+    // back, and a rendered plan is final.
+    expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered.*channel\.list_projects.*rendering whose statusAt is more than a day old.*back to planned.*expected_status rendering.*rendered one is final/s);
     for (const agent of TEMPLATES.faceless.agents) expect(agent.intake?.message, agent.name).not.toMatch(/alongside yours|running alongside/);
+  });
+
+  /**
+   * THE ROWS THE UPGRADE WOULD HAVE STRANDED, and the one fire that goes back for them.
+   *
+   * Before the plan existed, the scriptwriter wrote the script into the row's caption and moved the
+   * row to `scripted`, and the producer's 07:00 fire read exactly that (`channel.list_posts with
+   * stage scripted`). It reads plans now (`channel.list_projects`, status planned, kind generation),
+   * so on any channel upgraded past that commit the rows the old chain had already scripted match
+   * nobody's list: the writer's fire looks for `brief`, the producer's for a plan that was never
+   * written. They are not lost, they are worse — they sit on the production strip looking like work
+   * in flight, forever, and the manager's 08:00 sweep keeps feeding more in, because freeing a dead
+   * `rendering` claim puts a row back at `scripted`.
+   *
+   * So the 06:30 fire goes back for them, and it is the only place that can: it is the seat that
+   * writes plans. `list_posts` filters on status and stage and nothing else (`server/mcp.ts`), so
+   * "no plan" cannot be a filter — it is `projectId`, absent on the rows the stage filter returns,
+   * and absent on exactly the rows whose plan was never written (`create_project` sets it on every
+   * row it plans, and refuses a second plan on a row that has one). The claim discriminates for the
+   * same reason the `brief` one does: `scripting` with `expected_stage scripted` is a transition, so
+   * of two sessions that both saw `scripted` only the first lands. `scripting` itself is left out —
+   * a row there may be a live claim that `expected_stage scripting` could not tell from a dead one,
+   * and the manager's sweep already ages a dead one back to `brief`.
+   */
+  it("sends the scriptwriter's 06:30 fire back for rows the old chain left at scripted with no plan", () => {
+    const fire = TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")?.schedules?.[0];
+    expect(fire?.cron).toBe("30 6 * * *");
+    // Read `scripted`, keep only the ones with no `projectId`, claim off `scripted` — not off `brief`.
+    expect(fire?.input).toMatch(/channel\.list_posts, stage scripted.*no projectId.*channel\.update_post, stage scripting, expected_stage scripted/s);
+    // And plan from what the row already carries: the old chain's script is its caption.
+    expect(fire?.input).toMatch(/plan it from the caption already on the row/);
+    // The rescue is the second pass, after the briefs — the fire that drops its own brief list to
+    // chase orphans is a fire that stops planning the day's work.
+    expect(fire?.input.indexOf("stage scripting, expected_stage brief")).toBeLessThan(fire?.input.indexOf("stage scripting, expected_stage scripted") ?? -1);
+    // A rescued row lands back where it was, with the plan on it this time — so the producer's
+    // 07:00 fire, which reads plans, finally sees it.
+    expect(fire?.input).toMatch(/puts the row back at stage scripted with the plan on it/);
+    expect(TEMPLATES.faceless.agents.find((a) => a.name === "producer")?.schedules?.[0]?.input).toContain("channel.list_projects, status planned, kind generation");
   });
 
   /**
@@ -246,6 +289,48 @@ describe("the crews", () => {
   it("pins nothing on a crew that does not render", () => {
     expect(TEMPLATES.clipping.agents.find((a) => a.name === "clipper")?.tools?.configs["generate_video"])
       .toEqual({ enabled: false, permission: "deny" });
+  });
+
+  /**
+   * The plan is a row of its own (`seed/projects.ts`): the seat that plans a video never spends
+   * on it, and the seat that spends reads the plan rather than writing one. Every seat may read
+   * and write plans through the dashboard tools — the manager sweeps them, the caption-editor
+   * reads the why — but the render and the cut are still the two seats' alone.
+   */
+  it("plans a video before anyone renders it: planners write projects, executors claim and finish them", () => {
+    const PROJECT_TOOLS = ["channel.list_projects", "channel.get_project", "channel.create_project", "channel.update_project"];
+    for (const template of both) {
+      for (const agent of template.agents) {
+        for (const tool of PROJECT_TOOLS) expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual({ enabled: true, permission: "allow" });
+      }
+    }
+    const seat = (template: MediaTemplate, name: string) => template.agents.find((a) => a.name === name);
+    // Faceless: the scriptwriter writes a generation plan on the brief; the producer renders it.
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/channel\.create_project, kind generation.*scenes in order.*seconds.*voiceover.*on-screen text/s);
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/neither render nor find topics/);
+    expect(seat(TEMPLATES.faceless, "producer")?.system).toMatch(/channel\.get_project.*generate_video.*Do not rewrite the plan/s);
+    // Clipping: the scout writes a clipping plan — URL, timestamps, why; the clipper cuts it.
+    expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/channel\.create_project, kind clipping.*URL.*starts and ends.*why this moment/s);
+    expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/neither cut nor caption/);
+    expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/status rendering, expected_status planned.*channel\.get_project.*clip_video.*status rendered, expected_status rendering/s);
+    expect(seat(TEMPLATES.clipping, "clipper")?.schedules?.[0]?.input).toMatch(/status planned, kind clipping.*expected_status planned.*status rendered, expected_status rendering/s);
+    // clip_video takes a URL and picks the clips itself; the plan's timestamps choose among what comes back.
+    expect(seat(TEMPLATES.clipping, "clipper")?.system).toMatch(/clip_video takes the source URL whole — no timestamps.*pick by those titles — you have no tool to open a file — the one clip that is the moment the plan names \(its from, to and reason\).*that file id as `media_url`/s);
+    // The one who rewrites the caption reads the plan's reasoning, and the gate names both rows.
+    expect(seat(TEMPLATES.clipping, "caption-editor")?.system).toMatch(/channel\.get_project on the row's projectId/);
+    for (const template of both) for (const agent of template.agents) expect(agent.system).toMatch(/a video project is the plan a video is made from/);
+  });
+
+  it("names, per kind of plan, the seat the dashboard's Render button opens a session with — and each crew has it", () => {
+    // `POST /api/projects/:id/render` looks the renderer up by this name in the live roster, so a
+    // rename here without one in the template would send every press to nobody.
+    expect(TEMPLATES.faceless.agents.map((a) => a.name)).toContain(RENDERER.generation);
+    expect(TEMPLATES.clipping.agents.map((a) => a.name)).toContain(RENDERER.clipping);
+    const producer = TEMPLATES.faceless.agents.find((a) => a.name === RENDERER.generation);
+    const clipper = TEMPLATES.clipping.agents.find((a) => a.name === RENDERER.clipping);
+    // Both are briefed to take a plan named to them, which is what the button's message does.
+    expect(producer?.system).toMatch(/one named to you/);
+    expect(clipper?.system).toMatch(/named to you/);
   });
 
   it("files each agent's work through the dashboard queue, under the same gate", () => {

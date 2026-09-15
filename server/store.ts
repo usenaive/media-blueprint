@@ -8,11 +8,13 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStage, type PostStatus } from "../seed/posts.ts";
+import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, type ProjectStatus, type VideoProject } from "../seed/projects.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
 import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
 
 /** The demo rows of each template; a deployment starts empty, so these are `pnpm serve` only. */
 const SEEDS: Record<TemplateName, Post[]> = { faceless: FACELESS_SEEDS, clipping: CLIPPING_SEEDS };
+const PROJECT_SEEDS: Record<TemplateName, VideoProject[]> = { faceless: FACELESS_PROJECT_SEEDS, clipping: CLIPPING_PROJECT_SEEDS };
 
 /**
  * The setup answers are deliberately NOT here. The studio asks them once, before the crew exists
@@ -21,6 +23,8 @@ const SEEDS: Record<TemplateName, Post[]> = { faceless: FACELESS_SEEDS, clipping
  */
 export interface StoreState {
   posts: Post[];
+  /** The plans the posts are made from (`seed/projects.ts`). */
+  projects: VideoProject[];
   /** The style-template catalogue (`seed/style-templates.ts`), not the blueprint's templates. */
   templates: StyleTemplateSeed[];
 }
@@ -50,14 +54,35 @@ export interface NewPostInput {
   status: Extract<PostStatus, "pending" | "ready">;
 }
 
+/**
+ * What a planning seat files as a video project: everything about the piece that is decided
+ * before the paid step. The plan's `kind` says which seat makes it and with what — a generation
+ * plan carries scenes for `generate_video`, a clipping plan carries sources for `clip_video` —
+ * and `postId` ties it to the brief row it was written from, when there is one.
+ */
+export type NewProjectInput = Pick<VideoProject, "kind" | "title" | "brief"> &
+  Partial<Pick<VideoProject, "platform" | "account" | "agent" | "postId" | "styleTemplate" | "model" | "scenes" | "sources" | "caption">>;
+
+/**
+ * What may change on a plan. `status` is the lifecycle (`PROJECT_STATUSES`); a move to `rendered`
+ * carries `mediaUrl`, the render itself, which the store puts on the plan's post — creating the
+ * post when the plan has none — so the one write that ends a render also files it for review.
+ */
+export type ProjectPatch = Partial<
+  Pick<VideoProject, "status" | "title" | "brief" | "account" | "platform" | "styleTemplate" | "model" | "scenes" | "sources" | "caption">
+> & { mediaUrl?: string; renderedBy?: string };
+
 export interface Store {
   read(): StoreState;
   createPost(input: NewPostInput): Post;
   updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "platform" | "stage">>): Post | null;
+  createProject(input: NewProjectInput): VideoProject;
+  updateProject(id: string, patch: ProjectPatch): VideoProject | null;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
   posts: structuredClone(SEEDS[template.name]),
+  projects: structuredClone(PROJECT_SEEDS[template.name]),
   templates: [...STYLE_TEMPLATE_SEEDS],
 });
 
@@ -69,6 +94,7 @@ const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
  */
 const emptyState = (): StoreState => ({
   posts: [],
+  projects: [],
   templates: [...STYLE_TEMPLATE_SEEDS],
 });
 
@@ -123,36 +149,52 @@ export function openStoreOver(
    */
   defaultPlatform?: PostPlatform,
 ): Store {
+  // A document written before plans existed has no `projects`; it gains an empty list here,
+  // in memory, and the first write that follows persists it. `save` is not called for this alone.
+  state.projects ??= [];
   const save = () => persist(state);
+  const now = () => new Date().toISOString();
+
+  const setStage = (post: Post | undefined, stage: PostStage) => {
+    if (post === undefined || post.stage === stage) return;
+    post.stage = stage;
+    post.stageAt = now();
+  };
+  const setStatus = (project: VideoProject, status: ProjectStatus) => {
+    project.status = status;
+    project.statusAt = now();
+  };
+
+  const createPost = (input: NewPostInput, id = `post_${randomBytes(2).toString("hex")}`): Post => {
+    const post: Post = {
+      id,
+      title: titleFrom(input.caption),
+      caption: input.caption,
+      ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
+      // Named by the caller, else the customer's own setup answer, else the template's fallback.
+      // The target is the channel owner's — it is not this file's and it is no longer a literal.
+      platform: input.platform ?? defaultPlatform ?? template.platform,
+      // Only what the caller actually said. The row used to be stamped `agent: "mcp"`,
+      // `account: "unassigned"` and `duration: "—"` whatever it knew, so every agent-filed post
+      // printed the transport's name, a placeholder handle and an em dash where its running time
+      // goes. An absent field is left absent and the screen names it as unknown.
+      ...(input.agent === undefined ? {} : { agent: input.agent }),
+      ...(input.account === undefined ? {} : { account: input.account }),
+      ...(input.source === undefined ? {} : { source: input.source }),
+      ...(input.stage === undefined ? {} : { stage: input.stage, stageAt: new Date().toISOString() }),
+      // The kind is the template's first, not a constant: a `faceless` channel files what its
+      // producer made, a `clipping` channel files a cut. The row is read by the same screens.
+      kind: template.kinds[0].id,
+      status: input.status,
+    };
+    state.posts.unshift(post);
+    save();
+    return post;
+  };
 
   return {
     read: () => state,
-    createPost(input) {
-      const post: Post = {
-        id: `post_${randomBytes(2).toString("hex")}`,
-        title: titleFrom(input.caption),
-        caption: input.caption,
-        ...(input.mediaUrl === undefined ? {} : { mediaUrl: input.mediaUrl }),
-        // Named by the caller, else the customer's own setup answer, else the template's fallback.
-        // The target is the channel owner's — it is not this file's and it is no longer a literal.
-        platform: input.platform ?? defaultPlatform ?? template.platform,
-        // Only what the caller actually said. The row used to be stamped `agent: "mcp"`,
-        // `account: "unassigned"` and `duration: "—"` whatever it knew, so every agent-filed post
-        // printed the transport's name, a placeholder handle and an em dash where its running time
-        // goes. An absent field is left absent and the screen names it as unknown.
-        ...(input.agent === undefined ? {} : { agent: input.agent }),
-        ...(input.account === undefined ? {} : { account: input.account }),
-        ...(input.source === undefined ? {} : { source: input.source }),
-        ...(input.stage === undefined ? {} : { stage: input.stage, stageAt: new Date().toISOString() }),
-        // The kind is the template's first, not a constant: a `faceless` channel files what its
-        // producer made, a `clipping` channel files a cut. The row is read by the same screens.
-        kind: template.kinds[0].id,
-        status: input.status,
-      };
-      state.posts.unshift(post);
-      save();
-      return post;
-    },
+    createPost,
     updatePost(id, patch) {
       const post = state.posts.find((p) => p.id === id);
       if (!post) return null;
@@ -172,9 +214,108 @@ export function openStoreOver(
         post.views ??= 0;
         post.likes ??= 0;
       }
-      if (patch.status === "rejected") post.rejectedReason = patch.rejectedReason ?? "Rejected by you";
+      if (patch.status === "rejected") {
+        post.rejectedReason = patch.rejectedReason ?? "Rejected by you";
+        // Rejecting a brief drops the plan written on it, so no producer picks it up at 07:00.
+        const plan = post.projectId === undefined ? undefined : state.projects.find((p) => p.id === post.projectId);
+        if (plan !== undefined && plan.status !== "rendered") setStatus(plan, "dropped");
+      }
       save();
       return post;
+    },
+    createProject(input) {
+      const brief = input.postId === undefined ? undefined : state.posts.find((p) => p.id === input.postId);
+      // ONE ID FROM BRIEF TO PLAN TO POST. A plan written on a brief is the brief's id; a plan with
+      // no brief gives its id to the post its render files (below). The operator follows one id
+      // across Posts and Projects, and a producer told to render `X` claims exactly `X`.
+      // A brief holds one plan (`server/mcp.ts` refuses a second), so the id is never taken.
+      const id = brief?.id ?? `proj_${randomBytes(2).toString("hex")}`;
+      const project: VideoProject = {
+        id,
+        kind: input.kind,
+        status: "planned",
+        statusAt: now(),
+        createdAt: now(),
+        title: input.title,
+        brief: input.brief,
+        // The plan is for the row it was written from, where there is one, else for the network
+        // the caller named, else the customer's own answer — the same fallback a post takes.
+        platform: input.platform ?? brief?.platform ?? defaultPlatform ?? template.platform,
+        ...(input.account === undefined ? {} : { account: input.account }),
+        ...(input.agent === undefined ? {} : { agent: input.agent }),
+        ...(brief === undefined ? {} : { postId: brief.id }),
+        ...(input.styleTemplate === undefined ? {} : { styleTemplate: input.styleTemplate }),
+        ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.scenes === undefined ? {} : { scenes: input.scenes }),
+        ...(input.sources === undefined ? {} : { sources: input.sources }),
+        ...(input.caption === undefined ? {} : { caption: input.caption }),
+      };
+      state.projects.unshift(project);
+      // A brief with a plan on it is scripted: the writer's work is the plan, and the producer's
+      // queue reads the plan, not the caption.
+      if (brief !== undefined) {
+        brief.projectId = project.id;
+        setStage(brief, "scripted");
+      }
+      save();
+      return project;
+    },
+    updateProject(id, patch) {
+      const project = state.projects.find((p) => p.id === id);
+      if (!project) return null;
+      if (patch.title !== undefined) project.title = patch.title;
+      if (patch.brief !== undefined) project.brief = patch.brief;
+      if (patch.account !== undefined) project.account = patch.account;
+      if (patch.platform !== undefined) project.platform = patch.platform;
+      if (patch.styleTemplate !== undefined) project.styleTemplate = patch.styleTemplate;
+      if (patch.model !== undefined) project.model = patch.model;
+      if (patch.scenes !== undefined) project.scenes = patch.scenes;
+      if (patch.sources !== undefined) project.sources = patch.sources;
+      if (patch.caption !== undefined) project.caption = patch.caption;
+      const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
+      // The plan and its row publish to the same place, so retargeting the plan retargets the row
+      // while the row is still the crew's (pending or ready); an approved row is the operator's.
+      if (post !== undefined && (post.status === "pending" || post.status === "ready")) {
+        if (patch.platform !== undefined) post.platform = patch.platform;
+        if (patch.account !== undefined) post.account = patch.account;
+      }
+      if (patch.status !== undefined && patch.status !== project.status) {
+        setStatus(project, patch.status);
+        // The post mirrors the plan: claimed is `rendering`, freed is `scripted`, done is `rendered`.
+        if (patch.status === "rendering") setStage(post, "rendering");
+        if (patch.status === "planned") setStage(post, "scripted");
+      }
+      if (patch.status === "rendered" && patch.mediaUrl !== undefined) {
+        if (post === undefined) {
+          // A plan with no brief row — a clipping scout's, or a plan written from Chat — gets its
+          // post here, so the render is filed for review by the same write that records it.
+          const filed = createPost(
+            {
+              caption: project.caption ?? `${project.title}\n\n${project.brief}`,
+              mediaUrl: patch.mediaUrl,
+              platform: project.platform,
+              ...(project.account === undefined ? {} : { account: project.account }),
+              ...(patch.renderedBy === undefined ? {} : { agent: patch.renderedBy }),
+              source: `${project.title} (${project.id})`,
+              stage: "rendered",
+              status: "pending",
+            },
+            project.id,
+          );
+          filed.projectId = project.id;
+          project.postId = filed.id;
+        } else {
+          post.mediaUrl = patch.mediaUrl;
+          if (project.caption !== undefined) {
+            post.caption = project.caption;
+            post.title = titleFrom(project.caption);
+          }
+          if (patch.renderedBy !== undefined) post.agent = patch.renderedBy;
+          setStage(post, "rendered");
+        }
+      }
+      save();
+      return project;
     },
   };
 }

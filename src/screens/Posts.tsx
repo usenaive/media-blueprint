@@ -1,5 +1,6 @@
 import { Check, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { apiGet, apiSend, messageOf } from "../api";
 import { ConnectLine, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
 import { piecesOf, postedLabel, rowKind, type Post, type PostStatus } from "../data";
@@ -104,6 +105,7 @@ export function Posts() {
                     <span className="chip chip-plain">{p.stage}</span>
                     <span>filed by {p.agent ?? "an unnamed agent"}</span>
                     {p.source ? <span>from {p.source}</span> : null}
+                    {p.projectId ? <Link to="/projects" className="underline underline-offset-2">plan {p.projectId}</Link> : null}
                   </div>
                 </div>
                 {/* The one call a brief still needs from a person. The producer renders what is filed
@@ -159,6 +161,7 @@ export function Posts() {
                     {p.agent ? `filed by ${p.agent}` : "filed by an unnamed agent"} · {KIND_LABELS[p.kind] ?? p.kind}
                   </span>
                   {p.source ? <span className="truncate">from {p.source}</span> : null}
+                  {p.projectId ? <Link to="/projects" className="underline underline-offset-2">plan {p.projectId}</Link> : null}
                   {p.scheduledFor ? <span>→ {p.scheduledFor}</span> : null}
                   {p.postedAt ? <span className="tabular-nums">{postedLabel(p)} · {fmt(p.views ?? 0)} views · {fmt(p.likes ?? 0)} likes</span> : null}
                 </div>

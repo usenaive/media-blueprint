@@ -4,13 +4,14 @@
  * There are no rows here any more. Posts, accounts and agents come from the server
  * (`src/api.ts`), because a compiled-in row is a fabricated row: it survives a reload the real
  * data does not, and it hides the fact that a route is dead. `src/no-seed.test.ts` keeps it that
- * way — `seed/posts.ts` may only be imported here as a type.
+ * way — `seed/posts.ts` and `seed/projects.ts` may only be imported here as types.
  */
 
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates";
 import type { Post, PostPlatform, PostStatus } from "../seed/posts";
+import type { ProjectStatus, VideoProject } from "../seed/projects";
 
-export type { Post, PostPlatform, PostStatus };
+export type { Post, PostPlatform, PostStatus, ProjectStatus, VideoProject };
 
 /** What a queue row is: a rendered piece, a brief still in production, or a seat's note. */
 export type RowKind = "piece" | "production" | "note";

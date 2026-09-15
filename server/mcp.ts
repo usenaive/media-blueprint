@@ -14,8 +14,9 @@ import { channelPlatform, channelPlatforms } from "./channel.ts";
 import { notActivated, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
+import { PROJECT_KINDS, PROJECT_STATUSES, type ClipSource, type ProjectKind, type ProjectStatus, type Scene } from "../seed/projects.ts";
 import { ACTIVE } from "../templates/index.ts";
-import { labelOf } from "../templates/template.ts";
+import { labelOf, VIDEO_MODELS } from "../templates/template.ts";
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -71,6 +72,8 @@ export function authError(token: string | null, authHeader: string | undefined):
 const obj = (props: Record<string, unknown>, required: string[]) =>
   ({ type: "object", properties: props, required }) as const;
 const str = (description: string) => ({ type: "string", description }) as const;
+const num = (description: string) => ({ type: "number", description }) as const;
+const arr = (description: string, items: ReturnType<typeof obj>) => ({ type: "array", description, items }) as const;
 
 const OPERATOR_ONLY = "Approving, rejecting and publishing are operator actions on the dashboard; no tool does them.";
 
@@ -103,6 +106,37 @@ const targetSentence = (channels: readonly PostPlatform[]): string => {
  * that answered differently, reads two different sentences, which is the point.
  */
 const STAGES = POST_STAGES.join("|");
+const PROJECT_STATES = PROJECT_STATUSES.join("|");
+
+/** One shot of a generation plan, as the tool takes it. */
+const SCENE = obj({
+  prompt: str("What the frame shows — the prompt generate_video renders, written inside the style template's look"),
+  seconds: num("Running time of the shot, in seconds"),
+  voiceover: str("The narration said over it, as text. No narrator voices exist yet, so this is the line a voice will read."),
+  text: str("Text on the frame — the hook, on the first scene"),
+  model: str(`A video model for this shot when it differs from the project's: ${VIDEO_MODELS.join("|")}`),
+}, ["prompt", "seconds"]);
+
+/** One source of a clipping plan, as the tool takes it. */
+const SOURCE = obj({
+  url: str("The source video's URL — a YouTube URL from a reference channel the context names"),
+  from: str("Where the moment starts in the source, mm:ss or h:mm:ss"),
+  to: str("Where it ends"),
+  reason: str("Why this moment: the one idea in it and why it lands for this audience"),
+}, ["url", "reason"]);
+
+/** The plan's own fields, shared by `create_project` and `update_project`. */
+const PLAN_FIELDS = {
+  title: str("The piece, in a line"),
+  brief: str("The reasoning: the idea, why now, the hook direction — what the render is for. The operator reads this before anything is spent."),
+  platform: str(`Where the piece is for: ${POST_PLATFORMS.join("|")}. Defaults to the brief row's network, else the channel's own.`),
+  account: str("The connected account it is for, from list_accounts"),
+  style_template: str("generation: the style template the scenes are written in, by name (list_style_templates)"),
+  model: str(`generation: the video model the scenes render in, one of ${VIDEO_MODELS.join("|")}. Defaults to the first.`),
+  scenes: arr("generation: the shots in order — prompt, seconds, voiceover, on-screen text. Required for a generation plan; keep the total under fifteen seconds.", SCENE),
+  sources: arr("clipping: the source videos and the moment in each — url, from, to, reason. Required for a clipping plan.", SOURCE),
+  caption: str("The publishable caption, hashtags included; it goes on the post when the render lands"),
+};
 
 export const toolsFor = (channels: readonly PostPlatform[]) => [
   { name: "list_posts", description: `The post queue, optionally filtered by status and/or stage. ${OPERATOR_ONLY}`, inputSchema: obj({
@@ -126,6 +160,25 @@ export const toolsFor = (channels: readonly PostPlatform[]) => [
     stage: str(`The stage the piece has reached: ${STAGES}`),
     expected_stage: str(`The stage the row must still be at for this update to apply (${STAGES}); refused otherwise.`),
   }, ["id"]) },
+  { name: "list_projects", description: `The video projects — the plan each piece is made from, before it is rendered or cut — optionally filtered by status and/or kind. A plan at planned is waiting for a producer or clipper; rendering is claimed; rendered has its video on a post. ${OPERATOR_ONLY}`, inputSchema: obj({
+    status: str(`Optional filter: ${PROJECT_STATES}`),
+    kind: str(`Optional filter: ${PROJECT_KINDS.join("|")}`),
+  }, []) },
+  { name: "get_project", description: "One video project by id, with its scenes or sources in full.", inputSchema: obj({ id: str("Project id (proj_…)") }, ["id"]) },
+  { name: "create_project", description: `Write the plan a video is made from, before anyone spends on it. A generation plan is the scenes, the style template and the model the producer renders with; a clipping plan is the source videos, the moments in them and why each one. Name the brief row it was written from as post_id and that row moves to scripted with the plan on it; a plan with no row gets its post when the render lands. Sign it with your name as agent. ${OPERATOR_ONLY}`, inputSchema: obj({
+    kind: str(`${PROJECT_KINDS.join("|")} — rendered from scenes with generate_video, or cut from a source with clip_video`),
+    post_id: str("The brief row (post_…) this plan is for, when there is one"),
+    agent: str("Your own name, as the roster lists it — who planned this"),
+    ...PLAN_FIELDS,
+  }, ["kind", "title", "brief"]) },
+  { name: "update_project", description: `Fix a plan, or move it through its life: ${PROJECT_STATES}. To claim a plan before rendering or cutting it, set status rendering with expected_status planned: the call is refused if another session got there first, and a refusal means the plan is not yours. To finish, set status rendered with expected_status rendering and the video as media_url — the store puts it on the plan's post, creating the post when the plan has none, and it lands in the operator's queue as pending. A rendered plan is final: that render was paid for. dropped is for a plan that will not be made. ${OPERATOR_ONLY}`, inputSchema: obj({
+    id: str("Project id"),
+    status: str(`The status the plan has reached: ${PROJECT_STATES}`),
+    expected_status: str(`The status the plan must still be at for this update to apply (${PROJECT_STATES}); refused otherwise.`),
+    media_url: str("With status rendered: the URL of the finished video"),
+    agent: str("With status rendered: your own name — who rendered or cut it; it is signed on the post"),
+    ...PLAN_FIELDS,
+  }, ["id"]) },
   { name: "list_style_templates", description: "The channel's style templates (name, prompt, reference image, trend note).", inputSchema: obj({}, []) },
   { name: "list_accounts", description: "The social accounts the channel posts to.", inputSchema: obj({}, []) },
 ] as const;
@@ -137,9 +190,9 @@ export const toolsFor = (channels: readonly PostPlatform[]) => [
 export const TOOLS = toolsFor([ACTIVE.platform]);
 
 class ToolError extends Error {}
-const need = (params: Record<string, unknown>, key: string): string => {
+const need = (params: Record<string, unknown>, key: string, at = ""): string => {
   const value = params[key];
-  if (typeof value !== "string" || value === "") throw new ToolError(`${key} is required`);
+  if (typeof value !== "string" || value === "") throw new ToolError(`${at}${key} is required`);
   return value;
 };
 const optional = (params: Record<string, unknown>, key: string): string | undefined =>
@@ -151,6 +204,69 @@ const stageOf = (params: Record<string, unknown>, key = "stage"): PostStage | un
   if (!(POST_STAGES as readonly string[]).includes(stage)) throw new ToolError(`${key} must be one of ${POST_STAGES.join(", ")}`);
   return stage as PostStage;
 };
+
+const oneOf = <T extends string>(params: Record<string, unknown>, key: string, allowed: readonly T[]): T | undefined => {
+  const value = optional(params, key);
+  if (value === undefined) return undefined;
+  if (!(allowed as readonly string[]).includes(value)) throw new ToolError(`${key} must be one of ${allowed.join(", ")}`);
+  return value as T;
+};
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const isHttpUrl = (value: string): boolean => {
+  try {
+    return /^https?:$/.test(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+};
+
+/** The scenes a caller sent, each checked, or undefined when none were. */
+const scenesOf = (params: Record<string, unknown>): Scene[] | undefined => {
+  if (params.scenes === undefined) return undefined;
+  if (!Array.isArray(params.scenes) || params.scenes.length === 0) throw new ToolError("scenes must be a non-empty array");
+  return params.scenes.map((raw, i): Scene => {
+    if (!isRecord(raw)) throw new ToolError(`scenes[${i}] must be an object`);
+    const seconds = raw.seconds;
+    if (typeof seconds !== "number" || !(seconds > 0)) throw new ToolError(`scenes[${i}].seconds must be a positive number`);
+    const model = oneOf(raw, "model", VIDEO_MODELS);
+    const voiceover = optional(raw, "voiceover");
+    const text = optional(raw, "text");
+    return {
+      prompt: need(raw, "prompt", `scenes[${i}].`),
+      seconds,
+      ...(voiceover === undefined ? {} : { voiceover }),
+      ...(text === undefined ? {} : { text }),
+      ...(model === undefined ? {} : { model }),
+    };
+  });
+};
+
+/** The sources a caller sent, each checked, or undefined when none were. */
+const sourcesOf = (params: Record<string, unknown>): ClipSource[] | undefined => {
+  if (params.sources === undefined) return undefined;
+  if (!Array.isArray(params.sources) || params.sources.length === 0) throw new ToolError("sources must be a non-empty array");
+  return params.sources.map((raw, i): ClipSource => {
+    if (!isRecord(raw)) throw new ToolError(`sources[${i}] must be an object`);
+    const url = need(raw, "url", `sources[${i}].`);
+    if (!isHttpUrl(url)) throw new ToolError(`sources[${i}].url must be an http(s) URL`);
+    const from = optional(raw, "from");
+    const to = optional(raw, "to");
+    return { url, ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }), reason: need(raw, "reason", `sources[${i}].`) };
+  });
+};
+
+/** The plan fields both project tools take, checked; `kind` says which half is required. */
+const planOf = (params: Record<string, unknown>) => ({
+  title: optional(params, "title"),
+  brief: optional(params, "brief"),
+  platform: oneOf(params, "platform", POST_PLATFORMS),
+  account: optional(params, "account"),
+  styleTemplate: optional(params, "style_template"),
+  model: oneOf(params, "model", VIDEO_MODELS),
+  scenes: scenesOf(params),
+  sources: sourcesOf(params),
+  caption: optional(params, "caption"),
+});
 
 /**
  * Connected accounts from the platform when wired and activated; otherwise the accounts the queue
@@ -282,6 +398,94 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         mediaUrl: optional(params, "media_url"),
         stage,
         ...(target === undefined ? {} : { platform: target as PostPlatform }),
+      });
+    }
+    case "list_projects": {
+      const status = oneOf(params, "status", PROJECT_STATUSES);
+      const kind = oneOf(params, "kind", PROJECT_KINDS);
+      return store.read().projects.filter((p) => (status === undefined || p.status === status) && (kind === undefined || p.kind === kind));
+    }
+    case "get_project": {
+      const project = store.read().projects.find((p) => p.id === need(params, "id"));
+      if (!project) throw new ToolError("no such project");
+      return project;
+    }
+    case "create_project": {
+      const kind: ProjectKind | undefined = oneOf(params, "kind", PROJECT_KINDS);
+      if (kind === undefined) throw new ToolError(`kind must be one of ${PROJECT_KINDS.join(", ")}`);
+      const plan = planOf(params);
+      // A plan is the thing the render is made from, so a plan with nothing to render from is not
+      // one: scenes for a generation plan, sources for a clipping plan, refused rather than filed.
+      if (kind === "generation" && plan.scenes === undefined) throw new ToolError("a generation plan needs scenes: the shots generate_video renders, in order");
+      if (kind === "clipping" && plan.sources === undefined) throw new ToolError("a clipping plan needs sources: the videos to cut from and the moment in each");
+      const postId = optional(params, "post_id");
+      const brief = postId === undefined ? undefined : store.read().posts.find((p) => p.id === postId);
+      if (postId !== undefined) {
+        if (!brief) throw new ToolError("no such post");
+        if (brief.projectId !== undefined) throw new ToolError(`post ${postId} already has a plan (${brief.projectId}); update that one`);
+        if (brief.mediaUrl !== undefined) throw new ToolError("post already has media attached: it has been rendered, and a plan for it now would render it twice");
+        if (brief.status !== "pending" && brief.status !== "ready") throw new ToolError(`post is ${brief.status}; a plan is written on a pending or ready brief`);
+      }
+      const agent = optional(params, "agent");
+      return store.createProject({
+        kind,
+        title: need(params, "title"),
+        brief: need(params, "brief"),
+        // Named by the agent, else the brief row's network, else the first the operator chose in
+        // setup — awaited here for the same reason `create_post` awaits it.
+        platform: plan.platform ?? brief?.platform ?? (await channelPlatform(config)),
+        ...(plan.account === undefined ? {} : { account: plan.account }),
+        ...(agent === undefined ? {} : { agent }),
+        ...(postId === undefined ? {} : { postId }),
+        ...(plan.styleTemplate === undefined ? {} : { styleTemplate: plan.styleTemplate }),
+        ...(kind === "generation" ? { model: plan.model ?? VIDEO_MODELS[0] } : {}),
+        ...(plan.scenes === undefined ? {} : { scenes: plan.scenes }),
+        ...(plan.sources === undefined ? {} : { sources: plan.sources }),
+        ...(plan.caption === undefined ? {} : { caption: plan.caption }),
+      });
+    }
+    case "update_project": {
+      const id = need(params, "id");
+      const project = store.read().projects.find((p) => p.id === id);
+      if (!project) throw new ToolError("no such project");
+      // The claim, atomic under the store's lock exactly as `update_post`'s is: one session's
+      // `rendering` lands, the other's is refused before it spends anything.
+      const expected = oneOf(params, "expected_status", PROJECT_STATUSES);
+      if (expected !== undefined && project.status !== expected) {
+        throw new ToolError(`project is ${project.status}, not ${expected}; another session has it`);
+      }
+      const status: ProjectStatus | undefined = oneOf(params, "status", PROJECT_STATUSES);
+      const media = optional(params, "media_url");
+      // `rendered` is where the money went; nothing moves a plan out of it, nothing renders it
+      // again, and nothing reaches it without the video it paid for.
+      if (project.status === "rendered" && (status !== undefined || media !== undefined)) {
+        throw new ToolError("project is rendered and that render was paid for; it cannot go back or be rendered again. A piece that has to be remade is a new plan.");
+      }
+      const post = project.postId === undefined ? undefined : store.read().posts.find((p) => p.id === project.postId);
+      if (post?.status === "rejected" && (status === "rendering" || status === "rendered")) {
+        throw new ToolError(`post ${post.id} was rejected (${post.rejectedReason ?? "no reason"}); its plan is not made`);
+      }
+      if (status === "rendered" && project.status !== "rendered" && media === undefined) {
+        throw new ToolError("a plan reaches rendered by having its video attached: send media_url with this call");
+      }
+      if (project.status === "dropped" && status !== undefined && status !== "dropped" && status !== "planned") {
+        throw new ToolError("project is dropped; put it back to planned first");
+      }
+      const plan = planOf(params);
+      const agent = optional(params, "agent");
+      return store.updateProject(id, {
+        ...(status === undefined ? {} : { status }),
+        ...(status === "rendered" && media !== undefined ? { mediaUrl: media } : {}),
+        ...(status === "rendered" && agent !== undefined ? { renderedBy: agent } : {}),
+        ...(plan.title === undefined ? {} : { title: plan.title }),
+        ...(plan.brief === undefined ? {} : { brief: plan.brief }),
+        ...(plan.platform === undefined ? {} : { platform: plan.platform }),
+        ...(plan.account === undefined ? {} : { account: plan.account }),
+        ...(plan.styleTemplate === undefined ? {} : { styleTemplate: plan.styleTemplate }),
+        ...(plan.model === undefined ? {} : { model: plan.model }),
+        ...(plan.scenes === undefined ? {} : { scenes: plan.scenes }),
+        ...(plan.sources === undefined ? {} : { sources: plan.sources }),
+        ...(plan.caption === undefined ? {} : { caption: plan.caption }),
       });
     }
     case "list_style_templates":

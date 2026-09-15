@@ -260,11 +260,15 @@ another's work; on `faceless` the pieces move by **handoff** instead. Each brief
 `stage` — `brief` → `scripted` → `rendered` — and when the scout has filed its five it hands on to
 the scriptwriter with their ids (`send_to_agent` with `wait: false`; the `handoffs` line on the seat
 says who it may hand to — a seat without one hands to nobody, `handoffs: false`, rather than the
-platform's default of anyone); the scriptwriter writes into those rows and hands on to the
-producer, who renders the first. The timers
-stay as the fallback, picking up by stage whatever a handoff did not carry; where a handoff and a
-timer overlap, a seat claims a row first (`scripting`, `rendering`, with `expected_stage` on
-`update_post`), so one session gets it and the other is refused before spending. Day one costs at
+platform's default of anyone); the scriptwriter writes a **video project** for each — the plan:
+scenes, model, style template, caption — and hands the project ids on to the producer, who claims
+and renders the first. On `clipping` the scout files its five moments as clipping projects (source
+URL, timestamps, and why), and the clipper cuts from those. The plan is always written before the
+render, by a seat that cannot render; the seat that renders is told the plan is not its to write.
+The timers stay as the fallback, picking up by stage whatever a handoff did not carry; where a
+handoff and a timer overlap, a seat claims first (`scripting` with `expected_stage` on
+`update_post`; `rendering` with `expected_status` on `update_project`), so one session gets it and
+the other is refused before spending. Day one costs at
 most the sum of the intake budgets ($76 on `faceless`, $88 on `clipping`) plus the handoff
 sessions, each inside the receiving seat's $20 task ceiling — an intake budget is a **one-time
 ceiling on that one session**, not a recurring allowance; the recurring cap is the agent's own
@@ -297,12 +301,12 @@ agent's per-task ceiling.
 
 | When | Who | What it does |
 |---|---|---|
-| Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named reference channels |
-| Daily 06:30 | `scriptwriter` (`faceless`) | Hooks, scripts and captions every brief still at `stage: brief`, then hands the ids to the producer |
-| Daily 07:00 | `producer` / `clipper` | Makes the next piece — one produced video, or the next batch of clips — and files it as a pending post |
+| Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named reference channels as clipping projects |
+| Daily 06:30 | `scriptwriter` (`faceless`) | Writes a video project (scenes, model, look, caption) for every brief still at `stage: brief`, then hands the project ids to the producer |
+| Daily 07:00 | `producer` / `clipper` | Claims the next planned project and makes it — one produced video, or the next batch of clips — which lands as a pending post |
 | Daily 07:30 | `caption-editor` (`clipping`) | Titles and captions the morning's cuts |
 | Monday 07:30 | `analyst` | Last week's numbers, before the plan |
-| Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve |
+| Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve; frees plans a dead session left claimed |
 | Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
 | Monday 09:00 | `channel-manager` | Plans the week at the cadence you chose, one brief per slot |
 
@@ -364,6 +368,7 @@ first"*, which `channel.update_post` can do.
 | Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
 | Chat | Talk to the channel manager — brief it, ask for clips or productions, adjust the plan |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
+| Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
 | Analytics | Views and likes, summed from the posts this channel actually published |
 | Accounts | Connect and reconnect social accounts through the hosted portal |
@@ -456,6 +461,9 @@ sends it with every call. Without that token the endpoint answers `401`.
 | `list_posts {status?}`, `get_post {id}` | Inspect the queue |
 | `create_post {caption, media_url?, platform?, agent?, account?, source?, status?}` | File a finished piece as *pending* (or *ready*), signed: who filed it, which account it is for, what it was made from |
 | `update_post {id, title?, caption?, media_url?, platform?}` | Fix or retarget a pending or ready post; approved and posted ones are yours |
+| `list_projects {status?, kind?}`, `get_project {id}` | Inspect the video projects — the plan each video is made from |
+| `create_project {kind, title, brief, post_id?, scenes? \| sources?, model?, style_template?, caption?, …}` | File a plan: `generation` carries the scenes in order (prompt, seconds, voiceover, on-screen text, model) and the look; `clipping` carries the source URLs, the timestamps and the reason each moment was picked. Filed on a brief, it moves that brief to `scripted` |
+| `update_project {id, status?, expected_status?, media_url?, agent?, …}` | Claim a plan (`rendering`, `expected_status: planned` — a second session is refused before it spends) and finish it (`rendered` with the video as `media_url`); finishing puts the video on the plan's post, or files the post when the plan has none. Rendered is final |
 | `list_style_templates`, `list_accounts` | The style library, the connected accounts |
 
 The setup answers are not a tool of this server: the platform offers every agent of the crew its

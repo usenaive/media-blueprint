@@ -16,6 +16,7 @@
  */
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import type { PostKind, PostPlatform } from "../seed/posts.ts";
+import type { ProjectKind } from "../seed/projects.ts";
 
 export type TemplateName = "faceless" | "clipping";
 
@@ -215,6 +216,9 @@ export interface MediaTemplate {
   words: {
     queueSubtitle: string;
     queueEmpty: string;
+    /** The Projects screen: what a plan is on this channel, and who writes it. */
+    plansSubtitle: string;
+    plansEmpty: string;
   };
 }
 
@@ -278,9 +282,13 @@ export const CONTEXT_PREAMBLE =
 export const DAY_ONE_ORDER =
   "One last thing about today, and it is about today only. The install opens every seat's first session at the same moment, so the queue you read may hold nothing another seat is about to file. An empty or half-filled queue right now is the install's doing and not a finding: do not report it as one, do not wait for anyone, and do not invent the work you cannot see. Work that needs another seat's output reaches you by name — a handoff naming its rows, in a session of your own — or on your next cron fire, upstream seat first, hours apart; never from today's queue. File what you can make alone, hand on exactly what your message says to hand on, and say plainly what you left for the timers.";
 
-/** The one rule every agent of every template shares: the operator's approval queue is the only way out. */
+/**
+ * The one rule every agent of every template shares: the operator's approval queue is the only way
+ * out. It also names the two rows the channel works in — the post, which is the finished piece, and
+ * the video project, which is the plan it is made from — so every seat reads the same two words.
+ */
 const approvalGate =
-  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file — your name as `agent`, the connected account as `account` (channel.list_accounts), the video as `media_url`, what you made it from as `source`, the network as `platform`. A brief is a pending post with no media yet. The operator reviews every row and approves from the dashboard. The tools offered this turn are the complete list of what you can do right now: do not assume or invent a capability. If the task needs a tool or model you are not offered, request it once with request_tools — exact tool, permission, the model in config.models where needed, and why — then wait; a refusal is final for this task. If it needs a fact or decision only the operator has, ask once with ask_operator, then wait. A connected account's tools appear only once the operator connects it; when none is offered, say so and stop. Never describe a video you did not render or a post you did not file.";
+  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file: your name as `agent`, the connected account as `account` (channel.list_accounts), the video as `media_url`, its origin as `source`, the network as `platform`. A brief is a pending post with no media yet; a video project is the plan a video is made from — another seat renders or cuts it, and that files the post. The operator reviews and approves every row from the dashboard. The tools offered this turn are the complete list of what you can do right now: do not invent a capability. A tool or model you are not offered: request it once with request_tools — exact tool, permission, model in config.models where needed, why — then wait; a refusal is final. A fact or decision only the operator has: ask once with ask_operator, then wait. A connected account's tools appear once the operator connects it; none offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -310,7 +318,14 @@ export const BUILTIN_TOOLS = [
  * First is the default. The rest are named so the producer can still reach for a different look
  * without an operator editing this file; narrowing the list narrows what it can choose.
  */
-const VIDEO_MODELS = ["alibaba/wan-3.0", "alibaba/wan-3.0-prime", "alibaba/happyhorse-1.1"];
+export const VIDEO_MODELS: readonly string[] = ["alibaba/wan-3.0", "alibaba/wan-3.0-prime", "alibaba/happyhorse-1.1"];
+
+/**
+ * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
+ * (`POST /api/projects/:id/render`), and the one the planners hand off to. A generation plan is
+ * the faceless crew's producer; a clipping plan is the clipping crew's clipper.
+ */
+export const RENDERER: Record<ProjectKind, string> = { generation: "producer", clipping: "clipper" };
 
 /** The persona every agent of this channel acts as, and the one connected accounts hang off. */
 export const CHANNEL_IDENTITY = "channel";
@@ -318,6 +333,7 @@ export const CHANNEL_IDENTITY = "channel";
 /** The dashboard's own MCP tools (`server/mcp.ts`) — file and inspect, never approve or publish. They are the blueprint's, so every crew gets them. */
 const DASHBOARD_TOOLS = [
   "channel.list_posts", "channel.get_post", "channel.create_post", "channel.update_post",
+  "channel.list_projects", "channel.get_project", "channel.create_project", "channel.update_project",
   "channel.list_style_templates", "channel.list_accounts",
 ];
 
@@ -460,7 +476,7 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Approve, reject and publish are the operator's — never yours.",
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
     budget_micro_usd: 10_000_000, // $10 — a read and a few patches.
   }),
   schedule({
@@ -560,7 +576,7 @@ export const channelManager = (
     required: true,
     description:
       "Runs the channel: plans the week from the cadence answer, briefs the team, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
-    brief: `You are the channel manager, and the person the operator talks to in Chat. You keep the calendar full at the cadence the context names — daily, three times a week or weekly — and no fuller: a plan with more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and you never do their work for them. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows that are ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption anything you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel, for the audience the context describes. When the operator asks for something in Chat, answer with what the queue actually holds, and route the work to the seat it belongs to.`,
+    brief: `You are the channel manager, the person the operator talks to in Chat. You keep the calendar full at the cadence the context names — daily, three times a week or weekly — and no fuller: more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and never do their work: the video projects (channel.list_projects) are theirs to plan and make. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption what you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel, to the audience the context describes. When the operator asks in Chat, answer with what the queue actually holds, and route work to the seat it belongs to.`,
     tools: ["web_search", "web_fetch"],
     skills: ["naive/caption-writing"],
     intake: {
