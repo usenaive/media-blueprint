@@ -1528,11 +1528,13 @@ describe("the Studio", () => {
         rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
         post(state, "post_9f2a").mediaUrl = "fil_v1";
         const wasAt = rendered(state).statusAt;
+        const archived = structuredClone(rendered(state).renders);
         upstream((method, url) => (method === "POST" && url.pathname === path ? json(refusal, 409) : session(status)(method, url)));
         expect(await revise(state, "post_9f2a")).toEqual({ status: 409, body: refusal });
         expect(rendered(state)).toMatchObject({ status: "rendered", statusAt: wasAt });
         expect(rendered(state)).not.toHaveProperty("revision");
-        expect(rendered(state)).not.toHaveProperty("renders");
+        // Nothing archived: the render that was to be replaced is still the current one.
+        expect(rendered(state).renders).toEqual(archived);
         expect(rendered(state).sessions).toHaveLength(1);
         expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", stage: "rendered" });
         // The claim is free again.
@@ -1619,6 +1621,7 @@ describe("the Studio", () => {
       rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
       post(state, "post_9f2a").mediaUrl = "fil_v1";
       const wasAt = rendered(state).statusAt;
+      const earlier = structuredClone(rendered(state).renders!);
       upstream((method, url) => {
         if (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages") return json({ accepted_seq: 5 }, 202);
         if (method === "GET" && url.pathname === "/v1/sessions") return json({ data: [{ id: "ses_render", status: "running", stop_reason: null }] });
@@ -1630,7 +1633,7 @@ describe("the Studio", () => {
       const answer = await handleRequest(req("POST", "/mcp", finish, { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"));
       expect(JSON.stringify(answer.body)).not.toContain("isError");
       // Archived as it landed, by the session that made it — not as of the claim, by the session it opened.
-      expect(rendered(state)).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1", at: wasAt, sessionId: "ses_render" }] });
+      expect(rendered(state)).toMatchObject({ status: "rendered", renders: [...earlier, { mediaUrl: "fil_v1", at: wasAt, sessionId: "ses_render" }] });
       expect(rendered(state)).not.toHaveProperty("revision");
       expect(rendered(state).sessions.map((s) => s.id)).toEqual(["ses_render"]);
       expect(Date.parse(openedAt)).toBeGreaterThanOrEqual(Date.parse(wasAt));

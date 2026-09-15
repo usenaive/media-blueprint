@@ -62,6 +62,18 @@ describe("the template's own state", () => {
     expect(CLIPPING_PROJECT_SEEDS.every((p) => p.kind === "clipping" && (p.sources?.length ?? 0) > 0)).toBe(true);
   });
 
+  it("seeds the rendered demo plan with a current file on its post and one earlier render behind it", () => {
+    // The Studio's demo has a current cut to play and a version strip to show: a rendered plan
+    // with no file on record would show the absence instead.
+    const plan = FACELESS_PROJECT_SEEDS.find((p) => p.status === "rendered")!;
+    const post = FACELESS_SEEDS.find((p) => p.id === plan.postId)!;
+    expect(post.mediaUrl).toMatch(/^fil_\w+$/);
+    expect(plan.renders).toHaveLength(1);
+    expect(plan.renders![0]!.mediaUrl).toMatch(/^fil_\w+$/);
+    expect(plan.renders![0]!.mediaUrl).not.toBe(post.mediaUrl);
+    expect(Date.parse(plan.renders![0]!.at)).toBeLessThan(Date.parse(plan.statusAt));
+  });
+
   it("records who filed a post, what for and what from — and invents none of the three", () => {
     // The row was stamped `agent: "mcp"`, `account: "unassigned"` and `duration: "—"` whatever the
     // caller said, so a real agent's post arrived in the queue naming the transport as its author
