@@ -118,7 +118,7 @@ function AgentCard({ agent, runs }: { agent: ChannelAgent; runs: Run[] | null })
         <Facts
           cols={4}
           items={[
-            ["Model", agent.model ? <span className="font-mono text-xs">{agent.model}</span> : "—"],
+            ["Model", agent.model ? <span className="font-mono text-xs" title={agent.model}>{agent.model}</span> : "—"],
             [agent.period ? `Budget/${agent.period}` : "Budget", agent.capMicroUsd > 0 ? <span className="font-mono">{usd(agent.capMicroUsd)}</span> : "—"],
             ["Per task", agent.taskMicroUsd > 0 ? <span className="font-mono">{usd(agent.taskMicroUsd)}</span> : "—"],
             ["Tools", agent.tools.length],
@@ -228,10 +228,9 @@ export function Agents() {
 
       <Card title="Template" aside={<span className="chip chip-plain font-mono">{ACTIVE.name}</span>} className="mb-8">
         <Facts
-          cols={4}
+          cols={3}
           items={[
             ["Template", <span className="font-mono">{ACTIVE.name}</span>],
-            ["Description", <Clamp text={ACTIVE.description} lines={1} />],
             [
               "Kinds",
               <span className="flex flex-wrap gap-1.5">
@@ -243,6 +242,10 @@ export function Agents() {
             ["Agents", ACTIVE.agents.length],
           ]}
         />
+        <div className="mt-3">
+          <div className="prop-label">Description</div>
+          <Clamp text={ACTIVE.description} lines={1} className="mt-0.5" />
+        </div>
         <details className="mt-3">
           <summary className="cursor-pointer text-xs font-medium text-ink-2">How to switch template</summary>
           <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
