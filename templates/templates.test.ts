@@ -341,10 +341,10 @@ describe("the crews", () => {
    * brief the operator's Chat reaches, so it never asks a seat to do it.
    */
   it("briefs each renderer for the operator's revision on the same plan, and tells the manager the revision is not its move", () => {
-    const REVISION = "A revision arrives as a message on your session: re-read the plan with channel.get_project, apply the operator's note, finish with the same update_project write. Never open a second project.";
+    const REVISION = /A revision arrives as a message on your session: re-read the plan with channel\.get_project, apply the operator's note, finish with the same update_project write, changed (scenes|sources) on it\. Never open a second project\./;
     for (const [template, seat] of [[TEMPLATES.faceless, RENDERER.generation], [TEMPLATES.clipping, RENDERER.clipping]] as const) {
       const renderer = template.agents.find((a) => a.name === seat);
-      expect(renderer?.system, seat).toContain(REVISION);
+      expect(renderer?.system, seat).toMatch(REVISION);
       // The revision is finished by the same guarded write, not a new one, and still never published.
       expect(renderer?.system).toMatch(/status rendered, expected_status rendering.*A revision arrives.*never publish it yourself/s);
       // Nobody else is briefed for it: a revision reaches the seat that rendered, not the crew.
