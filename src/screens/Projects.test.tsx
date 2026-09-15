@@ -140,6 +140,26 @@ describe("the Projects screen", () => {
     expect(caption.textContent).toContain(planned.caption!);
   });
 
+  it("opens a long voiceover in the scene row, where a model name stays one truncated line", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    // The narration is what a voice reads into the render, so it is readable in full before Render
+    // is pressed — however long it runs.
+    const voiceover = "Seneca told a rich friend to live like a poor man a few days a month. ".repeat(4).trim();
+    const scenes = planned.scenes!.map((scene, i) => (i === 0 ? { ...scene, voiceover, model: "veo-3" } : scene));
+    await mount(vi.fn().mockResolvedValueOnce(json([{ ...planned, scenes }])));
+
+    const row = Array.from(card().querySelectorAll("ol.list li"))[1]!;
+    expect(row.textContent).toContain(voiceover);
+    const open = Array.from(row.querySelectorAll("button")).filter((b) => b.textContent === "Read more");
+    // One offer to open, on the voiceover: this scene's prompt and on-screen text both fit a line.
+    expect(open).toHaveLength(1);
+    await act(async () => open[0]!.click());
+    expect(row.textContent).toContain(voiceover);
+    expect(row.querySelector("button")?.textContent).toBe("Show less");
+    // The model is a short identifier, not prose: it keeps the plain truncated line.
+    expect(row.querySelector("span.truncate")?.textContent).toBe("veo-3");
+  });
+
   it("reads a clipping plan as its sources: the URL, the moment as a chip, and the reason", async () => {
     const planned = CLIPPING_PROJECT_SEEDS.find((p) => p.status === "planned")!;
     await mount(vi.fn().mockResolvedValueOnce(json([planned])));
