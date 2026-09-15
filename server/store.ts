@@ -214,7 +214,12 @@ export function openStoreOver(
         post.views ??= 0;
         post.likes ??= 0;
       }
-      if (patch.status === "rejected") post.rejectedReason = patch.rejectedReason ?? "Rejected by you";
+      if (patch.status === "rejected") {
+        post.rejectedReason = patch.rejectedReason ?? "Rejected by you";
+        // Rejecting a brief drops the plan written on it, so no producer picks it up at 07:00.
+        const plan = post.projectId === undefined ? undefined : state.projects.find((p) => p.id === post.projectId);
+        if (plan !== undefined && plan.status !== "rendered") setStatus(plan, "dropped");
+      }
       save();
       return post;
     },
@@ -263,6 +268,12 @@ export function openStoreOver(
       if (patch.sources !== undefined) project.sources = patch.sources;
       if (patch.caption !== undefined) project.caption = patch.caption;
       const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
+      // The plan and its row publish to the same place, so retargeting the plan retargets the row
+      // while the row is still the crew's (pending or ready); an approved row is the operator's.
+      if (post !== undefined && (post.status === "pending" || post.status === "ready")) {
+        if (patch.platform !== undefined) post.platform = patch.platform;
+        if (patch.account !== undefined) post.account = patch.account;
+      }
       if (patch.status !== undefined && patch.status !== project.status) {
         setStatus(project, patch.status);
         // The post mirrors the plan: claimed is `rendering`, freed is `scripted`, done is `rendered`.

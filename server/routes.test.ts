@@ -140,6 +140,15 @@ describe("the store routes", () => {
       body: { error: "project is rendered; reject its post instead" },
     });
     expect(state.projects.find((p) => p.id === rendered.id)?.status).toBe("rendered");
+    // A claimed plan is its executor's: dropping or resetting it under a running render would
+    // refuse the completion that carries the paid video.
+    const rendering = state.projects.find((p) => p.status === "rendering")!;
+    for (const status of ["dropped", "planned"]) {
+      const held = await handleRequest(req("PATCH", `/api/projects/${rendering.id}`, JSON.stringify({ status })), ctx);
+      expect(held.status, status).toBe(409);
+      expect(held.body).toEqual({ error: "project is being rendered; its executor holds it until the render lands or the manager frees it" });
+    }
+    expect(state.projects.find((p) => p.id === rendering.id)?.status).toBe("rendering");
     expect(await handleRequest(req("GET", `/api/projects/${planned.id}`), ctx)).toEqual({ status: 405, body: { error: "method not allowed" } });
   });
 

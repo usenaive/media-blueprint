@@ -424,6 +424,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         if (!brief) throw new ToolError("no such post");
         if (brief.projectId !== undefined) throw new ToolError(`post ${postId} already has a plan (${brief.projectId}); update that one`);
         if (brief.mediaUrl !== undefined) throw new ToolError("post already has media attached: it has been rendered, and a plan for it now would render it twice");
+        if (brief.status !== "pending" && brief.status !== "ready") throw new ToolError(`post is ${brief.status}; a plan is written on a pending or ready brief`);
       }
       const agent = optional(params, "agent");
       return store.createProject({
@@ -455,10 +456,14 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       }
       const status: ProjectStatus | undefined = oneOf(params, "status", PROJECT_STATUSES);
       const media = optional(params, "media_url");
-      // `rendered` is where the money went; nothing moves a plan out of it, and nothing reaches
-      // it without the video it paid for.
-      if (project.status === "rendered" && status !== undefined && status !== "rendered") {
-        throw new ToolError("project is rendered and that render was paid for; it cannot go back. A piece that has to be remade is a new plan.");
+      // `rendered` is where the money went; nothing moves a plan out of it, nothing renders it
+      // again, and nothing reaches it without the video it paid for.
+      if (project.status === "rendered" && (status !== undefined || media !== undefined)) {
+        throw new ToolError("project is rendered and that render was paid for; it cannot go back or be rendered again. A piece that has to be remade is a new plan.");
+      }
+      const post = project.postId === undefined ? undefined : store.read().posts.find((p) => p.id === project.postId);
+      if (post?.status === "rejected" && (status === "rendering" || status === "rendered")) {
+        throw new ToolError(`post ${post.id} was rejected (${post.rejectedReason ?? "no reason"}); its plan is not made`);
       }
       if (status === "rendered" && project.status !== "rendered" && media === undefined) {
         throw new ToolError("a plan reaches rendered by having its video attached: send media_url with this call");

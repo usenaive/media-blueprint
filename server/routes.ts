@@ -336,6 +336,7 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
     const current = store.read().projects.find((p) => p.id === project[1]);
     if (!current) return fail(404, "no such project");
     if (current.status === "rendered") return fail(409, "project is rendered; reject its post instead");
+    if (current.status === "rendering") return fail(409, "project is being rendered; its executor holds it until the render lands or the manager frees it");
     return json(200, store.updateProject(current.id, { status: body.status }));
   }
   return null;

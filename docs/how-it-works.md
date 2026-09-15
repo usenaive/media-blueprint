@@ -137,7 +137,7 @@ Nothing here approves, rejects or publishes.
 | `list_projects {status?, kind?}` | the plans, filtered |
 | `get_project {id}` | one plan |
 | `create_project {kind, title, brief, post_id?, agent?, platform?, account?, style_template?, model?, scenes?, sources?, caption?}` | lands `planned`; `generation` requires `scenes[]` (`prompt`, `seconds > 0`, `voiceover?`, `text?`, `model?`), `clipping` requires `sources[]` (`url` http(s), `reason`, `from?`, `to?`); `model` must be one of `VIDEO_MODELS` (defaults to the first for generation); a `post_id` must be a post with no plan and no media yet, and the post moves to `stage: scripted` |
-| `update_project {id, status?, expected_status?, media_url?, agent?, …plan fields}` | `expected_status` mismatch → refused (the claim); `rendered` requires `media_url` and is final — never back to `planned`/`dropped`; `dropped` can only return to `planned`; finishing writes media, caption and `stage: rendered` onto the linked post, or creates a pending post when the plan has none |
+| `update_project {id, status?, expected_status?, media_url?, agent?, …plan fields}` | `expected_status` mismatch → refused (the claim); `rendered` requires `media_url` and is final — never back to `planned`/`dropped`, never rendered again (a second `media_url` is refused; only the words can still change); `dropped` can only return to `planned`; a plan whose post was rejected cannot be claimed or finished; finishing writes media, caption and `stage: rendered` onto the linked post, or creates a pending post when the plan has none |
 | `list_style_templates` | the channel's style library |
 | `list_accounts` | platform's connected accounts, or the accounts the queue names when social isn't activated; a 401/403/500 is an error, never an empty list |
 
@@ -236,9 +236,13 @@ take today. When the platform grows named voices or characters they belong on `S
 
 Status is mirrored onto the linked post's `stage`: `rendering` ↔ `rendering`, `planned` ↔
 `scripted`, `rendered` (with media) ↔ `rendered`. The operator's moves on a plan are
-`PATCH /api/projects/:id {status: dropped | planned}` from the Projects screen — never `rendered`,
-which only the finishing `update_project` (with its `media_url`) can write; a rendered plan is
-refused there with a 409.
+`PATCH /api/projects/:id {status: dropped | planned}` from the Projects screen — `planned → dropped`
+and `dropped → planned` only. Never `rendered`, which only the finishing `update_project` (with
+its `media_url`) can write; a rendered plan is refused there with a 409, and so is a `rendering`
+one, which its executor holds until the render lands or the manager's sweep frees it. Rejecting a
+post from the Posts screen drops the unrendered plan written on it, and `create_project` refuses
+a `post_id` that is not pending or ready, so a rejected brief is never rendered. Retargeting a
+plan (`platform`/`account`) retargets its pending or ready post with it.
 
 ## 8. Post lifecycle end to end
 
