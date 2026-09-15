@@ -1442,15 +1442,43 @@ describe("the Studio", () => {
       expect(rendered(state).revision?.note).toBe("Tighter: cut scene two to three seconds.");
     });
 
-    it("refuses a note while the first render is still out: the note would name a claim that is gone when it is heard", async () => {
+    it("queues a note on the session making a first render — nothing claimed, nothing interrupted, no second renderer", async () => {
       const state = studioState();
       const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
       plan.sessions = [{ id: "ses_busy", role: "rendered", at: "2026-09-15T07:00:00Z" }];
       const before = structuredClone(state);
-      const hits = upstream(session("running"));
-      expect(await revise(state, "post_8e1b")).toEqual({ status: 409, body: { error: "the render is still out — revise when it lands" } });
-      expect(hits).toEqual([]);
+      const hits = upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_busy/messages") return json({ session_id: "ses_busy", status: "running", accepted_seq: 12 }, 202);
+        return session("running")(method, url);
+      });
+      expect(await revise(state, "post_8e1b")).toEqual({ status: 202, body: { session: "ses_busy", acceptedSeq: 12, opened: false } });
+      const sent = hits.find((h) => h.method === "POST")!;
+      expect(sent.url).toBe("/v1/sessions/ses_busy/messages");
+      expect(sent.body).toMatchObject({ queue: true });
+      expect(sent.body).not.toHaveProperty("interrupt");
+      const message = sent.body!.message as string;
+      // The frame is for the render that is out, not a revision of a landed one: one finishing write.
+      // It opens like every framed turn, so the Studio folds it behind the operator's words.
+      expect(message).toContain("Revision of video project proj_b2e1, whose render is still out");
+      expect(message).toContain("as a revision of the same plan");
+      expect(message).toContain("Finish once, with channel.update_project id proj_b2e1, status rendered, expected_status rendering");
+      expect(message).toContain('"producer" as agent. Do not claim the plan again, do not create a second project, do not approve or post anything.\n\nOperator: Tighter');
+      expect(message).not.toContain("the current video is");
+      expect(hits.filter((h) => h.url === "/v1/sessions")).toEqual([]);
+      // The claim stands as it was: no revision opened, the post where the crew left it.
       expect(state).toEqual(before);
+    });
+
+    it("refuses a note on a first render whose session is over, and one with no session: no second renderer on one claim", async () => {
+      for (const sessions of [[{ id: "ses_busy", role: "rendered" as const, at: "2026-09-15T07:00:00Z" }], []]) {
+        const state = studioState();
+        state.projects.find((p) => p.id === "proj_b2e1")!.sessions = [...sessions];
+        const before = structuredClone(state);
+        const hits = upstream(session("failed"));
+        expect(await revise(state, "post_8e1b")).toEqual({ status: 409, body: { error: "the render is still out and its session is over — revise when it lands" } });
+        expect(hits.filter((h) => h.method === "POST")).toEqual([]);
+        expect(state).toEqual(before);
+      }
     });
 
     it("reopens a rendered plan on the session that made it: queued, never interrupting, and the post goes back to the crew", async () => {

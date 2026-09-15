@@ -292,9 +292,11 @@ restored). The renderer then finishes exactly as it did the first time (`status:
 the revision is open the plan goes forward only: `update_project` refuses to move it anywhere
 but `rendered`, so the manager's sweep — which frees a claim older than a day — cannot free the
 operator's paid claim, and the store holds the status either way. A plan
-still on its first render (`rendering`, no revision open) cannot be revised yet — "the render is
-still out — revise when it lands" — because a note framed for `expected_status: rendering` would
-be heard after the first render filed, and its second video would have no plan to land on.
+still on its first render (`rendering`, no revision open) is one claim already: a note opens
+nothing and is queued on the session making it, framed for THAT render — fold the note into the
+video before it is filed, finish once with the write the renderer already owes (`midRenderFrame`; it opens "Revision of …" like every framed turn, so the Studio folds it).
+When that session is over there is nobody to hear it, and the note is refused rather than a second
+renderer opened on the same claim — "revise when it lands".
 
 ## 7b. The Studio
 
@@ -335,13 +337,13 @@ short is tried again next time.
   the operator never saw;
 - a plan whose revision is already open — the note it carries lands as the next render; a second
   one would pile a second render on the first.
-- a plan whose first render is still out — see above.
+- a plan whose first render is still out and whose session can no longer hear — see above.
 
 Otherwise the note goes to the plan's latest session when it is not terminal — queued
 (`queue: true`), never interrupting, because a running render is paid for — or a new renderer
 session is opened on the plan (`metadata: {project_id}`, recorded `revised`, `opened: true`). A
-`rendered` plan is reopened as above; a `rendering` one with a revision open changes no state (the
-note reaches the session that holds it); a `planned` one sends the note to its planning session and asks for no
+`rendered` plan is reopened as above; a `rendering` one changes no state — the note is queued on
+the session making the render; a `planned` one sends the note to its planning session and asks for no
 render; a post with no plan at all goes to the channel-manager, carrying the post's title, caption
 and id, and nothing is recorded. The renderer's note is framed so it stays on the same plan:
 "Revision of video project `<id>`. Read it with channel.get_project … finish with

@@ -376,6 +376,16 @@ export const revisionFrame = (project: VideoProject, post: Post | null, renderer
   `Apply the operator's note below on the same plan, then finish with channel.update_project id ${project.id}, status rendered, expected_status rendering, ` +
   `the new video as media_url and "${renderer}" as agent. Do not create a second project, do not approve or post anything.\n\nOperator: ${text}`;
 
+/**
+ * A first render still out is one claim, and stays one: the note is folded into the video before
+ * it is filed, and the finishing write is the one the renderer already owes — never a second one.
+ */
+export const midRenderFrame = (project: VideoProject, renderer: string, text: string): string =>
+  `Revision of video project ${project.id}, whose render is still out. Read it with channel.get_project ${project.id}. ` +
+  `Treat the operator's note below as a revision of the same plan: if the video is not made yet, fold the note in; if it is, make it again with the note applied and file only that one. ` +
+  `Finish once, with channel.update_project id ${project.id}, status rendered, expected_status rendering, the video as media_url and "${renderer}" as agent. ` +
+  `Do not claim the plan again, do not create a second project, do not approve or post anything.\n\nOperator: ${text}`;
+
 /** A planned plan is words, not a render: its planner is asked to change the plan, and nothing is spent. */
 const planningFrame = (project: VideoProject, text: string): string =>
   `Revision of video project ${project.id}. Read it with channel.get_project ${project.id} and apply the operator's note below on the same plan with channel.update_project id ${project.id}. Do not render it, do not create a second project, do not approve or post anything.\n\nOperator: ${text}`;
@@ -417,9 +427,11 @@ const isReply = (value: Opened | ApiReply): value is ApiReply => "status" in val
  * claim uses — BEFORE the renderer is asked, so two notes at once cost one render: the second is
  * refused with nothing sent, and a send that does not land gives the claim back. An approved or
  * posted video is the operator's word already given — reject it first. A first render still out
- * is not revised: the frame would name a claim that will be gone when the note is heard.
- * The note goes to the session that made the video when it can still hear (queued, never
- * interrupting a render); a finished one is replaced by a fresh renderer session on the same plan.
+ * is one claim already: nothing changes on the plan, the note is queued on the session making it
+ * (never interrupting — the render is paid for), and a session that can no longer hear it is a
+ * refusal, not a second renderer on the same claim. Otherwise the note goes to the session that
+ * made the video when it can still hear (queued); a finished one is replaced by a fresh renderer
+ * session on the same plan.
  */
 async function revise(store: Store, config: ProxyConfig, id: string, text: string): Promise<ApiReply> {
   const rows = studioRows(store, id);
@@ -435,11 +447,17 @@ async function revise(store: Store, config: ProxyConfig, id: string, text: strin
   const open = "a revision is already open on this project; it lands as the next render";
   if (project.revision !== undefined) return fail(409, open);
   if (project.status === "dropped") return fail(409, "project is dropped; restore it first");
-  if (project.status === "rendering") return fail(409, "the render is still out — revise when it lands");
 
   const latest = project.sessions.at(-1);
   const live = latest === undefined ? null : await readSession(config, latest.id);
   const heard = live !== null && !TERMINAL.has(live.status) ? live.id : null;
+  if (project.status === "rendering") {
+    // Re-read past the await: a note that arrived alongside may have opened the revision meanwhile.
+    if (project.revision !== undefined) return fail(409, open);
+    if (heard === null) return fail(409, "the render is still out and its session is over — revise when it lands");
+    const target = await queueOn(config, heard, midRenderFrame(project, RENDERER[project.kind], text));
+    return isReply(target) ? target : json(202, target);
+  }
   if (project.status === "planned") {
     // No render is asked for here, so no renderer is opened: the planner's own session, or the
     // seat that wrote the plan when that session is over.
