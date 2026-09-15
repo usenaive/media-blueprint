@@ -140,6 +140,106 @@ export function ConnectLine() {
   );
 }
 
+/** A card: a white panel whose head carries the title, its chips and any control on the right. */
+export function Card({
+  title,
+  meta,
+  aside,
+  className = "",
+  children,
+}: {
+  title?: ReactNode;
+  meta?: ReactNode;
+  aside?: ReactNode;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <section className={`panel ${className}`}>
+      {title !== undefined || aside !== undefined ? (
+        <header className="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
+          <div className="min-w-0 flex-1">
+            {title !== undefined ? <h2 className="card-title truncate">{title}</h2> : null}
+            {meta !== undefined ? <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">{meta}</div> : null}
+          </div>
+          {aside !== undefined ? <div className="flex shrink-0 items-center gap-2">{aside}</div> : null}
+        </header>
+      ) : null}
+      <div className="px-4 py-3">{children}</div>
+    </section>
+  );
+}
+
+/** A section's head: an eyebrow, the count beside it, and a control on the right. */
+export function SectionHead({ label, count, aside }: { label: string; count?: number; aside?: ReactNode }) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-4">
+      <h2 className="eyebrow">
+        {label}
+        {count !== undefined ? <span className="rail-count">{count}</span> : null}
+      </h2>
+      {aside}
+    </div>
+  );
+}
+
+/** Label-over-value facts in a grid — the alternative to a sentence that lists them. */
+export function Facts({ items, cols = 3 }: { items: readonly [label: string, value: ReactNode][]; cols?: 2 | 3 | 4 }) {
+  const grid = cols === 2 ? "grid-cols-2" : cols === 4 ? "grid-cols-4" : "grid-cols-3";
+  return (
+    <dl className={`grid ${grid} gap-x-4 gap-y-3`}>
+      {items.map(([label, value]) => (
+        <div key={label} className="min-w-0">
+          <dt className="prop-label">{label}</dt>
+          <dd className="mt-0.5 truncate text-sm text-ink">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Prose that shows its first lines and opens on request, so a long brief is never a wall. */
+export function Clamp({ text, lines = 2, className = "" }: { text: string; lines?: 1 | 2 | 3 | 4; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const clamp = lines === 1 ? "line-clamp-1" : lines === 2 ? "line-clamp-2" : lines === 3 ? "line-clamp-3" : "line-clamp-4";
+  // Roughly what the clamp can hold; a shorter text gets no toggle to a state that looks the same.
+  const long = text.length > lines * 110 || text.split("\n").length > lines;
+  return (
+    <div className={className}>
+      <p className={`whitespace-pre-line text-sm leading-relaxed text-ink-2 ${open ? "" : clamp}`}>{text}</p>
+      {long ? (
+        <button type="button" className="mt-1 text-xs font-medium text-accent hover:underline" onClick={() => setOpen((o) => !o)}>
+          {open ? "Show less" : "Read more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** An agent's face: its initials on the tinted disc, the same everywhere it is named. */
+export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+  const dim = size === "sm" ? "size-6 text-[10px]" : size === "lg" ? "size-10 text-sm" : "size-8 text-xs";
+  return (
+    <span className={`flex ${dim} shrink-0 items-center justify-center rounded-full bg-accent-soft font-semibold text-accent`} aria-hidden>
+      {name.slice(0, 2)}
+    </span>
+  );
+}
+
+/** "3m ago", "2h ago", "4d ago" — for a list where the date is context, not the point. */
+export function ago(iso: string | undefined, now: number = Date.now()): string {
+  if (!iso) return "";
+  const ms = now - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return d < 30 ? `${d}d ago` : new Date(iso).toLocaleDateString();
+}
+
 export function fmt(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
 }
