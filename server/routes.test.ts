@@ -1300,15 +1300,20 @@ describe("the Studio", () => {
       });
     });
 
-    it("backfills a plan made before plans remembered: the renderer's recent sessions, the first whose log names this id, recorded once", async () => {
+    it("backfills a plan made before plans remembered: the renderer's recent sessions, each log paged whole, the first that names this id recorded once", async () => {
       const state = studioState();
       expect(rendered(state).sessions).toEqual([]);
-      const logs: Record<string, unknown[]> = {
-        ses_other: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "proj_zzz", status: "rendering" } } }],
-        ses_maker: [
-          { seq: 1, type: "message.completed", data: { role: "user", content: "Render video project post_9f2a now" } },
-          { seq: 4, type: "tool.started", data: { name: "channel.update_project", args: { id: "post_9f2a", status: "rendering", expected_status: "planned" } }, created_at: "2026-09-13T10:00:00Z" },
-        ],
+      // The maker's write sits on the second page of its log, past a hundred spans.
+      const logs: Record<string, Record<string, unknown>> = {
+        "ses_other/events?limit=100": { data: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "proj_zzz", status: "rendering" } } }] },
+        "ses_maker/events?limit=100": {
+          data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "Render video project post_9f2a now" } }],
+          has_more: true,
+          next_cursor: "100",
+        },
+        "ses_maker/events?limit=100&after_seq=100": {
+          data: [{ seq: 104, type: "tool.started", data: { name: "channel.update_project", args: { id: "post_9f2a", status: "rendering", expected_status: "planned" } }, created_at: "2026-09-13T10:00:00Z" }],
+        },
       };
       const hits = upstream((method, url) => {
         if (url.pathname === "/v1/sessions") {
@@ -1317,20 +1322,22 @@ describe("the Studio", () => {
             { id: "ses_other", status: "idle", stop_reason: "end_turn", created_at: "2026-09-14T09:00:00Z" },
           ] });
         }
-        const log = /^\/v1\/sessions\/(ses_\w+)\/events$/.exec(url.pathname);
-        if (log) return json({ data: logs[log[1]!] ?? [] });
+        const log = logs[`${url.pathname}${url.search}`.slice("/v1/sessions/".length)];
+        if (log !== undefined) return json(log);
         return session("idle")(method, url);
       });
       const reply = await handleRequest(req("GET", "/api/studio/post_9f2a"), ctxOver(state, CONFIG));
       expect(reply.body).toMatchObject({ session: { id: "ses_maker", status: "idle", stop_reason: "end_turn" } });
       expect(rendered(state).sessions).toEqual([{ id: "ses_maker", role: "rendered", at: "2026-09-13T10:00:00Z" }]);
-      // The renderer's sessions, twenty newest; each log read once, bounded; newest first, so the
-      // other session's log was read and passed over before the maker's.
+      expect(rendered(state)).not.toHaveProperty("backfilledAt");
+      // The renderer's sessions, twenty newest; newest first, so the other session's log was read
+      // and passed over before the maker's, whose log was followed to its second page.
       const urls = hits.map((h) => h.url).filter((u) => u !== "/v1/agents");
       expect(urls).toEqual([
         "/v1/sessions?limit=20&agent_id=agt_producer",
         "/v1/sessions/ses_other/events?limit=100",
         "/v1/sessions/ses_maker/events?limit=100",
+        "/v1/sessions/ses_maker/events?limit=100&after_seq=100",
         "/v1/sessions/ses_maker",
       ]);
       // Remembered: the next open reads the session and scans nothing.
@@ -1339,22 +1346,45 @@ describe("the Studio", () => {
       expect(hits.map((h) => h.url)).toEqual(["/v1/sessions/ses_maker"]);
     });
 
-    it("records a planner's create_project as planned, and records nothing when no log names the plan", async () => {
+    it("records a planner's create_project as planned", async () => {
       const state = studioState();
       const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
-      let named = false;
       upstream((method, url) => {
         if (url.pathname === "/v1/sessions") return json({ data: [{ id: "ses_s", status: "completed", stop_reason: null, created_at: "2026-09-13T09:00:00Z" }] });
         if (url.pathname === "/v1/sessions/ses_s/events") {
-          return json({ data: named ? [{ seq: 2, type: "tool.started", data: { name: "channel.create_project", args: { id: plan.id, kind: "generation" } }, created_at: "2026-09-13T09:01:00Z" }] : [] });
+          return json({ data: [{ seq: 2, type: "tool.started", data: { name: "channel.create_project", args: { id: plan.id, kind: "generation" } }, created_at: "2026-09-13T09:01:00Z" }] });
         }
         return session("completed")(method, url);
       });
-      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: null });
-      expect(plan.sessions).toEqual([]);
-      named = true;
       expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: { id: "ses_s", status: "completed" } });
       expect(plan.sessions).toEqual([{ id: "ses_s", role: "planned", at: "2026-09-13T09:01:00Z" }]);
+    });
+
+    it("scans a plan no log names once — the miss is stamped, and the next open scans nothing — but not one whose logs could not all be read", async () => {
+      const state = studioState();
+      const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
+      let logs: Response | (() => Response) = () => json({ data: [] });
+      const hits = upstream((method, url) => {
+        if (url.pathname === "/v1/sessions") return json({ data: [{ id: "ses_s", status: "completed", stop_reason: null, created_at: "2026-09-13T09:00:00Z" }] });
+        if (url.pathname === "/v1/sessions/ses_s/events") return typeof logs === "function" ? logs() : logs;
+        return session("completed")(method, url);
+      });
+      // A log the platform would not give: nothing is stamped, so the next open asks again.
+      logs = () => json({ error: { code: "internal" } }, 500);
+      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: null });
+      expect(plan.sessions).toEqual([]);
+      expect(plan).not.toHaveProperty("backfilledAt");
+
+      logs = () => json({ data: [] });
+      hits.length = 0;
+      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: null });
+      expect(hits.map((h) => h.url).filter((u) => u !== "/v1/agents")).toEqual(["/v1/sessions?limit=20&agent_id=agt_producer", "/v1/sessions/ses_s/events?limit=100"]);
+      expect(plan.sessions).toEqual([]);
+      expect(typeof plan.backfilledAt).toBe("string");
+
+      hits.length = 0;
+      expect((await handleRequest(req("GET", "/api/studio/post_8e1b"), ctxOver(state, CONFIG))).body).toMatchObject({ session: null });
+      expect(hits).toEqual([]);
     });
   });
 
@@ -1397,6 +1427,32 @@ describe("the Studio", () => {
       expect(rendered(state).revision?.note).toBe("first note");
     });
 
+    it("claims before it asks: two notes at once cost one render, and the second is refused with nothing sent", async () => {
+      const state = studioState();
+      rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+      post(state, "post_9f2a").mediaUrl = "fil_v1";
+      const hits = upstream((method, url) => {
+        if (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages") return json({ session_id: "ses_render", status: "idle", accepted_seq: 41 }, 202);
+        return session("idle")(method, url);
+      });
+      const [first, second] = await Promise.all([revise(state, "post_9f2a"), revise(state, "post_9f2a", "And louder.")]);
+      expect(first.status).toBe(202);
+      expect(second).toEqual({ status: 409, body: { error: "a revision is already open on this project; it lands as the next render" } });
+      expect(hits.filter((h) => h.method === "POST")).toHaveLength(1);
+      expect(rendered(state).revision?.note).toBe("Tighter: cut scene two to three seconds.");
+    });
+
+    it("refuses a note while the first render is still out: the note would name a claim that is gone when it is heard", async () => {
+      const state = studioState();
+      const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
+      plan.sessions = [{ id: "ses_busy", role: "rendered", at: "2026-09-15T07:00:00Z" }];
+      const before = structuredClone(state);
+      const hits = upstream(session("running"));
+      expect(await revise(state, "post_8e1b")).toEqual({ status: 409, body: { error: "the render is still out — revise when it lands" } });
+      expect(hits).toEqual([]);
+      expect(state).toEqual(before);
+    });
+
     it("reopens a rendered plan on the session that made it: queued, never interrupting, and the post goes back to the crew", async () => {
       const state = studioState();
       rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
@@ -1425,22 +1481,6 @@ describe("the Studio", () => {
       state.projects.find((p) => p.id === "proj_b2e1")!.status = "rendered";
       const refused = await handleRequest(req("POST", "/mcp", JSON.stringify(mcp), { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"));
       expect(JSON.stringify(refused.body)).toContain("cannot go back or be rendered again");
-    });
-
-    it("queues the note on a plan still rendering and changes nothing: the render is paid for", async () => {
-      const state = studioState();
-      const plan = state.projects.find((p) => p.id === "proj_b2e1")!;
-      plan.sessions = [{ id: "ses_busy", role: "rendered", at: "2026-09-15T07:00:00Z" }];
-      const before = structuredClone(state);
-      const hits = upstream((method, url) => {
-        if (method === "POST" && url.pathname === "/v1/sessions/ses_busy/messages") return json({ session_id: "ses_busy", status: "running", accepted_seq: 9 }, 202);
-        return session("running")(method, url);
-      });
-      expect(await revise(state, "post_8e1b")).toEqual({ status: 202, body: { session: "ses_busy", acceptedSeq: 9, opened: false } });
-      const sent = hits.find((h) => h.method === "POST")!;
-      expect(sent.body).toEqual({ message: FRAME("proj_b2e1", "none yet", "producer"), queue: true });
-      expect(sent.body).not.toHaveProperty("interrupt");
-      expect(state).toEqual(before);
     });
 
     it("sends a planned plan's note to its planning session, and asks for no render", async () => {
@@ -1481,14 +1521,23 @@ describe("the Studio", () => {
       }
     });
 
-    it("forwards the platform's refusal and opens nothing when the send did not land", async () => {
-      const state = studioState();
-      rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+    it("forwards the platform's refusal and gives the claim back when the send did not land — on the session and on a fresh one", async () => {
       const refusal = { error: { type: "invalid_request", code: "session_terminal", message: "over" } };
-      upstream((method, url) => (method === "POST" && url.pathname === "/v1/sessions/ses_render/messages" ? json(refusal, 409) : session("idle")(method, url)));
-      expect(await revise(state, "post_9f2a")).toEqual({ status: 409, body: refusal });
-      expect(rendered(state)).toMatchObject({ status: "rendered" });
-      expect(rendered(state)).not.toHaveProperty("revision");
+      for (const [status, path] of [["idle", "/v1/sessions/ses_render/messages"], ["completed", "/v1/sessions"]] as const) {
+        const state = studioState();
+        rendered(state).sessions = [{ id: "ses_render", role: "rendered", at: "2026-09-14T09:00:00Z" }];
+        post(state, "post_9f2a").mediaUrl = "fil_v1";
+        const wasAt = rendered(state).statusAt;
+        upstream((method, url) => (method === "POST" && url.pathname === path ? json(refusal, 409) : session(status)(method, url)));
+        expect(await revise(state, "post_9f2a")).toEqual({ status: 409, body: refusal });
+        expect(rendered(state)).toMatchObject({ status: "rendered", statusAt: wasAt });
+        expect(rendered(state)).not.toHaveProperty("revision");
+        expect(rendered(state)).not.toHaveProperty("renders");
+        expect(rendered(state).sessions).toHaveLength(1);
+        expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", stage: "rendered" });
+        // The claim is free again.
+        expect(rendered(state).status).toBe("rendered");
+      }
     });
 
     it("takes a post that was never planned to the channel-manager, with the post in the note, and records nothing", async () => {
@@ -1580,7 +1629,8 @@ describe("the Studio", () => {
       const finish = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "post_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } });
       const answer = await handleRequest(req("POST", "/mcp", finish, { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"));
       expect(JSON.stringify(answer.body)).not.toContain("isError");
-      expect(rendered(state)).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1", at: openedAt, sessionId: "ses_render" }] });
+      // Archived as it landed, by the session that made it — not as of the claim, by the session it opened.
+      expect(rendered(state)).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1", at: wasAt, sessionId: "ses_render" }] });
       expect(rendered(state)).not.toHaveProperty("revision");
       expect(rendered(state).sessions.map((s) => s.id)).toEqual(["ses_render"]);
       expect(Date.parse(openedAt)).toBeGreaterThanOrEqual(Date.parse(wasAt));

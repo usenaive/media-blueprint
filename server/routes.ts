@@ -321,9 +321,10 @@ async function readSession(config: ProxyConfig, id: string): Promise<WireSession
 
 /**
  * A plan made before plans remembered their sessions: the renderer's twenty most recent sessions,
- * a hundred events each, for the `channel.update_project` or `channel.create_project` call that
- * named this id — the first hit is recorded and the scan never runs again for that plan. Bounded
- * on both axes so a busy org cannot turn one Studio open into a crawl.
+ * each log read whole, for the `channel.update_project` or `channel.create_project` call that
+ * named this id — the first hit is recorded, and a scan that found none is stamped on the plan
+ * (`backfilledAt`), so either way it runs once. A log that could not be read leaves the scan
+ * unfinished, to run again on the next open.
  */
 async function backfillSessions(store: Store, config: ProxyConfig, project: VideoProject): Promise<void> {
   const agent = await agentIdNamed(config, RENDERER[project.kind]);
@@ -332,10 +333,13 @@ async function backfillSessions(store: Store, config: ProxyConfig, project: Vide
   if (!listed.ok) return;
   const page = (await listed.json()) as { data?: WireSession[] };
   const newest = [...(page.data ?? [])].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  let whole = true;
   for (const session of newest) {
-    const res = await proxyFetch(config, sessionEvents(session.id), null);
-    if (!res.ok) continue;
-    const events = ((await res.json()) as { data?: WireEvent[] }).data ?? [];
+    const events = await collect<WireEvent>(config, sessionEvents(session.id), fetch, "after_seq");
+    if (events === null) {
+      whole = false;
+      continue;
+    }
     const hit = events.find((e) =>
       e.type === "tool.started" && (e.data?.name === "channel.update_project" || e.data?.name === "channel.create_project") && e.data.args?.id === project.id,
     );
@@ -347,6 +351,7 @@ async function backfillSessions(store: Store, config: ProxyConfig, project: Vide
     });
     return;
   }
+  if (whole) store.markBackfilled(project.id);
 }
 
 /**
@@ -359,7 +364,7 @@ async function studioRead(store: Store, config: ProxyConfig | null, id: string):
   const rows = studioRows(store, id);
   if (rows === null) return fail(404, "no such project or post");
   if (config === null || rows.project === null) return json(200, { ...rows, session: null });
-  if (rows.project.sessions.length === 0) await backfillSessions(store, config, rows.project);
+  if (rows.project.sessions.length === 0 && rows.project.backfilledAt === undefined) await backfillSessions(store, config, rows.project);
   const latest = rows.project.sessions.at(-1);
   const session = latest === undefined ? null : await readSession(config, latest.id);
   return json(200, { ...rows, session });
@@ -409,7 +414,10 @@ const isReply = (value: Opened | ApiReply): value is ApiReply => "status" in val
  * `POST /api/studio/:id/revise` — THE ONE WAY THROUGH "A RENDERED PLAN IS FINAL". The MCP write keeps
  * refusing rendered → rendering, because an agent must never re-spend on a paid render by accident;
  * here the operator asks for it by name, and the store opens the revision under the same lock the
- * claim uses. An approved or posted video is the operator's word already given — reject it first.
+ * claim uses — BEFORE the renderer is asked, so two notes at once cost one render: the second is
+ * refused with nothing sent, and a send that does not land gives the claim back. An approved or
+ * posted video is the operator's word already given — reject it first. A first render still out
+ * is not revised: the frame would name a claim that will be gone when the note is heard.
  * The note goes to the session that made the video when it can still hear (queued, never
  * interrupting a render); a finished one is replaced by a fresh renderer session on the same plan.
  */
@@ -424,32 +432,31 @@ async function revise(store: Store, config: ProxyConfig, id: string, text: strin
     if (opened === null) return fail(503, "no channel-manager agent in this org");
     return isReply(opened) ? opened : json(202, opened);
   }
-  if (project.revision !== undefined) return fail(409, "a revision is already open on this project; it lands as the next render");
+  const open = "a revision is already open on this project; it lands as the next render";
+  if (project.revision !== undefined) return fail(409, open);
   if (project.status === "dropped") return fail(409, "project is dropped; restore it first");
+  if (project.status === "rendering") return fail(409, "the render is still out — revise when it lands");
 
   const latest = project.sessions.at(-1);
   const live = latest === undefined ? null : await readSession(config, latest.id);
   const heard = live !== null && !TERMINAL.has(live.status) ? live.id : null;
-  let target: Opened | ApiReply | null;
   if (project.status === "planned") {
     // No render is asked for here, so no renderer is opened: the planner's own session, or the
     // seat that wrote the plan when that session is over.
     const frame = planningFrame(project, text);
-    if (heard !== null) target = await queueOn(config, heard, frame);
-    else target = project.agent === undefined ? null : await openFor(config, project.agent, frame, project.id);
+    const target = heard !== null ? await queueOn(config, heard, frame) : project.agent === undefined ? null : await openFor(config, project.agent, frame, project.id);
     if (target === null) return fail(409, "the plan's session is over and no seat signed it; edit the plan, or press Render");
-  } else {
-    const renderer = RENDERER[project.kind];
-    const frame = revisionFrame(project, post, renderer, text);
-    target = heard !== null ? await queueOn(config, heard, frame) : await openFor(config, renderer, frame, project.id);
-    if (target === null) return fail(503, `no ${renderer} agent in this org`);
+    return isReply(target) ? target : json(202, target);
   }
-  if (isReply(target)) return target;
-  const now = new Date().toISOString();
-  if (target.opened) store.recordSession(project.id, { id: target.session, role: "revised", at: now });
-  if (project.status === "rendered" && store.openRevision(project.id, target.session, text) === null) {
-    return fail(409, "a revision is already open on this project; it lands as the next render");
+  const renderer = RENDERER[project.kind];
+  if (store.openRevision(project.id, heard, text) === null) return fail(409, open);
+  const frame = revisionFrame(project, post, renderer, text);
+  const target = heard !== null ? await queueOn(config, heard, frame) : await openFor(config, renderer, frame, project.id);
+  if (target === null || isReply(target)) {
+    store.closeRevision(project.id);
+    return target ?? fail(503, `no ${renderer} agent in this org`);
   }
+  if (target.opened) store.recordSession(project.id, { id: target.session, role: "revised", at: new Date().toISOString() });
   return json(202, target);
 }
 
