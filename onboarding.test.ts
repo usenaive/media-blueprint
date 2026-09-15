@@ -148,15 +148,15 @@ describe("the question that asks where the channel posts", () => {
     expect(source).toMatch(/@usenaive-sdk\/blueprints@0\.4\.0/);
   });
 
-  /** Nothing was dropped to make room: the displaced question is asked in the first session. */
-  it("asks what it displaced in the crew's first conversation instead", () => {
+  /** Nothing was dropped to make room: the displaced question is asked on the manager's first card. */
+  it("asks what it displaced on the channel manager's first card instead", () => {
     for (const template of both) {
-      const manager = template.agents.find((one) => one.name === "channel-manager")!;
-      expect(manager.intake?.message, template.name).toMatch(/ask_operator/);
-      expect(manager.intake?.message, template.name).toMatch(/setup form asks three questions/);
+      const plan = template.tasks.find((one) => one.assignee === "channel-manager")!;
+      expect(plan.body, template.name).toMatch(/ask_operator/);
+      expect(plan.body, template.name).toMatch(/setup form asks three questions/);
     }
-    expect(TEMPLATES.faceless.agents[0]!.intake?.message).toMatch(/tone and who it is for/);
-    expect(TEMPLATES.clipping.agents[0]!.intake?.message).toMatch(/who these clips are for/);
+    expect(TEMPLATES.faceless.tasks[0]!.body).toMatch(/tone and who it is for/);
+    expect(TEMPLATES.clipping.tasks[0]!.body).toMatch(/who these clips are for/);
     // And what a template asks beside the platform question is still its own.
     expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", PLATFORM_ANSWER_KEY, "cadence"]);
     expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", PLATFORM_ANSWER_KEY, "cadence"]);

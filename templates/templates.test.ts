@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -20,6 +20,7 @@ const both = Object.values(TEMPLATES);
 const agentNames = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const toolsetOf = (template: MediaTemplate, name: string) =>
   template.agents.find((agent) => agent.name === name)?.tools;
+const taskOf = (template: MediaTemplate, assignee: string) => template.tasks.find((task) => task.assignee === assignee);
 
 /**
  * The platform's own rule for one tool (`canonical-spec §6`): `enabled:false` denies, an explicit
@@ -75,53 +76,72 @@ describe("the crews", () => {
   });
 
   /**
-   * Day one (plan §2.5). The apply opens one session per agent with `intake.message`, and every
-   * message is written to consume the setup answers rather than restate a hard-coded niche — the
+   * Day one is the board (`canonical-spec §31.10`). The apply seeds one card per seat, and every
+   * card is written to consume the setup answers rather than restate a hard-coded niche — the
    * scout files the first five briefs for the niche, the writer scripts them, the analyst lays out
-   * the report, the manager writes the plan from the cadence answer.
+   * the report, the manager writes the plan from the cadence answer. A card is a brief a stranger
+   * could pick up, so each says what "done" looks like.
    */
-  it("opens day one on every seat, from the context and inside the per-task ceiling", () => {
+  it("seeds day one as one card per seat, from the context, each saying what done looks like", () => {
     for (const template of both) {
-      for (const agent of template.agents) {
-        expect(agent.intake?.message, agent.name).toMatch(/project_context/);
-        expect(agent.intake?.budget_micro_usd, agent.name).toBeGreaterThan(0);
-        expect(agent.intake?.budget_micro_usd, agent.name).toBeLessThanOrEqual(agent.budget.max_task_micro_usd);
-        expect(Number.isInteger(agent.intake?.budget_micro_usd)).toBe(true);
+      expect(template.tasks.map((task) => task.assignee).sort()).toEqual(agentNames(template).sort());
+      expect(new Set(template.tasks.map((task) => task.key)).size).toBe(template.tasks.length);
+      for (const task of template.tasks) {
+        const at = `${template.name}/${task.key}`;
+        expect(task.key, at).toMatch(/^[a-z][a-z0-9-]*$/);
+        expect(task.title, at).toMatch(/\S/);
+        expect(task.body, at).toMatch(/project_context/);
+        expect(task.body, at).toMatch(/Done when/);
+        expect(task.body, at).toMatch(/Acceptance:/);
+        for (const key of task.blocked_by ?? []) expect(template.tasks.map((one) => one.key), at).toContain(key);
       }
-      expect(template.agents.find((a) => a.name === "channel-manager")?.intake?.message).toMatch(/cadence/);
-      expect(template.agents.find((a) => a.name === "analyst")?.intake?.message).toMatch(/report/i);
+      expect(taskOf(template, "channel-manager")?.body).toMatch(/cadence/);
+      expect(taskOf(template, "analyst")?.body).toMatch(/report/i);
     }
-    expect(TEMPLATES.faceless.agents.find((a) => a.name === "trend-scout")?.intake?.message).toMatch(/five/);
-    expect(TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")?.intake?.message).toMatch(/hook/i);
-    expect(TEMPLATES.clipping.agents.find((a) => a.name === "scout")?.intake?.message).toMatch(/reference channel\(s\).*first five/);
+    expect(taskOf(TEMPLATES.faceless, "trend-scout")?.body).toMatch(/five/);
+    expect(taskOf(TEMPLATES.faceless, "scriptwriter")?.body).toMatch(/hook/i);
+    expect(taskOf(TEMPLATES.clipping, "scout")?.body).toMatch(/reference channel\(s\).*first five/);
   });
 
-  it("makes no seat's day one wait on another's: the apply opens every intake at once", () => {
-    // The seats downstream of the scout are told that, told not to invent the upstream work, and
-    // told how the first of it reaches them; and they are budgeted for set-up (every call holds its
-    // quote until the turn commits, so the cap is turns, not dollars), under the timer that does render.
-    const downstream: [MediaTemplate, string, RegExp][] = [
-      [TEMPLATES.faceless, "producer", /set-up, not a render.*reaches you as a handoff from the scriptwriter.*Render nothing in this session/s],
-      [TEMPLATES.faceless, "scriptwriter", /set-up, not scripts.*do not invent one.*reach you as a handoff naming their ids/s],
-      [TEMPLATES.clipping, "clipper", /alongside yours.*Cut nothing today.*07:00 fire/s],
-      [TEMPLATES.clipping, "caption-editor", /cuts nothing until its 07:00 fire.*07:30 fire/s],
-    ];
-    for (const [template, name, says] of downstream) {
-      const seat = template.agents.find((a) => a.name === name);
-      expect(seat?.intake?.message, name).toMatch(says);
-    }
-    for (const [template, name] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.faceless, "scriptwriter"], [TEMPLATES.clipping, "clipper"]] as const) {
-      const seat = template.agents.find((a) => a.name === name);
-      const timer = Math.max(...(seat?.schedules ?? []).map((s) => s.budget_micro_usd ?? 0));
-      expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(timer);
-      expect(seat?.intake?.budget_micro_usd, name).toBeLessThan(ONE_RENDER_MICRO_USD * 4);
+  /**
+   * The order of day one is `blocked_by`, and only where one seat's work truly needs another's:
+   * a seat woken downstream finds the upstream rows already filed, so nobody reads an empty queue
+   * and reports it as a finding. The manager's plan and the analyst's skeleton need nobody.
+   */
+  it("orders day one by blocked_by — scout → writer → producer, scout → clipper → captions — and blocks nobody else", () => {
+    const blockers = (template: MediaTemplate) =>
+      Object.fromEntries(template.tasks.map((task) => [task.key, task.blocked_by ?? []]));
+    expect(blockers(TEMPLATES.faceless)).toEqual({
+      "channel-plan": [], briefs: [], scripts: ["briefs"], render: ["scripts"], "report-skeleton": [],
+    });
+    expect(blockers(TEMPLATES.clipping)).toEqual({
+      "channel-plan": [], moments: [], "first-cuts": ["moments"], captions: ["first-cuts"], "report-skeleton": [],
+    });
+    // A blocked card is woken from the blocker's `done` note, so the blocker says it names its rows.
+    for (const template of both) {
+      for (const task of template.tasks) {
+        const blocked = template.tasks.filter((one) => (one.blocked_by ?? []).includes(task.key));
+        if (blocked.length > 0) expect(task.body, task.key).toMatch(/done note (lists|names)/);
+      }
     }
   });
 
   /**
-   * The chain that replaced the race. Five intakes opening at once each read the others' empty
+   * A template that seeds `tasks` declares no intakes (`canonical-spec §31.10`): an intake would
+   * open a private first session beside the card, and the racing-intakes day one the board
+   * replaced — the scriptwriter filing "the scout has filed no briefs" in the minute the scout
+   * filed five — would be back.
+   */
+  it("declares no intake on any seat: the board is how the crew starts", () => {
+    for (const template of both) {
+      for (const agent of template.agents) expect(agent.intake, `${template.name}/${agent.name}`).toBeUndefined();
+    }
+  });
+
+  /**
+   * The chain that replaced the race. Five first sessions opening at once each read the others' empty
    * output — the scriptwriter wrote "the scout has filed no briefs" in the minute the scout filed
-   * five — so day one is now ordered by what a seat hands on after it has filed (`send_to_agent` with
+   * five — so the pipeline is ordered by what a seat hands on after it has filed (`send_to_agent` with
    * `wait: false`, canonical-spec §28.15), not by what it finds. Each seat may name exactly the next one; the producer
    * is the end; the timers reconcile by `stage` for whatever a handoff did not carry.
    */
@@ -145,13 +165,12 @@ describe("the crews", () => {
     }
     const seat = (name: string) => TEMPLATES.faceless.agents.find((a) => a.name === name);
     // The head files first, then hands on — the ids, a stable key — and hands on nothing it did not file.
-    expect(seat("trend-scout")?.intake?.message).toMatch(/stage brief.*When all five are filed, send_to_agent the scriptwriter once — wait false.*post ids.*handoff_key/s);
     expect(seat("trend-scout")?.system).toMatch(/only then.*send_to_agent the scriptwriter once, wait false.*Filed nothing, hand on nothing/s);
     // The next two claim a row (`expected_stage`) before they spend on it, so a handoff and the cron
     // that overlaps it cannot both script or render the same piece, and hand on only what they claimed.
     expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*`stage` scripted.*send_to_agent the producer once, wait false.*claimed nothing, hand on nothing/s);
     expect(seat("producer")?.system).toMatch(/named to you in a handoff.*claim it before you spend anything.*stage rendering and expected_stage scripted.*`stage` rendered.*you hand on to nobody/s);
-    // The timers are the fallback, by stage, claim the same way, and no seat's intake is told another intake is running.
+    // The timers are the fallback, by stage, and claim the same way.
     expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*stage scripted.*send_to_agent the producer once, wait false/s);
     expect(seat("producer")?.schedules?.[0]?.input).toMatch(/stage scripted.*stage rendering, expected_stage scripted.*stage rendered/s);
     /**
@@ -174,30 +193,10 @@ describe("the crews", () => {
     // A claim a dead session left behind is aged out by the manager's sweep, not by the seat that
     // finds it — and the sweep frees a claim, never a render: a row with media goes forward, not back.
     expect(seat("channel-manager")?.schedules?.find((s) => s.cron === "0 8 * * *")?.input).toMatch(/scripting or rendering.*more than a day old.*scripting to brief, rendering to scripted.*expected_stage.*Never send back a row that already carries a media_url.*forward to rendered/s);
-    for (const agent of TEMPLATES.faceless.agents) expect(agent.intake?.message, agent.name).not.toMatch(/alongside yours|running alongside/);
-  });
-
-  /**
-   * #6 — day one produced nothing, because the five intakes race each other.
-   *
-   * MEASURED IN PRODUCTION, 2026-09-09: the scriptwriter's day-one session read
-   * `channel.list_posts -> "[]"` and filed *"the trend-scout hasn't filed any briefs yet in its
-   * parallel session"* as its finding — while the trend-scout was filing five briefs in the same
-   * minute. `up` opens every intake at once (`packages/blueprints/src/up.ts`: one `eachInFlight`
-   * over the crew, after every write) and there is no ordering knob on `intake`. Only the crons run
-   * in order. Each message said a piece of that in its own words, and the one seat that was told
-   * still reported the emptiness as a result; so it is said once, to every seat of every template,
-   * by the same helper that composes the system prompt — not left to whoever writes the next seat.
-   */
-  it("tells every seat, in one place, that an empty day-one queue is not a finding", () => {
-    for (const template of both) {
-      for (const agent of template.agents) {
-        expect(agent.intake?.message, agent.name).toContain(DAY_ONE_ORDER);
-      }
-    }
-    expect(DAY_ONE_ORDER).toMatch(/not a finding/i);
-    // And it names where the ordered work actually happens, so "wait" is never the answer.
-    expect(DAY_ONE_ORDER).toMatch(/cron/i);
+    // The day-one cards claim the same way, so a card and the cron that overlaps it cannot both take a row.
+    expect(TEMPLATES.faceless.tasks.find((task) => task.key === "scripts")?.body).toMatch(/stage scripting, expected_stage brief/);
+    expect(TEMPLATES.faceless.tasks.find((task) => task.key === "render")?.body).toMatch(/stage rendering, expected_stage scripted.*never a second render/s);
+    for (const task of TEMPLATES.faceless.tasks) expect(task.body, task.key).not.toMatch(/alongside yours|running alongside/);
   });
 
   /**
@@ -601,20 +600,21 @@ describe("the data the screens read", () => {
 /**
  * The money, as the README prints it.
  *
- * Every figure in the README's crew tables and its day-one total is a dollar rendering of a
+ * Every figure in the README's crew tables is a dollar rendering of a
  * `budget_micro_usd` in `templates/`, and every one of them was left behind when the budgets were
  * raised — understating what the operator is signing up for by 5–12x on every line. A README that
  * quotes a number the code does not hold is the one kind of documentation bug a reader cannot
  * detect, so the numbers are read out of the declarations here rather than kept in step by hand.
+ * The first-card column is held to the code the same way: it opens with the key of the card the
+ * seat is assigned, and quotes no dollar figure, because a woken card runs on the seat's own
+ * ceilings and has no budget of its own.
  */
 describe("the spend this blueprint declares", () => {
   const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   const usd = (micro: number) => micro / 1_000_000;
   const dollars = (cell: string) => [...cell.matchAll(/\$([\d.]+)/g)].map((m) => Number(m[1]));
-  const intakes = (template: MediaTemplate) =>
-    template.agents.reduce((sum, one) => sum + (one.intake?.budget_micro_usd ?? 0), 0);
 
-  it("prints each seat's timers and day one at the budgets those fires actually carry", () => {
+  it("prints each seat's timers at the budgets those fires actually carry, and its first card by key", () => {
     let current: MediaTemplate | undefined;
     let rows = 0;
     for (const line of README.split("\n")) {
@@ -631,20 +631,23 @@ describe("the spend this blueprint declares", () => {
         agent.name,
         (agent.schedules ?? []).map((one) => usd(one.budget_micro_usd)),
       ]);
-      expect([current.name, agent.name, dollars(cells[6]!)]).toEqual([
+      const task = current.tasks.find((one) => one.assignee === agent.name);
+      expect([current.name, agent.name, /^`([\w-]+)`/.exec(cells[6]!.trim())?.[1], dollars(cells[6]!)]).toEqual([
         current.name,
         agent.name,
-        [usd(agent.intake?.budget_micro_usd ?? 0)],
+        task?.key,
+        [],
       ]);
     }
     // Five seats per template, both tables read.
     expect(rows).toBe(10);
   });
 
-  it("prints a day-one total that is the sum of the day-one budgets", () => {
-    const said = /\(\$([\d.]+) on `faceless`, \$([\d.]+) on `clipping`\)/.exec(README);
-    expect(said).not.toBeNull();
-    expect([Number(said![1]), Number(said![2])]).toEqual([usd(intakes(TEMPLATES.faceless)), usd(intakes(TEMPLATES.clipping))]);
+  it("explains day one as the board, and speaks of no intake anywhere", () => {
+    // A first session per seat is not how this crew starts any more; a README that still said so
+    // would describe a spend and an order that the declaration no longer holds.
+    expect(README).not.toMatch(/intake/i);
+    expect(README).toMatch(/board/);
   });
 
   /**

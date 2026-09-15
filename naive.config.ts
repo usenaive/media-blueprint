@@ -69,9 +69,17 @@ export const declaration = {
    * provisioned" for any project that names a template, which this one always does. So the middle
    * slot is spent on the network deliberately: a channel that does not know where it posts fills a
    * queue nothing can publish, while the question it displaced is asked by the channel manager in
-   * its first session (`templates/template.ts`, `channelManager`).
+   * its first card (`templates/template.ts`, `channelPlanTask`).
    */
   questions: ACTIVE.questions,
+
+  /**
+   * Day one, as cards on the channel's board (`canonical-spec §31.10`). The apply seeds one per
+   * seat, keyed `<project>:<key>` so a re-apply doubles nothing, and the board's tick wakes each
+   * assignee when its card has no open blocker — `blocked_by` is the order, not a race of first
+   * sessions. No agent declares an `intake`: a template that seeds tasks opens no private brief.
+   */
+  tasks: ACTIVE.tasks,
 
   /**
    * The channel persona, and the whole reason a connected account is reachable from a turn.

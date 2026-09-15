@@ -59,16 +59,15 @@ describe("naive.config", () => {
   });
 
   /**
-   * Plan §2.4/§4: the engine (0.4.0) carries `role`, `skills`, `intake`, `required` and the three
+   * Plan §2.4/§4: the engine (0.4.0) carries `role`, `skills`, `required` and the three
    * setup questions through `defineProject` — read back off `project`, not the template, so a
    * downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
    */
-  it("hands `up` the crew's roles, skills, intakes and the three setup questions", () => {
+  it("hands `up` the crew's roles, skills and the three setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
     expect(project.questions).toHaveLength(3);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
-      expect(agent.intake?.message).toMatch(/project_context/);
       expect(agent.skills?.every((skill) => skill.startsWith("naive/"))).toBe(true);
     }
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
@@ -78,6 +77,28 @@ describe("naive.config", () => {
     expect(project.agents.map((agent) => [agent.name, agent.handoffs])).toEqual(
       ACTIVE.agents.map((agent) => [agent.name, agent.handoffs]),
     );
+  });
+
+  /**
+   * Day one is the board (`canonical-spec §31.10`): the apply seeds one card per seat on the
+   * channel's board and the tick wakes each assignee when its card has no open blocker. The
+   * declaration is what is asserted — the installed engine (0.5.0) does not carry `tasks` through
+   * its parse yet; when the pin moves, `project.tasks` is the thing to read here instead.
+   */
+  it("seeds the running crew's day one as cards, one per seat, and opens no intake beside them", () => {
+    expect(declaration.tasks).toBe(ACTIVE.tasks);
+    const keys = declaration.tasks.map((task) => task.key);
+    expect(keys).toHaveLength(ACTIVE.agents.length);
+    expect(new Set(keys).size).toBe(keys.length);
+    const crew = project.agents.map((agent) => agent.name);
+    for (const task of declaration.tasks) {
+      // `assignee` is an agent NAME of the running crew: the engine resolves it against `agents[]`.
+      expect(crew, task.key).toContain(task.assignee);
+      for (const key of task.blocked_by ?? []) expect(keys, task.key).toContain(key);
+      expect(task.blocked_by ?? [], task.key).not.toContain(task.key);
+    }
+    // A template that seeds tasks declares no intakes, and none reaches the engine.
+    for (const agent of [...ACTIVE.agents, ...project.agents]) expect(agent.intake, agent.name).toBeUndefined();
   });
 
   it("declares the persona its agents act as, so a connected account is reachable from a turn", () => {
