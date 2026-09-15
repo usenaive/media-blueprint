@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStage, type PostStatus } from "../seed/posts.ts";
-import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, type ProjectStatus, type VideoProject } from "../seed/projects.ts";
+import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, type ProjectSession, type ProjectStatus, type VideoProject } from "../seed/projects.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
 import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
 
@@ -78,6 +78,14 @@ export interface Store {
   updatePost(id: string, patch: Partial<Pick<Post, "status" | "rejectedReason" | "title" | "caption" | "mediaUrl" | "platform" | "stage">>): Post | null;
   createProject(input: NewProjectInput): VideoProject;
   updateProject(id: string, patch: ProjectPatch): VideoProject | null;
+  /** Binds a session to a plan; a session already on it is left as first recorded. Null for no such plan. */
+  recordSession(id: string, session: ProjectSession): VideoProject | null;
+  /**
+   * THE OPERATOR'S REVISION: the one move that takes a rendered plan back to `rendering`, under the
+   * same lock as the claim. Null when there is no such plan, it is not rendered, a revision is
+   * already open, or its post is approved or posted — an approved video is the operator's word.
+   */
+  openRevision(id: string, sessionId: string, note: string): VideoProject | null;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
@@ -152,6 +160,7 @@ export function openStoreOver(
   // A document written before plans existed has no `projects`; it gains an empty list here,
   // in memory, and the first write that follows persists it. `save` is not called for this alone.
   state.projects ??= [];
+  for (const project of state.projects) project.sessions ??= [];
   const save = () => persist(state);
   const now = () => new Date().toISOString();
 
@@ -249,6 +258,7 @@ export function openStoreOver(
         ...(input.scenes === undefined ? {} : { scenes: input.scenes }),
         ...(input.sources === undefined ? {} : { sources: input.sources }),
         ...(input.caption === undefined ? {} : { caption: input.caption }),
+        sessions: [],
       };
       state.projects.unshift(project);
       // A brief with a plan on it is scripted: the writer's work is the plan, and the producer's
@@ -263,6 +273,7 @@ export function openStoreOver(
     updateProject(id, patch) {
       const project = state.projects.find((p) => p.id === id);
       if (!project) return null;
+      const before = project.statusAt;
       if (patch.title !== undefined) project.title = patch.title;
       if (patch.brief !== undefined) project.brief = patch.brief;
       if (patch.account !== undefined) project.account = patch.account;
@@ -305,6 +316,13 @@ export function openStoreOver(
           filed.projectId = project.id;
           project.postId = filed.id;
         } else {
+          // A revised render supersedes the file the post carried: that render was paid for too,
+          // so it is kept, with the session that made it, rather than overwritten.
+          if (project.revision !== undefined && post.mediaUrl !== undefined) {
+            const opened = project.revision.openedAt;
+            const prior = [...project.sessions].reverse().find((s) => s.role !== "planned" && s.at < opened);
+            project.renders = [...(project.renders ?? []), { mediaUrl: post.mediaUrl, at: before, ...(prior === undefined ? {} : { sessionId: prior.id }) }];
+          }
           post.mediaUrl = patch.mediaUrl;
           if (project.caption !== undefined) {
             post.caption = project.caption;
@@ -312,6 +330,33 @@ export function openStoreOver(
           }
           if (patch.renderedBy !== undefined) post.agent = patch.renderedBy;
           setStage(post, "rendered");
+        }
+        delete project.revision;
+      }
+      save();
+      return project;
+    },
+    recordSession(id, session) {
+      const project = state.projects.find((p) => p.id === id);
+      if (!project) return null;
+      if (project.sessions.some((s) => s.id === session.id)) return project;
+      project.sessions.push(session);
+      save();
+      return project;
+    },
+    openRevision(id, sessionId, note) {
+      const project = state.projects.find((p) => p.id === id);
+      if (!project || project.status !== "rendered" || project.revision !== undefined) return null;
+      const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
+      if (post?.status === "approved" || post?.status === "posted") return null;
+      project.revision = { openedAt: now(), sessionId, note };
+      setStatus(project, "rendering");
+      if (post !== undefined) {
+        setStage(post, "rendering");
+        // Back to the crew's queue: the operator asked for another take, so the old verdict is spent.
+        if (post.status === "ready" || post.status === "rejected") {
+          post.status = "pending";
+          delete post.rejectedReason;
         }
       }
       save();

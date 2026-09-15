@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FACELESS_SEEDS } from "../seed/posts";
 import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS } from "../seed/projects";
 import { ACTIVE, TEMPLATES } from "../templates/index.ts";
@@ -228,6 +228,111 @@ describe("openStore", () => {
       mediaUrl: "https://cdn.example/hill.mp4", projectId: plan.id, source: `The gravel hill (${plan.id})`, title: "The gravel hill",
     });
     expect(filed.caption).toBe("The gravel hill\n\nGoggins on why the hill matters.");
+  });
+});
+
+describe("the sessions a plan remembers, and the operator's revision", () => {
+  const rendered = (store: ReturnType<typeof openStoreOver>) => {
+    const plan = store.createProject({
+      kind: "clipping", agent: "scout", title: "The gravel hill", brief: "Goggins on why the hill matters.",
+      sources: [{ url: "https://www.youtube.com/watch?v=abc123", reason: "The line lands cold." }],
+    });
+    store.recordSession(plan.id, { id: "ses_render1", role: "rendered", at: "2026-01-01T07:00:00.000Z" });
+    store.updateProject(plan.id, { status: "rendering" });
+    store.updateProject(plan.id, { status: "rendered", mediaUrl: "fil_v1", renderedBy: "clipper" });
+    return plan.id;
+  };
+
+  it("reads a document written before sessions existed, and gives every plan an empty list of them", () => {
+    const legacy = { posts: [], projects: [{ ...FACELESS_PROJECT_SEEDS[0]!, sessions: undefined }], templates: [] } as unknown as StoreState;
+    let written: StoreState | undefined;
+    const store = openStoreOver(legacy, (next) => { written = next; }, TEMPLATES.faceless);
+    expect(store.read().projects[0]?.sessions).toEqual([]);
+    expect(written).toBeUndefined();
+    expect(FACELESS_PROJECT_SEEDS.every((p) => Array.isArray(p.sessions))).toBe(true);
+    expect(CLIPPING_PROJECT_SEEDS.every((p) => Array.isArray(p.sessions))).toBe(true);
+  });
+
+  it("records a session once, in order, and null for a plan it does not have", () => {
+    const file = storeFile();
+    const store = openStore(file, TEMPLATES.faceless);
+    const id = store.read().projects[0]!.id;
+    const planned = { id: "ses_plan", role: "planned" as const, at: "2026-01-01T06:30:00.000Z" };
+    expect(store.recordSession(id, planned)?.sessions).toEqual([planned]);
+    // The same session again — the Render button and the renderer's own claim both name it.
+    expect(store.recordSession(id, { ...planned, role: "rendered", at: "2026-01-01T07:00:00.000Z" })?.sessions).toEqual([planned]);
+    const render = { id: "ses_render", role: "rendered" as const, at: "2026-01-01T07:00:00.000Z" };
+    expect(store.recordSession(id, render)?.sessions).toEqual([planned, render]);
+    expect(store.recordSession("proj_nope", render)).toBeNull();
+    expect(openStore(file, TEMPLATES.faceless).read().projects[0]?.sessions).toEqual([planned, render]);
+  });
+
+  it("opens a revision only on a rendered plan with none open, and takes the post back to the crew", () => {
+    const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
+    const id = rendered(store);
+    const post = () => store.read().posts.find((p) => p.id === id)!;
+    store.updatePost(id, { status: "rejected", rejectedReason: "too long" });
+    expect(post().status).toBe("rejected");
+
+    const before = store.read().projects[0]!.statusAt;
+    const opened = store.openRevision(id, "ses_render1", "cut it shorter")!;
+    expect(opened).toMatchObject({ status: "rendering", revision: { sessionId: "ses_render1", note: "cut it shorter" } });
+    expect(Date.parse(opened.revision!.openedAt)).toBeGreaterThanOrEqual(Date.parse(before));
+    expect(post()).toMatchObject({ status: "pending", stage: "rendering", mediaUrl: "fil_v1" });
+    expect(post()).not.toHaveProperty("rejectedReason");
+
+    // A second one while this is open, and one on a plan that is not rendered: refused, untouched.
+    expect(store.openRevision(id, "ses_other", "again")).toBeNull();
+    expect(store.read().projects[0]?.revision?.sessionId).toBe("ses_render1");
+    expect(store.openRevision("proj_nope", "ses_x", "n")).toBeNull();
+    const planned = store.createProject({ kind: "clipping", title: "t", brief: "b", sources: [{ url: "https://x.example/v", reason: "r" }] });
+    expect(store.openRevision(planned.id, "ses_x", "n")).toBeNull();
+    expect(store.read().projects.find((p) => p.id === planned.id)?.status).toBe("planned");
+  });
+
+  it("refuses a revision on a plan whose post is approved or posted: that video is the operator's word", () => {
+    for (const status of ["approved", "posted"] as const) {
+      const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
+      const id = rendered(store);
+      store.updatePost(id, { status });
+      expect(store.openRevision(id, "ses_render1", "n")).toBeNull();
+      expect(store.read().projects[0]).toMatchObject({ status: "rendered" });
+      expect(store.read().projects[0]).not.toHaveProperty("revision");
+      expect(store.read().posts[0]?.status).toBe(status);
+    }
+  });
+
+  it("keeps the render a revision replaced, and files the new one on a post that stays pending", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-02T09:00:00.000Z"));
+    const store = openStoreOver(emptyState(), () => {}, TEMPLATES.clipping, "tiktok");
+    const id = rendered(store);
+    store.openRevision(id, "ses_render1", "cut it shorter");
+    // The revision went to a new session, recorded after it opened.
+    const { revision, statusAt: first } = store.read().projects[0]!;
+    expect(revision?.openedAt).toBe("2026-01-02T09:00:00.000Z");
+    vi.setSystemTime(new Date("2026-01-02T09:00:01.000Z"));
+    store.recordSession(id, { id: "ses_revise", role: "revised", at: new Date().toISOString() });
+
+    const done = store.updateProject(id, { status: "rendered", mediaUrl: "fil_v2", renderedBy: "clipper" })!;
+    expect(done.status).toBe("rendered");
+    expect(done).not.toHaveProperty("revision");
+    expect(done.renders).toEqual([{ mediaUrl: "fil_v1", at: first, sessionId: "ses_render1" }]);
+    expect(done.sessions.map((s) => s.id)).toEqual(["ses_render1", "ses_revise"]);
+    expect(store.read().posts[0]).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v2" });
+    expect(store.read().posts).toHaveLength(1);
+
+    // Revised again, this time on the session that made the last render: it is the prior render's session.
+    vi.setSystemTime(new Date("2026-01-03T09:00:00.000Z"));
+    store.openRevision(id, "ses_revise", "once more");
+    const second = store.read().projects[0]!.statusAt;
+    store.updateProject(id, { status: "rendered", mediaUrl: "fil_v3", renderedBy: "clipper" });
+    expect(store.read().projects[0]?.renders).toEqual([
+      { mediaUrl: "fil_v1", at: first, sessionId: "ses_render1" },
+      { mediaUrl: "fil_v2", at: second, sessionId: "ses_revise" },
+    ]);
+    expect(store.read().posts[0]).toMatchObject({ status: "pending", mediaUrl: "fil_v3" });
+    vi.useRealTimers();
   });
 });
 
