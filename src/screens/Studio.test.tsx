@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Post, VideoProject } from "../data";
 import { Approvals, postIdOf } from "./Approvals";
-import { POLL_EVERY, Studio, elapsed, versionsOf, type StudioData } from "./Studio";
+import { POLL_EVERY, REVISION_SPEND, Studio, elapsed, versionsOf, type StudioData } from "./Studio";
 import { FACELESS_PROJECT_SEEDS } from "../../seed/projects";
 
 const json = (body: unknown, status = 200) =>
@@ -115,14 +115,20 @@ const tick = async (ms: number) => {
     await vi.advanceTimersByTimeAsync(ms);
   });
 };
-const type = async (text: string) => {
+const write = async (text: string) => {
   const box = host.querySelector("textarea")!;
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
     setter.call(box, text);
     box.dispatchEvent(new Event("input", { bubbles: true }));
   });
+};
+const type = async (text: string) => {
+  await write(text);
   await click("Send");
+  // A note that spends money arms instead of sending; the priced button is the press that sends it.
+  const spend = buttons().find((b) => b.textContent?.trim() === REVISION_SPEND.action);
+  if (spend !== undefined) await act(async () => spend.click());
 };
 
 describe("the Studio", () => {
@@ -289,6 +295,7 @@ describe("the Studio", () => {
     expect(host.textContent).toContain("Rejected");
 
     await click("Send");
+    await click(REVISION_SPEND.action);
     const revise = fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === "POST");
     expect(revise).toHaveLength(2);
     expect(revise[1]![0]).toBe(`/api/studio/${seed.id}/revise`);
@@ -370,6 +377,49 @@ describe("the Studio", () => {
     expect(refusals[0]).toContain("reject it first");
     expect(host.querySelector("textarea")!.value).toBe("Make scene 2 dusk");
     expect(host.querySelectorAll(".bubble-you").length).toBe(0);
+  });
+
+  /**
+   * *** THE PRICE, SAID BEFORE IT IS SPENT. ***
+   *
+   * A note on a rendered plan buys a whole second cut of a video that was paid for once already
+   * (`ONE_RENDER_MICRO_USD`, ~$3.32 measured). It used to leave on one Enter, with no price
+   * anywhere on the screen. The price is under the composer before a word is typed, Enter arms the
+   * spend instead of making it, and the press that spends names the money.
+   */
+  it("says what a re-render costs, and spends nothing on Enter alone", async () => {
+    const fetchMock = wire(
+      () => json(studio),
+      (_url, init) => (init?.method === "POST" ? json({ session: "ses_1", acceptedSeq: 7, opened: false }, 202) : null),
+    );
+    await mount(fetchMock);
+    const sends = () => fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === "POST");
+    expect(host.querySelector(".composer-under")!.textContent).toContain("about $3.32");
+
+    await write("Make scene 2 dusk");
+    await click("Send");
+    expect(sends()).toHaveLength(0);
+    // Pressed again — a hand that slams Enter twice does not buy a render either.
+    await click("Send");
+    expect(sends()).toHaveLength(0);
+    expect(host.textContent).toContain("about $3.32");
+    expect(host.querySelector("textarea")!.value).toBe("Make scene 2 dusk");
+    expect(host.querySelectorAll(".bubble-you").length).toBe(0);
+
+    // Taken back, and taken back by typing on: what was priced is no longer what would be sent.
+    await click("Cancel");
+    expect(buttons().map((b) => b.textContent?.trim())).not.toContain(REVISION_SPEND.action);
+    await click("Send");
+    await write("Make scene 2 dusk, and cut the last line");
+    expect(buttons().map((b) => b.textContent?.trim())).not.toContain(REVISION_SPEND.action);
+    expect(sends()).toHaveLength(0);
+
+    await click("Send");
+    await click(REVISION_SPEND.action);
+    expect(sends()).toHaveLength(1);
+    expect(sends()[0]![0]).toBe(`/api/studio/${seed.id}/revise`);
+    expect(JSON.parse((sends()[0]![1] as RequestInit).body as string)).toEqual({ message: "Make scene 2 dusk, and cut the last line" });
+    expect(host.querySelector("textarea")!.value).toBe("");
   });
 
   it("holds a finished job's file as a draft above the current cut until the plan files it", async () => {

@@ -314,6 +314,20 @@ function studioRows(store: Store, id: string): { project: VideoProject | null; p
   return { project, post: post ?? posts.find((p) => p.id === project?.postId) ?? null };
 }
 
+/**
+ * THE SESSION TO TALK TO ABOUT THIS PLAN, by the only thing on the record that says which is which:
+ * `role`. Once a plan is out of `planned`, that is the last session recorded as having made a video
+ * (`rendered` or `revised`) — never simply the last session recorded. A plan remembers its planner
+ * too, and binding is best-effort (`whoIsRunning` names nobody when two sessions of a seat run at
+ * once), so a plan can remember the scriptwriter that wrote it and not the producer that rendered
+ * it; the last recorded session is then the scriptwriter, and a render instruction would be queued
+ * on a seat that cannot render. None recorded is no session, and the caller opens the renderer's own
+ * — one more session, against the wrong seat being told to render. `store.openRevision` reads the
+ * render being replaced by this same rule.
+ */
+const madeBy = (project: VideoProject): ProjectSession | undefined =>
+  project.status === "planned" ? project.sessions.at(-1) : [...project.sessions].reverse().find((s) => s.role !== "planned");
+
 async function readSession(config: ProxyConfig, id: string): Promise<WireSession | null> {
   const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${id}` }, null);
   if (!res.ok) return null;
@@ -394,7 +408,7 @@ async function studioRead(ctx: ApiContext, id: string): Promise<ApiReply> {
       else if (found !== "unfinished") store.recordSession(rows.project.id, found);
     }
   }
-  const latest = rows.project?.sessions.at(-1);
+  const latest = rows.project === null ? undefined : madeBy(rows.project);
   const session = latest === undefined ? null : await readSession(ctx.config, latest.id);
   return json(200, { ...rows, session });
 }
@@ -477,7 +491,7 @@ async function revise(store: Store, config: ProxyConfig, id: string, text: strin
   if (project.revision !== undefined) return fail(409, open);
   if (project.status === "dropped") return fail(409, "project is dropped; restore it first");
 
-  const latest = project.sessions.at(-1);
+  const latest = madeBy(project);
   const live = latest === undefined ? null : await readSession(config, latest.id);
   const heard = live !== null && !TERMINAL.has(live.status) ? live.id : null;
   if (project.status === "rendering") {

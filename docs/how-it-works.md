@@ -290,8 +290,12 @@ restored). The renderer then finishes exactly as it did the first time (`status:
 `replaces` onto `renders[]`, clears the revision, puts the new file on the post at
 `stage: rendered` — and leaves the post `pending`. Approval is the operator's, every time. While
 the revision is open the plan goes forward only: `update_project` refuses to move it anywhere
-but `rendered`, so the manager's sweep — which frees a claim older than a day — cannot free the
-operator's paid claim, and the store holds the status either way. A plan
+but `rendered`, so the manager's sweep cannot take the operator's paid claim for a dead one, and
+the store holds the status either way. With one exception, because the finishing write is
+otherwise a revision's only exit and a renderer dies for routine reasons (a blown per-task
+ceiling): a revision more than a day old is a dead claim like any other, and the sweep's
+`status: planned` frees it — to `rendered` on the cut the plan already has (`closeRevision`),
+never to `planned`, which would buy that cut a second time. A plan
 still on its first render (`rendering`, no revision open) is one claim already: a note opens
 nothing and is queued on the session making it, framed for THAT render — fold the note into the
 video before it is filed, finish once with the write the renderer already owes (`midRenderFrame`; it opens "Revision of …" like every framed turn, so the Studio folds it).
@@ -344,9 +348,11 @@ time.
   one would pile a second render on the first.
 - a plan whose first render is still out and whose session can no longer hear — see above.
 
-Otherwise the note goes to the plan's latest session when it is not terminal — queued
-(`queue: true`), never interrupting, because a running render is paid for — or a new renderer
-session is opened on the plan (`metadata: {project_id}`, recorded `revised`, `opened: true`). A
+Otherwise the note goes to the session that made the video when it is not terminal — the last one
+recorded `rendered` or `revised`, by the `role` on the record and never simply the last recorded,
+because a plan remembers its planner too and binding is best-effort — queued (`queue: true`), never
+interrupting, because a running render is paid for — or a new renderer session is opened on the plan
+(`metadata: {project_id}`, recorded `revised`, `opened: true`). A
 `rendered` plan is reopened as above; a `rendering` one changes no state — the note is queued on
 the session making the render; a `planned` one sends the note to its planning session and asks for no
 render; a post with no plan at all goes to the channel-manager, carrying the post's title, caption
@@ -355,6 +361,12 @@ and id, and nothing is recorded. The renderer's note is framed so it stays on th
 channel.update_project id `<id>`, status rendered, expected_status rendering … Do not create a
 second project, do not approve or post anything." The producer's and clipper's briefs say the same
 (`templates/`), and the manager's says a revision is the operator's move, never its own.
+
+A note on a `rendered` plan is the one message on this screen that spends: it renders the plan
+again, at `ONE_RENDER_MICRO_USD` (~$3.32, measured). So the composer says so under itself before a
+word is typed, and Enter arms the spend rather than making it — the press that sends it is a button
+naming the price. Every other note here (a plan's words, a render already out) costs nothing and
+leaves on Enter as it always did.
 
 In the Studio's transcript that frame is the server's, not the operator's: a user turn that
 carries it shows the operator's note as the bubble and the frame behind a labelled fold, and the

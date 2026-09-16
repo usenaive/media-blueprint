@@ -4,12 +4,12 @@ import { Link, useParams } from "react-router";
 import { ApiError, apiGet, apiSend, messageOf } from "../api";
 import { ChatPane } from "../chat/ChatPane";
 import type { WireEvent } from "../chat/stream";
-import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago, clock } from "../components/kit";
+import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago, clock, usd } from "../components/kit";
 import type { Post, VideoProject } from "../data";
 import { sessionState } from "./Chat";
 import { moveBody } from "./Posts";
 import { ProjectStatusChip, Scenes, Section, Sources, rangeOf, total } from "./Projects";
-import { RENDERER } from "../../templates/template";
+import { ONE_RENDER_MICRO_USD, RENDERER } from "../../templates/template";
 
 export interface StudioSession {
   id: string;
@@ -76,7 +76,22 @@ export const voiceOf = (project: VideoProject | null): { seat: string; placehold
   if (project.status === "rendering" && project.revision === undefined) {
     return { seat: renderer, placeholder: "Say what to change about this render…", does: "folds your note into the render that is out", empty: `The render is out and no session is bound to it — a note reaches the ${renderer} once one is.` };
   }
-  return { seat: renderer, placeholder: "Say what to change about this video…", does: "re-renders on your note", empty: `No session is bound to this plan yet — your first note opens one with the ${renderer}.` };
+  // A rendered plan is the one note here that spends, so its line carries the price — on screen
+  // before a word is typed, not after the money is gone.
+  const cost = project.status === "rendered" ? ` — about ${usd(ONE_RENDER_MICRO_USD)} a cut` : "";
+  return { seat: renderer, placeholder: "Say what to change about this video…", does: `re-renders on your note${cost}`, empty: `No session is bound to this plan yet — your first note opens one with the ${renderer}.` };
+};
+
+/**
+ * WHAT A RE-RENDER COSTS, SAID BEFORE IT IS SPENT. A note on a rendered plan renders it again at
+ * `ONE_RENDER_MICRO_USD` (~$3.32, measured — `templates/template.ts`), on a video that was paid for
+ * once already. So Enter arms the spend rather than making it, and this is the press that spends;
+ * every other note in this Studio — a plan's words, a render already out — costs nothing and sends
+ * on Enter as before.
+ */
+export const REVISION_SPEND = {
+  note: `A new cut is rendered from scratch — about ${usd(ONE_RENDER_MICRO_USD)}. The cut you have is kept either way.`,
+  action: `Re-render for ~${usd(ONE_RENDER_MICRO_USD)}`,
 };
 
 /** A vertical video, centred and no taller than the drawer allows. */
@@ -447,6 +462,7 @@ export function Studio() {
             keepOpen={rendering}
             placeholder={voice.placeholder}
             empty={voice.empty}
+            confirm={project?.status === "rendered" ? REVISION_SPEND : undefined}
             under={
               <>
                 <span className="font-mono">{voice.seat}</span> · {voice.does} — approve/publish stays yours

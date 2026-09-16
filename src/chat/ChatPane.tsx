@@ -276,6 +276,7 @@ export function ChatPane({
       <span className="font-mono">channel-manager</span> · can clip, produce, post &amp; reply on your connected accounts — approving and publishing stay with you
     </>
   ),
+  confirm,
   className = "",
 }: {
   sessionId: string | null;
@@ -288,11 +289,19 @@ export function ChatPane({
   empty?: string;
   /** The line under the composer — the seat and what stays with the operator. */
   under?: ReactNode;
+  /**
+   * WHEN THE NOTE COSTS MONEY. Set, Enter no longer sends: it arms the spend, and `action` — a
+   * button that names the price — is the second, deliberate press that sends it. Unset (Chat, and a
+   * note that renders nothing), Enter sends as it always has.
+   */
+  confirm?: { note: ReactNode; action: string };
   className?: string;
 }) {
   const [stream, setStream] = useState<Stream>(emptyStream);
   const [local, setLocal] = useState<Item[]>([]);
   const [draft, setDraft] = useState("");
+  /** Only with `confirm`: the note is typed and priced, waiting for the press that spends. */
+  const [armed, setArmed] = useState(false);
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -388,9 +397,10 @@ export function ChatPane({
     end.current?.scrollIntoView?.({ block: "end" });
   }, [items.length, phase.kind]);
 
-  const submit = () => {
+  const deliver = () => {
     const text = draft.trim();
     if (text === "") return;
+    setArmed(false);
     const turn: Item = { kind: "user", id: `local_${Date.now()}`, at: Date.now(), text };
     setLocal((l) => [...l, turn]);
     setDraft("");
@@ -412,6 +422,19 @@ export function ChatPane({
         setSent(false);
       },
     );
+  };
+
+  /**
+   * The Enter key and the send disc. With a `confirm` they arm the spend and nothing leaves: the
+   * priced button is the only press that sends, so no habit of the hands buys a render.
+   */
+  const submit = () => {
+    if (draft.trim() === "") return;
+    if (confirm !== undefined) {
+      setArmed(true);
+      return;
+    }
+    deliver();
   };
 
   const thinking = phase.kind === "thinking" || phase.kind === "sent";
@@ -460,13 +483,28 @@ export function ChatPane({
               )}
             </div>
           ) : null}
+          {confirm !== undefined && armed ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface-sunken px-3 py-2 text-xs text-ink-2" role="status">
+              <span className="min-w-0 flex-1">{confirm.note}</span>
+              <button type="button" className="btn btn-primary btn-sm" onClick={deliver}>
+                {confirm.action}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setArmed(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : null}
           <div className="composer">
             <textarea
               className="w-full resize-none bg-transparent px-4 pt-3 outline-none placeholder:text-ink-3"
               rows={1}
               placeholder={placeholderFor(phase, placeholder)}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                // Another word typed is another note: what was priced is not what would be sent.
+                setArmed(false);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

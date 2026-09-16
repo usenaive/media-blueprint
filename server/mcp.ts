@@ -108,6 +108,9 @@ const targetSentence = (channels: readonly PostPlatform[]): string => {
 const STAGES = POST_STAGES.join("|");
 const PROJECT_STATES = PROJECT_STATUSES.join("|");
 
+/** How old a claim has to be before it is read as dead — the day the channel-manager's 08:00 sweep is briefed with. */
+const DEAD_CLAIM_MS = 86_400_000;
+
 /** One shot of a generation plan, as the tool takes it. */
 const SCENE = obj({
   prompt: str("What the frame shows — the prompt generate_video renders, written inside the style template's look"),
@@ -487,9 +490,18 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       if (project.status === "rendered" && (status !== undefined || media !== undefined)) {
         throw new ToolError("project is rendered and that render was paid for; it cannot go back or be rendered again. A piece that has to be remade is a new plan.");
       }
-      // The operator's revision is a paid claim too: it is finished with the video, never freed.
+      // The operator's revision is a paid claim too: it is finished with the video, never freed —
+      // unless the session holding it died with it. Nothing else clears a revision: the finishing
+      // `rendered` write is its only normal exit, and a renderer dies for routine reasons (a blown
+      // per-task ceiling has parked one on production), which wedged the plan at `rendering` for
+      // good. So the 08:00 sweep's own rule reaches it: a claim more than a day old is dead, and
+      // the manager's `planned` frees it — to `rendered` on the video the plan still has, never to
+      // `planned`, which would buy that video a second time.
       if (project.revision !== undefined && status !== undefined && status !== "rendered") {
-        throw new ToolError("project is being revised on the operator's note; a revised plan goes forward only — finish it with status rendered and its media_url");
+        if (status !== "planned" || Date.now() - Date.parse(project.revision.openedAt) <= DEAD_CLAIM_MS) {
+          throw new ToolError("project is being revised on the operator's note; a revised plan goes forward only — finish it with status rendered and its media_url");
+        }
+        return store.closeRevision(id);
       }
       const post = project.postId === undefined ? undefined : store.read().posts.find((p) => p.id === project.postId);
       if (post?.status === "rejected" && (status === "rendering" || status === "rendered")) {

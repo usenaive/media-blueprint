@@ -542,7 +542,7 @@ describe("mcp tools", () => {
     expect(store.openRevision(plan.id, "ses_rev", "tighter")).toMatchObject({ status: "rendering" });
     const opened = structuredClone(store.read().projects.find((p) => p.id === plan.id)!);
 
-    // A day later the claim looks stale to the manager; it is the operator's paid revision.
+    // The manager's sweep cannot take a live revision for a dead claim: it is the operator's, paid for.
     for (const status of ["planned", "dropped", "rendering"]) {
       const swept = (await handleMcp(call("update_project", { id: plan.id, status, expected_status: "rendering" }), store, null)) as CallResult;
       expect(swept.result.isError, status).toBe(true);
@@ -557,6 +557,38 @@ describe("mcp tools", () => {
     );
     expect(done).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1" }] });
     expect(done).not.toHaveProperty("revision");
+    expect(store.openRevision(plan.id, "ses_rev2", "again")).not.toBeNull();
+  });
+
+  /**
+   * *** THE WAY OUT OF A WEDGED REVISION. ***
+   *
+   * The finishing `rendered` write is a revision's only exit in normal operation — no route, no
+   * other tool and no timeout clears one — so a renderer that died holding a revision (blowing the
+   * $20 per-task ceiling does it; production has parked a session that way) left the plan at
+   * `rendering` with every door shut: the posts and projects routes 409, `/revise` 409s, and this
+   * tool refused the 08:00 sweep. After a day the sweep's own rule for a dead claim reaches it —
+   * and frees it to `rendered` on the cut the plan already has, never to `planned`, which would buy
+   * that cut a second time.
+   */
+  it("frees a revision the sweep finds a day old, back to the cut the plan has", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+    );
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
+    store.openRevision(plan.id, "ses_rev", "tighter");
+    // The renderer died with it. Nothing ages a claim but time, so the claim is aged on the document.
+    store.read().projects.find((p) => p.id === plan.id)!.revision!.openedAt = new Date(Date.now() - 25 * 3_600_000).toISOString();
+
+    const freed = text<{ status: string }>((await handleMcp(call("update_project", { id: plan.id, status: "planned", expected_status: "rendering" }), store, null))!);
+    expect(freed.status).toBe("rendered");
+    expect(freed).not.toHaveProperty("revision");
+    // The video the channel paid for is still the post's, and the row is back for a verdict.
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "rendered", mediaUrl: "fil_v1", status: "pending" });
+    // Unwedged: the operator can ask for another cut.
     expect(store.openRevision(plan.id, "ses_rev2", "again")).not.toBeNull();
   });
 

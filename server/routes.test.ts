@@ -1583,6 +1583,34 @@ describe("the Studio", () => {
       expect(JSON.stringify(refused.body)).toContain("cannot go back or be rendered again");
     });
 
+    /**
+     * *** A RENDER INSTRUCTION GOES TO A RENDERER. ***
+     *
+     * A plan remembers its planner as well as its renderer, and binding is best-effort: a plan can
+     * remember the scriptwriter that wrote it and not the producer that rendered it. Taking the
+     * last session recorded queued "finish with status rendered and the video as media_url" on the
+     * scriptwriter — a seat with nothing to render with. The role on the record is what says which.
+     */
+    it("takes the session that made the video, not the last one recorded: a planner's session is never told to render", async () => {
+      const state = studioState();
+      const planner = [{ id: "ses_writer", role: "planned" as const, at: "2026-09-14T08:00:00Z" }];
+      rendered(state).sessions = [...planner];
+      post(state, "post_9f2a").mediaUrl = "fil_v1";
+      const hits = upstream((method, url) =>
+        method === "POST" && url.pathname === "/v1/sessions" ? json({ id: "ses_fresh", status: "queued" }, 201) : session("idle")(method, url),
+      );
+      expect(await revise(state, "post_9f2a")).toEqual({ status: 202, body: { session: "ses_fresh", acceptedSeq: 0, opened: true } });
+      // The planner's session was neither read nor written to; the renderer's own session was opened.
+      expect(hits.map((h) => h.url).filter((u) => u.includes("ses_writer"))).toEqual([]);
+      expect(hits.filter((h) => h.url.endsWith("/messages"))).toEqual([]);
+      expect(hits.find((h) => h.method === "POST" && h.url === "/v1/sessions")?.body).toEqual({
+        agent_id: "agt_producer", message: FRAME("post_9f2a", "fil_v1", "producer"), metadata: { project_id: "post_9f2a" },
+      });
+      expect(rendered(state).sessions).toEqual([...planner, { id: "ses_fresh", role: "revised", at: expect.any(String) }]);
+      // And the screen reads the same session the note went to.
+      expect((await handleRequest(req("GET", "/api/studio/post_9f2a"), ctxOver(state, CONFIG))).body).toMatchObject({ session: { id: "ses_fresh" } });
+    });
+
     it("sends a planned plan's note to its planning session, and asks for no render", async () => {
       const state = studioState();
       const plan = state.projects.find((p) => p.id === "proj_a1f0")!;
