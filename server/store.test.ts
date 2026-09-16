@@ -168,7 +168,7 @@ describe("openStore", () => {
     const brief = store.createPost({ caption: "Why the Stoics slept on the floor", status: "pending", stage: "brief", agent: "trend-scout" });
     const plan = store.createProject({
       kind: "generation", postId: brief.id, agent: "scriptwriter", title: "Sleep on the floor", brief: "Comfort is the trap.",
-      styleTemplate: "Sunlit stoic", model: "alibaba/wan-3.0", caption: "Seneca slept on the floor. #stoicism",
+      styleTemplate: "Sunlit stoic", model: "google/veo-3.1", caption: "Seneca slept on the floor. #stoicism",
       scenes: [{ prompt: "A stone floor at dawn", seconds: 4, voiceover: "He chose the floor.", text: "on purpose" }, { prompt: "A mattress pushed away", seconds: 5 }],
     });
     // One id from brief to plan to post: the plan IS the brief's id.

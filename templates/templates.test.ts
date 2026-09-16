@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, VIDEO_MODELS, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -281,8 +281,16 @@ describe("the crews", () => {
         const models = (config.config as { models?: unknown })?.models;
         expect(Array.isArray(models) && models.length > 0).toBe(true);
         expect(typeof (models as string[])[0]).toBe("string");
+        expect(models).toEqual(VIDEO_MODELS);
       }
     }
+    // First is the default the platform derives; the second is the one fallback. Both must be ids the
+    // live catalogue carries — a pin it lacks is skipped without a word.
+    expect(VIDEO_MODELS).toEqual(["google/veo-3.1", "openai/sora-2-pro"]);
+    // And the producer is told to hand the plan's model to the tool, or the first pin renders.
+    const producer = TEMPLATES.faceless.agents.find((a) => a.name === "producer");
+    expect(producer?.system).toMatch(/the plan's model, passed as `model`/);
+    expect(producer?.schedules?.[0]?.input).toMatch(/its model, passed as `model` — omitted, the first model in your tool is used/);
   });
 
   /** The pin narrows; it must not silently narrow a tool the crew was never granted. */
@@ -370,12 +378,53 @@ describe("the crews", () => {
       for (const agent of template.agents) {
         expect(permissionFor(template, agent.name, "youtube.upload_video")).toBe("ask");
         expect(permissionFor(template, agent.name, "instagram.create_post")).toBe("ask");
+        expect(permissionFor(template, agent.name, "connections.connect")).toBe("ask");
+        expect(permissionFor(template, agent.name, "social.post")).toBe("ask");
         // And the default widens nothing that CAN be named: every built-in this crew was not
         // granted is denied by name, sandbox included — so no session provisions a machine either.
         for (const sandbox of ["bash", "read", "write", "edit", "ls", "find"]) {
           expect(permissionFor(template, agent.name, sandbox)).toBe("deny");
         }
-        expect(permissionFor(template, agent.name, "browser")).toBe("deny");
+        for (const denied of ["browser", "publish_file", "apps", "wait_for_agents"]) {
+          expect(permissionFor(template, agent.name, denied), `${agent.name}/${denied}`).toBe("deny");
+        }
+      }
+    }
+  });
+
+  /**
+   * PRODUCTION: "producer wants to run find_files", "scriptwriter wants to run post_to_channel" —
+   * approval cards for tools that touch nothing but the channel's own files and room. `BUILTIN_TOOLS`
+   * was a stale copy of the platform's list, and a built-in it did not name was neither allowed nor
+   * denied, so it fell through to the `ask` default that exists for connected accounts. The tools a
+   * seat can run on its own are `allow` on every seat of every template; the board pair is what a
+   * seat woken by a card assignment reads and claims it with.
+   */
+  it("lets every seat run the safe built-ins without asking: files, stock, speech, the room, the board, and reading connections", () => {
+    const shared = [
+      "post_to_channel", "find_files", "find_stock_photo", "transcribe_audio", "generate_speech",
+      "connections.search", "connections.status", "board_read", "board_write",
+    ];
+    for (const template of both) {
+      for (const agent of template.agents) {
+        for (const tool of shared) {
+          expect(agent.tools?.configs[tool], `${template.name}/${agent.name}/${tool}`).toEqual({ enabled: true, permission: "allow" });
+        }
+      }
+    }
+  });
+
+  /** The parity the grant depends on: no built-in is ever left to `default_config`, on any seat. */
+  it("decides every platform built-in by name on every seat, so none falls through to the connections default", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        for (const tool of BUILTIN_TOOLS) {
+          const config = agent.tools?.configs[tool];
+          expect(config, `${template.name}/${agent.name}/${tool}`).toBeDefined();
+          expect(config?.enabled === true || config?.permission === "deny", `${template.name}/${agent.name}/${tool}`).toBe(true);
+        }
+        // A name the toolset does not mention is exactly what the default is for.
+        expect(permissionFor(template, agent.name, "some_connector.some_operation")).toBe("ask");
       }
     }
   });

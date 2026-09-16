@@ -301,9 +301,23 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "apps",
-  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
+  "transcribe_audio", "generate_speech", "find_files", "find_stock_photo",
+  "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
+
+/**
+ * What every seat may run on its own, whatever its template names: the built-ins that touch only
+ * this channel's own files, room and board, and the two read-only connections tools. A platform
+ * built-in named neither here nor in `BUILTIN_TOOLS` falls through to the toolset's `ask` default
+ * — which is how an operator came to be asked whether the producer may `find_files`. The board pair
+ * is how a seat reads and claims the card it was woken for; `connections.connect` is absent on
+ * purpose, because connecting an account is the operator's act.
+ */
+const SHARED_ALLOW: readonly string[] = [
+  "post_to_channel", "find_files", "find_stock_photo", "transcribe_audio", "generate_speech",
+  "connections.search", "connections.status", "board_read", "board_write",
+];
 
 /**
  * The video models the producer may render with, best-first — and the reason this list exists.
@@ -315,10 +329,11 @@ export const BUILTIN_TOOLS = [
  * does not — it fails the same way every night with nobody watching. A channel that renders video
  * has to say what it renders with.
  *
- * First is the default. The rest are named so the producer can still reach for a different look
- * without an operator editing this file; narrowing the list narrows what it can choose.
+ * First is the default; the second is the fallback the producer may reach for without an operator
+ * editing this file. Every id must be one the platform's live video catalogue carries — a pin it
+ * lacks is skipped silently. Narrowing the list narrows what it can choose.
  */
-export const VIDEO_MODELS: readonly string[] = ["alibaba/wan-3.0", "alibaba/wan-3.0-prime", "alibaba/happyhorse-1.1"];
+export const VIDEO_MODELS: readonly string[] = ["google/veo-3.1", "openai/sora-2-pro"];
 
 /**
  * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
@@ -379,24 +394,29 @@ const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
  * accounts as the publishing story, and not one agent could call a single tool on one. The default
  * is the only lever that reaches an unnameable name, and `ask` is the honest setting for it — a
  * connection tool acts on someone else's account, and every one of those calls now stops at the
- * Approvals screen with its arguments in front of a person.
+ * Approvals screen with its arguments in front of a person. `connections.connect` is left to the
+ * same default on purpose: it is the one connections tool that acts.
  *
- * It widens nothing else, because everything else CAN be named: every built-in this crew was not
- * granted is written `deny` above the default, including all six sandbox tools — a content agent
- * needs no shell, and denying them is also what keeps the session from provisioning (and billing) a
- * machine it would never use.
+ * It reaches nothing else, because everything else CAN be named — and is. Every built-in this crew
+ * was not granted is written `deny` above the default, including all six sandbox tools (a content
+ * agent needs no shell, and denying them is what keeps the session from provisioning and billing a
+ * machine it would never use); everything a seat can run on its own — its named tools, the
+ * dashboard's, `SHARED_ALLOW` — is `allow`. So the only calls that stop at the Approvals screen are
+ * the ones that act outward: `social.post`, a connected account's operations, `connections.connect`,
+ * and the two doors to the operator. A built-in left to the default is a bug; `templates.test.ts`
+ * holds every name in `BUILTIN_TOOLS` to an explicit answer.
  */
 export const toolset = (names: readonly string[], handoffs: readonly string[] = []) => ({
   default_config: { permission: "ask" as const },
   configs: {
     ...Object.fromEntries(
-      BUILTIN_TOOLS.filter((name) => !names.includes(name) && !ALWAYS.includes(name)).map((name) => [
+      BUILTIN_TOOLS.filter((name) => !names.includes(name) && !SHARED_ALLOW.includes(name) && !ALWAYS.includes(name)).map((name) => [
         name,
         { enabled: false, permission: "deny" as const },
       ]),
     ),
     ...Object.fromEntries(
-      [...names, ...ALWAYS].map((name) => [
+      [...SHARED_ALLOW, ...names, ...ALWAYS].map((name) => [
         name,
         {
           enabled: true,

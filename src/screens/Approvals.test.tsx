@@ -95,7 +95,7 @@ describe("argRows", () => {
 describe("a question", () => {
   const question = {
     prompt: "I have no generate_video this turn. Which video model may I use?",
-    fields: [{ key: "model", label: "Model", type: "choice" as const, options: ["alibaba/wan-3.0"], other: true }],
+    fields: [{ key: "model", label: "Model", type: "choice" as const, options: ["google/veo-3.1"], other: true }],
   };
 
   it("is carried as a question, so the card answers it rather than approving it", () => {
@@ -115,10 +115,10 @@ describe("a question", () => {
   it("is answered trimmed and whole, so a blank field is refused here and not by the platform", () => {
     // The platform rejects a partial answer (§7.2); "   " must not round-trip a 400 for what the
     // screen could have said before sending.
-    expect(trimmed(question.fields, { model: "  alibaba/wan-3.0 ", tags: ["a"] })).toEqual({ model: "alibaba/wan-3.0", tags: ["a"] });
+    expect(trimmed(question.fields, { model: "  google/veo-3.1 ", tags: ["a"] })).toEqual({ model: "google/veo-3.1", tags: ["a"] });
     expect(unanswered(question.fields, trimmed(question.fields, { model: "   " }))).toEqual(["Model"]);
     expect(unanswered(question.fields, {})).toEqual(["Model"]);
-    expect(unanswered(question.fields, { model: "alibaba/wan-3.0" })).toEqual([]);
+    expect(unanswered(question.fields, { model: "google/veo-3.1" })).toEqual([]);
   });
 
   it("drops a blank 'other' entry from a multi-choice, alone or beside a listed option", () => {
