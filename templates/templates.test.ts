@@ -9,9 +9,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, TONE_QUESTION, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
+import { TONE_QUESTION } from "./template.ts";
 
 /** The four of the platform's twelve `naive/*` catalogue skills a media crew has a use for; no other ref is allowed here. */
 const CATALOGUE = ["naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/seo-content-brief"];
