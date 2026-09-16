@@ -47,7 +47,7 @@ $60/day and $20/task (`templates/template.ts`, sized around one ~$3.32 render).
 | channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | Mon 09:00 plan · daily 08:00 queue sweep · daily 18:00 comments |
 | trend-scout | Trends & briefs | web_search, web_fetch | seo-content-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
 | scriptwriter | Hooks & scripts | web_search, web_fetch | short-video-hooks, caption-writing | producer | daily 06:30 |
-| producer | Video production | generate_video (models pinned: wan-3.0, wan-3.0-prime, happyhorse-1.1), generate_image | short-video-hooks | — | daily 07:00 |
+| producer | Video production | generate_video (models pinned: veo-3.1, sora-2-pro), generate_image | short-video-hooks | — | daily 07:00 |
 | analyst | Performance | — | — | — | Mon 07:30 |
 
 Pipeline: scout files briefs at `stage: brief` → `send_to_agent(scriptwriter, wait:false)` with
@@ -109,14 +109,19 @@ clipping projects.
   (`<connector>.<operation>`, not enumerable ahead of time) become reachable, and every such call
   parks at the Approvals screen.
 - Every `BUILTIN_TOOLS` entry the seat was not granted is `deny` by name — including all sandbox
-  tools (bash/read/write/…), so no session provisions a machine.
+  tools (bash/read/write/…), so no session provisions a machine. Every built-in is decided by
+  name; nothing but a connected account's operations reaches the default.
+- Granted `allow` on every seat (`SHARED_ALLOW` — what a seat can run on its own): `post_to_channel`,
+  `find_files`, `find_stock_photo`, `transcribe_audio`, `generate_speech`, `board_read`,
+  `board_write`, `connections.search`, `connections.status`.
 - Granted `allow`: `project_context`, `read_skill` (if the seat has skills), the seat's own tools,
   `social.accounts`, and the ten dashboard tools `channel.list_posts / get_post / create_post /
   update_post / list_projects / get_project / create_project / update_project /
   list_style_templates / list_accounts`. Planner and executor are separated by the *other* tools,
   not these: the scriptwriter and scout have no `generate_video` / `clip_video`, so they can only
   write the plan; the producer and clipper have them, and are told the plan is not theirs to write.
-- Granted `ask`: `social.post` (the one outward act), `ask_operator`, `request_tools`.
+- Granted `ask`: `social.post` (the one outward act), `ask_operator`, `request_tools`; and by the
+  default, `<connector>.<operation>` publishes and `connections.connect`.
 - Seats with `handoffs` also get `send_to_agent` and `list_agents` at `allow`.
 
 The dashboard surfaces both parked states: `GET /api/sessions` lists them, `POST

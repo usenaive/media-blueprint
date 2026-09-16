@@ -157,9 +157,11 @@ credentials.
 Every agent's `system` opens with the same paragraph — *read `project_context` before anything
 else; the answers there are the client's, not yours to invent* — and closes with the approval
 gate. Between them is the seat's own brief, 150–400 words. Every agent also holds the
-dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, and the two doors to
-you (`ask_operator`, `request_tools`, both `ask`); the **Tools** column lists what is granted on
-top of that. Every seat carries the same ceilings — **$20 a task and $60 a day, per agent** —
+dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, the two doors to
+you (`ask_operator`, `request_tools`, both `ask`), and the built-ins any seat may run on its own
+without asking — `find_files`, `find_stock_photo`, `transcribe_audio`, `generate_speech`,
+`post_to_channel`, `board_read`, `board_write`, `connections.search`, `connections.status`; the
+**Tools** column lists what is granted on top of that. Every seat carries the same ceilings — **$20 a task and $60 a day, per agent** —
 sized so one render of the length the producer is briefed for fits inside a single task
 (`ONE_RENDER_MICRO_USD` in [`templates/template.ts`](templates/template.ts)); each timer and each
 day one below carries its own budget inside them. Money is integer micro-USD in the declarations;
@@ -170,7 +172,7 @@ it is printed in dollars here.
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one |
 |---|---|---|---|---|---|
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer — slots per week, days, kinds, accounts — and files it as a brief ($20) |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | Picks the style templates for the niche; renders nothing until the scriptwriter hands it a scripted row ($8) |
+| `producer` | Video production | `generate_video` (models pinned: `google/veo-3.1` default, `openai/sora-2-pro` fallback), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | Picks the style templates for the niche; renders nothing until the scriptwriter hands it a scripted row ($8) |
 | `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | Researches the niche, files the channel's **first five briefs**, then triggers the scriptwriter with their ids ($20) |
 | `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | Files the channel's hook style; scripts the five briefs in the session the scout's handoff opens, then triggers the producer ($8) |
 | `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton for this niche and cadence ($20) |
@@ -403,7 +405,9 @@ naming the exact tool, permission and (for video) the model in `config.models`, 
 narrating a video it never rendered. That is an ordinary tool card on Approvals: approving it
 mints a new version of the agent and re-pins the running session, so the tool is offered when the
 session resumes and the piece gets made; refusing it ends the request. The next `naive up` writes
-the template's toolset back, so a model you want kept belongs in `VIDEO_MODELS` too. When a fire
+the template's toolset back, so a model you want kept belongs in `VIDEO_MODELS` too (first is the
+default the producer renders with, `google/veo-3.1`; the second, `openai/sora-2-pro`, is the one
+fallback). When a fire
 needs a *fact* only you have — which account, which source video — it calls `ask_operator`: the
 session parks at `awaiting_answer`, the question lands on the same screen as a card with fields,
 and your answer goes back through `POST /v1/sessions/:id/answers`. Neither door connects an
@@ -436,10 +440,14 @@ Three rules worth knowing before your first edit:
 - **An agent needs a persona.** The `agent()` helper names `CHANNEL_IDENTITY` for you, and
   `schedule()` does the same for every fire. Without it a turn's connection tools resolve to
   nothing, silently, and a cron runs as nobody.
-- **The toolset denies by name and asks by default.** Every built-in an agent was not granted
-  is written `deny` — the sandbox tools included — and the *default* is `ask`, which is what
-  reaches the connection tools no config can enumerate ahead of time. A connection tool is
-  therefore always offered and never runs unattended.
+- **The toolset decides every built-in by name and asks by default.** Every built-in an agent
+  was not granted is written `deny` — the sandbox tools included — and everything a seat can run
+  on its own is `allow`; the *default* is `ask`, which is what reaches the connection tools no
+  config can enumerate ahead of time. A connection tool is therefore always offered and never
+  runs unattended — and nothing else asks: only `social.post`, a connected account's operations,
+  `connections.connect`, `ask_operator` and `request_tools` stop at Approvals. A platform built-in
+  left out of `BUILTIN_TOOLS` would fall through to that default and start asking too, which is why
+  `templates/templates.test.ts` holds every name in it to an explicit `allow` or `deny`.
 - **Never grant `social.post` at `allow`.** That is a publish path straight around the queue
   the dashboard and the system prompts promise. `naive.config.test.ts` and
   `templates/templates.test.ts` exist to stop it happening by accident.
