@@ -1,8 +1,8 @@
 import { Check, Send, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { apiGet, apiSend, messageOf } from "../api";
-import { ConnectLine, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
+import { Avatar, Card, Clamp, ConnectLine, Facts, PageHeader, PlatformChip, StatusChip, Thumb, fmt } from "../components/kit";
 import { piecesOf, postedLabel, rowKind, type Post, type PostStatus } from "../data";
 import { ACTIVE } from "../../templates";
 
@@ -17,6 +17,23 @@ const TABS: { key: PostStatus; label: string }[] = [
 /** What each kind a row can carry is called, in the running template's words; a row filed under
  * the other template keeps its own kind and is still listed, so the id is the fallback. */
 const KIND_LABELS: Record<string, string> = Object.fromEntries(ACTIVE.kinds.map((kind) => [kind.id, kind.label]));
+
+/** A field the agent did not fill in is named as missing rather than dressed as an answer. */
+const Missing = ({ text }: { text: string }) => <span className="chip chip-absent">{text}</span>;
+
+/** The facts a queue row carries, in the order the card prints them; a fact the row lacks is left out. */
+export const postFacts = (post: Post): [string, ReactNode][] => {
+  const facts: [string, ReactNode][] = [
+    ["Filed by", post.agent ?? <Missing text="unnamed agent" />],
+    ["Kind", KIND_LABELS[post.kind] ?? post.kind],
+    ["Account", post.account ?? <Missing text="none chosen" />],
+    ["Plan", post.projectId ? <Link to="/projects" className="font-mono text-xs text-accent hover:underline">plan {post.projectId}</Link> : <Missing text="no plan" />],
+  ];
+  if (post.source) facts.push(["Source", post.source]);
+  if (post.scheduledFor) facts.push(["Scheduled", post.scheduledFor]);
+  if (post.postedAt) facts.push(["Posted", postedLabel(post)], ["Views", fmt(post.views ?? 0)], ["Likes", fmt(post.likes ?? 0)]);
+  return facts;
+};
 
 /** The post lifecycle: pending (agent proposed) → ready (person edited/ok'd
  * content) → approved (cleared to publish, awaiting slot) → posted / rejected. Only rendered pieces are listed. */
@@ -64,6 +81,37 @@ export function Posts() {
     );
   };
 
+  /** The one or two calls a row in this tab still needs from a person; none once it is posted or rejected. */
+  const actionsFor = (p: Post): ReactNode => {
+    if (tab === "pending" || tab === "ready") {
+      return (
+        <>
+          <button type="button" className="btn btn-accent btn-sm" title="Approve for posting" onClick={() => move(p.id, "approved")}>
+            <Check size={14} strokeWidth={1.75} /> Approve
+          </button>
+          {/* Labelled, like Approve: the destructive half of a pair was an icon on its own,
+              which is the one button in the queue nobody should have to guess at. */}
+          <button type="button" className="btn btn-danger btn-sm" title="Reject this post — it moves to Rejected and is never published" onClick={() => move(p.id, "rejected")}>
+            <X size={14} strokeWidth={1.75} /> Reject
+          </button>
+        </>
+      );
+    }
+    if (tab === "approved") {
+      return (
+        <button
+          type="button"
+          className="btn btn-accent btn-sm"
+          title={`Publish now to ${p.platform}${p.account ? ` as ${p.account}` : ""}, video included`}
+          onClick={() => move(p.id, "posted")}
+        >
+          <Send size={14} strokeWidth={1.75} /> Post now
+        </button>
+      );
+    }
+    return undefined;
+  };
+
   return (
     <div className="pane-in">
       <PageHeader
@@ -93,19 +141,22 @@ export function Posts() {
 
       {production.length > 0 ? (
         <details className="panel mb-4">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-            In production {production.length} — briefs the crew is still scripting or rendering; they land here as videos
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3">
+            <span className="card-title">In production</span>
+            <span className="chip chip-plain tabular-nums">{production.length}</span>
+            <span className="text-xs text-ink-3">briefs the crew is still scripting or rendering; they land here as videos</span>
           </summary>
           <div className="divide-y divide-line border-t border-line">
             {production.map((p) => (
-              <div key={p.id} className="flex items-start gap-3 px-4 py-3">
+              <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                <Avatar name={p.agent ?? "?"} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium">{p.title}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                  <div className="truncate text-sm font-medium">{p.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
                     <span className="chip chip-plain">{p.stage}</span>
-                    <span>filed by {p.agent ?? "an unnamed agent"}</span>
-                    {p.source ? <span>from {p.source}</span> : null}
-                    {p.projectId ? <Link to="/projects" className="underline underline-offset-2">plan {p.projectId}</Link> : null}
+                    <span>{p.agent ?? "an unnamed agent"}</span>
+                    {p.source ? <span className="chip chip-plain">{p.source}</span> : null}
+                    {p.projectId ? <Link to="/projects" className="font-mono text-accent hover:underline">plan {p.projectId}</Link> : null}
                   </div>
                 </div>
                 {/* The one call a brief still needs from a person. The producer renders what is filed
@@ -128,7 +179,8 @@ export function Posts() {
 
       {posts === null && error !== null ? (
         <div className="absence">
-          The queue could not be read, so nothing can be said about what is {tab}: {error}
+          <div className="mb-2">The queue could not be read, so nothing can be said about what is {tab}.</div>
+          <span className="chip chip-fail">{error}</span>
         </div>
       ) : posts === null ? (
         <div className="absence">Loading the queue…</div>
@@ -138,58 +190,37 @@ export function Posts() {
           {pieces.length === 0 ? ` ${ACTIVE.words.queueEmpty}` : ""}
         </div>
       ) : (
-        <div className="list">
+        <div className="space-y-3">
           {rows.map((p) => (
-            <div key={p.id} className="flex items-start gap-3 px-4 py-3">
-              <Thumb src={p.mediaUrl} duration={p.duration} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium">{p.title}</span>
+            <Card
+              key={p.id}
+              title={p.title}
+              meta={
+                <>
                   <StatusChip status={p.status} />
-                </div>
-                <details className="mt-0.5 text-sm text-ink-2">
-                  <summary className="cursor-pointer truncate">{p.caption}</summary>
-                  <div className="mt-1 whitespace-pre-wrap">{p.caption}</div>
-                </details>
-                {/* Who filed it, what from, and where it is going — the three things an agent-filed
-                    row was missing while the same row printed "by mcp · unassigned". A field the
-                    agent did not fill in is named as missing rather than dressed as an answer. */}
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                   <PlatformChip platform={p.platform} account={p.account} />
-                  {p.account ? null : <span>no account chosen yet</span>}
-                  <span>
-                    {p.agent ? `filed by ${p.agent}` : "filed by an unnamed agent"} · {KIND_LABELS[p.kind] ?? p.kind}
-                  </span>
-                  {p.source ? <span className="truncate">from {p.source}</span> : null}
-                  {p.projectId ? <Link to="/projects" className="underline underline-offset-2">plan {p.projectId}</Link> : null}
-                  {p.scheduledFor ? <span>→ {p.scheduledFor}</span> : null}
-                  {p.postedAt ? <span className="tabular-nums">{postedLabel(p)} · {fmt(p.views ?? 0)} views · {fmt(p.likes ?? 0)} likes</span> : null}
+                  <span className="font-mono text-xs text-ink-3">{p.id}</span>
+                </>
+              }
+              aside={actionsFor(p)}
+            >
+              <div className="flex items-start gap-4">
+                <Thumb src={p.mediaUrl} duration={p.duration} />
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div>
+                    <div className="prop-label mb-1">Caption</div>
+                    <Clamp text={p.caption} lines={2} />
+                  </div>
+                  <Facts items={postFacts(p)} cols={4} />
+                  {p.rejectedReason ? (
+                    <div>
+                      <div className="prop-label mb-1 text-fail">Rejected because</div>
+                      <Clamp text={p.rejectedReason} lines={2} />
+                    </div>
+                  ) : null}
                 </div>
-                {p.rejectedReason ? <div className="mt-1 text-xs text-tone-fail">{p.rejectedReason}</div> : null}
               </div>
-              {tab === "pending" || tab === "ready" ? (
-                <div className="flex shrink-0 gap-1.5">
-                  <button type="button" className="btn btn-accent btn-sm" title="Approve for posting" onClick={() => move(p.id, "approved")}>
-                    <Check size={14} strokeWidth={1.75} /> Approve
-                  </button>
-                  {/* Labelled, like Approve: the destructive half of a pair was an icon on its own,
-                      which is the one button in the queue nobody should have to guess at. */}
-                  <button type="button" className="btn btn-danger btn-sm" title="Reject this post — it moves to Rejected and is never published" onClick={() => move(p.id, "rejected")}>
-                    <X size={14} strokeWidth={1.75} /> Reject
-                  </button>
-                </div>
-              ) : null}
-              {tab === "approved" ? (
-                <button
-                  type="button"
-                  className="btn btn-accent btn-sm shrink-0"
-                  title={`Publish now to ${p.platform}${p.account ? ` as ${p.account}` : ""}, video included`}
-                  onClick={() => move(p.id, "posted")}
-                >
-                  <Send size={14} strokeWidth={1.75} /> Post now
-                </button>
-              ) : null}
-            </div>
+            </Card>
           ))}
         </div>
       )}

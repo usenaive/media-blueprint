@@ -592,6 +592,125 @@ describe("the platform routes", () => {
   });
 
   /**
+   * The rail's session list: the channel-manager's sessions, newest first, each named by the first
+   * line of the operator's first message — read once per session, since it never changes.
+   */
+  describe("the rail's chat sessions", () => {
+    const platform = (events: Record<string, unknown[]>) =>
+      vi.fn((url: string) => {
+        const path = new URL(url).pathname;
+        if (path === "/v1/agents") return Promise.resolve(json({ data: [{ id: "agt_1", name: "channel-manager" }] }));
+        if (path === "/v1/sessions") {
+          return Promise.resolve(
+            json({
+              data: [
+                { id: "ses_old", status: "idle", stop_reason: "completed", created_at: "2026-09-14T09:00:00Z" },
+                { id: "ses_new", status: "running", stop_reason: null, created_at: "2026-09-15T09:00:00Z" },
+              ],
+              has_more: false,
+            }),
+          );
+        }
+        const log = /^\/v1\/sessions\/(ses_\w+)\/events$/.exec(path);
+        if (log) return Promise.resolve(json({ data: events[log[1]!] ?? [], has_more: false }));
+        return Promise.resolve(json({ error: path }, 404));
+      });
+
+    it("titles each session by its first user message, newest first, and reads a title once", async () => {
+      const fetchMock = platform({
+        ses_new: [
+          { seq: 1, type: "session.started", data: {} },
+          { seq: 2, type: "message.completed", data: { role: "user", content: "  Clip the stoicism interview from yesterday, the part about anger — and make it a short vertical for reels, please\nsecond line" } },
+          { seq: 3, type: "message.completed", data: { content: "On it." } },
+        ],
+        ses_old: [{ seq: 1, type: "message.completed", data: { content: "Hello — what should I do?" } }],
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const ctx = ctxOver(demoState(), CONFIG);
+
+      const reply = await handleRequest(req("GET", "/api/chat"), ctx);
+      expect(reply.status).toBe(200);
+      const rows = (reply.body as { data: { id: string; title: string; status: string; stop_reason: string | null; created_at: string }[] }).data;
+      expect(rows.map((r) => r.id)).toEqual(["ses_new", "ses_old"]);
+      expect(rows[0]).toEqual({
+        id: "ses_new",
+        status: "running",
+        stop_reason: null,
+        created_at: "2026-09-15T09:00:00Z",
+        title: "Clip the stoicism interview from yesterday, the part about…",
+      });
+      expect(rows[0]!.title.length).toBeLessThanOrEqual(60);
+      // The agent spoke but the operator never did: nothing to title it by.
+      expect(rows[1]!.title).toBe("New session");
+      const listed = fetchMock.mock.calls.map((c) => new URL(c[0] as string));
+      expect(listed.find((u) => u.pathname === "/v1/sessions")?.searchParams.get("agent_id")).toBe("agt_1");
+      expect(listed.find((u) => u.pathname === "/v1/sessions")?.searchParams.get("limit")).toBe("20");
+
+      const logReads = () => fetchMock.mock.calls.filter((c) => /\/events/.test(c[0] as string)).length;
+      const before = logReads();
+      await handleRequest(req("GET", "/api/chat"), ctx);
+      // `ses_new` is titled and remembered; `ses_old` never was, so it is asked again.
+      expect(logReads() - before).toBe(1);
+      expect(fetchMock.mock.calls.at(-1)![0]).toContain("/v1/sessions/ses_old/events");
+    });
+
+    it("answers one session in the same shape, for a resumed chat's header", async () => {
+      const fetchMock = vi.fn((url: string) =>
+        Promise.resolve(
+          new URL(url).pathname === "/v1/sessions/ses_new"
+            ? json({ id: "ses_new", agent_id: "agt_1", status: "idle", stop_reason: "completed", created_at: "2026-09-15T09:00:00Z" })
+            : json({ data: [], has_more: false }),
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const reply = await handleRequest(req("GET", "/api/chat/ses_new"), ctxOver(demoState(), CONFIG));
+      expect(reply).toEqual({
+        status: 200,
+        body: { id: "ses_new", status: "idle", stop_reason: "completed", created_at: "2026-09-15T09:00:00Z", title: "Clip the stoicism interview from yesterday, the part about…" },
+      });
+      // The title came from the cache: the only upstream read was the session itself.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("relays the transcript whole, following `after_seq` across pages", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "hi" } }], has_more: true, next_cursor: "1" }))
+        .mockResolvedValueOnce(json({ data: [{ seq: 2, type: "message.completed", data: { content: "hello" } }], has_more: false, next_cursor: null }));
+      vi.stubGlobal("fetch", fetchMock);
+      const request = { ...req("GET", "/api/chat/ses_1/events"), query: new URLSearchParams("after_seq=0") };
+      const reply = await handleRequest(request, ctxOver(demoState(), CONFIG));
+      expect(reply.status).toBe(200);
+      expect((reply.body as { data: { seq: number }[] }).data.map((e) => e.seq)).toEqual([1, 2]);
+      expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/sessions/ses_1/events?limit=100&after_seq=0");
+      expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/v1/sessions/ses_1/events?limit=100&after_seq=1");
+    });
+
+    it("queues a follow-up, so a running session never answers the operator session_running", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ session_id: "ses_1", status: "running", accepted_seq: 7 }, 202));
+      vi.stubGlobal("fetch", fetchMock);
+      const reply = await handleRequest(req("POST", "/api/chat/ses_1/messages", '{"message":"and the captions?"}'), ctxOver(demoState(), CONFIG));
+      expect(reply).toEqual({ status: 202, body: { session_id: "ses_1", status: "running", accepted_seq: 7 } });
+      expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/sessions/ses_1/messages");
+      expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({ message: "and the captions?", queue: true });
+    });
+
+    it("answers 405 to the wrong method on each chat path", async () => {
+      vi.stubGlobal("fetch", vi.fn());
+      const ctx = ctxOver(demoState(), CONFIG);
+      for (const [method, path] of [
+        ["DELETE", "/api/chat"],
+        ["POST", "/api/chat/ses_1"],
+        ["POST", "/api/chat/ses_1/events"],
+        ["GET", "/api/chat/ses_1/messages"],
+        ["POST", "/api/chat/ses_1/stream"],
+      ] as const) {
+        expect(await handleRequest(req(method, path), ctx), `${method} ${path}`).toEqual({ status: 405, body: { error: "method not allowed" } });
+      }
+    });
+  });
+
+  /**
    * The home's context card: the setup answers as the platform holds them (`canonical-spec §31.8`),
    * read off this project's latest *applied* install — never a local row, never a pending apply.
    */

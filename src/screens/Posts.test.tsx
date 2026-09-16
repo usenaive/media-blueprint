@@ -126,3 +126,103 @@ describe("a queue that could not be read", () => {
     expect(host.textContent).toContain(ACTIVE.words.queueEmpty);
   });
 });
+
+/* ---- from #25: the Posts screen over the newer row shape. Its own mount() takes a
+   prepared fetch mock rather than a Response, so it is kept as mountWire(). ---- */
+
+const LONG = "A caption long enough to need the clamp. ".repeat(8).trim();
+
+const pending: Post = {
+  id: "post_9f2a",
+  title: "3 stoic rules nobody follows",
+  caption: LONG,
+  platform: "youtube",
+  account: "@dailystoic",
+  status: "pending",
+  agent: "producer",
+  kind: "produced",
+  duration: "0:41",
+  projectId: "proj_1",
+};
+
+/** The queue answers with the rows; the connect line's two reads answer with nothing. */
+const wire = (rows: Post[], onSend?: (url: string, init: RequestInit) => Response) =>
+  vi.fn((url: string, init?: RequestInit) => {
+    if (init?.method !== undefined && onSend) return Promise.resolve(onSend(url, init));
+    if (url === "/api/posts") return Promise.resolve(json(rows));
+    return Promise.resolve(json({ data: [] }));
+  });
+
+async function mountWire(fetchMock: ReturnType<typeof vi.fn>) {
+  vi.stubGlobal("fetch", fetchMock);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <Posts />
+      </MemoryRouter>,
+    );
+  });
+}
+
+const buttons = () => Array.from(host.querySelectorAll("button")).map((b) => b.textContent?.trim());
+const click = async (label: string) => {
+  const button = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === label)!;
+  await act(async () => button.click());
+};
+
+describe("the Posts screen", () => {
+  it("draws a pending row as a card: clamped caption, labelled facts, plan link, Approve and Reject", async () => {
+    await mountWire(wire([pending]));
+
+    const card = host.querySelector("section.panel")!;
+    expect(card.querySelector("h2.card-title")?.textContent).toBe(pending.title);
+    expect(card.textContent).toContain("Pending review");
+    expect(card.textContent).toContain("youtube");
+
+    const caption = card.querySelector("p")!;
+    expect(caption.textContent).toBe(LONG);
+    expect(caption.className).toContain("line-clamp-2");
+    expect(buttons()).toEqual(expect.arrayContaining(["Read more", "Approve", "Reject"]));
+
+    const labels = Array.from(card.querySelectorAll("dt")).map((n) => n.textContent);
+    expect(labels).toEqual(["Filed by", "Kind", "Account", "Plan"]);
+    const plan = card.querySelector<HTMLAnchorElement>("dd a")!;
+    expect(plan.textContent).toBe("plan proj_1");
+    expect(plan.getAttribute("href")).toBe("/projects");
+  });
+
+  it("approves a row through PATCH and moves it out of Pending", async () => {
+    const fetchMock = wire([pending], () => json({ ...pending, status: "approved" }));
+    await mountWire(fetchMock);
+
+    await click("Approve");
+
+    const sent = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")!;
+    expect(sent[0]).toBe(`/api/posts/${pending.id}`);
+    expect(JSON.parse((sent[1] as RequestInit).body as string)).toEqual({ status: "approved" });
+    expect(host.querySelector("section.panel")).toBeNull();
+    expect(host.querySelector(".absence")?.textContent).toContain("Nothing pending right now.");
+  });
+
+  it("names a missing account and plan as missing, and says so with a dashed absence when a tab is empty", async () => {
+    const bare: Post = { ...pending, id: "post_bare", account: undefined, projectId: undefined };
+    await mountWire(wire([bare]));
+
+    const chips = Array.from(host.querySelectorAll("dd .chip-absent")).map((n) => n.textContent);
+    expect(chips).toEqual(["none chosen", "no plan"]);
+
+    const tab = Array.from(host.querySelectorAll<HTMLButtonElement>("[role=tab]")).find((b) => b.textContent?.startsWith("Rejected"))!;
+    await act(async () => tab.click());
+    expect(host.querySelector(".absence")?.textContent).toContain("Nothing rejected right now.");
+  });
+
+  it("labels a rejected row's reason in the fail tone", async () => {
+    const rejected: Post = { ...pending, id: "post_no", status: "rejected", rejectedReason: "The hook restates the title." };
+    await mountWire(wire([rejected]));
+    const tab = Array.from(host.querySelectorAll<HTMLButtonElement>("[role=tab]")).find((b) => b.textContent?.startsWith("Rejected"))!;
+    await act(async () => tab.click());
+    const label = Array.from(host.querySelectorAll(".prop-label")).find((n) => n.textContent === "Rejected because")!;
+    expect(label.className).toContain("text-fail");
+    expect(host.textContent).toContain("The hook restates the title.");
+  });
+});

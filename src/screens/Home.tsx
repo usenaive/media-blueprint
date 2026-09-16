@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import { ACTIVE } from "../../templates";
 import { apiGet, ApiError, messageOf } from "../api";
-import { ConnectLine, PageHeader, STATUS_LABEL } from "../components/kit";
+import { ago, Avatar, Card, Clamp, ConnectLine, PageHeader, SectionHead, STATUS_LABEL } from "../components/kit";
 import { piecesOf, rowKind, type Post, type PostStatus } from "../data";
 import { toRoster } from "./Agents";
 import { parked, type WireSession } from "./Approvals";
@@ -44,6 +44,19 @@ export const nextFireOf = (rows: readonly WireDeployment[], agentId: string): st
     .filter((row) => row.agent_id === agentId && row.next_run_at !== null)
     .map((row) => row.next_run_at!)
     .sort()[0] ?? null;
+
+/** "in 3m", "in 2h", "in 4d" — `ago` for a time still to come; one already past reads "due now". */
+export function until(iso: string, now: number = Date.now()): string {
+  const ms = new Date(iso).getTime() - now;
+  if (!Number.isFinite(ms)) return "";
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "due now";
+  if (m < 60) return `in ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `in ${h}h`;
+  const d = Math.floor(h / 24);
+  return d < 30 ? `in ${d}d` : new Date(iso).toLocaleDateString();
+}
 
 /**
  * How far the crew's first day has got: one line per intake the apply opened, with its session's
@@ -88,6 +101,8 @@ function useRead<T>(path: string) {
   return { data, error };
 }
 
+const Fault = ({ text }: { text: string }) => <span className="chip chip-fail">{text}</span>;
+
 /**
  * The channel at a glance: what the operator told the studio, how far day one has got, what is
  * waiting on them, who is on the crew and when each next fires, and what the queue holds. Every
@@ -126,118 +141,140 @@ export function Home() {
       {/* Before the queue, the cards and the roster: can this channel publish what it is making? */}
       <ConnectLine />
 
-      <div className="mb-6 grid grid-cols-2 gap-3">
-        <section className="panel p-4">
-          <div className="eyebrow mb-3">Channel setup</div>
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <Card
+          title="Channel setup"
+          aside={home === null ? undefined : <span className="text-xs text-ink-3">Updated {ago(home.context.updated_at)}</span>}
+        >
           {home === null ? (
-            <div className="text-sm text-ink-3">{absence ?? "Reading the channel's setup…"}</div>
+            <div className="absence">{absence ?? "Reading the channel's setup…"}</div>
           ) : (
-            <dl className="space-y-2">
+            <dl className="dl">
               {home.context.answers.map((answer) => (
-                <div key={answer.key}>
-                  <dt className="text-[0.6875rem] uppercase tracking-[0.08em] text-ink-3">{answer.label}</dt>
-                  <dd className="text-sm text-ink">{Array.isArray(answer.value) ? answer.value.join(", ") : answer.value}</dd>
+                <div key={answer.key} className="contents">
+                  <dt>{answer.label}</dt>
+                  <dd>{Array.isArray(answer.value) ? answer.value.join(", ") : <Clamp text={answer.value} lines={2} />}</dd>
                 </div>
               ))}
-              <div className="pt-1 text-[0.6875rem] text-ink-3">
-                Updated {new Date(home.context.updated_at).toLocaleString()} · edit in the studio
-              </div>
             </dl>
           )}
-        </section>
+        </Card>
 
-        <section className="panel p-4">
-          <div className="eyebrow mb-3">
-            Day one
-            {progress.length > 0 ? <span className="rail-count ml-2">{progress.filter((row) => row.done).length}/{progress.length}</span> : null}
-          </div>
+        <Card
+          title="Day one"
+          aside={progress.length > 0 ? <span className="chip chip-plain tabular-nums">{progress.filter((row) => row.done).length}/{progress.length} finished</span> : undefined}
+        >
           {progress.length === 0 ? (
-            <div className="text-sm text-ink-3">{home === null ? "Nothing to show until the team is installed." : "This install opened no first sessions."}</div>
+            <div className="absence">{home === null ? "Nothing to show until the team is installed." : "This install opened no first sessions."}</div>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="divide-y divide-line">
               {progress.map((row) => (
-                <li key={row.name} className="flex items-center gap-2 text-sm">
+                <li key={row.name} className="flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0">
+                  <Avatar name={row.name} size="sm" />
                   <span className="font-medium">{row.name}</span>
                   <span className={`ml-auto chip ${row.done ? "chip-credit" : "chip-plain"}`}>{row.state}</span>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </Card>
+      </div>
 
-        <NavLink to="/approvals" className="panel block p-4">
-          <div className="eyebrow mb-1">Approvals due</div>
-          <div className="font-display text-h2">{parkedError !== null ? "—" : parkedLoaded ? `${due}${partial ? "+" : ""}` : "…"}</div>
-          <div className="text-[0.6875rem] text-ink-3">
-            {parkedError ?? (!parkedLoaded ? "Reading the parked sessions…" : due === 0 ? "Nothing is waiting on you." : partial ? "The first hundred parked sessions; there are more." : "An agent is parked until you answer.")}
-          </div>
-        </NavLink>
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <Card title="Approvals due" aside={<NavLink to="/approvals" className="btn btn-ghost btn-sm">Review</NavLink>}>
+          {parkedError !== null ? (
+            <Fault text={parkedError} />
+          ) : (
+            <NavLink to="/approvals" className="tile">
+              <span className="prop-label">Waiting on you</span>
+              <span className="tile-value">{parkedLoaded ? `${due}${partial ? "+" : ""}` : "…"}</span>
+              <span className="text-xs text-ink-3">
+                {!parkedLoaded ? "Reading the parked sessions…" : due === 0 ? "Nothing is waiting on you." : partial ? "The first hundred parked sessions; there are more." : "An agent is parked until you answer."}
+              </span>
+            </NavLink>
+          )}
+        </Card>
 
-        <section className="panel p-4">
-          <div className="eyebrow mb-3">Queue</div>
+        <Card className="col-span-2" title="Queue" aside={<NavLink to="/posts" className="btn btn-ghost btn-sm">Open queue</NavLink>}>
           {posts.error !== null ? (
-            <div className="text-sm text-ink-3">{posts.error}</div>
+            <Fault text={posts.error} />
           ) : (
             <div className="grid grid-cols-5 gap-2">
               {queueCounts(piecesOf(posts.data ?? [])).map(([status, count]) => (
-                <div key={status}>
-                  <div className="font-display text-h2">{posts.data === null ? "…" : count}</div>
-                  <div className="text-[0.6875rem] leading-tight text-ink-3">{STATUS_LABEL[status]}</div>
+                <div key={status} className="tile">
+                  <span className="prop-label">{status}</span>
+                  <span className="tile-value">{posts.data === null ? "…" : count}</span>
                 </div>
               ))}
             </div>
           )}
-        </section>
+        </Card>
       </div>
 
       <section className="mb-6">
-        <div className="eyebrow mb-2">From the team</div>
+        <SectionHead label="From the team" count={posts.data === null ? undefined : notes.length} />
         {posts.error !== null ? (
-          <div className="absence">{posts.error}</div>
+          <div className="absence"><Fault text={posts.error} /></div>
         ) : posts.data === null ? (
           <div className="absence">Reading the team's notes…</div>
         ) : notes.length === 0 ? (
           <div className="absence">Nothing filed yet — the crew's channel plan, hook style and weekly report show up here.</div>
         ) : (
-          <div className="list">
-            {notes.map((post) => (
-              <details key={post.id} className="px-3 py-2.5">
-                <summary className="cursor-pointer font-medium">
-                  {post.title}{" "}
-                  <span className="font-mono text-xs text-ink-3">
-                    {post.agent ?? "an unnamed agent"}{post.source ? ` · ${post.source}` : ""}
-                  </span>
-                </summary>
-                <div className="mt-1 whitespace-pre-wrap text-sm text-ink-2">{post.caption}</div>
-              </details>
-            ))}
+          <div className="space-y-3">
+            {notes.map((post) => {
+              const author = post.agent ?? "an unnamed agent";
+              return (
+                <Card
+                  key={post.id}
+                  title={post.title}
+                  meta={
+                    <>
+                      <Avatar name={author} size="sm" />
+                      <span className="text-ink-2">{author}</span>
+                      {post.stageAt ? <span>· {ago(post.stageAt)}</span> : null}
+                      {post.source ? <span className="chip chip-plain">{post.source}</span> : null}
+                    </>
+                  }
+                >
+                  <Clamp text={post.caption} lines={3} />
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>
 
-      <div className="eyebrow mb-2">The agent team</div>
-      {agents.error !== null ? (
-        <div className="absence">{agents.error}</div>
-      ) : agents.data === null || home === null ? (
-        <div className="absence">{absence ?? "Reading the team…"}</div>
-      ) : crew.length === 0 ? (
-        <div className="absence">No agents yet — the studio installs the team.</div>
-      ) : (
-        <div className="list">
-          {crew.map((agent) => {
-            const fire = timers.data === null ? null : nextFireOf(timers.data.data ?? [], agent.id);
-            return (
-              <div key={agent.id} className="flex items-center gap-3 px-3 py-2.5">
-                <span className="font-medium">{agent.name}</span>
-                <span className="text-sm text-ink-2">{ROLES.get(agent.name) ?? ""}</span>
-                <span className="ml-auto font-mono text-xs text-ink-3">
-                  {timers.error !== null ? timers.error : timers.data === null ? "…" : fire === null ? "no timer armed" : `next fire ${new Date(fire).toLocaleString()}`}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <section>
+        <SectionHead label="The agent team" count={agents.data === null || home === null ? undefined : crew.length} />
+        {agents.error !== null ? (
+          <div className="absence"><Fault text={agents.error} /></div>
+        ) : agents.data === null || home === null ? (
+          <div className="absence">{absence ?? "Reading the team…"}</div>
+        ) : crew.length === 0 ? (
+          <div className="absence">No agents yet — the studio installs the team.</div>
+        ) : (
+          <div className="list">
+            {crew.map((agent) => {
+              const fire = timers.data === null ? null : nextFireOf(timers.data.data ?? [], agent.id);
+              return (
+                <div key={agent.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <Avatar name={agent.name} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{agent.name}</div>
+                    <div className="truncate text-xs text-ink-2">{ROLES.get(agent.name) ?? ""}</div>
+                  </div>
+                  <span className="ml-auto shrink-0">
+                    {timers.error !== null ? <Fault text={timers.error} />
+                    : timers.data === null ? <span className="chip chip-absent">…</span>
+                    : fire === null ? <span className="chip chip-absent">no timer armed</span>
+                    : <span className="chip chip-plain" title={new Date(fire).toLocaleString()}>fires {until(fire)}</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
