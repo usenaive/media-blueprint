@@ -21,17 +21,14 @@
  * a Chat request can overlap on one plan, so the clipper claims it first (`rendering`,
  * `expected_status: planned`) — one locked write, one winner — and a rendered plan is final.
  */
-import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
+import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, TONE_QUESTION, type MediaTemplate } from "./template.ts";
 
 export const CLIPPING: MediaTemplate = {
   name: "clipping",
   description: "Repurposes existing video in one niche: cuts the best moments out of the reference channels and captions them.",
 
   agents: [
-    channelManager(
-      "the scout, the clipper and the caption-editor",
-      "who these clips are for and the tone they are cut in, in one line — the setup form asked for the reference channels and not for this.",
-    ),
+    channelManager("the scout, the clipper and the caption-editor"),
     agent({
       name: "clipper",
       role: "Clip production",
@@ -134,10 +131,10 @@ export const CLIPPING: MediaTemplate = {
   kinds: [{ id: "clip", label: "Clip" }],
 
   /**
-   * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
-   * `PLATFORM_QUESTION` takes was `niche` — "Niche / audience" — and the channel manager asks for
-   * it in its day-one session instead. The references question keeps its slot whatever else goes: it is
-   * the one answer no seat may work without, and no crew may infer.
+   * Four, because the engine refuses a fifth (`templates/template.ts`, `SetupQuestion`). The
+   * references question is this template's own and the first asked: it is the one answer no seat
+   * may work without, and no crew may infer. The tone — who these clips are for and the voice they
+   * are cut in — the network and the cadence are every channel's.
    */
   questions: [
     {
@@ -146,6 +143,7 @@ export const CLIPPING: MediaTemplate = {
       type: "text",
       placeholder: "Channel or playlist URLs, one per line — the crew watches these and cuts from nowhere else",
     },
+    TONE_QUESTION,
     PLATFORM_QUESTION,
     CADENCE_QUESTION,
   ],

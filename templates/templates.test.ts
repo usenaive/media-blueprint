@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
+import { BUILTIN_TOOLS, CONTEXT_PREAMBLE, DAY_ONE_ORDER, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, TONE_QUESTION, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -645,28 +645,61 @@ describe("the data the screens read", () => {
   });
 
   /**
-   * Three questions per template, asked by the studio before anything is provisioned — the engine
-   * refuses a fourth, and `onboarding.test.ts` holds it to that by asking the engine itself.
+   * Four questions per template, asked by the studio before anything is provisioned — the engine
+   * refuses a fifth, and `onboarding.test.ts` holds it to that by asking the engine itself.
    * `choice` where the answers are a short list, `text` where they are the client's own words.
    *
-   * TWO OF THE THREE ARE SHARED NOW. Where the channel posts is not a matter of template — both
-   * crews make the same vertical video and both need a network to file it for — so
-   * `PLATFORM_QUESTION` sits between the template's own question and the cadence, and each
-   * template spends its one remaining slot on the thing only it needs: the niche, or the sources.
+   * THREE OF THE FOUR ARE SHARED. The tone and who it is for, where the channel posts and how often
+   * are not a matter of template — both crews make the same vertical video, in a voice, for a
+   * network, at a cadence — so `TONE_QUESTION`, `PLATFORM_QUESTION` and `CADENCE_QUESTION` follow
+   * the template's own question, and each template spends its one slot on the thing only it
+   * needs: the niche, or the sources.
    */
-  it("asks exactly three setup questions per template, and no more anywhere", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["platform", "choice"], ["cadence", "choice"]]);
-    expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["platform", "choice"], ["cadence", "choice"]]);
+  it("asks exactly four setup questions per template, and no more anywhere", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["tone", "text"], ["platform", "choice"], ["cadence", "choice"]]);
+    expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["tone", "text"], ["platform", "choice"], ["cadence", "choice"]]);
     for (const template of both) {
-      expect(template.questions).toHaveLength(3);
+      expect(template.questions).toHaveLength(4);
       for (const question of template.questions) expect(question.label).toMatch(/\S/);
-      expect(new Set(template.questions.map((q) => q.key)).size).toBe(3);
+      expect(new Set(template.questions.map((q) => q.key)).size).toBe(4);
     }
     // Each shared question is one question, spelled once: the cadence sizes every plan and every
-    // timer, and the network is what every filed row is stamped with.
+    // timer, the network is what every filed row is stamped with, and the tone is the voice every
+    // caption is written in.
     expect(TEMPLATES.faceless.questions[1]).toBe(TEMPLATES.clipping.questions[1]);
     expect(TEMPLATES.faceless.questions[2]).toBe(TEMPLATES.clipping.questions[2]);
-    expect(TEMPLATES.faceless.questions[2]).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
+    expect(TEMPLATES.faceless.questions[3]).toBe(TEMPLATES.clipping.questions[3]);
+    expect(TEMPLATES.faceless.questions[1]).toBe(TONE_QUESTION);
+    expect(TONE_QUESTION).toMatchObject({
+      key: "tone",
+      type: "text",
+      label: "Channel tone and who it is for, in one line",
+      placeholder: expect.stringMatching(/tone, for/),
+    });
+    expect(TEMPLATES.faceless.questions[3]).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
+  });
+
+  /**
+   * The tone question is on the form now, so it is nobody's to ask in conversation. The channel
+   * manager used to open its very first session with `ask_operator` for it — which parked the
+   * session on a question the form could have asked — and the niche's help text sent the operator
+   * to that conversation. Neither sentence may come back.
+   */
+  it("has no seat ask the operator for the tone on day one, now that the form does", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        const said = `${agent.system ?? ""} ${agent.intake?.message ?? ""} ${agent.description ?? ""}`;
+        expect(said, `${template.name}/${agent.name}`).not.toMatch(/setup form asks three questions/);
+        expect(said, `${template.name}/${agent.name}`).not.toMatch(/ask_operator[^.]*(tone|who it is for|who these clips are for)/);
+        expect(said, `${template.name}/${agent.name}`).not.toMatch(/(tone|who it is for|who these clips are for)[^.]*ask_operator/);
+      }
+      for (const question of template.questions) {
+        expect(question.help ?? "", `${template.name}/${question.key}`).not.toMatch(/channel manager will ask/);
+      }
+      // And the manager reads the answer where every other answer is read.
+      const manager = template.agents.find((one) => one.name === "channel-manager")!;
+      expect(manager.intake?.message, template.name).toMatch(/Read project_context — what this channel is about, its tone and who it is for/);
+    }
   });
 
   it("prints its own words on every screen that has any", () => {

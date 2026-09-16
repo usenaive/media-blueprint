@@ -68,7 +68,7 @@ export const queueCounts = (posts: readonly Post[]): [PostStatus, number][] =>
 /** Why the context card is empty, in the operator's words: no key is one sentence, no install another. */
 export const contextAbsence = (error: unknown): string =>
   error instanceof ApiError && error.status === 404
-    ? "Not set up yet — the studio asks the channel's three questions when it installs the team."
+    ? "Not set up yet — the studio asks the channel's four questions when it installs the team."
     : messageOf(error);
 
 const ROLES = new Map(ACTIVE.agents.map((agent) => [agent.name, agent.role ?? ""]));

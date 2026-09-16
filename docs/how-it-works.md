@@ -8,7 +8,7 @@ a post lives. Everything below is read off the code; file paths are given so it 
 - **Blueprint** = the machine, shared by every template: the React dashboard (`src/`), the
   `/api/*` routes (`server/routes.ts`), the `/mcp` endpoint (`server/mcp.ts`), the store
   (`server/store.ts`, `server/api-entry.ts`) and the approval flow.
-- **Template** = data: the crew, its prompts, tool allow-lists, post kinds, three setup questions,
+- **Template** = data: the crew, its prompts, tool allow-lists, post kinds, four setup questions,
   and the words the queue prints (`templates/faceless.ts`, `templates/clipping.ts`).
 - `templates/index.ts` — `ACTIVE` picks the running template (`faceless` by default,
   `NAIVE_TEMPLATE` overrides). Switching is an edit of that line plus `naive up`.
@@ -29,10 +29,11 @@ From `naive.config.ts`:
 | Schedules | every agent's crons, owned as a complete set (omission deletes; matched by exact cron string) |
 | Intake sessions | one per created agent, all opened at once |
 
-Setup questions are capped at three by the SDK (`parseProject`). Both templates spend one on
+Setup questions are capped at four by the SDK (`parseProject`, `@usenaive-sdk/blueprints` 0.6.0).
+Both templates spend one on `tone` (channel tone and who it is for, one line of text), one on
 `platform` (multi-select of YouTube Shorts / TikTok / Instagram Reels) and one on `cadence`;
-`faceless` asks `niche`, `clipping` asks `sources` (reference channel URLs). The displaced question
-(tone/audience) is asked by the channel manager on day one via `ask_operator`.
+`faceless` asks `niche`, `clipping` asks `sources` (reference channel URLs). Every agent reads the
+answers through `project_context`; none asks the operator for any of them on day one.
 
 ## 3. The crews
 
