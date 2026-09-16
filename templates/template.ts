@@ -102,7 +102,7 @@ export const PLATFORM_QUESTION: SetupQuestion = {
   options: PLATFORM_CHOICES.map((choice) => choice.option),
   multiple: true,
   other: false,
-  help: "Pick the apps your videos go out on — one or several. Picking them is not the same as connecting them — after setup, open Accounts and connect the account you post from on each one, or the team will fill a queue that cannot publish.",
+  help: "Pick the apps your videos go out on — one or several. Picking them is not the same as connecting them: the next step asks you to connect the account you post from on each one, or the team will fill a queue that cannot publish.",
 };
 
 /** What a customer saw this network called; the raw id for anything not on the list. */
