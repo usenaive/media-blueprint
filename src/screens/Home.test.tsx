@@ -73,7 +73,7 @@ describe("queueCounts", () => {
 
 describe("contextAbsence", () => {
   it("tells a channel with no applied install apart from a dashboard with no key", () => {
-    expect(contextAbsence(new ApiError(404, "this project has no applied install yet"))).toMatch(/three questions/);
+    expect(contextAbsence(new ApiError(404, "this project has no applied install yet"))).toMatch(/four questions/);
     expect(contextAbsence(new ApiError(503, "not configured — set NAIVE_API_KEY"))).toBe("not configured — set NAIVE_API_KEY");
   });
 });

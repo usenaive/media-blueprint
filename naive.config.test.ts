@@ -59,13 +59,13 @@ describe("naive.config", () => {
   });
 
   /**
-   * Plan §2.4/§4: the engine (0.4.0) carries `role`, `skills`, `intake`, `required` and the three
+   * Plan §2.4/§4: the engine (0.6.0) carries `role`, `skills`, `intake`, `required` and the four
    * setup questions through `defineProject` — read back off `project`, not the template, so a
    * downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
    */
-  it("hands `up` the crew's roles, skills, intakes and the three setup questions", () => {
+  it("hands `up` the crew's roles, skills, intakes and the four setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
-    expect(project.questions).toHaveLength(3);
+    expect(project.questions).toHaveLength(4);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       expect(agent.intake?.message).toMatch(/project_context/);

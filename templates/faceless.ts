@@ -31,17 +31,14 @@
  * receipt for the render, which nothing — the producer, or the sweep freeing a dead session's
  * claim — may send back (`server/mcp.ts`).
  */
-import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
+import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, TONE_QUESTION, type MediaTemplate } from "./template.ts";
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",
   description: "Generates original short-form video in one niche, from briefs, in the channel's own look.",
 
   agents: [
-    channelManager(
-      "the trend-scout, the scriptwriter and the producer",
-      "the channel's tone and who it is for, in one line — the setup form asked for the niche and not for this.",
-    ),
+    channelManager("the trend-scout, the scriptwriter and the producer"),
     agent({
       name: "producer",
       role: "Video production",
@@ -159,11 +156,10 @@ export const FACELESS: MediaTemplate = {
   ],
 
   /**
-   * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
-   * `PLATFORM_QUESTION` takes was `audience` — "Tone and audience, in one line" — and that question
-   * is now the first thing the channel manager asks the operator in its day-one session. Where a
-   * channel posts cannot be asked later: the crew starts filing within the minute, and every row it
-   * files carries a target.
+   * Four, because the engine refuses a fifth (`templates/template.ts`, `SetupQuestion`). The niche
+   * is this template's own; the tone, the network and the cadence are every channel's. None of
+   * them can be asked later: the crew starts filing within the minute, every row it files carries
+   * a target, and every caption it writes is in a voice.
    */
   questions: [
     {
@@ -178,8 +174,9 @@ export const FACELESS: MediaTemplate = {
         "History mysteries",
         "Health & longevity",
       ],
-      help: "Pick one or type your own — every brief, script and render is for this niche. Your tone and who it is for is the first thing the channel manager will ask you about.",
+      help: "Pick one or type your own — every brief, script and render is for this niche.",
     },
+    TONE_QUESTION,
     PLATFORM_QUESTION,
     CADENCE_QUESTION,
   ],

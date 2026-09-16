@@ -21,8 +21,8 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 | `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **three questions** (what the channel is about, **where it posts** — one network or
-several — and how often), every agent reads the answers back through the platform's
+studio asks **four questions** (what the channel is about, its tone and who it is for, **where it
+posts** — one network or several — and how often), every agent reads the answers back through the platform's
 `project_context` tool, and each opens a **day-one** session that turns those answers into the
 channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
 
@@ -40,7 +40,7 @@ flowchart LR
   repo["this repo<br/>naive.config.ts + templates/"]
   repo -->|naive up| plat["Naive platform"]
   plat --> app["channel app<br/>fullstack: /api/* and /mcp"]
-  plat --> ctx["install context<br/>niche · audience · cadence"]
+  plat --> ctx["install context<br/>niche · tone · network · cadence"]
   plat --> spec["four specialists<br/>daily 06:00–07:30, Mon 07:30"]
   plat --> mgr["channel-manager<br/>daily 08:00 and 18:00, Mon 09:00"]
   plat --> idn["channel identity<br/>holds the connected accounts"]
@@ -63,7 +63,7 @@ flowchart LR
 A freshly provisioned channel has **no posts**, and every screen shows its empty state until
 you or an agent files something. That is the truth about a new deployment: the dashboard never
 ships rows that pretend to be work someone did — the first rows are the ones the day-one
-sessions file from your three answers.
+sessions file from your four answers.
 
 ## 🚀 Get started
 
@@ -189,30 +189,31 @@ Only the `channel-manager` is `required` — it is the seat the dashboard's Chat
 other seat can be left unticked when the template is installed, and its crons and intake are
 then never armed. The `channel` app is `required` too: it is the crew's queue and MCP endpoint.
 
-### The three questions
+### The four questions
 
-The studio asks these before anything exists, and the engine refuses a template with a fourth — in
-its own words, *"a template asks at most 3 before anything is provisioned — a fourth belongs to the
+The studio asks these before anything exists, and the engine refuses a template with a fifth — in
+its own words, *"a template asks at most 4 before anything is provisioned — a fifth belongs to the
 crew's first conversation"*. There is no onboarding screen in the dashboard: one place to ask, one
 place the answers live.
 
-| Template | 1 | 2 | 3 |
-|---|---|---|---|
-| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Reference channels for inspiration** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| Template | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| `faceless` | **Niche** — a choice of six, or your own | **Channel tone and who it is for, in one line** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Reference channels for inspiration** — text | **Channel tone and who it is for, in one line** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 
-The middle one is the same question on both templates, and it is the one this channel cannot run
-without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
+The last three are the same questions on both templates. The network is the one this channel
+cannot run without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
 (checkboxes in the studio), because the same vertical video usually goes out on more than one
 network: every network you tick is a target the crew files for, and a post that names no network
 goes to the **first** one you ticked. It used to be a constant in the code — a line an operator was
 expected to edit and re-deploy — so every install of this blueprint filed for the same network
 whoever installed it and whatever they had connected.
 
-Three is a budget, so asking that one meant not asking another. The slot came from *"tone and
-audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager now asks for it
-with `ask_operator` in its day-one session, which is exactly where the engine's refusal says a
-fourth question belongs. Nothing was dropped — it moved from the form to the conversation.
+Four is a budget. When it was three, the network took the slot *"tone and audience"* had on
+`faceless` and *"niche / audience"* had on `clipping`, and the channel manager asked for it with
+`ask_operator` in its day-one session — which parked its very first run on a question a form could
+have asked. The cap went to four so the form asks it: **Channel tone and who it is for** is the
+second question on both templates, and no agent asks for it in conversation.
 
 The answers are the install's project context. Each agent reads them through the platform's
 read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
@@ -344,8 +345,8 @@ the caption and drops the render, so a "published" post there ships a line of te
 work behind. The list this replaced admitted six of those and excluded `youtube` and `instagram` —
 two of the three that take the work.
 
-**Where *this* channel posts is yours**, answered in setup (see [The three
-questions](#the-three-questions)) — **one network or several** — and read back by everything that
+**Where *this* channel posts is yours**, answered in setup (see [The four
+questions](#the-four-questions)) — **one network or several** — and read back by everything that
 stamps a target: the store's default, the `create_post` tool description the crew reads before
 filing, and the line on Home and Posts. The answer is read as a list (`platformsFromAnswers`): every
 recognised pick in your order, each once, anything unrecognised dropped. With several picked, the
@@ -365,7 +366,7 @@ first"*, which `channel.update_post` can do.
 
 | Screen | What it does |
 |---|---|
-| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
+| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your four answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
 | Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
 | Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
@@ -424,7 +425,7 @@ an edit plus a re-apply.
 | the model, budget or approval gate every agent shares | [`templates/template.ts`](templates/template.ts) | `naive up` |
 | when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
-| the post kinds, the three setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
+| the post kinds, the four setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
 | where the channel posts | **you answer it in the studio** — no edit, no deploy | nothing |
 | a seat's role, skills or day-one intake | `role`, `skills`, `intake` in its `agent({ … })` call | `naive up` |
 | the style library | [`seed/style-templates.ts`](seed/style-templates.ts) | `pnpm build && naive up` |
@@ -490,7 +491,7 @@ blueprint, and not by whichever template happens to list the tool.
 ## 🔁 Switching template
 
 A template is data ([`templates/`](templates)): the crew and its prompts, the tool allow-lists,
-the post kinds it files, the three questions the studio asks and the words the queue prints. Nothing
+the post kinds it files, the four questions the studio asks and the words the queue prints. Nothing
 about the machine changes with it — same screens, same routes, same `/mcp`, same app.
 
 ```ts
@@ -580,7 +581,7 @@ export default defineProject({
   name: "media",
   blueprint: "media",
   template: ACTIVE.name,                 // chosen in templates/index.ts
-  questions: ACTIVE.questions,           // the three the studio asks: subject, network, cadence
+  questions: ACTIVE.questions,           // the four the studio asks: subject, tone, network, cadence
   templates: [                           // every template this repo carries
     { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
     { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },
@@ -619,7 +620,7 @@ The config can declare more than this template uses:
 | Key | What it provisions |
 |---|---|
 | `apps[]` | `name`, `type`, `description`, `deploy_dir`, `mcp` (the path of the app's own MCP endpoint; fullstack only), and `env` — literals, `{ from_env }` or `{ generate: true }`, written as the app's secrets |
-| `questions[]` | the setup questions (`text` or `choice`); at most three when a `template` is set |
+| `questions[]` | the setup questions (`text` or `choice`); at most four when a `template` is set |
 | `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `intake`, `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
 | `agents[].intake` | `message` and `budget_micro_usd` of the session the apply opens on day one |
 | `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |

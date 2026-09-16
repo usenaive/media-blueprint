@@ -59,7 +59,7 @@ describe("the store routes", () => {
   });
 
   it("has no onboarding route: the studio asks the questions, once, before the crew exists", async () => {
-    // Two places to answer the same three questions is two answers. `PUT /api/onboarding` and its
+    // Two places to answer the same four questions is two answers. `PUT /api/onboarding` and its
     // screen are gone; the answers live on the install and reach the dashboard via `/api/context`.
     const ctx = ctxOver(demoState(), CONFIG);
     expect(await handleRequest(req("GET", "/api/onboarding"), ctx)).toEqual({ status: 404, body: { error: "no such route" } });

@@ -28,25 +28,38 @@ export const PROJECT_NAME = "media";
  * studio asks it before the crew is provisioned, the answer lands on the install, and every agent
  * reads it back through `project_context`.
  *
- * *** THERE ARE THREE OF THEM, AND THE LIMIT IS REAL. MEASURED, NOT ASSUMED. ***
+ * *** THERE ARE FOUR OF THEM, AND THE LIMIT IS REAL. MEASURED, NOT ASSUMED. ***
  *
- * `defineProject` refuses a fourth outright, and it is worth having the sentence here because the
+ * `defineProject` refuses a fifth outright, and it is worth having the sentence here because the
  * schema does not show it: `questions` is `z.array(QuestionFieldSchema)` with no bound, and the
  * cap is a separate check in `parseProject`, applied only when the project names a `template` —
- * which this one always does. Run against `@usenaive-sdk/blueprints@0.4.0`, the version this repo
- * pins and `naive up` runs, a four-question declaration comes back:
+ * which this one always does. Run against `@usenaive-sdk/blueprints@0.6.0`, the version that
+ * raised the cap, a five-question declaration comes back:
  *
- *     template "faceless" asks 4 questions, but a template asks at most 3 before anything is
- *     provisioned — a fourth belongs to the crew's first conversation
+ *     template "faceless" asks 5 questions, but a template asks at most 4 before anything is
+ *     provisioned — a fifth belongs to the crew's first conversation
  *
- * So the three slots are a budget, and spending one is choosing what NOT to ask. `PLATFORM_QUESTION`
- * below took a slot from `audience` on `faceless` and from `niche` on `clipping`, because a channel
- * that does not know where it posts fills a queue nothing can publish, while tone and audience are
- * one sentence the channel manager asks for in its first session — which is the home the engine's
- * own refusal names for them. Both displaced questions are asked there (`channelManager`), so
- * nothing was dropped; it moved to the conversation instead of the form.
+ * So the four slots are a budget, and spending one is choosing what NOT to ask. Two are the
+ * blueprint's and every template asks them: `PLATFORM_QUESTION`, because a channel that does not
+ * know where it posts fills a queue nothing can publish, and `TONE_QUESTION`, because the cap used
+ * to be three, the network took the slot tone and audience had, and the channel manager was left
+ * to `ask_operator` for them on day one — which parked its very first session on a question the
+ * form could have asked. The cap went to four so the form asks it; no seat asks it in conversation.
  */
 export type SetupQuestion = NonNullable<DefineInput["questions"]>[number];
+
+/**
+ * The channel's voice and its audience, in the operator's own words. Shared: both crews write
+ * captions, scripts and replies "in the channel's voice, for its audience", and both read the one
+ * answer back through `project_context` as `answers.tone`. The placeholder is the sentence the
+ * channel manager used to ask with, kept word for word.
+ */
+export const TONE_QUESTION: SetupQuestion = {
+  key: "tone",
+  label: "Channel tone and who it is for, in one line",
+  type: "text",
+  placeholder: "e.g. tense and awe-driven nature-doc tone, for animal-lovers and viral-clip watchers 18-34",
+};
 
 /** How often the channel posts, which sizes every plan and every timer. Shared: one cadence, spelled once. */
 export const CADENCE_QUESTION: SetupQuestion = {
@@ -83,7 +96,7 @@ export const PLATFORM_CHOICES: readonly { option: string; platform: PostPlatform
  * "an operator who wants another network edits this one line and runs `naive up`". That is not an
  * onboarding flow, it is a patch — and the customer this blueprint is for is connecting a YouTube
  * account, not editing TypeScript. The channel's target is the one fact about a channel that only
- * its owner knows, so it is asked in the studio with the niche, the audience and the cadence, and
+ * its owner knows, so it is asked in the studio with the niche, the tone and the cadence, and
  * every post the crew files reads the answer.
  *
  * `other: false` deliberately: a network typed in free text is a network nothing can publish to,
@@ -203,15 +216,16 @@ export interface MediaTemplate {
    */
   platform: PostPlatform;
   /**
-   * The questions the studio asks once, before anything exists — three, because the engine refuses
-   * a fourth on a project that names a template (the refusal is quoted on `SetupQuestion` above,
+   * The questions the studio asks once, before anything exists — four, because the engine refuses
+   * a fifth on a project that names a template (the refusal is quoted on `SetupQuestion` above,
    * and `naive.config.test.ts` holds it to that count). The tuple is the type-level half of that
-   * budget: a template cannot quietly ask a fourth and discover it at `naive up`.
+   * budget: a template cannot quietly ask a fifth and discover it at `naive up`.
    *
-   * One of the three is `PLATFORM_QUESTION`, which every template of this blueprint asks, because
-   * where a channel posts is not the blueprint's to decide. A template chooses the other two.
+   * Three of the four are shared — `TONE_QUESTION`, `PLATFORM_QUESTION` and `CADENCE_QUESTION` —
+   * because voice, network and cadence are facts about any channel, whatever crew runs it. A
+   * template chooses the first: the thing only it needs.
    */
-  questions: [SetupQuestion, SetupQuestion, SetupQuestion];
+  questions: [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
   /** Every word a screen prints that changes with the template. */
   words: {
     queueSubtitle: string;
@@ -257,7 +271,7 @@ const model = "anthropic/claude-sonnet-5";
 
 /**
  * The paragraph every template agent's `system` opens with (plan §2.4). The setup answers — niche,
- * audience, cadence, the sources — are the client's; the tool is how they are read, and the one
+ * tone and audience, cadence, the sources — are the client's; the tool is how they are read, and the one
  * place they are true.
  */
 export const CONTEXT_PREAMBLE =
@@ -556,20 +570,7 @@ export const agent = (decl: {
  * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
  * names the rest of the crew in the brief, which is the only line that differs between templates.
  */
-export const channelManager = (
-  specialists: string,
-  /**
-   * THE QUESTION THE SETUP FORM HAD NO SLOT FOR, asked in the first session instead.
-   *
-   * The studio asks three (see `SetupQuestion`), and `PLATFORM_QUESTION` takes one of them —
-   * where the channel posts gates whether anything it makes can be published at all. What it
-   * displaced is named here and asked on day one with `ask_operator`, which parks the session with
-   * the question in front of the operator (`canonical-spec §7`). The engine's own refusal says
-   * this is where a fourth question belongs; this is the sentence that puts it there, rather than
-   * leaving the crew to invent an answer the preamble forbids it to invent.
-   */
-  firstAsk: string,
-): AgentDecl =>
+export const channelManager = (specialists: string): AgentDecl =>
   agent({
     name: "channel-manager",
     role: "Channel lead",
@@ -581,7 +582,7 @@ export const channelManager = (
     skills: ["naive/caption-writing"],
     intake: {
       message:
-        `Day one. Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published.`,
+        `Day one. Read project_context — what this channel is about, its tone and who it is for, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published.`,
       budget_micro_usd: 20_000_000,
     },
     schedules: CHANNEL_MANAGER_SCHEDULES,

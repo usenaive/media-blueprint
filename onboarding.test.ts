@@ -27,6 +27,7 @@ import {
   PLATFORM_ANSWER_KEY,
   PLATFORM_CHOICES,
   PLATFORM_QUESTION,
+  TONE_QUESTION,
   labelOf,
   labelsOf,
   platformFromAnswers,
@@ -82,20 +83,20 @@ describe("the question that asks where the channel posts", () => {
   /**
    * THE BUDGET THIS QUESTION IS SPENT OUT OF, measured against the SDK this repo pins.
    *
-   * The brief for this change said the tuple could simply be widened to four — that the platform
-   * takes `z.array(QuestionFieldSchema)` unbounded. The schema does; `parseProject` does not.
-   * `@usenaive-sdk/blueprints@0.4.0`, the published version `naive up` runs, refuses a fourth
-   * whenever the project names a template, which this one always does. A declaration that asks
-   * four does not install at all, so the question had to take a slot rather than add one.
+   * The schema takes `z.array(QuestionFieldSchema)` unbounded; `parseProject` does not.
+   * `@usenaive-sdk/blueprints@0.6.0` refuses a fifth whenever the project names a template, which
+   * this one always does — and 0.5.0 and earlier refused a fourth, which is why the tone question
+   * spent a day-one `ask_operator` instead of a slot. A declaration over the cap does not install
+   * at all.
    *
    * This test is the reason nobody has to re-derive that: it asks the real engine.
    */
-  it("fits the three the engine will actually install, and a fourth is refused by name", async () => {
-    for (const template of both) expect(template.questions, template.name).toHaveLength(3);
+  it("fits the four the engine will actually install, and a fifth is refused by name", async () => {
+    for (const template of both) expect(template.questions, template.name).toHaveLength(4);
     const { defineProject } = await import("@usenaive-sdk/blueprints");
-    const fourth = { key: "extra", label: "One more thing", type: "text" as const };
-    const four = { ...declaration, questions: [...declaration.questions, fourth] };
-    expect(() => defineProject(four)).toThrow(/asks 4 questions, but a template asks at most 3/);
+    const fifth = { key: "extra", label: "One more thing", type: "text" as const };
+    const five = { ...declaration, questions: [...declaration.questions, fifth] };
+    expect(() => defineProject(five)).toThrow(/asks 5 questions, but a template asks at most 4/);
     // And the declaration as it stands is one the engine accepts.
     expect(() => defineProject(declaration)).not.toThrow();
   });
@@ -139,27 +140,32 @@ describe("the question that asks where the channel posts", () => {
    * "Exactly three (§4 of the plan)" and "the engine refuses a template with more than three" —
    * the count was right and the reason was a guess, so the next reader could not tell whether the
    * limit was the blueprint's taste or the platform's rule. It is the platform's, and the file now
-   * quotes the refusal it was measured from.
+   * quotes the refusal it was measured from — the four-question one, not the three it replaced.
    */
-  it("says where the three-question limit actually comes from", () => {
+  it("says where the four-question limit actually comes from", () => {
     const source = readFileSync(new URL("./templates/template.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/Exactly three \(§4 of the plan\)/);
-    expect(source).toMatch(/a template asks at most 3 before anything is/);
-    expect(source).toMatch(/@usenaive-sdk\/blueprints@0\.4\.0/);
+    expect(source).not.toMatch(/a template asks at most 3 before anything is/);
+    expect(source).toMatch(/a template asks at most 4 before anything is/);
+    expect(source).toMatch(/@usenaive-sdk\/blueprints@0\.6\.0/);
   });
 
-  /** Nothing was dropped to make room: the displaced question is asked in the first session. */
-  it("asks what it displaced in the crew's first conversation instead", () => {
+  /**
+   * The tone question is back on the form, so the manager no longer opens day one by parking its
+   * session on `ask_operator` for it — the operator saw exactly that on the very first run, and it
+   * is the reason the cap went to four.
+   */
+  it("asks the tone on the form, and no longer in the crew's first conversation", () => {
     for (const template of both) {
       const manager = template.agents.find((one) => one.name === "channel-manager")!;
-      expect(manager.intake?.message, template.name).toMatch(/ask_operator/);
-      expect(manager.intake?.message, template.name).toMatch(/setup form asks three questions/);
+      expect(manager.intake?.message, template.name).not.toMatch(/ask_operator/);
+      expect(manager.intake?.message, template.name).not.toMatch(/setup form asks three questions/);
+      expect(manager.intake?.message, template.name).toMatch(/its tone and who it is for/);
+      expect(template.questions.find((q) => q.key === "tone"), template.name).toBe(TONE_QUESTION);
     }
-    expect(TEMPLATES.faceless.agents[0]!.intake?.message).toMatch(/tone and who it is for/);
-    expect(TEMPLATES.clipping.agents[0]!.intake?.message).toMatch(/who these clips are for/);
-    // And what a template asks beside the platform question is still its own.
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", PLATFORM_ANSWER_KEY, "cadence"]);
-    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", PLATFORM_ANSWER_KEY, "cadence"]);
+    // And what a template asks ahead of the shared three is still its own.
+    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", "tone", PLATFORM_ANSWER_KEY, "cadence"]);
+    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "tone", PLATFORM_ANSWER_KEY, "cadence"]);
   });
 });
 

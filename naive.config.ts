@@ -8,7 +8,7 @@
  *
  * The blueprint is the machine — the screens, `/api/*`, `/mcp`, the store, the approval flow — and
  * it is shared by every template it carries. The template is data: the crew and its prompts, the
- * tool allow-lists, the post kinds, the three setup questions and the words the queue prints
+ * tool allow-lists, the post kinds, the four setup questions and the words the queue prints
  * (`templates/`). Switching template is an edit of `ACTIVE` in `templates/index.ts` plus
  * `naive up`, on the same clone and the same app.
  *
@@ -59,17 +59,18 @@ export const declaration = {
   templates,
 
   /**
-   * The three things the studio asks before anything is provisioned (`canonical-spec §7.1`): what
-   * the channel is about, WHERE IT POSTS, and how often. The answers land on the install and reach
-   * every agent through the built-in `project_context` tool (§31.8) — there is no other place they
-   * are asked, which is why the dashboard has no onboarding screen of its own.
+   * The four things the studio asks before anything is provisioned (`canonical-spec §7.1`): what
+   * the channel is about, its tone and who it is for, WHERE IT POSTS, and how often. The answers
+   * land on the install and reach every agent through the built-in `project_context` tool (§31.8)
+   * — there is no other place they are asked, which is why the dashboard has no onboarding screen
+   * of its own and no agent asks for one of them in conversation.
    *
-   * The engine refuses a fourth, and it is not a style rule — `parseProject` in
-   * `@usenaive-sdk/blueprints@0.4.0` throws "a template asks at most 3 before anything is
-   * provisioned" for any project that names a template, which this one always does. So the middle
-   * slot is spent on the network deliberately: a channel that does not know where it posts fills a
-   * queue nothing can publish, while the question it displaced is asked by the channel manager in
-   * its first session (`templates/template.ts`, `channelManager`).
+   * The engine refuses a fifth, and it is not a style rule — `parseProject` in
+   * `@usenaive-sdk/blueprints@0.6.0` throws "a template asks at most 4 before anything is
+   * provisioned" for any project that names a template, which this one always does. Under the
+   * earlier cap of three the network took the tone's slot and the channel manager opened day one
+   * by asking for it with `ask_operator`; the cap was raised so the form asks it instead
+   * (`templates/template.ts`, `TONE_QUESTION`).
    */
   questions: ACTIVE.questions,
 
