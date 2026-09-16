@@ -25,7 +25,17 @@ export function upstreamFor(method: string, pathname: string, identityId: string
   if (method === "POST" && pathname === "/api/chat") return { method: "POST", path: "/v1/sessions" };
   const stream = /^\/api\/chat\/(ses_[\w-]+)\/stream$/.exec(pathname);
   if (method === "GET" && stream) {
-    return { method: "GET", path: `/v1/sessions/${stream[1]}/stream`, sse: true };
+    return { method: "GET", path: `/v1/sessions/${stream[1]}/stream${afterSeq(query)}`, sse: true };
+  }
+  // A resumed session's transcript: the event log, whole (`collect` follows `seq`), from
+  // `after_seq` when the screen already holds the start of it.
+  const events = /^\/api\/chat\/(ses_[\w-]+)\/events$/.exec(pathname);
+  if (method === "GET" && events) {
+    return { method: "GET", path: `/v1/sessions/${events[1]}/events?limit=100${afterSeq(query, "&")}` };
+  }
+  const messages = /^\/api\/chat\/(ses_[\w-]+)\/messages$/.exec(pathname);
+  if (method === "POST" && messages) {
+    return { method: "POST", path: `/v1/sessions/${messages[1]}/messages` };
   }
   // The roster and the timers are read whole (`collect` follows the cursor): a page of either
   // would show an agent as having no timer when its timer sat on the page that was not read.
@@ -75,6 +85,12 @@ export function upstreamFor(method: string, pathname: string, identityId: string
 
 /** The list filters the platform's `GET /v1/sessions` takes (`canonical-spec §5`); anything else is dropped. */
 const SESSION_FILTERS = ["agent_id", "status", "stop_reason"] as const;
+
+/** The `after_seq` cursor (`canonical-spec §8`), when the browser sent a well-formed one. */
+function afterSeq(query: URLSearchParams | undefined, lead: "?" | "&" = "?"): string {
+  const value = query?.get("after_seq");
+  return value !== undefined && value !== null && /^\d+$/.test(value) ? `${lead}after_seq=${value}` : "";
+}
 
 export interface ProxyConfig {
   baseUrl: string;
@@ -135,14 +151,16 @@ export function notActivated(status: number, body: unknown): boolean {
 
 /**
  * Every row of a cursor-paginated platform list, or null when any page failed — a list cut short
- * by a failed page would read as a shorter roster, and nothing downstream could tell.
+ * by a failed page would read as a shorter roster, and nothing downstream could tell. `cursor`
+ * names the query parameter the next page is asked by: `after` (§9) or a session log's `after_seq` (§8).
  */
-export async function collect<T>(config: ProxyConfig, upstream: Upstream, fetchImpl: typeof fetch = fetch): Promise<T[] | null> {
+export async function collect<T>(config: ProxyConfig, upstream: Upstream, fetchImpl: typeof fetch = fetch, cursor = "after"): Promise<T[] | null> {
   const all: T[] = [];
   let after: string | null = null;
   for (;;) {
-    const path = after === null ? upstream.path : `${upstream.path}&after=${encodeURIComponent(after)}`;
-    const res = await proxyFetch(config, { method: "GET", path }, null, fetchImpl);
+    const url = new URL(upstream.path, "http://upstream");
+    if (after !== null) url.searchParams.set(cursor, after);
+    const res = await proxyFetch(config, { method: "GET", path: `${url.pathname}${url.search}` }, null, fetchImpl);
     if (!res.ok) return null;
     const page = (await res.json()) as { data?: T[]; has_more?: boolean; next_cursor?: string | null };
     all.push(...(page.data ?? []));

@@ -284,6 +284,14 @@ store — so a post published that way is not a `posted` row unless someone also
 {agent_id, message}`; the UI then streams `GET /api/chat/:ses/stream` (SSE proxy). The manager
 answers from the queue and routes work to the seat it belongs to; it does not publish.
 
+The rail lists the manager's sessions from `GET /api/chat` (`GET /v1/sessions?agent_id=`, newest
+first, twenty at most), each titled by the first line of its first user message — read once from
+the session's events and held in a module-level map, since a first message never changes. Opening
+`/chat/:ses` reduces `GET /api/chat/:ses/events` (`message.completed`, both roles) into the
+transcript, then streams from the last `seq`; a follow-up goes through `POST /api/chat/:ses/messages`
+→ `POST /v1/sessions/:ses/messages {message, queue: true}`, so a running session holds it instead
+of answering `session_running`.
+
 ## 10. Observed vs. inferred
 
 Everything above is read from the repository. Two things are not verifiable here: how the platform

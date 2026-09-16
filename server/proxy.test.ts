@@ -11,6 +11,34 @@ describe("upstreamFor", () => {
     });
   });
 
+  it("maps a resumed session's log and follow-up onto the session's events and messages, carrying `after_seq`", () => {
+    expect(upstreamFor("GET", "/api/chat/ses_abc123/events", null)).toEqual({
+      method: "GET",
+      path: "/v1/sessions/ses_abc123/events?limit=100",
+    });
+    expect(upstreamFor("GET", "/api/chat/ses_abc123/events", null, new URLSearchParams({ after_seq: "12", evil: "1" }))).toEqual({
+      method: "GET",
+      path: "/v1/sessions/ses_abc123/events?limit=100&after_seq=12",
+    });
+    expect(upstreamFor("GET", "/api/chat/ses_abc123/events", null, new URLSearchParams({ after_seq: "x" }))?.path).toBe(
+      "/v1/sessions/ses_abc123/events?limit=100",
+    );
+    expect(upstreamFor("GET", "/api/chat/ses_abc123/stream", null, new URLSearchParams({ after_seq: "12" }))).toEqual({
+      method: "GET",
+      path: "/v1/sessions/ses_abc123/stream?after_seq=12",
+      sse: true,
+    });
+    expect(upstreamFor("POST", "/api/chat/ses_abc123/messages", null)).toEqual({
+      method: "POST",
+      path: "/v1/sessions/ses_abc123/messages",
+    });
+    // The list and the single session are answered by `routes.ts` itself (titled), not passed through.
+    expect(upstreamFor("GET", "/api/chat", null)).toBeNull();
+    expect(upstreamFor("GET", "/api/chat/ses_abc123", null)).toBeNull();
+    expect(upstreamFor("POST", "/api/chat/ses_abc123/events", null)).toBeNull();
+    expect(upstreamFor("GET", "/api/chat/ses_abc123/messages", null)).toBeNull();
+  });
+
   it("streams a filed video's bytes by its file id, and nothing shaped otherwise", () => {
     expect(upstreamFor("GET", "/api/files/fil_4pb4vm", null)).toEqual({
       method: "GET",
