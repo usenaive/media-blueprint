@@ -33,8 +33,8 @@ const FILE_ID = /^fil_\w+$/;
 
 export function MediaPreview({ src, label }: { src: string; label: string }) {
   const frame = "w-full rounded-md border border-line bg-sunken";
-  if (FILE_ID.test(src)) return <VideoPoster className={frame} src={`/api/files/${src}`} label={label} />;
-  if (VIDEO.test(src)) return <VideoPoster className={frame} src={src} label={label} />;
+  if (FILE_ID.test(src)) return <VideoPoster key={src} className={frame} src={`/api/files/${src}`} label={label} />;
+  if (VIDEO.test(src)) return <VideoPoster key={src} className={frame} src={src} label={label} />;
   if (IMAGE.test(src)) return <img className={`${frame} object-cover`} src={src} alt={label} />;
   return (
     <a className="block truncate font-mono text-xs text-ink-2 underline" href={src} target="_blank" rel="noreferrer">
