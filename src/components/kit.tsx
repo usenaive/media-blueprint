@@ -44,30 +44,33 @@ export function MediaPreview({ src, label }: { src: string; label: string }) {
 }
 
 /**
- * A VIDEO IS FETCHED WHEN IT IS PLAYED, NOT WHEN IT IS SHOWN.
+ * A VIDEO SHOWS ITS FIRST FRAME AND PLAYS WHEN PRESSED.
  *
- * `/api/files/:id` pipes the whole object with no range support, so a `<video>` on the page — even
- * at `preload="metadata"` — pulls the entire render before it draws a frame, and a queue of twenty
- * posts pulls twenty renders at once. Until the operator presses play there is no `<video>` at all:
- * a portrait poster frame, and one press mounts the player and starts it.
+ * `/api/files/:id` (and the platform behind it) answer a `Range`, so `preload="metadata"` costs the
+ * clip's header and first frame — a few hundred KB of a render — and that frame is the thumbnail.
+ * The rest is fetched when the operator presses play; the same element plays, so what the thumbnail
+ * loaded is not loaded twice.
  */
 export function VideoPoster({ src, label, className = "" }: { src: string; label: string; className?: string }) {
   const [playing, setPlaying] = useState(false);
-  if (playing) return <video className={className} src={src} controls autoPlay playsInline preload="auto" />;
+  const player = useRef<HTMLVideoElement>(null);
+  const play = () => {
+    setPlaying(true);
+    void player.current?.play();
+  };
   return (
-    <button
-      type="button"
-      data-video-poster={src}
-      aria-label={`Play ${label}`}
-      onClick={() => setPlaying(true)}
-      className={`group grid aspect-[9/16] place-items-center ${className} hover:bg-hover`}
-    >
-      <span className="grid size-10 place-items-center rounded-full bg-ink/80 text-surface group-hover:bg-ink">
-        <svg viewBox="0 0 24 24" className="size-4 translate-x-px" fill="currentColor" aria-hidden>
-          <path d="M7 4.5v15l12-7.5z" />
-        </svg>
-      </span>
-    </button>
+    <span className={`relative block overflow-hidden ${className}`}>
+      <video ref={player} className="block aspect-[9/16] w-full object-cover" src={src} controls={playing} playsInline preload="metadata" aria-label={label} />
+      {!playing && (
+        <button type="button" data-video-poster={src} aria-label={`Play ${label}`} onClick={play} className="group absolute inset-0 grid place-items-center">
+          <span className="grid size-10 place-items-center rounded-full bg-ink/80 text-surface group-hover:bg-ink">
+            <svg viewBox="0 0 24 24" className="size-4 translate-x-px" fill="currentColor" aria-hidden>
+              <path d="M7 4.5v15l12-7.5z" />
+            </svg>
+          </span>
+        </button>
+      )}
+    </span>
   );
 }
 
