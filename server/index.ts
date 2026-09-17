@@ -67,6 +67,7 @@ const isLoopback = (address: string | undefined): boolean =>
 async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const reply = await handleRequest(await requestOf(req, url), {
     store: () => Promise.resolve(store),
+    release: () => Promise.resolve(),
     config,
     mcpToken,
     dashboardToken,

@@ -74,6 +74,8 @@ describe("the Projects screen", () => {
     expect(buttons()).toEqual(expect.arrayContaining(["Render", "Drop"]));
     expect(host.textContent).toContain(planned.id);
     expect(host.textContent).toContain(planned.title);
+    // The Studio takes a planned plan too: a note there goes to its planner.
+    expect(card().querySelector("header a.btn")?.getAttribute("href")).toBe(`/studio/${planned.id}`);
 
     await click("Render");
 
@@ -110,6 +112,7 @@ describe("the Projects screen", () => {
 
     expect(host.querySelectorAll("section.panel")).toHaveLength(1);
     expect(card().querySelector("h2.card-title")?.textContent).toBe(planned.title);
+    expect(card().querySelector("h2.card-title a")?.getAttribute("href")).toBe(`/studio/${planned.id}`);
     expect(card().querySelector(".chip-absent")?.textContent).toBe("Planned — waiting for a render");
     expect(labels()).toEqual(["Platform", "Planned by", "Model", "Total seconds", "Style template", "Post"]);
     const seconds = planned.scenes!.reduce((sum, s) => sum + s.seconds, 0);
@@ -173,19 +176,29 @@ describe("the Projects screen", () => {
     expect(card().textContent).toContain(source.reason);
   });
 
-  it("tones the status chip by state, and offers Restore on a dropped plan", async () => {
+  it("tones the status chip by state, offers Open in Studio on every plan but a dropped one, and Restore on a dropped plan", async () => {
     await mount(vi.fn().mockResolvedValueOnce(json([...FACELESS_PROJECT_SEEDS, ...CLIPPING_PROJECT_SEEDS])));
 
+    const studio = () => card().querySelector<HTMLAnchorElement>("header a.btn");
     expect(tabCount("Planned")).toBe(2);
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    expect(studio()?.textContent?.trim()).toBe("Open in Studio");
+    expect(studio()?.className).toContain("btn-ghost");
+    expect(studio()?.getAttribute("href")).toBe(`/studio/${planned.id}`);
+    expect(buttons()).toEqual(expect.arrayContaining(["Render", "Drop"]));
     await act(async () => tab("In progress").click());
     expect(card().querySelector(".chip-plain .dot-run")).not.toBeNull();
     expect(card().textContent).toContain("Rendering");
+    expect(studio()?.textContent?.trim()).toBe("Open in Studio");
+    expect(studio()?.className).toContain("btn-ghost");
     await act(async () => tab("Rendered").click());
     expect(card().querySelector(".chip-credit")?.textContent).toBe("Rendered");
     expect(card().querySelector("a[href='/posts']")?.textContent).toBe("post_9f2a");
+    expect(studio()?.getAttribute("href")).toBe("/studio/post_9f2a");
     await act(async () => tab("Dropped").click());
     expect(card().querySelector(".chip-fail")?.textContent).toBe("Dropped");
     expect(buttons()).toContain("Restore");
+    expect(studio()).toBeNull();
   });
 
   it("says so when a group is empty, and when the plans could not be read", async () => {

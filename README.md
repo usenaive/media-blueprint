@@ -369,6 +369,7 @@ first"*, which `channel.update_post` can do.
 | Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
 | Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
+| Studio | One video and the session that made it: `GET /api/studio/:id` (a project or post id) answers the plan, its post and the latest of the plan's sessions read live; **Revise** (`POST /api/studio/:id/revise {message}`) sends your note to that session — queued, never interrupting a paid render — or opens a new renderer session on the same plan. It is the one way a rendered plan renders again, and it refuses an approved or posted video: reject it first |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
 | Analytics | Views and likes, summed from the posts this channel actually published |
 | Accounts | Connect and reconnect social accounts through the hosted portal |
@@ -463,8 +464,13 @@ sends it with every call. Without that token the endpoint answers `401`.
 | `update_post {id, title?, caption?, media_url?, platform?}` | Fix or retarget a pending or ready post; approved and posted ones are yours |
 | `list_projects {status?, kind?}`, `get_project {id}` | Inspect the video projects — the plan each video is made from |
 | `create_project {kind, title, brief, post_id?, scenes? \| sources?, model?, style_template?, caption?, …}` | File a plan: `generation` carries the scenes in order (prompt, seconds, voiceover, on-screen text, model) and the look; `clipping` carries the source URLs, the timestamps and the reason each moment was picked. Filed on a brief, it moves that brief to `scripted` |
-| `update_project {id, status?, expected_status?, media_url?, agent?, …}` | Claim a plan (`rendering`, `expected_status: planned` — a second session is refused before it spends) and finish it (`rendered` with the video as `media_url`); finishing puts the video on the plan's post, or files the post when the plan has none. Rendered is final |
+| `update_project {id, status?, expected_status?, media_url?, agent?, …}` | Claim a plan (`rendering`, `expected_status: planned` — a second session is refused before it spends) and finish it (`rendered` with the video as `media_url`); finishing puts the video on the plan's post, or files the post when the plan has none. Rendered is final to every agent — only the operator's **Revise** in the Studio reopens it, and the same finishing write then lands the new video, with the previous one kept on the plan's `renders[]` |
 | `list_style_templates`, `list_accounts` | The style library, the connected accounts |
+
+A write that names its seat (`agent`) is bound to the session that made it: `create_project`
+and the claim/finish moves of `update_project` record the seat's one running session on the
+plan's `sessions[]` — exactly one, or nothing is recorded — and the **Render** button records the
+session it opens. That is what the Studio talks to.
 
 The setup answers are not a tool of this server: the platform offers every agent of the crew its
 own read-only `project_context`, so there is one copy of them.

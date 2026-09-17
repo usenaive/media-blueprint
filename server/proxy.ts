@@ -22,7 +22,7 @@ export interface Upstream {
  * without one they are unroutable and return null (the caller answers 503).
  */
 export function upstreamFor(method: string, pathname: string, identityId: string | null, query?: URLSearchParams): Upstream | null {
-  if (method === "POST" && pathname === "/api/chat") return { method: "POST", path: "/v1/sessions" };
+  if (method === "POST" && pathname === "/api/chat") return SESSION_CREATE;
   const stream = /^\/api\/chat\/(ses_[\w-]+)\/stream$/.exec(pathname);
   if (method === "GET" && stream) {
     return { method: "GET", path: `/v1/sessions/${stream[1]}/stream${afterSeq(query)}`, sse: true };
@@ -34,9 +34,7 @@ export function upstreamFor(method: string, pathname: string, identityId: string
     return { method: "GET", path: `/v1/sessions/${events[1]}/events?limit=100${afterSeq(query, "&")}` };
   }
   const messages = /^\/api\/chat\/(ses_[\w-]+)\/messages$/.exec(pathname);
-  if (method === "POST" && messages) {
-    return { method: "POST", path: `/v1/sessions/${messages[1]}/messages` };
-  }
+  if (method === "POST" && messages) return sessionMessages(messages[1]!);
   // The roster and the timers are read whole (`collect` follows the cursor): a page of either
   // would show an agent as having no timer when its timer sat on the page that was not read.
   if (method === "GET" && pathname === "/api/agents") return { method: "GET", path: "/v1/agents?limit=100" };
@@ -54,12 +52,12 @@ export function upstreamFor(method: string, pathname: string, identityId: string
    * rather than the whole list.
    */
   if (method === "GET" && pathname === "/api/sessions") {
-    const params = new URLSearchParams({ limit: "100" });
+    const filters: SessionFilters = { limit: 100 };
     for (const name of SESSION_FILTERS) {
       const value = query?.get(name);
-      if (value) params.set(name, value);
+      if (value) filters[name] = value;
     }
-    return { method: "GET", path: `/v1/sessions?${params}` };
+    return sessionList(filters);
   }
   const confirm = /^\/api\/sessions\/(ses_[\w-]+)\/tool_confirmations$/.exec(pathname);
   if (method === "POST" && confirm) {
@@ -85,6 +83,34 @@ export function upstreamFor(method: string, pathname: string, identityId: string
 
 /** The list filters the platform's `GET /v1/sessions` takes (`canonical-spec §5`); anything else is dropped. */
 const SESSION_FILTERS = ["agent_id", "status", "stop_reason"] as const;
+
+export type SessionFilters = Partial<Record<(typeof SESSION_FILTERS)[number], string>> & { limit?: number };
+
+/** `POST /v1/sessions` — opens a session; the body names the agent, the first message and any `metadata`. */
+export const SESSION_CREATE: Upstream = { method: "POST", path: "/v1/sessions" };
+
+/**
+ * `GET /v1/sessions` narrowed to one agent and, when asked, one status: how the server finds the
+ * session that made a plan (`whoIsRunning`, the Studio's backfill) as well as what the browser's
+ * `/api/sessions` maps onto. The filters go in a fixed order so a path reads the same either way.
+ */
+export function sessionList(filters: SessionFilters): Upstream {
+  const params = new URLSearchParams({ limit: String(filters.limit ?? 100) });
+  for (const name of SESSION_FILTERS) {
+    const value = filters[name];
+    if (value) params.set(name, value);
+  }
+  return { method: "GET", path: `/v1/sessions?${params}` };
+}
+
+/** A session's log, first hundred events from `afterSeq` (exclusive) — the shape `collect` pages with `after_seq`. */
+export const sessionEvents = (id: string, afterSeq?: number): Upstream => ({
+  method: "GET",
+  path: `/v1/sessions/${id}/events?limit=100${afterSeq === undefined ? "" : `&after_seq=${afterSeq}`}`,
+});
+
+/** `POST /v1/sessions/:id/messages` — a follow-up; the body says whether it queues behind the turn. */
+export const sessionMessages = (id: string): Upstream => ({ method: "POST", path: `/v1/sessions/${id}/messages` });
 
 /** The `after_seq` cursor (`canonical-spec §8`), when the browser sent a well-formed one. */
 function afterSeq(query: URLSearchParams | undefined, lead: "?" | "&" = "?"): string {

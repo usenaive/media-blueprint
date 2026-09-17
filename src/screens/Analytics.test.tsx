@@ -122,8 +122,6 @@ describe("xTicks", () => {
   });
 });
 
-/* ---- from #25: the screen as an operator reads it, over the newer row shape ---- */
-
 const posted: Post = {
   id: "post_3970",
   title: "The obstacle is the way",

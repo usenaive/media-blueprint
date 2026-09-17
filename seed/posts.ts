@@ -148,7 +148,7 @@ const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_00
 
 /** The `faceless` demo queue: original video the producer made, in one niche. */
 export const FACELESS_SEEDS: Post[] = [
-  { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "youtube", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:41", projectId: "post_9f2a" },
+  { id: "post_9f2a", title: "3 stoic rules nobody follows", caption: "Rule two will sting. #stoicism #discipline", platform: "youtube", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", mediaUrl: "fil_9f2a_v2", duration: "0:41", projectId: "post_9f2a" },
   { id: "post_8e1b", title: "Marcus Aurelius on mornings", caption: "The 5am debate, settled 1,900 years ago.", platform: "instagram", account: "@dailystoic", status: "pending", agent: "producer", kind: "produced", duration: "0:58" },
   { id: "post_7d3c", title: "Why comfort is a trap", caption: "Seneca said it better than any podcast.", platform: "tiktok", account: "@dailystoic", status: "ready", agent: "producer", kind: "produced", duration: "0:36" },
   { id: "post_6c4d", title: "Dichotomy of control, animated", caption: "Part 1 of 3 — the only flowchart you need.", platform: "youtube", account: "@dailystoic", status: "ready", agent: "producer", kind: "multi", duration: "0:52" },

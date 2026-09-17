@@ -531,6 +531,67 @@ describe("mcp tools", () => {
     expect(text<{ status: string }>((await handleMcp(call("update_project", { id: dropped.id, status: "planned" }), store, null))!).status).toBe("planned");
   });
 
+  it("refuses the sweep's write on a plan the operator is revising: a revised plan goes forward only", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+    );
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
+    expect(store.openRevision(plan.id, "ses_rev", "tighter")).toMatchObject({ status: "rendering" });
+    const opened = structuredClone(store.read().projects.find((p) => p.id === plan.id)!);
+
+    // The manager's sweep cannot take a live revision for a dead claim: it is the operator's, paid for.
+    for (const status of ["planned", "dropped", "rendering"]) {
+      const swept = (await handleMcp(call("update_project", { id: plan.id, status, expected_status: "rendering" }), store, null)) as CallResult;
+      expect(swept.result.isError, status).toBe(true);
+      expect(swept.result.content[0]!.text).toMatch(/a revised plan goes forward only/);
+    }
+    expect(store.read().projects.find((p) => p.id === plan.id)).toEqual(opened);
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "rendering", mediaUrl: "fil_v1" });
+
+    // The renderer's finish is the one way through, and the plan is revisable again after it.
+    const done = text<{ status: string; renders: unknown[] }>(
+      (await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" }), store, null))!,
+    );
+    expect(done).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1" }] });
+    expect(done).not.toHaveProperty("revision");
+    expect(store.openRevision(plan.id, "ses_rev2", "again")).not.toBeNull();
+  });
+
+  /**
+   * *** THE WAY OUT OF A WEDGED REVISION. ***
+   *
+   * The finishing `rendered` write is a revision's only exit in normal operation — no route, no
+   * other tool and no timeout clears one — so a renderer that died holding a revision (blowing the
+   * $20 per-task ceiling does it; production has parked a session that way) left the plan at
+   * `rendering` with every door shut: the posts and projects routes 409, `/revise` 409s, and this
+   * tool refused the 08:00 sweep. After a day the sweep's own rule for a dead claim reaches it —
+   * and frees it to `rendered` on the cut the plan already has, never to `planned`, which would buy
+   * that cut a second time.
+   */
+  it("frees a revision the sweep finds a day old, back to the cut the plan has", async () => {
+    const store = freshStore();
+    const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
+    const plan = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+    );
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
+    store.openRevision(plan.id, "ses_rev", "tighter");
+    // The renderer died with it. Nothing ages a claim but time, so the claim is aged on the document.
+    store.read().projects.find((p) => p.id === plan.id)!.revision!.openedAt = new Date(Date.now() - 25 * 3_600_000).toISOString();
+
+    const freed = text<{ status: string }>((await handleMcp(call("update_project", { id: plan.id, status: "planned", expected_status: "rendering" }), store, null))!);
+    expect(freed.status).toBe("rendered");
+    expect(freed).not.toHaveProperty("revision");
+    // The video the channel paid for is still the post's, and the row is back for a verdict.
+    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "rendered", mediaUrl: "fil_v1", status: "pending" });
+    // Unwedged: the operator can ask for another cut.
+    expect(store.openRevision(plan.id, "ses_rev2", "again")).not.toBeNull();
+  });
+
   it("retargets the brief with its plan while the row is the crew's, and keeps an approved row where the operator put it", async () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft", agent: "trend-scout", stage: "brief" }), store, null))!);
@@ -626,5 +687,78 @@ describe("mcp tools", () => {
         vi.unstubAllGlobals();
       }
     }
+  });
+});
+
+/**
+ * THE SESSION THAT MADE IT. An MCP call carries no session id, so the plan is bound to the seat's
+ * one running session — and only then. The write always lands: the binding is for the Studio,
+ * and a lookup that fails or cannot be sure records nothing rather than guessing.
+ */
+describe("binding a plan to the session writing it", () => {
+  const sources = [{ url: "https://www.youtube.com/watch?v=abc123", from: "12:04", to: "12:41", reason: "The line lands cold." }];
+  const file = (store: Store, who: (agent: string) => Promise<string | null>) =>
+    handleMcp(call("create_project", { kind: "clipping", agent: "scout", title: "The hill", brief: "Why the hill.", sources }), store, null, who);
+
+  it("records the one running session of the named seat on the plan's writes, once", async () => {
+    const store = freshStore();
+    const asked: string[] = [];
+    const who = async (agent: string) => { asked.push(agent); return agent === "scout" ? "ses_scout" : "ses_clipper"; };
+    const plan = text<{ id: string; sessions: unknown[] }>((await file(store, who))!);
+    expect(asked).toEqual(["scout"]);
+    expect(plan.sessions).toEqual([{ id: "ses_scout", role: "planned", at: expect.any(String) }]);
+
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned", agent: "clipper" }), store, null, who);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_1", agent: "clipper" }), store, null, who);
+    // An edit is not a move: nobody is asked for it.
+    await handleMcp(call("update_project", { id: plan.id, title: "The gravel hill", agent: "scout" }), store, null, who);
+    expect(asked).toEqual(["scout", "clipper", "clipper"]);
+    expect(store.read().projects.find((p) => p.id === plan.id)?.sessions.map((s) => [s.id, s.role])).toEqual([["ses_scout", "planned"], ["ses_clipper", "rendered"]]);
+  });
+
+  it("binds a claim that names no agent to the plan's renderer seat", async () => {
+    // The renderers' briefs claim with `status rendering, expected_status planned` and no `agent`:
+    // the seat is the plan's kind — clipper for a clipping plan, producer for a generation one.
+    const asked: string[] = [];
+    const who = async (agent: string) => { asked.push(agent); return `ses_${agent}`; };
+    const store = freshStore();
+    const clip = text<{ id: string }>((await file(store, who))!);
+    await handleMcp(call("update_project", { id: clip.id, status: "rendering", expected_status: "planned" }), store, null, who);
+    const made = text<{ id: string }>(
+      (await handleMcp(call("create_project", { kind: "generation", agent: "scriptwriter", title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null, who))!,
+    );
+    await handleMcp(call("update_project", { id: made.id, status: "rendering", expected_status: "planned" }), store, null, who);
+    expect(asked).toEqual(["scout", "clipper", "scriptwriter", "producer"]);
+    const sessions = (id: string) => store.read().projects.find((p) => p.id === id)?.sessions.map((s) => [s.id, s.role]);
+    expect(sessions(clip.id)).toEqual([["ses_scout", "planned"], ["ses_clipper", "rendered"]]);
+    expect(sessions(made.id)).toEqual([["ses_scriptwriter", "planned"], ["ses_producer", "rendered"]]);
+    // A finish that names its seat is asked for as named.
+    await handleMcp(call("update_project", { id: clip.id, status: "rendered", expected_status: "rendering", media_url: "fil_1", agent: "editor" }), store, null, who);
+    expect(asked.at(-1)).toBe("editor");
+  });
+
+  it("records nothing when the seat has no running session, several, is not named, or the lookup fails — and the write still lands", async () => {
+    for (const who of [async () => null, async () => { throw new Error("upstream down"); }]) {
+      const store = freshStore();
+      const plan = text<{ id: string; status: string; sessions: unknown[] }>((await file(store, who))!);
+      expect(plan.status).toBe("planned");
+      expect(plan.sessions).toEqual([]);
+      const claimed = text<{ status: string; sessions: unknown[] }>(
+        (await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned", agent: "clipper" }), store, null, who))!,
+      );
+      expect(claimed).toMatchObject({ status: "rendering", sessions: [] });
+    }
+    const store = freshStore();
+    const who = vi.fn(async () => "ses_x");
+    const unsigned = text<{ id: string; sessions: unknown[] }>(
+      (await handleMcp(call("create_project", { kind: "clipping", title: "The hill", brief: "Why.", sources }), store, null, who))!,
+    );
+    expect(who).not.toHaveBeenCalled();
+    expect(unsigned.sessions).toEqual([]);
+    // A refused write asks nobody.
+    await handleMcp(call("update_project", { id: unsigned.id, status: "rendered", expected_status: "planned", agent: "clipper" }), store, null, who);
+    expect(who).not.toHaveBeenCalled();
+    // Without a lookup at all — the local demo — the tools work as before.
+    expect(text<{ sessions: unknown[] }>((await handleMcp(call("update_project", { id: unsigned.id, status: "rendering", agent: "clipper" }), store, null))!).sessions).toEqual([]);
   });
 });
