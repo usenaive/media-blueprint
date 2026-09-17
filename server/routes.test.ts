@@ -673,18 +673,33 @@ describe("the platform routes", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it("relays the transcript whole, following `after_seq` across pages", async () => {
+    it("streams the transcript a page at a time, following `after_seq`, without the deltas and spans", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "hi" } }, { seq: 2, type: "span.turn.start", data: {} }, { seq: 3, type: "message.delta", data: { content: "hel" } }], has_more: true, next_cursor: "3" }))
+        .mockResolvedValueOnce(json({ data: [{ seq: 4, type: "message.completed", data: { content: "hello" } }], has_more: false, next_cursor: null }));
+      vi.stubGlobal("fetch", fetchMock);
+      const reply = await handleRequest(req("GET", "/api/chat/ses_1/events"), ctxOver(demoState(), CONFIG));
+      expect(reply.status).toBe(200);
+      expect(reply.sse).toBe(true);
+      const frames = (await reply.stream!.text()).split("\n\n").filter((f) => f !== "");
+      expect(frames.map((f) => f.split("\n")[0])).toEqual(["event: message.completed", "event: message.completed"]);
+      expect(frames.map((f) => (JSON.parse(f.split("\ndata: ")[1]!) as { seq: number }).seq)).toEqual([1, 4]);
+      expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/sessions/ses_1/events?limit=100");
+      expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/v1/sessions/ses_1/events?limit=100&after_seq=3");
+    });
+
+    it("ends a transcript whose later page failed with an error frame, and refuses one whose first did", async () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "hi" } }], has_more: true, next_cursor: "1" }))
-        .mockResolvedValueOnce(json({ data: [{ seq: 2, type: "message.completed", data: { content: "hello" } }], has_more: false, next_cursor: null }));
+        .mockResolvedValueOnce(json({ error: "gone" }, 502))
+        .mockResolvedValueOnce(json({ error: "gone" }, 404));
       vi.stubGlobal("fetch", fetchMock);
-      const request = { ...req("GET", "/api/chat/ses_1/events"), query: new URLSearchParams("after_seq=0") };
-      const reply = await handleRequest(request, ctxOver(demoState(), CONFIG));
-      expect(reply.status).toBe(200);
-      expect((reply.body as { data: { seq: number }[] }).data.map((e) => e.seq)).toEqual([1, 2]);
-      expect(fetchMock.mock.calls[0]![0]).toBe("https://api.test/v1/sessions/ses_1/events?limit=100&after_seq=0");
-      expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/v1/sessions/ses_1/events?limit=100&after_seq=1");
+      const ctx = ctxOver(demoState(), CONFIG);
+      const cut = await handleRequest(req("GET", "/api/chat/ses_1/events"), ctx);
+      expect((await cut.stream!.text()).split("\n\n").filter((f) => f !== "").map((f) => f.split("\n")[0])).toEqual(["event: message.completed", "event: error"]);
+      expect(await handleRequest(req("GET", "/api/chat/ses_1/events"), ctx)).toEqual({ status: 502, body: { error: "upstream unavailable" } });
     });
 
     it("queues a follow-up, so a running session never answers the operator session_running", async () => {

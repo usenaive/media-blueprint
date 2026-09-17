@@ -61,6 +61,8 @@ function relay() {
   };
 }
 
+const logged = (log: readonly { type: string }[]) => stream(log.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(""));
+
 const frame = (type: string, data: Record<string, unknown> = {}, seq = 0) => `event: ${type}\ndata: ${JSON.stringify({ seq, type, data })}\n\n`;
 
 describe("followStream", () => {
@@ -209,7 +211,7 @@ async function type(text: string) {
 function serve(session: Record<string, unknown>, log: WireEvent[], live = relay()) {
   const fetchMock = vi.fn((url: string) => {
     if (url === "/api/chat/ses_1") return Promise.resolve(json(session));
-    if (url === "/api/chat/ses_1/events") return Promise.resolve(json({ data: log }));
+    if (url === "/api/chat/ses_1/events") return Promise.resolve(logged(log));
     if (url.startsWith("/api/chat/ses_1/stream")) return Promise.resolve(live.response);
     return Promise.resolve(json({ error: url }, 404));
   });
@@ -218,6 +220,26 @@ function serve(session: Record<string, unknown>, log: WireEvent[], live = relay(
 }
 
 describe("the ChatPane", () => {
+  it("draws the transcript as it streams in — the first frame is on screen before the log has ended", async () => {
+    const log = relay();
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/chat/ses_1") return Promise.resolve(json(SESSION));
+      if (url === "/api/chat/ses_1/events") return Promise.resolve(log.response);
+      return Promise.resolve(json({ error: url }, 404));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await mount();
+    expect(host.textContent).toContain("Reading the conversation…");
+    await act(async () => log.push({ seq: 1, type: "message.completed", data: { role: "user", content: "Clip the interview" }, created_at: at(0) }));
+    await vi.waitFor(() => expect(bubbles()).toEqual([[true, "Clip the interview"]]));
+    expect(host.textContent).not.toContain("Reading the conversation…");
+    await act(async () => log.push({ seq: 2, type: "message.completed", data: { role: "assistant", content: "Three clips." }, created_at: at(10) }));
+    await act(async () => log.close());
+    await vi.waitFor(() => expect(bubbles()).toEqual([[true, "Clip the interview"], [false, "Three clips."]]));
+    // Idle and not kept open: the log was the whole read.
+    expect(fetchMock.mock.calls.filter((c) => /\/stream/.test(c[0] as string))).toHaveLength(0);
+  });
+
   it("shows thinking dots and 'Thinking' while a turn is open, then writes the reply under a caret until it is done", async () => {
     const running = { ...SESSION, status: "running", stop_reason: null };
     const log: WireEvent[] = [{ seq: 1, type: "message.completed", data: { role: "user", content: "Clip the interview" }, created_at: at(0) }];
