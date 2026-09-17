@@ -402,7 +402,7 @@ export function ChatPane({
       Promise.all([apiGet<SessionRow>(`/chat/${sessionId}`), readLog(sessionId, onLogged, control.signal)]).then(
         ([s, lastSeq]) => {
           if (!live) return;
-          setStream((st) => ({ ...st, status: s.status, stopReason: s.stop_reason, pendingApproval: st.pendingApproval || s.stop_reason === "awaiting_approval" }));
+          setStream((st) => ({ ...st, status: s.status, stopReason: s.stop_reason, pendingApproval: s.stop_reason === "awaiting_approval" }));
           setLoading(false);
           props.current.onSession?.(s);
           if (RUNNING.has(s.status) || (props.current.keepOpen && !TERMINAL.has(s.status))) follow(sessionId, lastSeq);

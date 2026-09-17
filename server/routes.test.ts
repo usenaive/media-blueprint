@@ -694,11 +694,14 @@ describe("the platform routes", () => {
         .fn()
         .mockResolvedValueOnce(json({ data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "hi" } }], has_more: true, next_cursor: "1" }))
         .mockResolvedValueOnce(json({ error: "gone" }, 502))
+        .mockResolvedValueOnce(json({ data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "hi" } }], has_more: true, next_cursor: "1" }))
+        .mockRejectedValueOnce(new TypeError("fetch failed"))
         .mockResolvedValueOnce(json({ error: "gone" }, 404));
       vi.stubGlobal("fetch", fetchMock);
       const ctx = ctxOver(demoState(), CONFIG);
-      const cut = await handleRequest(req("GET", "/api/chat/ses_1/events"), ctx);
-      expect((await cut.stream!.text()).split("\n\n").filter((f) => f !== "").map((f) => f.split("\n")[0])).toEqual(["event: message.completed", "event: error"]);
+      const names = async (reply: Awaited<ReturnType<typeof handleRequest>>) => (await reply.stream!.text()).split("\n\n").filter((f) => f !== "").map((f) => f.split("\n")[0]);
+      expect(await names(await handleRequest(req("GET", "/api/chat/ses_1/events"), ctx))).toEqual(["event: message.completed", "event: error"]);
+      expect(await names(await handleRequest(req("GET", "/api/chat/ses_1/events"), ctx))).toEqual(["event: message.completed", "event: error"]);
       expect(await handleRequest(req("GET", "/api/chat/ses_1/events"), ctx)).toEqual({ status: 502, body: { error: "upstream unavailable" } });
     });
 

@@ -261,8 +261,12 @@ interface LogPage {
  */
 async function transcript(config: ProxyConfig, id: string): Promise<ApiReply> {
   const page = async (after: number | undefined): Promise<LogPage | null> => {
-    const res = await proxyFetch(config, sessionEvents(id, after), null);
-    return res.ok ? ((await res.json()) as LogPage) : null;
+    try {
+      const res = await proxyFetch(config, sessionEvents(id, after), null);
+      return res.ok ? ((await res.json()) as LogPage) : null;
+    } catch {
+      return null;
+    }
   };
   const first = await page(undefined);
   if (first === null) return fail(502, "upstream unavailable");
