@@ -649,17 +649,23 @@ export const channelManager = (specialists: string): AgentDecl =>
  * *** `firstAsk` IS THE QUESTION THE SETUP FORM HAD NO SLOT FOR. *** The studio asks three (see
  * `SetupQuestion`) and `PLATFORM_QUESTION` takes one of them, because where the channel posts gates
  * whether anything it makes can be published at all. What it displaced is named by the template and
- * asked here with `ask_operator`, which parks the session with the question in front of the
- * operator (`canonical-spec §7`) — the engine's own refusal says this is where a fourth question
- * belongs, rather than leaving the crew to invent an answer the preamble forbids it to invent.
+ * asked here — but LAST, after the plan is filed and this card is closed.
  *
- * It sat on the manager's intake before, where it was asked in the same minute every other seat was
- * already working. On the board it is asked FIRST and the analyst waits behind it.
+ * *** THE ASK IS THE ONE THING ON THIS BOARD THAT CAN WAIT ON A HUMAN, SO IT IS NOT ALLOWED TO
+ * GATE ANYTHING. *** `ask_operator` parks the session with the question in front of the operator
+ * (`canonical-spec §7`). Asked BEFORE the filing — where it sat when this card was first written —
+ * it parks a card at `doing`, the tick eventually walks that card to `blocked` (§28.18), and
+ * `report-frame`, which is blocked on this one, never becomes due: an operator who installs the
+ * channel and closes the tab gets an analyst that is never woken at all. Asked after `done`, the
+ * question still reaches them and the answer still reaches the manager's next fire, while the
+ * crew behind the card is already running. The manager reads the tone from the niche in the
+ * meantime and marks it in the plan as its own reading — which is the preamble's rule, not a
+ * breach of it: the answer is asked for, it is simply not waited on.
  */
 export const channelPlanCard = (firstAsk: string): Task =>
   task({
     key: "channel-plan",
     title: "Ask the operator the question the form had no room for, then file the channel plan",
     assignee: "channel-manager",
-    body: `Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published. Put the post's id in the note when you close this card: the analyst is blocked on it and reads the plan's slot count as the week it will be measuring against.`,
+    body: `Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published. The setup form asks three questions and no more, so one thing this channel needs is not in there: ${firstAsk} Read it from the niche and the networks, write it into the plan as its second line, and say there that it is your reading and not the operator's answer. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. Close this card with the post's id in the note: the analyst is blocked on it and reads the plan's slot count as the week it will be measuring against. THEN, once the card is closed and not before, ask the operator to confirm that line with ask_operator, once. It is last because asking parks your session until they answer, and the crew waiting behind this card must not wait on a person who may not open the dashboard today. Their answer reaches you here, and every fire from then on works to it.`,
   });
