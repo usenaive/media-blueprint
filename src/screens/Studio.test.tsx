@@ -147,8 +147,8 @@ describe("the Studio", () => {
     expect(header.querySelector("a[href='/projects']")).not.toBeNull();
     // Into the queue on the post's own tab, not the bare list.
     expect(header.querySelector("a[href='/posts?tab=pending']")?.textContent).toBe("Open post");
-    expect(host.querySelector(".composer-under")!.textContent).toContain("producer · re-renders on your note");
-    expect(host.querySelector(".composer-under")!.textContent).toContain("approve/publish stays yours");
+    // No seat strip under the Studio composer — the pane is the video's, not a roster.
+    expect(host.querySelector(".composer-under")).toBeNull();
     expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this video…");
 
     expect(tabs()).toEqual(["Video", "Plan", "Post"]);
@@ -172,14 +172,14 @@ describe("the Studio", () => {
     const planned: VideoProject = { ...rendered, status: "planned", agent: "scriptwriter", sessions: [] };
     await mount(wire(() => json({ project: planned, post: null, session: null })));
     expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this plan…");
-    expect(host.querySelector(".composer-under")!.textContent).toBe("scriptwriter · edits the plan on your note — approve/publish stays yours");
+    expect(host.querySelector(".composer-under")).toBeNull();
     expect(host.querySelector(".absence")!.textContent).toContain("your first note opens one with the scriptwriter");
     expect(host.textContent).not.toContain("re-renders");
 
     await act(async () => root.unmount());
     root = createRoot(host);
     await mount(wire(() => json({ project: { ...planned, agent: undefined }, post: null, session: null })));
-    expect(host.querySelector(".composer-under")!.textContent).toContain("planner · edits the plan on your note");
+    expect(host.querySelector(".composer-under")).toBeNull();
 
     // A first render out: no revision opens, the note is folded into the render that is running.
     await act(async () => root.unmount());
@@ -187,7 +187,7 @@ describe("the Studio", () => {
     const out: VideoProject = { ...rendered, status: "rendering", statusAt: new Date(Date.now() - 60_000).toISOString(), renders: undefined };
     await mount(wire(() => json({ project: out, post: { ...post, mediaUrl: undefined, stage: "rendering" }, session: { ...session, status: "running", stop_reason: null } })));
     expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this render…");
-    expect(host.querySelector(".composer-under")!.textContent).toBe("producer · folds your note into the render that is out — approve/publish stays yours");
+    expect(host.querySelector(".composer-under")).toBeNull();
 
     // A render out on the operator's note is a re-render, as a rendered plan's is.
     await act(async () => root.unmount());
@@ -195,7 +195,7 @@ describe("the Studio", () => {
     const revising: VideoProject = { ...out, revision: { openedAt: out.statusAt, sessionId: "ses_1", note: "dusk" } };
     await mount(wire(() => json({ project: revising, post: { ...post, stage: "rendering" }, session })));
     expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this video…");
-    expect(host.querySelector(".composer-under")!.textContent).toBe("producer · re-renders on your note — approve/publish stays yours");
+    expect(host.querySelector(".composer-under")).toBeNull();
   });
 
   it("switches tabs: the plan's scenes, then the post with Approve and Reject and no publish", async () => {
@@ -351,7 +351,7 @@ describe("the Studio", () => {
 
     expect(host.textContent).toContain("This post has no plan behind it");
     expect(host.querySelector(".absence")!.textContent).toContain("the channel-manager hears your first note");
-    expect(host.querySelector(".composer-under")!.textContent).toBe("channel-manager · edits the post on your note — approve/publish stays yours");
+    expect(host.querySelector(".composer-under")).toBeNull();
     expect(host.querySelector("textarea")!.placeholder).toBe("Say what to change about this post…");
     expect(tabs()).toEqual(["Post"]);
     expect(host.textContent).toContain(post.title);
@@ -384,8 +384,8 @@ describe("the Studio", () => {
    *
    * A note on a rendered plan buys a whole second cut of a video that was paid for once already
    * (`ONE_RENDER_MICRO_USD`, ~$3.32 measured). It used to leave on one Enter, with no price
-   * anywhere on the screen. The price is under the composer before a word is typed, Enter arms the
-   * spend instead of making it, and the press that spends names the money.
+   * anywhere on the screen. Enter arms the spend instead of making it, and the press that spends
+   * names the money.
    */
   it("says what a re-render costs, and spends nothing on Enter alone", async () => {
     const fetchMock = wire(
@@ -394,7 +394,7 @@ describe("the Studio", () => {
     );
     await mount(fetchMock);
     const sends = () => fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === "POST");
-    expect(host.querySelector(".composer-under")!.textContent).toContain("about $3.32");
+    expect(host.textContent).not.toContain("about $3.32");
 
     await write("Make scene 2 dusk");
     await click("Send");
