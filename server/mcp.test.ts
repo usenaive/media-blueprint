@@ -401,7 +401,7 @@ describe("mcp tools", () => {
     );
     const scenes = [
       { prompt: "A bare stone floor at dawn, one thin blanket", seconds: 4, voiceover: "Seneca slept on the floor on purpose.", text: "on purpose" },
-      { prompt: "A hand pushing a soft mattress away", seconds: 5, voiceover: "Comfort, he said, is the thing you should fear.", model: "alibaba/wan-3.0-prime" },
+      { prompt: "A hand pushing a soft mattress away", seconds: 5, voiceover: "Comfort, he said, is the thing you should fear.", model: "bytedance/seedance-2.5" },
     ];
     const plan = text<{ id: string; kind: string; status: string; statusAt: string; postId?: string; model?: string; platform: string; scenes: unknown[]; agent?: string }>(
       (await handleMcp(call("create_project", {
@@ -409,7 +409,7 @@ describe("mcp tools", () => {
         style_template: "Sunlit stoic", scenes, caption: "Seneca slept on the floor. #stoicism",
       }), store, null))!,
     );
-    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: "alibaba/wan-3.0", agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
+    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: "google/veo-3.1", agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
     expect(plan.id).toBe(brief.id);
     expect(plan.statusAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(plan.scenes).toEqual(scenes);

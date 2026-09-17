@@ -119,7 +119,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     id: "proj_a1f0", kind: "generation", status: "planned", statusAt: daysAgo(0), createdAt: daysAgo(0), sessions: [],
     title: "Seneca on the fear of losing everything", agent: "scriptwriter", platform: "youtube", account: "@dailystoic",
     brief: "Letter 18 — practise poverty on purpose. Money anxiety is the niche's top question this week; the hook flips it: rehearse the loss so it stops owning you.",
-    styleTemplate: "Marble & ink", model: "alibaba/wan-3.0",
+    styleTemplate: "Marble & ink", model: "google/veo-3.1",
     scenes: [
       { prompt: "Slow push-in on a marble bust of Seneca, ink washes bleeding across the frame, candlelight", seconds: 4, text: "Rehearse losing it all.", voiceover: "Seneca told a rich friend to live like a poor man a few days a month." },
       { prompt: "A bare table, one bowl, one cup, ink lines drawing themselves across a stone wall", seconds: 5, voiceover: "Not to suffer. To find out the fear was bigger than the thing." },
@@ -131,7 +131,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     id: "proj_b2e1", kind: "generation", status: "rendering", statusAt: daysAgo(0), createdAt: daysAgo(1), sessions: [],
     title: "Marcus Aurelius and the morning argument", agent: "scriptwriter", platform: "instagram", account: "@dailystoic",
     brief: "Meditations 5.1 — the emperor arguing with himself about getting out of bed. The 5am-club debate is trending; the ancient version is funnier and lands harder.",
-    styleTemplate: "Ghibli dusk", model: "alibaba/wan-3.0",
+    styleTemplate: "Ghibli dusk", model: "google/veo-3.1",
     scenes: [
       { prompt: "A soft dawn bedroom in a painted anime style, a figure under blankets, light creeping across the floor", seconds: 5, text: "He didn't want to get up either.", voiceover: "The most powerful man alive wrote down his own excuses." },
       { prompt: "The same figure standing at a window, the city waking below, warm dusk-coloured light", seconds: 5, voiceover: "Then answered them: you were made for this. Get up." },
@@ -143,7 +143,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     renders: [{ mediaUrl: "fil_9f2a_v1", at: daysAgo(1.5) }],
     title: "3 stoic rules nobody follows", agent: "scriptwriter", platform: "youtube", account: "@dailystoic", postId: "post_9f2a",
     brief: "Three rules from the Enchiridion the niche quotes and does not keep. Rule two is the one that stings, so it goes in the middle.",
-    styleTemplate: "Marble & ink", model: "alibaba/wan-3.0",
+    styleTemplate: "Marble & ink", model: "google/veo-3.1",
     scenes: [
       { prompt: "Three marble tablets in a row, ink numerals drawing themselves on each, hard side light", seconds: 4, text: "Three rules. You keep none.", voiceover: "Epictetus left three rules. Almost nobody keeps them." },
       { prompt: "The middle tablet cracking, ink pouring from the crack across the frame", seconds: 5, voiceover: "Rule two: some things are not up to you. Stop acting like they are." },
