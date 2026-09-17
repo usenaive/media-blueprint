@@ -27,7 +27,7 @@ From `naive.config.ts`:
 | App `channel` (fullstack, required) | `deploy_dir: dist`, `mcp: "/mcp"`, env `NAIVE_API_KEY` (from env), `DASHBOARD_TOKEN` + `DASHBOARD_PASSWORD` (platform-generated); platform also injects `VETTA_MCP_TOKEN`, `NAIVE_API_URL`, `NAIVE_IDENTITY_ID`, `DATABASE_URL` |
 | Agents | the template's crew (5 seats each) |
 | Schedules | every agent's crons, owned as a complete set (omission deletes; matched by exact cron string) |
-| Intake sessions | one per created agent, all opened at once |
+| Board cards | one per `tasks[]` entry on the org orchestrator's board (§31.11), keyed `media:<key>`; the API's tick wakes each assignee whose card is `todo` and unblocked. Replaces the intakes — a template that seeds `tasks` declares none |
 
 Setup questions are capped at three by the SDK (`parseProject`). Both templates spend one on
 `platform` (multi-select of YouTube Shorts / TikTok / Instagram Reels) and one on `cadence`;
@@ -94,9 +94,9 @@ Every `system` is composed by `agent()` in `templates/template.ts` as
   request a missing one once with `request_tools`; ask the operator once with `ask_operator`;
   never describe a video you did not render.
 
-Every intake message gets `DAY_ONE_ORDER` appended: all intakes open simultaneously, so an empty
-queue on day one is not a finding — file what you can alone, hand on by name, leave the rest to
-the timers. Day-one work per seat is set-up, filed as notes into the queue (`source` = "channel
+Every card body gets `CARD_ORDER` appended: read the card with `board_read`, claim it, file the
+work, and close it to `done` with a note — closing is what releases the cards blocked on it. An
+empty queue on day one is not a finding; a card that waits on nothing is waiting on nothing. Day-one work per seat is set-up, filed as notes into the queue (`source` = "channel
 plan", "style choice", "hook style", "report skeleton", "clipper check", "caption style"); the
 trend-scout is the exception and files five real briefs, as the clipping scout files five real
 clipping projects.
@@ -422,6 +422,6 @@ of answering `session_running`.
 ## 10. Observed vs. inferred
 
 Everything above is read from the repository. Two things are not verifiable here: how the platform
-composes `agents[].handoffs` / `intake` on the wire (only the SDK's declaration shape is visible),
+composes `agents[].handoffs` / `tasks` on the wire (only the SDK's declaration shape is visible),
 and what the analyst's connected-account metrics tools return — no code in this repo reads views
 or likes from a network, so today those numbers on a row are whatever was filed or seeded.

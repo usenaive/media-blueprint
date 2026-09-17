@@ -760,6 +760,49 @@ describe("the platform routes", () => {
     ]);
   });
 
+  /**
+   * DAY ONE IS THE CARDS NOW, and the `crd_` they carry is not a `ses_`.
+   *
+   * `tasks` lines (`canonical-spec §31.11`) win over `intake` when the install has any, and no
+   * session is read for one: `GET /v1/sessions/crd_…` answers 404, which the home would print as
+   * `unknown` on every card of every install. `intake` stays the fallback for an install applied
+   * before this blueprint moved to cards, so an operator who has not re-applied still sees a day one.
+   */
+  it("reads day one off the seeded cards when the install has them, and asks for no session", async () => {
+    const context = { object: "project_context", project: "media", template: "faceless", answers: [] };
+    const report = {
+      agents: [{ name: "channel-manager", action: "created", id: "agt_m" }],
+      intake: [],
+      tasks: [
+        { name: "channel-plan", action: "created", id: "crd_1" },
+        { name: "first-render", action: "refused", reason: "blocked_by \"first-scripts\" was not seeded in this run" },
+      ],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ data: [{ id: "bpi_live", status: "applied", report }] }))
+      .mockResolvedValueOnce(json(context));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await handleRequest(req("GET", "/api/context"), ctxOver(demoState(), CONFIG));
+
+    expect(reply).toEqual({
+      status: 200,
+      body: {
+        context,
+        team: [{ name: "channel-manager", id: "agt_m" }],
+        day_one: [
+          { name: "channel-plan", action: "created", id: "crd_1", session: null, card: true },
+          { name: "first-render", action: "refused", reason: "blocked_by \"first-scripts\" was not seeded in this run", session: null, card: true },
+        ],
+      },
+    });
+    // Two calls and no third: the install list and the context, never a session read on a card id.
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.test/v1/blueprints/installs?project=media",
+      "https://api.test/v1/blueprints/installs/bpi_live/context",
+    ]);
+  });
+
   it("says so when the project has never been applied, and 503s by name without a key", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json({ data: [{ id: "bpi_1", status: "pending" }] })));
     expect(await handleRequest(req("GET", "/api/context"), ctxOver(demoState(), CONFIG))).toEqual({

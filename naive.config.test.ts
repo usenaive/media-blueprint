@@ -59,18 +59,28 @@ describe("naive.config", () => {
   });
 
   /**
-   * Plan §2.4/§4: the engine (0.4.0) carries `role`, `skills`, `intake`, `required` and the three
-   * setup questions through `defineProject` — read back off `project`, not the template, so a
-   * downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
+   * Plan §2.4/§4: the engine carries `role`, `skills`, `required`, the three setup questions and —
+   * since `^0.6.0` — `tasks` through `defineProject`. Read back off `project`, not the template, so
+   * a downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
+   *
+   * *** `tasks` IS THE ONE THAT NEEDED THE PIN MOVED, AND THE ONE THAT FAILS SILENTLY. ***
+   * `parseProject` strips what its schema does not know, and 0.5.0's schema does not know `tasks` —
+   * so under the old pin this line reads `[]`, `up` seeds no board and no cards, and nothing refuses
+   * anywhere. That is what `media@1.2.0` published and what an operator got: five agents and an
+   * empty dashboard. Reading the count off `project` is the assertion that the installed engine
+   * really carries the field.
    */
-  it("hands `up` the crew's roles, skills, intakes and the three setup questions", () => {
+  it("hands `up` the crew's roles, skills, cards and the three setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
     expect(project.questions).toHaveLength(3);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
-      expect(agent.intake?.message).toMatch(/project_context/);
+      // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.
+      expect(agent.intake, agent.name).toBeUndefined();
       expect(agent.skills?.every((skill) => skill.startsWith("naive/"))).toBe(true);
     }
+    expect(project.tasks).toEqual(ACTIVE.tasks);
+    expect(project.tasks).toHaveLength(7);
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
     // The dashboard is the crew's queue and MCP endpoint: an install cannot untick it.
     expect(project.apps[0]?.required).toBe(true);

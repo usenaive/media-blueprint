@@ -74,6 +74,32 @@ export const declaration = {
   questions: ACTIVE.questions,
 
   /**
+   * THE CREW'S FIRST WORK, AS CARDS ON THE ORGANIZATION'S BOARD (`canonical-spec §31.11`).
+   *
+   * The apply ensures the org's standing orchestrator (`metadata.role: "orchestrator"`, created as
+   * `CEO` when absent), widens its roster to this crew and turns its board on, opens the board, and
+   * writes one card per task under the key `media:<task.key>` — so a re-apply answers the card it
+   * already wrote instead of filing a second. Nothing here starts a session: a `todo` card with an
+   * assignee and no open blocker is *due*, and the API's tick wakes the assignee (§28.18).
+   *
+   * *** IT IS THE RUNNING TEMPLATE'S, AND ONLY THE RUNNING TEMPLATE'S. *** `templates` above hands
+   * `up` both crews so the switch can widen rather than narrow, but `tasks` is the project's own
+   * field and the engine folds no template's into it — so this line is what carries them, exactly
+   * as `questions` above carries the running template's three. A switch of `ACTIVE` re-applies with
+   * the new crew's cards; the old crew's, already on the board, are left where they are, which is
+   * the same rule as its agents.
+   *
+   * *** AND THIS REPLACED THE INTAKES, WHICH IS WHY THERE ARE NONE. *** §31.11 says a template that
+   * seeds `tasks` declares no intakes, and `up`'s own words are that `tasks` "is the reconcile that
+   * supersedes it". Five intakes opened at once and could not be ordered; seven cards can, because
+   * a card with an open blocker is not due. It needs `@usenaive-sdk/blueprints@^0.6.0`: `tasks` does
+   * not exist in 0.5.0 and `parseProject` strips what its schema does not know, so declaring them
+   * under the old pin published `tasks: []` and provisioned an empty board — silently, with no
+   * refusal anywhere. That is what `media@1.2.0` shipped.
+   */
+  tasks: ACTIVE.tasks,
+
+  /**
    * The channel persona, and the whole reason a connected account is reachable from a turn.
    *
    * Connection tools resolve `session → agent → identity → connected accounts`, so an agent with no

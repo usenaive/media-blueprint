@@ -590,7 +590,11 @@ async function upstreamReason(res: Response): Promise<string> {
   return body?.error?.message ?? `the platform answered ${res.status}`;
 }
 
-/** One line of an install report (`canonical-spec §31.2`); on `intake`, `id` is the session the apply opened. */
+/**
+ * One line of an install report (`canonical-spec §31.2`). On `intake`, `id` is the `ses_` the apply
+ * opened; on `tasks` (§31.11) it is the `crd_` of the card it seeded — two different things behind
+ * one shape, which is why `dayOne` below is told which it is holding rather than sniffing the id.
+ */
 export interface ReportLine {
   name: string;
   action: string;
@@ -601,12 +605,14 @@ export interface ReportLine {
 interface WireInstall {
   id: string;
   status: string;
-  report?: { agents?: ReportLine[]; intake?: ReportLine[] } | null;
+  report?: { agents?: ReportLine[]; intake?: ReportLine[]; tasks?: ReportLine[] } | null;
 }
 
-/** An intake line with its session's state, read by id — or null when that read did not answer. */
+/** A day-one line with its session's state, read by id — or null when it is a card, or that read did not answer. */
 export interface DayOneLine extends ReportLine {
   session: { status: string; stop_reason: string | null; waiting: boolean } | null;
+  /** This line is a seeded card, not an opened session, so `name` is a task key and `id` a `crd_`. */
+  card?: true;
 }
 
 /**
@@ -622,6 +628,11 @@ export interface HomeContext {
 /**
  * An intake session read by its own id. The install opened it on day one and a session list is the
  * hundred most recent, so once the crons have run a while the list no longer holds it; the id does.
+ *
+ * A CARD LINE NEVER COMES HERE, which is why the caller and not this function decides. A `tasks`
+ * line's `id` is a `crd_` and `GET /v1/sessions` on one answers 404 — printed as `unknown`, a state
+ * nobody has seen, on every card of every install. The board holds a card's progress; the line
+ * holds only whether the apply seeded it.
  */
 async function dayOneLine(config: ProxyConfig, line: ReportLine): Promise<DayOneLine> {
   if (line.action !== "created" || line.id === undefined) return { ...line, session: null };
@@ -642,7 +653,9 @@ async function dayOneLine(config: ProxyConfig, line: ReportLine): Promise<DayOne
  * agents read them through `project_context`. Two hops because the spec has no `GET …/{id}` for
  * an install: list this project's installs (most recently applied first), take the first that is
  * `applied` — a pending or failed one has no context — and read `…/{id}/context` (§31.8). The
- * report's `intake` lines ride along so the home can show which day-one sessions have finished.
+ * The report's day-one lines ride along. They are the `tasks` lines now — one per card the apply
+ * seeded on the company board (§31.11) — and `intake` is the fallback, because an install applied
+ * before this blueprint moved to cards still has those and nothing else.
  */
 async function projectContext(config: ProxyConfig): Promise<ApiReply> {
   const listed = await proxyFetch(config, { method: "GET", path: `/v1/blueprints/installs?project=${encodeURIComponent(config.project)}` }, null);
@@ -659,7 +672,10 @@ async function projectContext(config: ProxyConfig): Promise<ApiReply> {
     team: (applied.report?.agents ?? [])
       .filter((row) => row.action !== "refused" && row.action !== "deleted" && row.id !== undefined)
       .map((row) => ({ name: row.name, id: row.id as string })),
-    day_one: await Promise.all((applied.report?.intake ?? []).map((row) => dayOneLine(config, row))),
+    day_one:
+      (applied.report?.tasks ?? []).length > 0
+        ? (applied.report?.tasks ?? []).map((row): DayOneLine => ({ ...row, session: null, card: true }))
+        : await Promise.all((applied.report?.intake ?? []).map((row) => dayOneLine(config, row))),
   };
   return json(200, reply);
 }

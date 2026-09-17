@@ -37,7 +37,7 @@ const SUMMARY_KEYS = ["id", "status", "model", "title"];
 
 /** A turn past this many lines is folded to them; the operator opens the rest. Sized to `Clamp`'s
  * own measure of "long", so a folded turn always carries its `Read more`. Both sides fold: the
- * day-one intake arrives as a message of yours and is the longest thing in most transcripts. */
+ * day-one card arrives as a message of yours and is the longest thing in most transcripts. */
 const FOLD_LINES = 6;
 export const isWall = (text: string): boolean => text.length > FOLD_LINES * 110 || text.split("\n").length > FOLD_LINES;
 

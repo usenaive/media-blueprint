@@ -9,7 +9,9 @@ import { parked, type WireSession } from "./Approvals";
 
 /**
  * `GET /api/context`: the platform's `project_context` (`canonical-spec §31.8`), the `agt_` ids the
- * install left standing, and each intake line with its session read by id (`server/routes.ts`).
+ * install left standing, and each day-one line — a card the apply seeded on the company board, or,
+ * on an install applied before this blueprint moved to cards, an intake session read by its own id
+ * (`server/routes.ts`).
  */
 export interface HomeContext {
   context: {
@@ -23,6 +25,7 @@ export interface HomeContext {
     action: string;
     id?: string;
     session: { status: string; stop_reason: string | null; waiting: boolean } | null;
+    card?: true;
   }[];
 }
 
@@ -59,19 +62,25 @@ export function until(iso: string, now: number = Date.now()): string {
 }
 
 /**
- * How far the crew's first day has got: one line per intake the apply opened, with its session's
- * state as the server read it by id. A session the server could not read just now is `unknown` —
- * not "opened", which would claim a state nobody has seen.
+ * How far the crew's first day has got: one line per card the apply seeded on the company board, or
+ * — on an install applied before the cards replaced them — per intake it opened, with that session's
+ * state as the server read it by id. A session the server could not read just now is `unknown`, not
+ * "opened", which would claim a state nobody has seen.
+ *
+ * A CARD LINE SAYS ONLY THAT IT WAS SEEDED, and never "finished". Its progress lives on the board,
+ * which this dashboard does not read; printing a session state for it would be inventing one, and
+ * printing `0/7 finished` forever is worse than printing nothing.
  */
 export const dayOne = (lines: HomeContext["day_one"]) =>
   lines.map((line) => {
     const state =
       line.action !== "created" ? line.action
+      : line.card === true ? "on the board"
       : line.session === null ? "unknown"
       : line.session.waiting ? "waiting for you"
       : line.session.stop_reason === "end_turn" || line.session.status === "completed" ? "finished"
       : line.session.stop_reason ?? line.session.status;
-    return { name: line.name, state, done: state === "finished" };
+    return { name: line.name, state, done: state === "finished", card: line.card === true };
   });
 
 /** The queue by status, in the order the labels are declared (the seed module is types-only here). */
@@ -162,10 +171,18 @@ export function Home() {
 
         <Card
           title="Day one"
-          aside={progress.length > 0 ? <span className="chip chip-plain tabular-nums">{progress.filter((row) => row.done).length}/{progress.length} finished</span> : undefined}
+          aside={
+            progress.length > 0 ?
+              <span className="chip chip-plain tabular-nums">
+                {progress[0]?.card === true ?
+                  `${progress.length} cards`
+                : `${progress.filter((row) => row.done).length}/${progress.length} finished`}
+              </span>
+            : undefined
+          }
         >
           {progress.length === 0 ? (
-            <div className="absence">{home === null ? "Nothing to show until the team is installed." : "This install opened no first sessions."}</div>
+            <div className="absence">{home === null ? "Nothing to show until the team is installed." : "This install seeded no first work."}</div>
           ) : (
             <ul className="divide-y divide-line">
               {progress.map((row) => (
