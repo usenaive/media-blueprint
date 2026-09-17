@@ -47,7 +47,7 @@ $60/day and $20/task (`templates/template.ts`, sized around one ~$3.32 render).
 | channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | Mon 09:00 plan · daily 08:00 queue sweep · daily 18:00 comments |
 | trend-scout | Trends & briefs | web_search, web_fetch | seo-content-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
 | scriptwriter | Hooks & scripts | web_search, web_fetch | short-video-hooks, caption-writing | producer | daily 06:30 |
-| producer | Video production | generate_video (models pinned: wan-3.0, wan-3.0-prime, happyhorse-1.1), generate_image | short-video-hooks | — | daily 07:00 |
+| producer | Video production | generate_video (models pinned: veo-3.1, seedance-2.5), generate_image | short-video-hooks | — | daily 07:00 |
 | analyst | Performance | — | — | — | Mon 07:30 |
 
 Pipeline: scout files briefs at `stage: brief` → `send_to_agent(scriptwriter, wait:false)` with

@@ -318,7 +318,7 @@ export const BUILTIN_TOOLS = [
  * First is the default. The rest are named so the producer can still reach for a different look
  * without an operator editing this file; narrowing the list narrows what it can choose.
  */
-export const VIDEO_MODELS: readonly string[] = ["alibaba/wan-3.0", "alibaba/wan-3.0-prime", "alibaba/happyhorse-1.1"];
+export const VIDEO_MODELS: readonly string[] = ["google/veo-3.1", "bytedance/seedance-2.5"];
 
 /**
  * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
