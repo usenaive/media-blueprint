@@ -83,7 +83,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): P
       res.writeHead(reply.status, { "content-type": "text/event-stream", "cache-control": "no-cache" });
       res.write("retry: 3000\n\n");
     } else {
-      res.writeHead(reply.status, { "content-type": reply.stream.headers.get("content-type") ?? "application/octet-stream" });
+      res.writeHead(reply.status, { "content-type": reply.stream.headers.get("content-type") ?? "application/octet-stream", ...extra });
     }
     if (reply.stream.body === null) return void res.end();
     const reader = reply.stream.body.getReader();

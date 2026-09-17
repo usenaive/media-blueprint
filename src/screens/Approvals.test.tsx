@@ -252,7 +252,17 @@ describe("the Approvals screen", () => {
     const rows = Array.from(host.querySelectorAll("dl > div"));
     const [content, media] = rows.map((row) => [row.querySelector("dt")!, row.querySelector("dd")!] as const);
     expect(media![0].textContent).toBe("Media urls");
-    expect(media![1].querySelector("video")?.getAttribute("src")).toBe("https://cdn.example/a.mp4");
+    const poster = media![1].querySelector<HTMLButtonElement>("[data-video-poster]")!;
+    expect(poster.getAttribute("data-video-poster")).toBe("https://cdn.example/a.mp4");
+    // The first frame is the thumbnail: metadata only, no controls until it is pressed.
+    const player = media![1].querySelector("video")!;
+    expect(player.getAttribute("src")).toBe("https://cdn.example/a.mp4");
+    expect(player.getAttribute("preload")).toBe("metadata");
+    expect(player.hasAttribute("controls")).toBe(false);
+    player.play = async () => {};
+    await act(async () => { poster.click(); });
+    expect(player.hasAttribute("controls")).toBe(true);
+    expect(media![1].querySelector("[data-video-poster]")).toBeNull();
     expect(media!.map((el) => el.classList.contains("self-start"))).toEqual([true, true]);
     expect(content!.map((el) => el.classList.contains("self-start"))).toEqual([false, false]);
   });

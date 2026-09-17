@@ -14,6 +14,8 @@ export interface Upstream {
   sse?: boolean;
   /** Piped as-is with the upstream's content type — a file's bytes, not JSON. */
   raw?: boolean;
+  /** The browser's `Range` header, forwarded so a player's first-frame read is a 206, not the clip. */
+  range?: string;
 }
 
 /**
@@ -154,6 +156,7 @@ export async function proxyFetch(
     headers: {
       authorization: `Bearer ${config.apiKey}`,
       ...(body === null ? {} : { "content-type": "application/json" }),
+      ...(upstream.range === undefined ? {} : { range: upstream.range }),
     },
     ...(body === null ? {} : { body }),
   });

@@ -989,9 +989,19 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   // running one — the operator is never answered `session_running`.
   const follow = /^\/api\/chat\/ses_[\w-]+\/messages$/.test(req.path);
   const body = req.method === "GET" ? null : follow ? JSON.stringify({ message: textOf(parse(req.body).message), queue: true }) : req.body || "{}";
-  const answer = await proxyFetch(ctx.config, upstream, body);
+  const range = req.headers.range;
+  const answer = await proxyFetch(ctx.config, upstream.raw && range ? { ...upstream, range } : upstream, body);
   if (upstream.sse) return { status: answer.status, stream: answer, sse: true };
-  if (upstream.raw) return answer.ok ? { status: answer.status, stream: answer } : fail(answer.status, "file unavailable");
+  if (upstream.raw) {
+    if (!answer.ok) return fail(answer.status, "file unavailable");
+    // A 206 carries where in the clip it is; without these the player cannot seek or draw a frame.
+    const headers: Record<string, string> = {};
+    for (const name of ["content-length", "content-range", "accept-ranges"]) {
+      const value = answer.headers.get(name);
+      if (value !== null) headers[name] = value;
+    }
+    return { status: answer.status, stream: answer, headers };
+  }
   const payload = await answer.json();
   /** Like `mcp.ts`'s listAccounts rule: not activated means no accounts yet, not a failed read. */
   if (req.method === "GET" && req.path === "/api/social/accounts" && notActivated(answer.status, payload)) {

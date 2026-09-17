@@ -108,7 +108,8 @@ const click = async (label: string) => {
 };
 const tabs = () => Array.from(host.querySelectorAll<HTMLButtonElement>("nav[aria-label=Drawer] [role=tab]")).map((t) => t.textContent?.trim());
 const versions = () => Array.from(host.querySelectorAll<HTMLButtonElement>("[aria-label=Versions] [role=tab]"));
-const players = () => Array.from(host.querySelectorAll("video")).map((v) => v.getAttribute("src"));
+/** The clips on offer — posters until pressed, so no bytes move before the operator asks. */
+const players = () => Array.from(host.querySelectorAll("[data-video-poster]")).map((v) => v.getAttribute("data-video-poster"));
 const studioReads = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.calls.filter((c) => (c[0] as string) === `/api/studio/${seed.id}`).length;
 const tick = async (ms: number) => {
   await act(async () => {

@@ -32,14 +32,45 @@ const IMAGE = /\.(jpe?g|png|gif|webp|avif|svg)(\?|#|$)/i;
 const FILE_ID = /^fil_\w+$/;
 
 export function MediaPreview({ src, label }: { src: string; label: string }) {
-  const frame = "w-full rounded-md border border-line bg-surface-sunken";
-  if (FILE_ID.test(src)) return <video className={frame} src={`/api/files/${src}`} controls preload="metadata" playsInline />;
-  if (VIDEO.test(src)) return <video className={frame} src={src} controls preload="metadata" playsInline />;
+  const frame = "w-full rounded-md border border-line bg-sunken";
+  if (FILE_ID.test(src)) return <VideoPoster key={src} className={frame} src={`/api/files/${src}`} label={label} />;
+  if (VIDEO.test(src)) return <VideoPoster key={src} className={frame} src={src} label={label} />;
   if (IMAGE.test(src)) return <img className={`${frame} object-cover`} src={src} alt={label} />;
   return (
     <a className="block truncate font-mono text-xs text-ink-2 underline" href={src} target="_blank" rel="noreferrer">
       {src}
     </a>
+  );
+}
+
+/**
+ * A VIDEO SHOWS ITS FIRST FRAME AND PLAYS WHEN PRESSED.
+ *
+ * `/api/files/:id` (and the platform behind it) answer a `Range`, so `preload="metadata"` costs the
+ * clip's header and first frame — a few hundred KB of a render — and that frame is the thumbnail.
+ * The rest is fetched when the operator presses play; the same element plays, so what the thumbnail
+ * loaded is not loaded twice.
+ */
+export function VideoPoster({ src, label, className = "" }: { src: string; label: string; className?: string }) {
+  const [playing, setPlaying] = useState(false);
+  const player = useRef<HTMLVideoElement>(null);
+  const play = () => {
+    setPlaying(true);
+    void player.current?.play();
+  };
+  return (
+    <span className={`relative block overflow-hidden ${className}`}>
+      <video ref={player} className="block aspect-[9/16] w-full object-cover" src={src} controls={playing} playsInline preload="metadata" aria-label={label} />
+      {!playing && (
+        <button type="button" data-video-poster={src} aria-label={`Play ${label}`} onClick={play} className="group absolute inset-0 grid place-items-center">
+          <span className="grid size-10 place-items-center rounded-full bg-ink/80 text-surface group-hover:bg-ink">
+            <svg viewBox="0 0 24 24" className="size-4 translate-x-px" fill="currentColor" aria-hidden>
+              <path d="M7 4.5v15l12-7.5z" />
+            </svg>
+          </span>
+        </button>
+      )}
+    </span>
   );
 }
 

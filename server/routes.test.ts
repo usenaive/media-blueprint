@@ -552,6 +552,20 @@ describe("the platform routes", () => {
     expect(reply.body).toBeUndefined();
   });
 
+  it("forwards a player's Range on a file read and hands the 206's range headers back", async () => {
+    const upstream = new Response("abcd", {
+      status: 206,
+      headers: { "content-type": "video/mp4", "content-range": "bytes 0-3/1000", "content-length": "4", "accept-ranges": "bytes" },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(upstream);
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = await handleRequest(req("GET", "/api/files/fil_1", "", { range: "bytes=0-3" }), ctxOver(demoState(), CONFIG));
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).headers).toMatchObject({ range: "bytes=0-3" });
+    expect(reply.status).toBe(206);
+    expect(reply.stream).toBe(upstream);
+    expect(reply.headers).toEqual({ "content-length": "4", "content-range": "bytes 0-3/1000", "accept-ranges": "bytes" });
+  });
+
   /**
    * The approval queue, end to end through the same table: the dashboard could open a session and
    * read its replies, and could neither see a session parked on `ask` nor release it.
