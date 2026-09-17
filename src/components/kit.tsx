@@ -32,14 +32,42 @@ const IMAGE = /\.(jpe?g|png|gif|webp|avif|svg)(\?|#|$)/i;
 const FILE_ID = /^fil_\w+$/;
 
 export function MediaPreview({ src, label }: { src: string; label: string }) {
-  const frame = "w-full rounded-md border border-line bg-surface-sunken";
-  if (FILE_ID.test(src)) return <video className={frame} src={`/api/files/${src}`} controls preload="metadata" playsInline />;
-  if (VIDEO.test(src)) return <video className={frame} src={src} controls preload="metadata" playsInline />;
+  const frame = "w-full rounded-md border border-line bg-sunken";
+  if (FILE_ID.test(src)) return <VideoPoster className={frame} src={`/api/files/${src}`} label={label} />;
+  if (VIDEO.test(src)) return <VideoPoster className={frame} src={src} label={label} />;
   if (IMAGE.test(src)) return <img className={`${frame} object-cover`} src={src} alt={label} />;
   return (
     <a className="block truncate font-mono text-xs text-ink-2 underline" href={src} target="_blank" rel="noreferrer">
       {src}
     </a>
+  );
+}
+
+/**
+ * A VIDEO IS FETCHED WHEN IT IS PLAYED, NOT WHEN IT IS SHOWN.
+ *
+ * `/api/files/:id` pipes the whole object with no range support, so a `<video>` on the page — even
+ * at `preload="metadata"` — pulls the entire render before it draws a frame, and a queue of twenty
+ * posts pulls twenty renders at once. Until the operator presses play there is no `<video>` at all:
+ * a portrait poster frame, and one press mounts the player and starts it.
+ */
+export function VideoPoster({ src, label, className = "" }: { src: string; label: string; className?: string }) {
+  const [playing, setPlaying] = useState(false);
+  if (playing) return <video className={className} src={src} controls autoPlay playsInline preload="auto" />;
+  return (
+    <button
+      type="button"
+      data-video-poster={src}
+      aria-label={`Play ${label}`}
+      onClick={() => setPlaying(true)}
+      className={`group grid aspect-[9/16] place-items-center ${className} hover:bg-hover`}
+    >
+      <span className="grid size-10 place-items-center rounded-full bg-ink/80 text-surface group-hover:bg-ink">
+        <svg viewBox="0 0 24 24" className="size-4 translate-x-px" fill="currentColor" aria-hidden>
+          <path d="M7 4.5v15l12-7.5z" />
+        </svg>
+      </span>
+    </button>
   );
 }
 

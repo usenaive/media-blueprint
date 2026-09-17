@@ -252,6 +252,10 @@ describe("the Approvals screen", () => {
     const rows = Array.from(host.querySelectorAll("dl > div"));
     const [content, media] = rows.map((row) => [row.querySelector("dt")!, row.querySelector("dd")!] as const);
     expect(media![0].textContent).toBe("Media urls");
+    const poster = media![1].querySelector<HTMLButtonElement>("[data-video-poster]")!;
+    expect(poster.getAttribute("data-video-poster")).toBe("https://cdn.example/a.mp4");
+    expect(media![1].querySelector("video")).toBeNull();
+    await act(async () => { poster.click(); });
     expect(media![1].querySelector("video")?.getAttribute("src")).toBe("https://cdn.example/a.mp4");
     expect(media!.map((el) => el.classList.contains("self-start"))).toEqual([true, true]);
     expect(content!.map((el) => el.classList.contains("self-start"))).toEqual([false, false]);
