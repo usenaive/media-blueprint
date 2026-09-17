@@ -50,7 +50,7 @@ flowchart LR
   backed by a thin server that talks to the platform on your behalf.
 - **The template's crew of five** — each with a role, a system prompt that opens by reading the
   install's context, a deny-by-default tool allow-list, the catalogue skills it works from, a
-  daily budget, its own crons and a day-one intake session. The roster is in
+  daily budget, its own crons and the day-one cards it owes on the company board. The roster is in
   [The crew](#-the-crew).
 - **Nine starter style templates** (reference image + prompt) covering the current
   high-performing short-form aesthetics — the blueprint's shipped catalogue, present from the
@@ -167,27 +167,27 @@ it is printed in dollars here.
 
 ### `faceless`
 
-| Agent | Role | Tools | Skills | Timers (channel time) | Day one |
+| Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer — slots per week, days, kinds, accounts — and files it as a brief ($20) |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | Picks the style templates for the niche; renders nothing until the scriptwriter hands it a scripted row ($8) |
-| `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | Researches the niche, files the channel's **first five briefs**, then triggers the scriptwriter with their ids ($20) |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | Files the channel's hook style; scripts the five briefs in the session the scout's handoff opens, then triggers the producer ($8) |
-| `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton for this niche and cadence ($20) |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
+| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | `look` — picks the style templates this channel renders in · `first-render` — renders the first piece, once there is a plan |
+| `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `hook-style` — writes the channel's voice · `first-scripts` — turns the five briefs into video projects |
+| `analyst` | Performance | — | — | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
 
 ### `clipping`
 
-| Agent | Role | Tools | Skills | Timers (channel time) | Day one |
+| Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | Writes the channel plan from the cadence answer and files it as a brief ($20) |
-| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | Cuts the first two clips from the scout's briefs; cuts nothing from a channel the context does not name ($8) |
-| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | Goes through the named reference channels and files the **first five moments** worth cutting ($20) |
-| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($10) | Titles and captions the morning's clips and files the channel's caption style ($20) |
-| `analyst` | Performance | — | — | Mon 07:30 report ($10) | Sets up the weekly report skeleton by source and clip ($20) |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you who the clips are for, then files the plan: slots per week, days, kinds, accounts |
+| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | `source-check` — confirms it can reach every named reference · `first-cuts` — cuts the first two clips from the scout's plans |
+| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | `first-moments` — goes through the named references and plans the **first five moments** worth cutting |
+| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($10) | `caption-style` — writes the channel's voice · `first-captions` — titles and captions the first clips |
+| `analyst` | Performance | — | — | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report by source and clip, against the manager's plan |
 
 Only the `channel-manager` is `required` — it is the seat the dashboard's Chat talks to. Every
-other seat can be left unticked when the template is installed, and its crons and intake are
-then never armed. The `channel` app is `required` too: it is the crew's queue and MCP endpoint.
+other seat can be left unticked when the template is installed, and its crons are then never armed
+and its cards never seeded — `up` refuses a card whose assignee this run did not provision. The `channel` app is `required` too: it is the crew's queue and MCP endpoint.
 
 ### The three questions
 
@@ -246,42 +246,54 @@ line goes quiet and names the handles.
 a publish action: refusing to file would throw away a render that has already been paid for (~$3.32
 each, see [What it costs](#-what-it-costs)), and every day-one session opens minutes after the
 install, before anyone has had a chance to connect anything — so refusing would mean an empty first
-day and five intake budgets spent on nothing. What is not acceptable is filing *silently*, which is
+day and seven day-one cards spent on nothing. What is not acceptable is filing *silently*, which is
 what the line above fixes. Publishing still refuses honestly at the button, and the channel
 manager's first plan opens by saying whether an account is connected.
 
 ### Day one
 
-The apply that creates the crew opens one session per agent with its `intake.message`, each
-written to consume the answers: the scout files the first five briefs for *your* niche, the
-analyst lays out the report, the manager writes the plan from *your* cadence, and the
-scriptwriter and producer set themselves up. The intakes open at once, so none of them reads
-another's work; on `faceless` the pieces move by **handoff** instead. Each brief carries a
-`stage` — `brief` → `scripted` → `rendered` — and when the scout has filed its five it hands on to
-the scriptwriter with their ids (`send_to_agent` with `wait: false`; the `handoffs` line on the seat
-says who it may hand to — a seat without one hands to nobody, `handoffs: false`, rather than the
-platform's default of anyone); the scriptwriter writes a **video project** for each — the plan:
-scenes, model, style template, caption — and hands the project ids on to the producer, who claims
-and renders the first. On `clipping` the scout files its five moments as clipping projects (source
-URL, timestamps, and why), and the clipper cuts from those. The plan is always written before the
-render, by a seat that cannot render; the seat that renders is told the plan is not its to write.
-The timers stay as the fallback, picking up by stage whatever a handoff did not carry; where a
-handoff and a timer overlap, a seat claims first (`scripting` with `expected_stage` on
-`update_post`; `rendering` with `expected_status` on `update_project`), so one session gets it and
-the other is refused before spending. Day one costs at
-most the sum of the intake budgets ($76 on `faceless`, $88 on `clipping`) plus the handoff
-sessions, each inside the receiving seat's $20 task ceiling — an intake budget is a **one-time
-ceiling on that one session**, not a recurring allowance; the recurring cap is the agent's own
-`budget.cap_micro_usd` above. Everything day one makes lands in the queue as pending — nothing is
-published. The Home screen tracks each intake session until it
-finishes.
+**The apply seeds the crew's first work as cards on your company board, and the platform's tick
+wakes the seat each card is assigned to** (`canonical-spec §31.11`, §28.18). The apply ensures your
+organization's standing orchestrator — the `CEO` seat, created if you have none — puts this crew on
+its roster, turns its board on, opens the board and writes one card per task, keyed so re-running
+`naive up` answers the same card instead of filing a second. Nothing here starts a session: a card
+that is `todo`, assigned, and waiting on nothing is *due*, and the next tick starts one ordinary
+session of its assignee with the card as the brief.
 
-**All five sessions open at the same moment**, so a seat downstream of another reads a queue that
-is still being filled. That is the install, not a fault: every day-one message ends with the same
-paragraph (`DAY_ONE_ORDER` in [`templates/template.ts`](templates/template.ts)) telling the seat
-so, telling it not to wait and not to report the emptiness as a finding, and pointing the chained
-work at the handoff that names its rows — or, where no seat hands on, at the crons, which run in
-order, hours apart, upstream seat first.
+**The cards are ordered, and that is the whole reason they replaced the intakes.** Each seat used to
+open one `intake` session, all of them in the same minute, with no way to say which came first — so
+the scriptwriter read an empty queue and filed *"the trend-scout hasn't filed any briefs yet"* as its
+finding while the scout was filing five. A card names what it waits on (`blocked_by`), and a card
+with an open blocker is not due, so its seat is not started and not billed until the work it needs
+exists. Seven cards per template, four of which wait on nothing and open together:
+
+| | `faceless` | `clipping` | waits on |
+|---|---|---|---|
+| **opens the install** | `channel-plan` *(manager)* | `channel-plan` *(manager)* | — |
+| | `first-briefs` *(scout)* | `first-moments` *(scout)* | — |
+| | `look` *(producer)* | `source-check` *(clipper)* | — |
+| | `hook-style` *(writer)* | `caption-style` *(editor)* | — |
+| **then** | `report-frame` *(analyst)* | `report-frame` *(analyst)* | the channel plan, whose slot count is the week it measures against |
+| | `first-scripts` *(writer)* | `first-cuts` *(clipper)* | the briefs/moments, and the seat's own set-up card |
+| **last** | `first-render` *(producer)* | `first-captions` *(editor)* | the plan it renders / the clip it captions |
+
+Each card's body is the brief the seat reads when it wakes, and it ends with the same paragraph
+(`CARD_ORDER` in [`templates/template.ts`](templates/template.ts)): read the card, claim it, file the
+work, and **close it with a note** — closing is what wakes the next seat, and a card left open when
+its session ends is parked for the CEO to look at rather than retried forever. No card hands off
+with `send_to_agent`; the board does that now. The `handoffs` on each seat are for the crons, which
+are still the standing work — and no card restates one: nobody's card writes a weekly report, sweeps
+the queue or answers comments, because Monday 07:30, daily 08:00 and daily 18:00 already do.
+
+**What it costs to start.** A card carries no budget of its own — the tick starts an ordinary
+session on the assignee's own ceiling — so a fresh install can spend at most one **$20 task** per
+card, seven cards each ($140 on `faceless`, $140 on `clipping`), and only one of those sessions
+renders anything (~$3.32, see [What it costs](#-what-it-costs)). It is a ceiling and not a bill: the
+four set-up cards are reads and one filing each. The five intakes it replaced were capped lower
+($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
+mattered. Nothing day one makes is published: everything lands in the queue as pending, for you to
+approve. The Home screen lists the cards the apply seeded; the board itself is where their progress
+lives.
 
 ### The skills
 
@@ -365,7 +377,7 @@ first"*, which `channel.update_post` can do.
 
 | Screen | What it does |
 |---|---|
-| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), day-one progress per intake session, approvals due, the crew with each agent's next fire, and the queue by status |
+| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), the day-one cards the apply seeded, approvals due, the crew with each agent's next fire, and the queue by status |
 | Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
 | Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
@@ -427,7 +439,8 @@ an edit plus a re-apply.
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
 | the post kinds, the three setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
 | where the channel posts | **you answer it in the studio** — no edit, no deploy | nothing |
-| a seat's role, skills or day-one intake | `role`, `skills`, `intake` in its `agent({ … })` call | `naive up` |
+| a seat's role or skills | `role`, `skills` in its `agent({ … })` call | `naive up` |
+| what a seat is asked for on day one, and what it waits on | its `task({ … })` in the template's `tasks` | `naive up` |
 | the style library | [`seed/style-templates.ts`](seed/style-templates.ts) | `pnpm build && naive up` |
 | the dashboard's screens | [`src/screens/`](src/screens) | `pnpm build && naive up` |
 | a new MCP tool for agents to call | [`server/mcp.ts`](server/mcp.ts) and [`server/routes.ts`](server/routes.ts) | `pnpm build && naive up` |
@@ -626,8 +639,8 @@ The config can declare more than this template uses:
 |---|---|
 | `apps[]` | `name`, `type`, `description`, `deploy_dir`, `mcp` (the path of the app's own MCP endpoint; fullstack only), and `env` — literals, `{ from_env }` or `{ generate: true }`, written as the app's secrets |
 | `questions[]` | the setup questions (`text` or `choice`); at most three when a `template` is set |
-| `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `intake`, `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
-| `agents[].intake` | `message` and `budget_micro_usd` of the session the apply opens on day one |
+| `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
+| `tasks[]` | the crew's first work as cards on the organization's board: `key` (idempotent as `media:<key>`), `title`, `body`, `assignee` (an agent **name**) and `blocked_by` (sibling keys). Needs `@usenaive-sdk/blueprints@^0.6.0` — 0.5.0 strips the field without saying so |
 | `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |
 | `skills[]` | markdown files pushed by slug, versioned by content |
 | `identities[]` | personas agents and schedules act as |

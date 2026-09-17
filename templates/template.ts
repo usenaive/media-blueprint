@@ -173,6 +173,25 @@ export interface PostKindDecl {
   label: string;
 }
 
+/**
+ * One card the apply seeds on the organization's board (`canonical-spec §31.11`), in the engine's
+ * own `tasks` shape — `{ key, title, body, assignee, blocked_by }`.
+ *
+ * *** THIS IS WHAT REPLACED THE INTAKES, AND IT NEEDED THE PIN MOVED TO SAY IT. *** `tasks` does
+ * not exist in `@usenaive-sdk/blueprints@0.5.0`: `parseProject` strips what its schema does not
+ * know, so a template that declared these under the old pin published an artifact reading
+ * `tasks: []` — no board, no cards, an empty dashboard, and no refusal anywhere to say why. That is
+ * exactly what `media@1.2.0` shipped. The pin is `^0.6.0` in `package.json` for this one reason.
+ *
+ * `key` is the card's idempotency handle (`media:<key>` on the wire), so a re-apply answers the
+ * same card rather than filing a second copy; `assignee` is an agent NAME and `up` refuses one no
+ * agent of this project declares; `blocked_by` names sibling keys and becomes their `crd_` ids at
+ * apply time. A card with an open blocker is not due and its seat is not woken — which is the
+ * ordering the intakes could not express, and the reason a blocker that is not real is a seat that
+ * never starts.
+ */
+export type Task = NonNullable<DefineInput["tasks"]>[number];
+
 export interface MediaTemplate {
   /** Spelled exactly as `defineProject({ template })` names it. */
   name: TemplateName;
@@ -212,6 +231,13 @@ export interface MediaTemplate {
    * where a channel posts is not the blueprint's to decide. A template chooses the other two.
    */
   questions: [SetupQuestion, SetupQuestion, SetupQuestion];
+  /**
+   * The crew's first work, as cards on the organization's board (§31.11) — the set-up every seat
+   * owes once, in the order it actually has to happen. `naive.config.ts` hands the RUNNING
+   * template's to `defineProject`; the other template's are never seeded, the way its agents are
+   * never created.
+   */
+  tasks: Task[];
   /** Every word a screen prints that changes with the template. */
   words: {
     queueSubtitle: string;
@@ -264,23 +290,29 @@ export const CONTEXT_PREAMBLE =
   "Read `project_context` before anything else; the answers there are the client's, not yours to invent. Every brief, script, clip, caption and plan you make is for the niche, the audience and the cadence written there — when an answer is missing, ask the operator rather than filling it in.";
 
 /**
- * The sentence every day-one message ends with, and the race it is the answer to.
+ * The paragraph every card body ends with, and the race it is the answer to.
  *
- * `naive up` opens one intake session per created agent, all of them together in a single
- * `eachInFlight` after every other write (`packages/blueprints/src/up.ts`), and `intake` carries no
- * ordering knob. So on day one the downstream seats read a queue the upstream ones are still
- * filling: in production the scriptwriter's first session read `channel.list_posts -> "[]"` and
- * filed *"the trend-scout hasn't filed any briefs yet in its parallel session"* as its finding,
- * while the scout was filing five briefs in the same minute. The channel's real order is not the
- * intakes': it is the handoff a seat sends after it has filed (`send_to_agent` with `wait: false`,
- * `handoffs` on the seat — canonical-spec §28.15), naming the rows, and where no seat hands on, the
- * crons', which fire hours apart in dependency order.
+ * IT USED TO BE `DAY_ONE_ORDER`, ON AN INTAKE. `naive up` opened one intake session per created
+ * agent, all of them together in a single `eachInFlight` after every other write
+ * (`packages/blueprints/src/up.ts`), and `intake` carried no ordering knob. So on day one the
+ * downstream seats read a queue the upstream ones were still filling: in production the
+ * scriptwriter's first session read `channel.list_posts -> "[]"` and filed *"the trend-scout hasn't
+ * filed any briefs yet in its parallel session"* as its finding, while the scout was filing five
+ * briefs in the same minute. The remedy then was a paragraph telling every seat not to report the
+ * emptiness — which is a sentence about a race, not an order.
  *
- * It is appended by `agent()` below rather than written into each message, for the same reason the
+ * `tasks` (§31.11) is the order itself. A card with an open `blocked_by` is not due, so the seat
+ * that would have read an empty queue is not woken until the card it waits on is `done`; the wave
+ * a fresh install opens is the cards that genuinely depend on nothing. What a seat still has to be
+ * told is the half the board cannot enforce: that FINISHING the card is what releases the next one.
+ * A card left `todo` or `doing` when its session ends is parked `blocked` by the tick (§28.18) and
+ * everything behind it waits forever — so `done`, with a note, is the handoff now.
+ *
+ * It is appended by `task()` below rather than written into each body, for the same reason the
  * approval gate is: a rule every seat needs is a rule no seat can be written without.
  */
-export const DAY_ONE_ORDER =
-  "One last thing about today, and it is about today only. The install opens every seat's first session at the same moment, so the queue you read may hold nothing another seat is about to file. An empty or half-filled queue right now is the install's doing and not a finding: do not report it as one, do not wait for anyone, and do not invent the work you cannot see. Work that needs another seat's output reaches you by name — a handoff naming its rows, in a session of your own — or on your next cron fire, upstream seat first, hours apart; never from today's queue. File what you can make alone, hand on exactly what your message says to hand on, and say plainly what you left for the timers.";
+export const CARD_ORDER =
+  "How this card works, and it is the same for every seat. You were woken by the board, so the card is your whole brief: read it in full with board_read before anything else, and claim it (board_write, update to doing) before you spend. Everything this card needs either is in it or is in project_context — if it names no blocker, nothing you are waiting on exists, so do not wait for another seat and do not chase work you cannot see. An empty or half-filled queue right now is the install's doing and not a finding: do not report it as one, and do not invent the work you cannot see. When your work is filed, finish the card yourself: board_write, update to done, with a note saying what you filed and where it can be read. That note is the handoff — another seat's card is blocked on this one and is woken the moment it closes, so a card left open is a crew that stops. Work you could not finish goes to blocked with a comment saying what is missing, never to done. This card is the first of its kind only; the timers carry it from here.";
 
 /**
  * The one rule every agent of every template shares: the operator's approval queue is the only way
@@ -350,6 +382,31 @@ const CONTEXT_TOOL = "project_context";
  * the one outward act always stops at the Approvals screen (see `toolset`).
  */
 const SOCIAL: readonly string[] = ["social.accounts", "social.post"];
+
+/**
+ * THE TWO TOOLS A SEEDED CARD CANNOT BE WORKED WITHOUT, and the reason they are named here rather
+ * than left to the platform.
+ *
+ * `tasks` (`canonical-spec §31.11`) seeds the crew's first work as cards on the standing
+ * orchestrator's board, and the API's tick wakes the assignee of a due one (§28.18). The message
+ * that wake carries is the card's TITLE and nothing else — `board-wake.ts` composes *"Card crd_… on
+ * the company board is assigned to you: "…". Read it with board_read({card_id}) — its notes and
+ * comments are the brief"* — so the body below is reachable only through `board_read`, and the card
+ * only reaches `done` through `board_write`.
+ *
+ * §28.11 says both are "published to every session seated on a board", which every agent of this
+ * crew is once the apply widens the orchestrator's roster. That is CONSTRUCTION, not the tool list
+ * the model sees: the harness filters the injected modules through this very toolset
+ * (`permissionOf`, `packages/core`), and `toolset` below writes every built-in it is not handed as
+ * `{ enabled: false, permission: "deny" }` by name. So an unlisted board tool is a woken agent told
+ * to call `board_read` and not offered it — a card it cannot read, cannot finish, and therefore a
+ * chain that never unblocks and a crew that stops after one wave. Named here, for every seat,
+ * because it is the blueprint's rule and not a template's to drop.
+ *
+ * `allow` rather than `ask`: a wake runs with nobody watching, and a board write moves a card, not
+ * a post — the approval queue is still the only way anything leaves this channel.
+ */
+const BOARD: readonly string[] = ["board_read", "board_write"];
 
 /**
  * The two built-ins every agent holds whatever its template names: the gate above tells the agent
@@ -487,6 +544,27 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   }),
 ];
 
+/**
+ * One seeded card: what the seat is asked for, who owes it, and what it waits on.
+ *
+ * `body` is what the agent reads when the tick wakes it and it is the ONLY thing it is given — the
+ * wake message carries the title and a pointer to `board_read` and nothing else — so a body has to
+ * stand alone: the deliverable, where to file it, and where to stop. `CARD_ORDER` is appended here
+ * rather than written into each one, the way the approval gate is appended to every `system`.
+ *
+ * A card carries no budget of its own: the tick starts an ordinary session on the assignee's agent,
+ * so what it may spend is that seat's `max_task_micro_usd` above ($20). The intakes it replaced each
+ * named a smaller ceiling; the honest reading of the change is that day one is now bounded by the
+ * per-task ceiling, per card, and the README says so in the operator's words.
+ */
+export const task = (decl: { key: string; title: string; body: string; assignee: string; blocked_by?: string[] }): Task => ({
+  key: decl.key,
+  title: decl.title,
+  body: `${decl.body} ${CARD_ORDER}`,
+  assignee: decl.assignee,
+  ...(decl.blocked_by === undefined ? {} : { blocked_by: decl.blocked_by }),
+});
+
 /** A word count of the kind the plan's 150–400-word bound on a `system` is checked against. */
 export const words = (text: string): number => text.split(/\s+/).filter(Boolean).length;
 
@@ -506,8 +584,6 @@ export const agent = (decl: {
   tools: string[];
   /** `naive/<slug>` refs into the platform's skill catalogue; read with `read_skill`. */
   skills: string[];
-  /** The first session, opened by the apply that creates this agent (`canonical-spec §31.4`). */
-  intake: { message: string; budget_micro_usd: number };
   /** Only where the template cannot run without this seat — the studio cannot untick it. */
   required?: boolean;
   /**
@@ -533,11 +609,8 @@ export const agent = (decl: {
   budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
-  tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
+  tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
-  // Preamble → brief → gate for the standing prompt; message → order for the one-off. Composed here
-  // so a new seat cannot be written without either.
-  intake: { ...decl.intake, message: `${decl.intake.message} ${DAY_ONE_ORDER}` },
   handoffs: decl.handoffs ?? false,
   /**
    * The persona this agent acts as, and the reason it can act on a connected account at all: the
@@ -556,20 +629,7 @@ export const agent = (decl: {
  * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
  * names the rest of the crew in the brief, which is the only line that differs between templates.
  */
-export const channelManager = (
-  specialists: string,
-  /**
-   * THE QUESTION THE SETUP FORM HAD NO SLOT FOR, asked in the first session instead.
-   *
-   * The studio asks three (see `SetupQuestion`), and `PLATFORM_QUESTION` takes one of them —
-   * where the channel posts gates whether anything it makes can be published at all. What it
-   * displaced is named here and asked on day one with `ask_operator`, which parks the session with
-   * the question in front of the operator (`canonical-spec §7`). The engine's own refusal says
-   * this is where a fourth question belongs; this is the sentence that puts it there, rather than
-   * leaving the crew to invent an answer the preamble forbids it to invent.
-   */
-  firstAsk: string,
-): AgentDecl =>
+export const channelManager = (specialists: string): AgentDecl =>
   agent({
     name: "channel-manager",
     role: "Channel lead",
@@ -579,10 +639,27 @@ export const channelManager = (
     brief: `You are the channel manager, the person the operator talks to in Chat. You keep the calendar full at the cadence the context names and no fuller: more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and never do their work: the video projects (channel.list_projects) are theirs to plan and make, and revising a rendered one is the operator's move, never yours. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption what you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel. When the operator asks in Chat, answer with what the queue actually holds, and route work to the seat it belongs to.`,
     tools: ["web_search", "web_fetch"],
     skills: ["naive/caption-writing"],
-    intake: {
-      message:
-        `Day one. Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published.`,
-      budget_micro_usd: 20_000_000,
-    },
     schedules: CHANNEL_MANAGER_SCHEDULES,
+  });
+
+/**
+ * The manager's own card, shared by both templates because the manager is — and it is the head of
+ * both boards for the same reason its Monday fire is the head of both weeks.
+ *
+ * *** `firstAsk` IS THE QUESTION THE SETUP FORM HAD NO SLOT FOR. *** The studio asks three (see
+ * `SetupQuestion`) and `PLATFORM_QUESTION` takes one of them, because where the channel posts gates
+ * whether anything it makes can be published at all. What it displaced is named by the template and
+ * asked here with `ask_operator`, which parks the session with the question in front of the
+ * operator (`canonical-spec §7`) — the engine's own refusal says this is where a fourth question
+ * belongs, rather than leaving the crew to invent an answer the preamble forbids it to invent.
+ *
+ * It sat on the manager's intake before, where it was asked in the same minute every other seat was
+ * already working. On the board it is asked FIRST and the analyst waits behind it.
+ */
+export const channelPlanCard = (firstAsk: string): Task =>
+  task({
+    key: "channel-plan",
+    title: "Ask the operator the question the form had no room for, then file the channel plan",
+    assignee: "channel-manager",
+    body: `Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). The setup form asks three questions and no more, so one thing this channel needs is not in there: ask the operator for it once, with ask_operator, before you plan anything — ${firstAsk} Then write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published. Put the post's id in the note when you close this card: the analyst is blocked on it and reads the plan's slot count as the week it will be measuring against.`,
   });

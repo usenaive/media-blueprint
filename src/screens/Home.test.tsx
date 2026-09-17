@@ -48,12 +48,30 @@ describe("dayOne", () => {
       { name: "clipper", action: "deselected", session: null },
     ];
     expect(dayOne(lines)).toEqual([
-      { name: "trend-scout", state: "finished", done: true },
-      { name: "scriptwriter", state: "waiting for you", done: false },
-      { name: "producer", state: "running", done: false },
-      { name: "channel-manager", state: "budget_exhausted", done: false },
-      { name: "analyst", state: "unknown", done: false },
-      { name: "clipper", state: "deselected", done: false },
+      { name: "trend-scout", state: "finished", done: true, card: false },
+      { name: "scriptwriter", state: "waiting for you", done: false, card: false },
+      { name: "producer", state: "running", done: false, card: false },
+      { name: "channel-manager", state: "budget_exhausted", done: false, card: false },
+      { name: "analyst", state: "unknown", done: false, card: false },
+      { name: "clipper", state: "deselected", done: false, card: false },
+    ]);
+  });
+
+  /**
+   * A CARD LINE SAYS ONLY THAT IT WAS SEEDED. `tasks` lines carry a `crd_`, not a `ses_`, so the
+   * server reads no session for one — and printing `unknown` on every card of every install, or
+   * `0/7 finished` forever, would be claiming a state this dashboard cannot see. The board holds
+   * the progress; the line holds the seeding.
+   */
+  it("says only that a card was seeded, and never that it finished", () => {
+    expect(
+      dayOne([
+        { name: "channel-plan", action: "created", id: "crd_1", session: null, card: true },
+        { name: "first-render", action: "refused", session: null, card: true },
+      ]),
+    ).toEqual([
+      { name: "channel-plan", state: "on the board", done: false, card: true },
+      { name: "first-render", state: "refused", done: false, card: true },
     ]);
   });
 });

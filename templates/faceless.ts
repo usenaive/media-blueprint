@@ -10,14 +10,21 @@
  * Nothing here is code: swap this template for `clipping` and the same screens, routes and store
  * serve the other crew.
  *
- * Every agent runs on crons and opens with an intake. A faceless channel whose crew only moves when
- * a human opens a chat window is not a channel, it is a chat window. Read the comment on `schedule`
- * (`template.ts`) before touching a cron string here: schedules are the one place in `naive up`
- * where omission deletes, and a live row is matched by its exact cron text.
+ * Every agent runs on crons and owes a card on the company board. A faceless channel whose crew only
+ * moves when a human opens a chat window is not a channel, it is a chat window. Read the comment on
+ * `schedule` (`template.ts`) before touching a cron string here: schedules are the one place in
+ * `naive up` where omission deletes, and a live row is matched by its exact cron text.
  *
- * The pieces move as a chain, not a race. The apply opens every intake at once — declaration order
- * is not execution order — so no seat's first session reads another's; the intakes are set-up, and
- * the pipeline is ordered by handoffs (`handoffs`; `send_to_agent` with `wait: false`): the scout files briefs at
+ * *** DAY ONE IS THE BOARD NOW, NOT FIVE INTAKES. *** `tasks` below (`canonical-spec §31.11`) seeds
+ * seven cards on the standing orchestrator's board, and the API's tick wakes the assignee of each
+ * one that is `todo`, assigned and unblocked. The intakes this replaced opened at once — declaration
+ * order was never execution order — so every downstream seat read a queue its upstream was still
+ * filling, and the file had to spend a paragraph telling each of them not to report the emptiness.
+ * A blocker is that paragraph made structural: the scriptwriter is not woken until there are briefs
+ * to script, and the producer is not woken until there is a plan to render. What is NOT blocked is
+ * not blocked on purpose — a card whose blocker never closes is a seat that never starts at all.
+ *
+ * The ongoing pipeline still moves by handoff (`handoffs`; `send_to_agent` with `wait: false`): the scout files briefs at
  * `stage: brief` and names their ids to the scriptwriter, who writes a video project against each
  * (the row moves to `scripted` with the plan on it) and names the project ids to the producer, who
  * renders the plan and finishes it (`rendered`, on the project and the row). The crons are the
@@ -31,17 +38,24 @@
  * receipt for the render, which nothing — the producer, or the sweep freeing a dead session's
  * claim — may send back (`server/mcp.ts`).
  */
-import { agent, CADENCE_QUESTION, channelManager, PLATFORM_CHOICES, PLATFORM_QUESTION, schedule, type MediaTemplate } from "./template.ts";
+import {
+  agent,
+  CADENCE_QUESTION,
+  channelManager,
+  channelPlanCard,
+  PLATFORM_CHOICES,
+  PLATFORM_QUESTION,
+  schedule,
+  task,
+  type MediaTemplate,
+} from "./template.ts";
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",
   description: "Generates original short-form video in one niche, from briefs, in the channel's own look.",
 
   agents: [
-    channelManager(
-      "the trend-scout, the scriptwriter and the producer",
-      "the channel's tone and who it is for, in one line — the setup form asked for the niche and not for this.",
-    ),
+    channelManager("the trend-scout, the scriptwriter and the producer"),
     agent({
       name: "producer",
       role: "Video production",
@@ -51,11 +65,6 @@ export const FACELESS: MediaTemplate = {
         "You are the producer: yours is the render, not the plan. Take a planned project, one named to you by the operator or a handoff or the next planned (channel.list_projects); claim it before you spend anything: channel.update_project, status rendering and expected_status planned. Refused, another has it: take the next. Read the plan (channel.get_project) and its style template (channel.list_style_templates). Render it as one generate_video call — nothing here joins clips: the prompt is the scenes in order with seconds, voiceover, on-screen text and look; seconds their sum; aspect_ratio 9:16; its model. Wait for the file. Do not rewrite it. Finish: channel.update_project: status rendered, expected_status rendering, the video as `media_url`, your name as `agent`. Refused there, it moved on: never render twice. A revision arrives as a message on your session: re-read the plan with channel.get_project, apply the operator's note, finish with the same update_project write, changed scenes on it. Never open a second project. One plan per session; nothing planned, nothing rendered. You end the chain.",
       tools: ["generate_video", "generate_image"],
       skills: ["naive/short-video-hooks"],
-      intake: {
-        message:
-          "Day one is set-up, not a render. Do not read the queue for work: the first plan reaches you as a handoff from the scriptwriter, in its own session, naming the video project to render. Read project_context for the niche, the tone and the audience, then the style templates (channel.list_style_templates). Choose the one or two templates whose look fits the tone answer and file the choice as a pending post with no media and no stage, `source` \"style choice\", one line on why for each. Then check that generate_video is among your tools; if it is not, request exactly it with request_tools, once. Render nothing in this session.",
-        budget_micro_usd: 8_000_000,
-      },
       schedules: [
         schedule({
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
@@ -75,11 +84,6 @@ export const FACELESS: MediaTemplate = {
       tools: ["web_search", "web_fetch"],
       skills: ["naive/seo-content-brief", "naive/short-video-hooks"],
       handoffs: ["scriptwriter"],
-      intake: {
-        message:
-          "Day one. Read project_context for the niche, the audience and the cadence. Research what is moving in that niche right now and file the channel's first five briefs as pending posts (channel.create_post, no media, stage brief, `source` naming where each came from): topic, format, why now, hook direction, style template. Skip anything already in the queue. When all five are filed, send_to_agent the scriptwriter once — wait false, the message \"script these briefs\" with the five post ids, handoff_key \"briefs-day-one\" — and stop. That handoff, not a timer, is how day one gets its first scripts.",
-        budget_micro_usd: 20_000_000,
-      },
       schedules: [
         schedule({
           cron: "0 6 * * 1,4", // Monday and Thursday 06:00 — the week's briefs, and a mid-week refill.
@@ -99,11 +103,6 @@ export const FACELESS: MediaTemplate = {
       tools: ["web_search", "web_fetch"],
       skills: ["naive/short-video-hooks", "naive/caption-writing"],
       handoffs: ["producer"],
-      intake: {
-        message:
-          "Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience. Write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, `source` \"hook style\", so the team works to one voice. Do not read the queue for briefs and do not invent one: the trend-scout's first five reach you as a handoff naming their ids, in a session of your own, and that is where you plan them — each claimed first (stage scripting, expected_stage brief), three candidate hooks, the strongest picked, then one video project per row (channel.create_project: kind generation, post_id, title, brief, style template, model, scenes with prompt, seconds, voiceover and on-screen text, caption), then one send_to_agent to the producer, wait false, with the project ids. Stop here.",
-        budget_micro_usd: 8_000_000,
-      },
       schedules: [
         schedule({
           // Daily 06:30 — scripts on the night's briefs, before the producer's 07:00 render, and the
@@ -132,11 +131,6 @@ export const FACELESS: MediaTemplate = {
         "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: per post kind — produced and multi-part — what went out, what it did, which hooks and formats moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
       tools: [],
       skills: [],
-      intake: {
-        message:
-          "Day one. Read project_context for the niche, the audience and the cadence, then the queue (channel.list_posts). Set up the report skeleton this channel will use every week: the post kinds it files, the metrics you will read for each and where they come from, and the cadence-sized target for the week. File it as a pending post with no media, `source` \"report skeleton\", so the team can read what it will be measured against.",
-        budget_micro_usd: 20_000_000,
-      },
       schedules: [
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
@@ -145,6 +139,82 @@ export const FACELESS: MediaTemplate = {
           budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
         }),
       ],
+    }),
+  ],
+
+  /**
+   * THE CREW'S FIRST DAY, AS SEVEN CARDS ON THE COMPANY BOARD (`canonical-spec §31.11`).
+   *
+   * Each one is SET-UP — the thing this channel owes once, that no timer below will ever do again.
+   * The crons are the ongoing work and the cards deliberately do not restate them: the scout's card
+   * files the first five briefs because a channel installed on a Tuesday has nothing to script until
+   * Thursday 06:00 otherwise, and that is the only overlap; nobody's card writes a weekly report, a
+   * queue sweep or a comment reply, because Monday 07:30, 08:00 and 18:00 already do.
+   *
+   * *** THE CHAIN IS THE POINT, AND EVERY LINK IN IT IS REAL. *** A card with an open `blocked_by`
+   * is not due, so its seat is not woken and is not billed; when the blocker reaches `done` the tick
+   * wakes it with the note the last seat wrote. Four cards depend on nothing and open the install
+   * together — the plan, the briefs, the look, the hook style — because those four seats each need
+   * only `project_context` and can be got wrong by waiting. Three wait, and each waits on work it
+   * genuinely cannot start without:
+   *
+   *   · `report-frame` waits on `channel-plan`, because the skeleton is what the channel is measured
+   *     against and the plan is what sets the target — a frame written first invents its own
+   *     cadence-sized week and then disagrees with the manager's.
+   *   · `first-scripts` waits on `first-briefs` (there is nothing to script until briefs exist),
+   *     on `hook-style` (the voice every script is written to is the writer's own earlier card) and
+   *     on `look` (a plan names the style template it renders in, and the producer picks which ones
+   *     this channel uses).
+   *   · `first-render` waits on `first-scripts`: the producer renders a plan, and there is no plan
+   *     before the writer files one. It is the one card that spends real money (~$3.32,
+   *     `ONE_RENDER_MICRO_USD`) and it is last for that reason too.
+   *
+   * Nothing else is blocked, and that is a decision rather than an omission: a blocker that is not
+   * real is a card that never becomes due and a seat that never wakes at all.
+   *
+   * A RE-APPLY DOES NOT DOUBLE THEM. Each `key` becomes `media:<key>` on the wire and the apply
+   * answers the card that key already names.
+   */
+  tasks: [
+    channelPlanCard("the channel's tone and who it is for, in one line — the setup form asked for the niche and not for this."),
+    task({
+      key: "first-briefs",
+      title: "File the channel's first five briefs for its niche",
+      assignee: "trend-scout",
+      body: "Read project_context for the niche, the audience and the cadence. Research what is moving in that niche right now and file the channel's first five briefs as pending posts (channel.create_post, no media, stage brief, `source` naming where each came from): topic, format, why now, hook direction, style template. Skip anything already in the queue (channel.list_posts). Five good briefs beat twenty thin ones; file five and stop. Do not script them and do not hand off — the scriptwriter's card is blocked on this one and the board wakes it when you close yours, so send_to_agent here would open a second session on the same work. Put the five post ids in the note. Your Monday and Thursday 06:00 fires refill the queue from here.",
+    }),
+    task({
+      key: "look",
+      title: "Choose the style templates this channel renders in",
+      assignee: "producer",
+      body: "Day one is set-up, not a render. Read project_context for the niche, the tone and the audience, then the style templates (channel.list_style_templates). Choose the one or two whose look fits the tone and file the choice as a pending post with no media and no stage, `source` \"style choice\", one line on why for each — the scriptwriter names a style template in every plan it writes and is blocked on this card, so the note it reads is what stops it choosing at random. Then check that generate_video is among your tools; if it is not, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing in this session: your card for the first render is a separate one and it waits on a plan.",
+    }),
+    task({
+      key: "hook-style",
+      title: "Write the channel's hook style, so the team works to one voice",
+      assignee: "scriptwriter",
+      body: "Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience, then write the channel's hook style in five lines — the openings this audience stops for, the length, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, `source` \"hook style\". Do not read the queue for briefs and do not invent one: the scout's five reach you on your next card, which the board opens once this one and the scout's are closed. Put the post's id in the note.",
+    }),
+    task({
+      key: "report-frame",
+      title: "Set up the weekly report this channel will be measured against",
+      assignee: "analyst",
+      body: "Read project_context for the niche, the audience and the cadence, then the channel plan the manager filed (channel.list_posts, `source` \"channel plan\" — it is the card this one waited on, and its note names the post). Set up the report skeleton this channel will use every week: the post kinds it files, the metrics you will read for each and where they come from, and the week's target taken from the manager's slot count rather than invented here. File it as a pending post with no media, `source` \"report skeleton\", so the team can read what it will be measured against. Write no report today — there is nothing posted to report on, and your Monday 07:30 fire writes the first real one.",
+      blocked_by: ["channel-plan"],
+    }),
+    task({
+      key: "first-scripts",
+      title: "Turn the first five briefs into video projects",
+      assignee: "scriptwriter",
+      body: "The briefs exist now — the scout's card closed, and its note names the five post ids. Read project_context, your own hook style post and the producer's style choice post (channel.list_posts), then every row at stage brief (channel.list_posts, stage brief). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row, so skip it. Each claimed row becomes one video project (channel.create_project, kind generation, post_id the row, your name as agent): title; the brief's reasoning; a style template the producer actually chose and a video model; the scenes in order — render prompt inside that look, seconds, voiceover line, on-screen text — hook in the first scene, under fifteen seconds in all; the hashtagged caption. Filing it moves the row to stage scripted. Do not hand off to the producer: its card is blocked on this one and the board wakes it. Put the project ids in the note.",
+      blocked_by: ["first-briefs", "hook-style", "look"],
+    }),
+    task({
+      key: "first-render",
+      title: "Render the channel's first piece from the first plan",
+      assignee: "producer",
+      body: "There is a plan now — the scriptwriter's card closed, and its note names the project ids. Take the oldest planned generation project (channel.list_projects, status planned, kind generation) and claim it before you spend anything: channel.update_project, status rendering, expected_status planned; refused means another has it, so take the next. Read the plan in full (channel.get_project) and its style template (channel.list_style_templates). Render it as one generate_video call — nothing here joins clips: the prompt is the scenes in order with their seconds, voiceover, on-screen text and look; seconds their sum; aspect_ratio 9:16; its model. Wait for the file. Do not rewrite the plan. Finish it: channel.update_project, status rendered, expected_status rendering, the video as `media_url`, your name as `agent`. Refused there means it moved on while you rendered: say so and stop rather than render a second time — a rendered plan is one the channel has already paid for. ONE piece today, not five; your 07:00 fire takes the next one tomorrow. Name the project you rendered in the note.",
+      blocked_by: ["first-scripts"],
     }),
   ],
 
