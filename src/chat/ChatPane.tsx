@@ -287,7 +287,7 @@ export function ChatPane({
   placeholder?: string;
   /** The absence shown while there is no session yet — who hears the first message. */
   empty?: string;
-  /** The line under the composer — the seat and what stays with the operator. */
+  /** The line under the composer — the seat and what stays with the operator. `null` draws no strip. */
   under?: ReactNode;
   /**
    * WHEN THE NOTE COSTS MONEY. Set, Enter no longer sends: it arms the spend, and `action` — a
@@ -526,7 +526,7 @@ export function ChatPane({
               </button>
             </div>
           </div>
-          <div className="composer-under">{under}</div>
+          {under !== null ? <div className="composer-under">{under}</div> : null}
         </div>
       </div>
     </div>

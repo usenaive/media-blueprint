@@ -57,29 +57,25 @@ export const versionsOf = (project: VideoProject, post: Post | null): { mediaUrl
 ];
 
 /**
- * Who hears a note here and what they do with it, by where the plan is: a planned plan's note
- * edits words and renders nothing; a first render still out folds the note in; a rendered one is
- * rendered again. One line — it sits under a composer that may be half a window wide.
+ * Who hears a note here, by where the plan is: a planned plan's note reaches its planner; a
+ * render out or done reaches the renderer; a post with no plan behind it reaches the channel-manager.
  */
-export const voiceOf = (project: VideoProject | null): { seat: string; placeholder: string; does: string; empty: string } => {
+export const voiceOf = (project: VideoProject | null): { seat: string; placeholder: string; empty: string } => {
   if (project === null) {
-    return { seat: "channel-manager", placeholder: "Say what to change about this post…", does: "edits the post on your note", empty: "Nothing has been said about this post yet — the channel-manager hears your first note." };
+    return { seat: "channel-manager", placeholder: "Say what to change about this post…", empty: "Nothing has been said about this post yet — the channel-manager hears your first note." };
   }
   const renderer = RENDERER[project.kind];
   if (project.status === "planned") {
     const seat = project.agent ?? "planner";
-    return { seat, placeholder: "Say what to change about this plan…", does: "edits the plan on your note", empty: `No session is bound to this plan yet — your first note opens one with the ${seat}.` };
+    return { seat, placeholder: "Say what to change about this plan…", empty: `No session is bound to this plan yet — your first note opens one with the ${seat}.` };
   }
   if (project.status === "dropped") {
-    return { seat: renderer, placeholder: "Dropped — restore the plan to revise it…", does: "hears nothing on a dropped plan", empty: "This plan is dropped — restore it in Projects, and your note reaches its seat." };
+    return { seat: renderer, placeholder: "Dropped — restore the plan to revise it…", empty: "This plan is dropped — restore it in Projects, and your note reaches its seat." };
   }
   if (project.status === "rendering" && project.revision === undefined) {
-    return { seat: renderer, placeholder: "Say what to change about this render…", does: "folds your note into the render that is out", empty: `The render is out and no session is bound to it — a note reaches the ${renderer} once one is.` };
+    return { seat: renderer, placeholder: "Say what to change about this render…", empty: `The render is out and no session is bound to it — a note reaches the ${renderer} once one is.` };
   }
-  // A rendered plan is the one note here that spends, so its line carries the price — on screen
-  // before a word is typed, not after the money is gone.
-  const cost = project.status === "rendered" ? ` — about ${usd(ONE_RENDER_MICRO_USD)} a cut` : "";
-  return { seat: renderer, placeholder: "Say what to change about this video…", does: `re-renders on your note${cost}`, empty: `No session is bound to this plan yet — your first note opens one with the ${renderer}.` };
+  return { seat: renderer, placeholder: "Say what to change about this video…", empty: `No session is bound to this plan yet — your first note opens one with the ${renderer}.` };
 };
 
 /**
@@ -463,11 +459,7 @@ export function Studio() {
             placeholder={voice.placeholder}
             empty={voice.empty}
             confirm={project?.status === "rendered" ? REVISION_SPEND : undefined}
-            under={
-              <>
-                <span className="font-mono">{voice.seat}</span> · {voice.does} — approve/publish stays yours
-              </>
-            }
+            under={null}
           />
         </section>
 
