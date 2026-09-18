@@ -334,7 +334,7 @@ export const BUILTIN_TOOLS = [
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
   "find_files", "find_stock_photo",
-  "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
+  "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
 

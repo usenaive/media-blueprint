@@ -152,7 +152,7 @@ export const CLIPPING: MediaTemplate = {
       key: "source-check",
       title: "Confirm this channel can reach the references and cut at all",
       assignee: "clipper",
-      body: "Day one is set-up, not a cut. Read project_context for the reference channel(s) the operator named, then confirm you can reach each one. Check that clip_video is among your tools; if it is not, request exactly it with request_tools, once. File what you found as a pending post with no media, `source` \"clipper check\": which sources you can reach, which you cannot, and what is missing. Cut nothing today — your card for the first cuts is a separate one and it waits on the scout's plans. This is the check that decides whether this channel can work at all, so say plainly in the note whether it can.",
+      body: "Day one is set-up, not a cut. Read project_context for the reference channel(s) the operator named, then confirm you can reach each one. Look for clip_video in the tools you were offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools: never request a tool you already hold, and never request one for a card you are not on. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. File what you found as a pending post with no media, `source` \"clipper check\": which sources you can reach, which you cannot, and what is missing. Cut nothing today — your card for the first cuts is a separate one and it waits on the scout's plans. This is the check that decides whether this channel can work at all, so say plainly in the note whether it can.",
     }),
     task({
       key: "caption-style",
