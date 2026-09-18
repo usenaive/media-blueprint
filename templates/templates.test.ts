@@ -117,10 +117,10 @@ describe("the crews", () => {
    * `{enabled:false, permission:"deny"}` by name. Unlisted, the crew would have been woken onto
    * cards it could not read and could not close — one wave, then silence.
    */
-  it("grants every seat the two board tools a seeded card cannot be worked without", () => {
+  it("grants every seat the two board tools a seeded card cannot be worked without, and the file library", () => {
     for (const template of both) {
       for (const agent of template.agents) {
-        for (const tool of ["board_read", "board_write"]) {
+        for (const tool of ["board_read", "board_write", "find_files"]) {
           expect(agent.tools?.configs[tool], `${template.name}/${agent.name}/${tool}`).toEqual({ enabled: true, permission: "allow" });
         }
       }
@@ -467,6 +467,9 @@ describe("the crews", () => {
           expect(permissionFor(template, agent.name, sandbox)).toBe("deny");
         }
         expect(permissionFor(template, agent.name, "browser")).toBe("deny");
+        for (const spends of ["generate_speech", "transcribe_audio", "find_stock_photo"]) {
+          expect(permissionFor(template, agent.name, spends)).toBe("deny");
+        }
       }
     }
   });
@@ -506,6 +509,14 @@ describe("the crews", () => {
     expect(producer?.schedules?.[0]?.input).toMatch(/If generate_video is not among your tools.*request_tools.*config\.models/);
     const clipper = TEMPLATES.clipping.agents.find((agent) => agent.name === "clipper");
     expect(clipper?.schedules?.[0]?.input).toMatch(/If clip_video is not among your tools.*request_tools/);
+    // The day-one card is the other side of the same coin: a seat that already holds the tool
+    // must not raise a request_tools card for it "in case" a later render card needs it.
+    const styleCard = TEMPLATES.faceless.tasks.find((task) => task.key === "look");
+    expect(styleCard?.body).toMatch(/tools you were offered this turn — that list is complete.*If it is there.*do not call request_tools.*never request a tool you already hold.*never request one for a card you are not on.*Only if it is missing.*request_tools, once/s);
+    // The clipper is the sharper case: it holds clip_video at `allow` already, so the old
+    // "check that clip_video is among your tools" sentence was an invitation to park day one.
+    const sourceCard = TEMPLATES.clipping.tasks.find((task) => task.key === "source-check");
+    expect(sourceCard?.body).toMatch(/tools you were offered this turn — that list is complete.*If it is there.*do not call request_tools.*never request a tool you already hold.*never request one for a card you are not on.*Only if it is missing.*request_tools, once/s);
   });
 
   /**
