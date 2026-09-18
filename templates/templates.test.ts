@@ -120,7 +120,7 @@ describe("the crews", () => {
   it("grants every seat the two board tools a seeded card cannot be worked without", () => {
     for (const template of both) {
       for (const agent of template.agents) {
-        for (const tool of ["board_read", "board_write"]) {
+        for (const tool of ["board_read", "board_write", "find_files"]) {
           expect(agent.tools?.configs[tool], `${template.name}/${agent.name}/${tool}`).toEqual({ enabled: true, permission: "allow" });
         }
       }
@@ -467,6 +467,9 @@ describe("the crews", () => {
           expect(permissionFor(template, agent.name, sandbox)).toBe("deny");
         }
         expect(permissionFor(template, agent.name, "browser")).toBe("deny");
+        for (const spends of ["generate_speech", "transcribe_audio", "find_stock_photo"]) {
+          expect(permissionFor(template, agent.name, spends)).toBe("deny");
+        }
       }
     }
   });

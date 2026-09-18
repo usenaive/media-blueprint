@@ -332,7 +332,8 @@ const approvalGate =
 export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
-  "generate_image", "generate_video", "clip_video", "apps",
+  "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
+  "find_files", "find_stock_photo",
   "send_to_agent", "wait_for_agents", "list_agents", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
@@ -375,6 +376,13 @@ const DASHBOARD_TOOLS = [
  * to every agent because the preamble tells every agent to call it first.
  */
 const CONTEXT_TOOL = "project_context";
+
+/**
+ * The read side of the org's file library: what `generate_video`, `generate_image` and `clip_video`
+ * file is retrieved by this. A seat reaching for the style template's reference frame or the clip
+ * it was handed reads its own crew's files, so it is `allow` for every seat like `project_context`.
+ */
+const LIBRARY_TOOL = "find_files";
 
 /**
  * Held by every agent of every template, so the publish rule is the blueprint's and not a
@@ -609,7 +617,7 @@ export const agent = (decl: {
   budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
-  tools: toolset([CONTEXT_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
+  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
   handoffs: decl.handoffs ?? false,
   /**
