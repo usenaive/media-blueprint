@@ -509,6 +509,10 @@ describe("the crews", () => {
     expect(producer?.schedules?.[0]?.input).toMatch(/If generate_video is not among your tools.*request_tools.*config\.models/);
     const clipper = TEMPLATES.clipping.agents.find((agent) => agent.name === "clipper");
     expect(clipper?.schedules?.[0]?.input).toMatch(/If clip_video is not among your tools.*request_tools/);
+    // The day-one card is the other side of the same coin: a seat that already holds the tool
+    // must not raise a request_tools card for it "in case" a later render card needs it.
+    const styleCard = TEMPLATES.faceless.tasks.find((task) => task.assignee === "producer");
+    expect(styleCard?.body).toMatch(/tools you were offered this turn — that list is complete.*If it is there.*do not call request_tools.*never request a tool you already hold.*never request one for a card you are not on.*Only if it is missing.*request_tools, once/s);
   });
 
   /**
