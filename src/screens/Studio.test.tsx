@@ -82,7 +82,7 @@ function wire(answer: () => Response, extra: (url: string, init?: RequestInit) =
     if (url.startsWith("/api/studio/") && init?.method === undefined) return Promise.resolve(answer());
     const one = /^\/api\/chat\/([^/?]+)$/.exec(url);
     if (one) return Promise.resolve(json({ ...session, id: one[1] }));
-    if (/\/events$/.test(url)) return Promise.resolve(json({ data: [] }));
+    if (/\/events$/.test(url)) return Promise.resolve(new Response("", { status: 200 }));
     if (/\/stream/.test(url)) return Promise.resolve(new Response(null, { status: 204 }));
     return Promise.resolve(json({ error: `unexpected ${url}` }, 500));
   });

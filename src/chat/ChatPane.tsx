@@ -1,7 +1,7 @@
 import { ArrowUp, Plus } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { apiGet, messageOf } from "../api";
+import { ApiError, apiGet, messageOf, refusal } from "../api";
 import { Clamp, clock } from "../components/kit";
 import {
   APPROVALS_TAIL,
@@ -12,7 +12,6 @@ import {
   phaseOf,
   readFrames,
   reduce,
-  replay,
   type Item,
   type Phase,
   type Stream,
@@ -136,6 +135,39 @@ export function followStream(
     }
   })();
   return () => control.abort();
+}
+
+/**
+ * Reads the transcript `GET /api/chat/:id/events` streams — the store's log, a frame per event, in
+ * order — handing each over as it lands, so a long session is on screen from its first page rather
+ * than after its last. Resolves with the last `seq` read, which is where the live relay picks up.
+ * Rejects on a refusal or on the `error` frame the server ends a cut-short log with.
+ */
+export async function readLog(sessionId: string, onEvent: (event: WireEvent) => void, signal: AbortSignal): Promise<number> {
+  const res = await fetch(`/api/chat/${sessionId}/events`, { headers: { accept: "text/event-stream" }, signal });
+  if (!res.ok) throw new ApiError(res.status, refusal(await res.json().catch(() => null)));
+  if (res.body === null) return 0;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let last = 0;
+  let failed: ApiError | null = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer = readFrames(buffer + decoder.decode(value, { stream: true }), (name, raw) => {
+      if (name === "error") {
+        failed = new ApiError(502, "the transcript was cut short — reload to read it whole");
+        return;
+      }
+      const event = frameEvent(name, raw, last);
+      if (event === null) return;
+      last = Math.max(last, event.seq);
+      onEvent(event);
+    });
+  }
+  if (failed !== null) throw failed;
+  return last;
 }
 
 export function argsSummary(args: Record<string, unknown>): string {
@@ -346,6 +378,7 @@ export function ChatPane({
 
   useEffect(() => {
     let live = true;
+    const control = new AbortController();
     setError(null);
     if (sessionId === null) {
       setStream(emptyStream);
@@ -361,14 +394,18 @@ export function ChatPane({
       setStream(emptyStream);
       setLocal([]);
       setSent(false);
-      Promise.all([apiGet<SessionRow>(`/chat/${sessionId}`), apiGet<{ data: WireEvent[] }>(`/chat/${sessionId}/events`)]).then(
-        ([s, log]) => {
+      const onLogged = (event: WireEvent) => {
+        if (!live) return;
+        setStream((s) => reduce(s, event));
+        setLoading(false);
+      };
+      Promise.all([apiGet<SessionRow>(`/chat/${sessionId}`), readLog(sessionId, onLogged, control.signal)]).then(
+        ([s, lastSeq]) => {
           if (!live) return;
-          const replayed = replay(log.data);
-          setStream({ ...replayed, status: s.status, stopReason: s.stop_reason, pendingApproval: s.stop_reason === "awaiting_approval" });
+          setStream((st) => ({ ...st, status: s.status, stopReason: s.stop_reason, pendingApproval: s.stop_reason === "awaiting_approval" }));
           setLoading(false);
           props.current.onSession?.(s);
-          if (RUNNING.has(s.status) || (props.current.keepOpen && !TERMINAL.has(s.status))) follow(sessionId, replayed.lastSeq);
+          if (RUNNING.has(s.status) || (props.current.keepOpen && !TERMINAL.has(s.status))) follow(sessionId, lastSeq);
         },
         (err: unknown) => {
           if (!live) return;
@@ -379,6 +416,7 @@ export function ChatPane({
     }
     return () => {
       live = false;
+      control.abort();
       stop.current();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

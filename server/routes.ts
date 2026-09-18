@@ -237,6 +237,61 @@ async function chatSessions(config: ProxyConfig): Promise<ApiReply> {
   return json(200, { data: await Promise.all(rows.map((s) => chatSession(config, s))), has_more: false, next_cursor: null });
 }
 
+/**
+ * The events a transcript is drawn without. Every token of every reply is stored as its own
+ * `message.delta`, and the harness brackets each step in a `span.*` pair, so the log of one
+ * session that made a video runs to thousands of rows — and `message.completed` carries the whole
+ * answer anyway. The live relay still carries deltas: that is how a reply is watched being written.
+ */
+const NOISE = (type: string): boolean => type === "message.delta" || type.startsWith("span.");
+
+interface LogPage {
+  data?: WireEvent[];
+  has_more?: boolean;
+  next_cursor?: string | null;
+}
+
+/**
+ * `GET /api/chat/:id/events` — the whole log, as an event stream rather than one JSON body. The
+ * platform pages the log a hundred rows at a time, so a long session was dozens of upstream reads
+ * in a row before the browser saw a byte; streamed, the first page is on screen while the rest is
+ * still being read. Nothing here touches the platform's tail (`/stream`): this is the store's
+ * history, and the relay is picked up from the last `seq` it delivers. A page that fails after the
+ * first ends the stream with an `error` frame, so a cut-short transcript never reads as a whole one.
+ */
+async function transcript(config: ProxyConfig, id: string): Promise<ApiReply> {
+  const page = async (after: number | undefined): Promise<LogPage | null> => {
+    try {
+      const res = await proxyFetch(config, sessionEvents(id, after), null);
+      return res.ok ? ((await res.json()) as LogPage) : null;
+    } catch {
+      return null;
+    }
+  };
+  const first = await page(undefined);
+  if (first === null) return fail(502, "upstream unavailable");
+  const encoder = new TextEncoder();
+  const frame = (name: string, body: unknown) => encoder.encode(`event: ${name}\ndata: ${JSON.stringify(body)}\n\n`);
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let current: LogPage = first;
+      for (;;) {
+        for (const event of current.data ?? []) if (!NOISE(event.type)) controller.enqueue(frame(event.type, event));
+        const cursor = Number(current.next_cursor);
+        if (current.has_more !== true || !Number.isInteger(cursor)) break;
+        const next = await page(cursor);
+        if (next === null) {
+          controller.enqueue(frame("error", { error: "upstream unavailable" }));
+          break;
+        }
+        current = next;
+      }
+      controller.close();
+    },
+  });
+  return { status: 200, stream: new Response(body), sse: true };
+}
+
 /** `GET /api/chat/:id` — one session in the rail's shape, for the header of a resumed chat. */
 async function chatSessionById(config: ProxyConfig, id: string): Promise<ApiReply> {
   const res = await proxyFetch(config, { method: "GET", path: `/v1/sessions/${id}` }, null);
@@ -943,6 +998,8 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
   const one = /^\/api\/chat\/(ses_[\w-]+)$/.exec(req.path);
   if (one) return req.method === "GET" ? chatSessionById(ctx.config, one[1]!) : fail(405, "method not allowed");
+  const log = /^\/api\/chat\/(ses_[\w-]+)\/events$/.exec(req.path);
+  if (log) return req.method === "GET" ? transcript(ctx.config, log[1]!) : fail(405, "method not allowed");
 
   const render = /^\/api\/projects\/([\w-]+)\/render$/.exec(req.path);
   if (render) {
@@ -956,10 +1013,6 @@ export async function handleRequest(req: ApiRequest, ctx: ApiContext): Promise<A
   }
   if (req.path === "/api/agents" || req.path === "/api/deployments") {
     const rows = await collect(ctx.config, upstream);
-    return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
-  }
-  if (/^\/api\/chat\/ses_[\w-]+\/events$/.test(req.path)) {
-    const rows = await collect(ctx.config, upstream, fetch, "after_seq");
     return rows === null ? fail(502, "upstream unavailable") : json(200, { data: rows, has_more: false, next_cursor: null });
   }
   /**

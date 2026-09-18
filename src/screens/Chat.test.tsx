@@ -42,6 +42,8 @@ const stream = (text: string) =>
     },
   }), { status: 200 });
 
+const logged = (log: readonly { type: string }[]) => stream(log.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(""));
+
 const LOG = [
   { seq: 1, type: "session.started", data: {} },
   { seq: 2, type: "message.completed", data: { role: "user", content: "Clip the interview" } },
@@ -102,7 +104,7 @@ async function type(text: string) {
 describe("the Chat screen", () => {
   it("reads a session back from its log, both sides in their own bubbles, under its header", async () => {
     const fetchMock = vi.fn((url: string) =>
-      Promise.resolve(url === "/api/chat/ses_1" ? json(SESSION) : url === "/api/chat/ses_1/events" ? json({ data: LOG }) : json({ error: url }, 404)),
+      Promise.resolve(url === "/api/chat/ses_1" ? json(SESSION) : url === "/api/chat/ses_1/events" ? logged(LOG) : json({ error: url }, 404)),
     );
     await mount("/chat/ses_1", fetchMock);
     expect(bubbles()).toEqual([
@@ -125,7 +127,7 @@ describe("the Chat screen", () => {
       { seq: 3, type: "message.completed", data: { role: "assistant", content: "Short." } },
     ];
     const fetchMock = vi.fn((url: string) =>
-      Promise.resolve(url === "/api/chat/ses_1" ? json(SESSION) : url === "/api/chat/ses_1/events" ? json({ data: log }) : json({ error: url }, 404)),
+      Promise.resolve(url === "/api/chat/ses_1" ? json(SESSION) : url === "/api/chat/ses_1/events" ? logged(log) : json({ error: url }, 404)),
     );
     await mount("/chat/ses_1", fetchMock);
     const [yours, agent, short] = Array.from(host.querySelectorAll(".bubble"));
@@ -145,7 +147,7 @@ describe("the Chat screen", () => {
   it("queues a follow-up on the open session and shows it at once", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/chat/ses_1") return Promise.resolve(json(SESSION));
-      if (url === "/api/chat/ses_1/events") return Promise.resolve(json({ data: LOG }));
+      if (url === "/api/chat/ses_1/events") return Promise.resolve(logged(LOG));
       if (url === "/api/chat/ses_1/messages" && init?.method === "POST") return Promise.resolve(json({ session_id: "ses_1", status: "running", accepted_seq: 6 }, 202));
       if (url.startsWith("/api/chat/ses_1/stream")) return Promise.resolve(stream("event: session.idle\ndata: {}\n\n"));
       return Promise.resolve(json({ error: url }, 404));
@@ -185,7 +187,7 @@ describe("the Chat screen", () => {
   it("takes a refused follow-up off the transcript and back into the composer", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/chat/ses_1") return Promise.resolve(json(SESSION));
-      if (url === "/api/chat/ses_1/events") return Promise.resolve(json({ data: LOG }));
+      if (url === "/api/chat/ses_1/events") return Promise.resolve(logged(LOG));
       if (url === "/api/chat/ses_1/messages" && init?.method === "POST") return Promise.resolve(json({ error: "session is busy" }, 409));
       return Promise.resolve(json({ error: url }, 404));
     });
@@ -201,7 +203,7 @@ describe("the Chat screen", () => {
   it("drops the previous session's header while the next one loads", async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url === "/api/chat/ses_1") return Promise.resolve(json(SESSION));
-      if (url === "/api/chat/ses_1/events") return Promise.resolve(json({ data: LOG }));
+      if (url === "/api/chat/ses_1/events") return Promise.resolve(logged(LOG));
       return Promise.resolve(json({ error: "no such session" }, 404));
     });
     await mount("/chat/ses_1", fetchMock);
