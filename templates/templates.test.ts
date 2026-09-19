@@ -117,12 +117,14 @@ describe("the crews", () => {
    * `{enabled:false, permission:"deny"}` by name. Unlisted, the crew would have been woken onto
    * cards it could not read and could not close — one wave, then silence.
    */
-  it("grants every seat the two board tools a seeded card cannot be worked without, and the file library", () => {
+  it("grants every seat the two board tools a seeded card cannot be worked without, the file library, and its own bill", () => {
     for (const template of both) {
       for (const agent of template.agents) {
-        for (const tool of ["board_read", "board_write", "find_files"]) {
+        for (const tool of ["board_read", "board_write", "find_files", "session_spend"]) {
           expect(agent.tools?.configs[tool], `${template.name}/${agent.name}/${tool}`).toEqual({ enabled: true, permission: "allow" });
         }
+        // The gate names the tool so a seat asked "how much did that cost" quotes the ledger, never a rate.
+        expect(agent.system).toMatch(/session_spend reads what this session was charged.*never estimate/);
       }
     }
   });

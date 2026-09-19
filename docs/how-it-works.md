@@ -90,7 +90,8 @@ Every `system` is composed by `agent()` in `templates/template.ts` as
 - `approvalGate` — file every finished piece as a *pending* post via `channel.create_post`, never
   publish yourself; sign it (`agent`, `account`, `media_url`, `source`, `platform`); a brief is a
   pending post with no media, a video project is the plan a video is made from — another seat
-  renders or cuts it, and that files the post; the tools offered this turn are the complete list;
+  renders or cuts it, and that files the post; `session_spend` is what the session was charged,
+  per media job — quote it, never estimate; the tools offered this turn are the complete list;
   request a missing one once with `request_tools`; ask the operator once with `ask_operator`;
   never describe a video you did not render.
 

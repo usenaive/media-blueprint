@@ -320,7 +320,7 @@ export const CARD_ORDER =
  * the video project, which is the plan it is made from — so every seat reads the same two words.
  */
 const approvalGate =
-  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file: your name as `agent`, the connected account as `account` (channel.list_accounts), the video as `media_url`, its origin as `source`, the network as `platform`. A brief is a pending post with no media yet; a video project is the plan a video is made from — another seat renders or cuts it, and that files the post. The operator reviews and approves every row from the dashboard. The tools offered this turn are the complete list of what you can do right now: do not invent a capability. A tool or model you are not offered: request it once with request_tools — exact tool, permission, model in config.models where needed, why — then wait; a refusal is final. A fact or decision only the operator has: ask once with ask_operator, then wait. A connected account's tools appear once the operator connects it; none offered, say so and stop. Never describe a video you did not render or a post you did not file.";
+  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file: `agent` your name, `account` the connected account (channel.list_accounts), `media_url` the video, `source` its origin, `platform` the network. A brief is a pending post with no media yet; a video project is the plan a video is made from — another seat renders or cuts it, and that files the post. The operator approves every row on the dashboard. session_spend reads what this session was charged, per media job: quote it, never estimate. The tools offered this turn are the complete list of what you can do right now: do not invent a capability. A tool or model you lack: request it once with request_tools — exact tool, permission, model in config.models, why — then wait; a refusal is final. A fact only the operator has: ask once with ask_operator, then wait. A connected account's tools appear once it is connected; none offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -333,7 +333,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
-  "find_files", "find_stock_photo",
+  "find_files", "find_stock_photo", "session_spend",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
@@ -383,6 +383,14 @@ const CONTEXT_TOOL = "project_context";
  * it was handed reads its own crew's files, so it is `allow` for every seat like `project_context`.
  */
 const LIBRARY_TOOL = "find_files";
+
+/**
+ * What this session has been charged, read from the ledger and scoped by the platform to the
+ * calling session (`canonical-spec §11.4`). Every seat spends — a render, a clip, a search — and
+ * the operator's first question after a run is what it cost, so it is `allow` for every seat: it
+ * reads, it names no other session, and a guess dressed up as a figure is worse than the number.
+ */
+const SPEND_TOOL = "session_spend";
 
 /**
  * Held by every agent of every template, so the publish rule is the blueprint's and not a
@@ -617,7 +625,7 @@ export const agent = (decl: {
   budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
-  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
+  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, SPEND_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
   handoffs: decl.handoffs ?? false,
   /**
