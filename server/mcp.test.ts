@@ -495,6 +495,63 @@ describe("mcp tools", () => {
   });
 
   /**
+   * *** WHAT HAPPENS TO A PLAN WRITTEN BEFORE ANY OF THIS — the backward-compatibility contract. ***
+   *
+   * An install that upgrades carries plans with no `hook`, no `beat`, none of the seven new fields,
+   * the old default model, and — because the old prompts demanded "under fifteen seconds in all" —
+   * a scene list that is now BELOW the format's floor. All of it must keep working, because the
+   * alternative is an upgrade that strands a queue.
+   *
+   * It does, with exactly one deliberate exception, pinned at the bottom: RE-WRITING a legacy plan's
+   * scenes is refused, because the length check runs on the write. That is the right answer rather
+   * than a grandfather clause — the channel's format is 15–30s now, so a piece being re-cut should
+   * come out conforming — but it is a behaviour change and it belongs in a test rather than in
+   * somebody's afternoon. The refusal names the remedy ("re-cut the shots"), and every patch that
+   * does NOT touch scenes — the 08:00 sweep's caption and status fixes, the claim, the finish — is
+   * untouched, which is what keeps a live queue moving through the upgrade.
+   */
+  it("keeps a plan written before any of this readable, patchable, claimable and renderable", async () => {
+    const store = freshStore();
+    const legacy = {
+      id: "proj_old1", kind: "generation" as const, status: "planned" as const,
+      statusAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+      title: "Legacy 9s plan", brief: "written before any of this", platform: "youtube" as const,
+      styleTemplate: "Marble & ink", model: "google/veo-3.1",
+      scenes: [{ prompt: "a bust", seconds: 4 }, { prompt: "a table", seconds: 5 }],
+      caption: "old caption", sessions: [],
+    };
+    store.read().projects.push(legacy);
+
+    const read = text<Record<string, unknown>>((await handleMcp(call("get_project", { id: legacy.id }), store, null))!);
+    expect(read.title).toBe("Legacy 9s plan");
+    // Its model is preserved rather than rewritten to the new default, and nothing is invented on it.
+    expect(read.model).toBe("google/veo-3.1");
+    for (const added of ["hook", "retention", "cta", "facts", "sound", "referenceFrames", "referencePattern"]) {
+      expect(read[added], added).toBeUndefined();
+    }
+    expect((read.scenes as { beat?: string }[]).every((one) => one.beat === undefined)).toBe(true);
+    // A prompt is still compiled for it, at its own length — the read does not enforce the format.
+    expect(read.render_seconds).toBe(9);
+    expect(read.render_prompt).toContain("9 seconds in total, 2 shots in order");
+
+    // Every patch that does not touch scenes still applies: this is the daily sweep and the claim.
+    const swept = text<{ caption: string }>((await handleMcp(call("update_project", { id: legacy.id, caption: "fixed by the sweep" }), store, null))!);
+    expect(swept.caption).toBe("fixed by the sweep");
+    const claimed = text<{ status: string }>((await handleMcp(call("update_project", { id: legacy.id, status: "rendering", expected_status: "planned" }), store, null))!);
+    expect(claimed.status).toBe("rendering");
+    const done = text<{ status: string }>((await handleMcp(call("update_project", {
+      id: legacy.id, status: "rendered", expected_status: "rendering", media_url: "https://cdn.example.test/old.mp4", agent: "producer",
+    }), store, null))!);
+    expect(done.status).toBe("rendered");
+
+    // THE ONE EXCEPTION, and it is deliberate: re-cutting it must bring it into the format.
+    store.openRevision(legacy.id, "ses_rev", "tighten it");
+    const reWritten = (await handleMcp(call("update_project", { id: legacy.id, scenes: legacy.scenes }), store, null)) as CallResult;
+    expect(reWritten.result.isError).toBe(true);
+    expect(reWritten.result.content[0]!.text).toMatch(/the scenes run 9s in all[\s\S]*Re-cut the shots/);
+  });
+
+  /**
    * §16.2 / ADR-0752: a plan may name the stills it is rendered AGAINST, and `get_project` hands
    * them to the renderer beside the prompt. Describing a reference in words and hoping the model
    * rebuilds it is the lossy path; the provider takes reference images directly, so the seat's
