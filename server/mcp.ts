@@ -234,19 +234,31 @@ export const TOOLS = toolsFor([ACTIVE.platform]);
  */
 export const scenesPrompt = (project: { scenes?: Scene[]; styleTemplate?: string; sound?: Sound }): string => {
   const scenes = project.scenes ?? [];
+  // A planner's field is a phrase, not a sentence: `prompt` arrives with no full stop and a
+  // `voiceover` usually arrives with one. Running this for real showed both — "…candlelight
+  // On-screen text:" ran two clauses together, and `Voiceover: "…afraid of?".` closed a question
+  // with a full stop. The prompt is read by a model as prose, so punctuation is content here.
+  const stop = (text: string): string => {
+    const said = text.trim();
+    return /[.!?…]$/.test(said) ? said : `${said}.`;
+  };
+  const quoted = (label: string, text: string): string => {
+    const said = text.trim();
+    return `${label}: "${said}"${/[.!?…]$/.test(said) ? "" : "."}`;
+  };
   const shots = scenes.map((scene, i) => {
-    const parts = [`Shot ${i + 1}${scene.beat === undefined ? "" : ` (${scene.beat})`}, ${scene.seconds}s: ${scene.prompt}`];
-    if (scene.text !== undefined) parts.push(`On-screen text: "${scene.text}".`);
-    if (scene.voiceover !== undefined) parts.push(`Voiceover: "${scene.voiceover}".`);
+    const parts = [`Shot ${i + 1}${scene.beat === undefined ? "" : ` (${scene.beat})`}, ${scene.seconds}s: ${stop(scene.prompt)}`];
+    if (scene.text !== undefined) parts.push(quoted("On-screen text", scene.text));
+    if (scene.voiceover !== undefined) parts.push(quoted("Voiceover", scene.voiceover));
     return parts.join(" ");
   });
   const total = scenes.reduce((sum, scene) => sum + scene.seconds, 0);
   const lines = [
     `One continuous vertical video, ${total} seconds in total, ${shots.length} shot${shots.length === 1 ? "" : "s"} in order.`,
     ...(project.styleTemplate === undefined ? [] : [`Look: ${project.styleTemplate}, held across every shot.`]),
-    ...(project.sound?.music === undefined ? [] : [`Music: ${project.sound.music}.`]),
-    ...(project.sound?.voice === undefined ? [] : [`Narration voice: ${project.sound.voice}.`]),
-    ...(project.sound?.sfx === undefined ? [] : [`Sound design: ${project.sound.sfx.join("; ")}.`]),
+    ...(project.sound?.music === undefined ? [] : [`Music: ${stop(project.sound.music)}`]),
+    ...(project.sound?.voice === undefined ? [] : [`Narration voice: ${stop(project.sound.voice)}`]),
+    ...(project.sound?.sfx === undefined ? [] : [`Sound design: ${stop(project.sound.sfx.join("; "))}`]),
     ...shots,
   ];
   return lines.join("\n");

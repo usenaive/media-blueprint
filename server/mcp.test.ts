@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authError, handleMcp, TOOLS } from "./mcp";
+import { authError, handleMcp, scenesPrompt, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { TEMPLATES } from "../templates/index.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
@@ -488,6 +488,35 @@ describe("mcp tools", () => {
     expect(await refused({ kind: "clipping", title: "t", brief: "b", sources: [{ url: "https://youtu.be/x" }] })).toMatch(/sources\[0\]\.reason/);
     expect(await refused({ kind: "generation", post_id: "post_nope", title: "t", brief: "b", ...PLAN })).toMatch(/no such post/);
     expect(store.read().projects).toHaveLength(before);
+  });
+
+  /**
+   * *** PUNCTUATION IS CONTENT IN A RENDER PROMPT, AND THIS WAS FOUND BY RUNNING IT. ***
+   *
+   * The unit tests asserted the prompt CONTAINED each shot and passed while the real output read
+   * "…candlelight On-screen text:" — two clauses run together — and closed a question with a full
+   * stop: `Voiceover: "…afraid of?".`. A planner's field is a phrase, not a sentence: `prompt`
+   * arrives without a full stop and a `voiceover` usually arrives with one. The model reads this
+   * as prose, so both are fixed at the join and held here.
+   */
+  it("punctuates the compiled prompt: one stop per clause, and never two", () => {
+    const prompt = scenesPrompt({
+      styleTemplate: "Marble & ink",
+      sound: { music: "Low drone, no drop", voice: "Unhurried", sfx: ["Bowl on stone"] },
+      scenes: [
+        { prompt: "A marble bust, candlelight", seconds: 15, beat: "hook", text: "Rehearse losing it all.", voiceover: "Is this what I was afraid of?" },
+      ],
+    });
+    // The shot's phrase gains the stop it did not carry, before the next clause begins.
+    expect(prompt).toContain('Shot 1 (hook), 15s: A marble bust, candlelight. On-screen text:');
+    // Text and voiceover already end in punctuation, so nothing is added after the quote.
+    expect(prompt).toContain('On-screen text: "Rehearse losing it all." Voiceover: "Is this what I was afraid of?"');
+    // Nowhere does a quote close onto a second stop, or a stop double up.
+    expect(prompt).not.toMatch(/"\.|\.\.(?!\.)|\?\.|!\./);
+    // A phrase with no punctuation of its own still gets exactly one.
+    expect(prompt).toContain("Music: Low drone, no drop.");
+    expect(prompt).toContain("Narration voice: Unhurried.");
+    expect(prompt).toContain("Sound design: Bowl on stone.");
   });
 
   /**
