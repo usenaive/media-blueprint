@@ -192,9 +192,10 @@ export const CLIPPING: MediaTemplate = {
 
   /**
    * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
-   * `PLATFORM_QUESTION` takes was `niche` — "Niche / audience" — and the channel manager asks for
-   * it in its day-one session instead. The references question keeps its slot whatever else goes: it is
-   * the one answer no seat may work without, and no crew may infer.
+   * `PLATFORM_QUESTION` takes was `niche` — "Niche / audience" — which the channel manager now reads
+   * off the references in its day-one session and writes into the channel plan as its own reading,
+   * rather than asking the operator for it. The references question keeps its slot whatever else goes:
+   * it is the one answer no seat may work without, and no crew may infer.
    */
   questions: [
     {

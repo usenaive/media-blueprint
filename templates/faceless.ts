@@ -230,10 +230,10 @@ export const FACELESS: MediaTemplate = {
 
   /**
    * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
-   * `PLATFORM_QUESTION` takes was `audience` — "Tone and audience, in one line" — and that question
-   * is now the first thing the channel manager asks the operator in its day-one session. Where a
-   * channel posts cannot be asked later: the crew starts filing within the minute, and every row it
-   * files carries a target.
+   * `PLATFORM_QUESTION` takes was `audience` — "Tone and audience, in one line" — which the channel
+   * manager now reads off the niche in its day-one session and writes into the channel plan as its
+   * own reading, rather than asking the operator for it. Where a channel posts cannot be inferred
+   * later: the crew starts filing within the minute, and every row it files carries a target.
    */
   questions: [
     {

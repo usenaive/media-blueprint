@@ -31,8 +31,9 @@ From `naive.config.ts`:
 
 Setup questions are capped at three by the SDK (`parseProject`). Both templates spend one on
 `platform` (multi-select of YouTube Shorts / TikTok / Instagram Reels) and one on `cadence`;
-`faceless` asks `niche`, `clipping` asks `sources` (reference channel URLs). The displaced question
-(tone/audience) is asked by the channel manager on day one via `ask_operator`.
+`faceless` asks `niche`, `clipping` asks `sources` (reference channel URLs). The displaced line
+(tone/audience) is not asked of the operator at all: the channel manager reads it off the niche on
+day one and writes it into the channel plan as its own reading.
 
 ## 3. The crews
 

@@ -149,17 +149,20 @@ describe("the question that asks where the channel posts", () => {
   });
 
   /**
-   * Nothing was dropped to make room: the displaced question is asked in the manager's first
-   * session, which is now the session the board wakes it into on the `channel-plan` card — and it
-   * is the head of the chain, so it is asked before the seat that waits on it is started at all.
+   * Nothing was dropped to make room: the displaced line is covered in the manager's first session,
+   * which is the session the board wakes it into on the `channel-plan` card — and it is the head of
+   * the chain, so it is written before the seat that waits on it is started at all. The manager
+   * READS it off the niche and writes it into the plan as its own reading; it does not ask the
+   * operator, because a card that parks on a human gates the crew waiting behind it.
    */
-  it("asks what it displaced in the crew's first conversation instead", () => {
+  it("covers what it displaced in the plan instead, without asking the operator", () => {
     for (const template of both) {
       const plan = template.tasks.find((one) => one.key === "channel-plan")!;
       expect(plan.assignee, template.name).toBe("channel-manager");
       expect(plan.blocked_by ?? [], template.name).toEqual([]);
-      expect(plan.body, template.name).toMatch(/ask_operator/);
-      expect(plan.body, template.name).toMatch(/setup form asks three questions/);
+      expect(plan.body, template.name).not.toMatch(/ask_operator/);
+      expect(plan.body, template.name).toMatch(/write it into the plan as its second line/);
+      expect(plan.body, template.name).toMatch(/it is your reading/);
     }
     expect(TEMPLATES.faceless.tasks[0]!.body).toMatch(/tone and who it is for/);
     expect(TEMPLATES.clipping.tasks[0]!.body).toMatch(/who these clips are for/);

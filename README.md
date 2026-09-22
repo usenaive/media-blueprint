@@ -169,7 +169,7 @@ it is printed in dollars here.
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — files the plan (slots per week, days, kinds, accounts) and records its own reading of the channel's tone and audience; asks you nothing |
 | `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | `look` — picks the style templates this channel renders in · `first-render` — renders the first piece, once there is a plan |
 | `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
 | `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `hook-style` — writes the channel's voice · `first-scripts` — turns the five briefs into video projects |
@@ -210,9 +210,10 @@ expected to edit and re-deploy — so every install of this blueprint filed for 
 whoever installed it and whatever they had connected.
 
 Three is a budget, so asking that one meant not asking another. The slot came from *"tone and
-audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager now asks for it
-with `ask_operator` in its day-one session, which is exactly where the engine's refusal says a
-fourth question belongs. Nothing was dropped — it moved from the form to the conversation.
+audience"* on `faceless` and *"niche / audience"* on `clipping`; rather than a fourth question, the
+channel manager reads it off the niche in its day-one session and writes it into the channel plan as
+its own reading. Nothing was dropped, and nothing waits on you — the setup answers already carry what
+the channel needs, so the crew never parks on a follow-up question.
 
 The answers are the install's project context. Each agent reads them through the platform's
 read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
