@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { authError, handleMcp, scenesPrompt, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { TEMPLATES } from "../templates/index.ts";
+import { VIDEO_MODELS } from "../templates/template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 
 const dirs: string[] = [];
@@ -431,7 +432,10 @@ describe("mcp tools", () => {
         reference_pattern: "cold open on the object",
       }), store, null))!,
     );
-    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: "google/veo-3.1", agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
+    // The model a plan takes when it names none is the FIRST pin, derived rather than spelled: the
+    // default moved to Seedance 2.5 and a test naming the old one would have gone on passing while
+    // every plan rendered with something else.
+    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: VIDEO_MODELS[0], agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
     expect(plan.id).toBe(brief.id);
     expect(plan.statusAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(plan.scenes).toEqual(scenes);

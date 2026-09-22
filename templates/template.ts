@@ -369,17 +369,21 @@ export const SCENES_ARE_ONE_RENDER = true;
 /**
  * What one render actually costs, measured rather than guessed.
  *
- * PRODUCTION, 2026-09-07: one 10-second 1080x1920 video was debited **2,210,000 µUSD**
- * (`led_vna2cf3v27phg8meh4tdnxfcx0`) — 221,000 µUSD per second. Nothing publishes a price for a
- * video model, so this figure comes from a real invoice and is the only honest one available;
- * re-measure it when the model changes.
+ * RE-MEASURED 2026-09-21, on the model this template now defaults to. One 26.08-second 720x1280
+ * `bytedance/seedance-2.5` render of a real four-beat plan cost **$6.01875** — **230,780 µUSD per
+ * second**. The earlier figure, 221,000, was a 10-second `google/veo-3.1` render from 2026-09-07,
+ * and the docstring on `VIDEO_MODELS` explains why the default moved; this constant follows the
+ * default, because a ceiling derived from the model the channel no longer uses is not a ceiling.
  *
- * At `MAX_SECONDS` that is **6,630,000 µUSD** (~$6.63), and it is the number every ceiling below
+ * Nothing publishes a price for a video model, so this comes from a real invoice and is the only
+ * honest figure available; re-measure it when the default model changes again.
+ *
+ * At `MAX_SECONDS` that is **6,923,400 µUSD** (~$6.92), and it is the number every ceiling below
  * has to clear. It doubled when the format did — the old figure was ~$3.32 for the fifteen seconds
  * the prompts used to demand — which is the real price of the length fix and is stated here rather
  * than discovered by an operator reading a bill.
  */
-export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 221_000;
+export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 230_780;
 
 /**
  * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
@@ -515,8 +519,31 @@ export const BUILTIN_TOOLS = [
  *
  * First is the default. The rest are named so the producer can still reach for a different look
  * without an operator editing this file; narrowing the list narrows what it can choose.
+ *
+ * *** SEEDANCE 2.5 IS THE DEFAULT, AND THE REASON IS THE FORMAT THIS TEMPLATE RENDERS. ***
+ *
+ * Both ids were checked against the live catalogues on 2026-09-21 rather than assumed: the provider
+ * this blueprint's `generate_video` reads publishes `bytedance/seedance-2.5` and `google/veo-3.1`
+ * among its 29 video models, so both below resolve.
+ *
+ * What decided the order is what the catalogue says Seedance 2.5 does: *"generates native
+ * 30-second single-shot video at up to 720p from a single text prompt, reasoning about the whole
+ * shot at once so motion, lighting, and subject identity stay coherent from first frame to last."*
+ * That is this template's format exactly — `MAX_SECONDS` is 30, and a plan's scenes are compiled
+ * into ONE prompt for ONE generation (`scenesPrompt`) because nothing here joins clips. A model
+ * whose native length is the format's ceiling, and which reasons over the whole shot at once, is
+ * the one that holds a four-beat plan together; Veo's own generations are shorter, so the same
+ * prompt comes back truncated or hurried.
+ *
+ * *** AND THE WORD "SINGLE-SHOT" IS A REAL CONSTRAINT, NOT MARKETING. *** Seedance reasons about
+ * one continuous take. Our plans are multi-BEAT and the compiled prompt asks for shots in order,
+ * which this model reads as movement within one take rather than as cuts. In practice that means a
+ * plan whose beats are camera and subject changes renders well, and a plan whose beats are hard
+ * cuts between unrelated scenes renders as a drift between them. Plan the beats as one continuous
+ * take that develops — `naive/short-video-hooks` is written that way — and prefer Veo only when a
+ * piece genuinely needs a hard cut.
  */
-export const VIDEO_MODELS: readonly string[] = ["google/veo-3.1", "bytedance/seedance-2.5"];
+export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
 
 /**
  * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
