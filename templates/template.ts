@@ -404,21 +404,28 @@ export const SCENES_ARE_ONE_RENDER = true;
 /**
  * What one render actually costs, measured rather than guessed.
  *
- * RE-MEASURED 2026-09-21, on the model this template now defaults to. One 26.08-second 720x1280
- * `bytedance/seedance-2.5` render of a real four-beat plan cost **$6.01875** — **230,780 µUSD per
- * second**. The earlier figure, 221,000, was a 10-second `google/veo-3.1` render from 2026-09-07,
- * and the docstring on `VIDEO_MODELS` explains why the default moved; this constant follows the
- * default, because a ceiling derived from the model the channel no longer uses is not a ceiling.
+ * *** IT IS WHAT THE PLATFORM CHARGES, NOT WHAT THE PROVIDER COSTS, AND THE TWO ARE 30% APART. ***
  *
- * Nothing publishes a price for a video model, so this comes from a real invoice and is the only
- * honest figure available; re-measure it when the default model changes again.
+ * MEASURED 2026-09-22 THROUGH THE PLATFORM, which is the only measurement that means anything
+ * here: a producer agent on staging rendered a 15.07-second 720x1280 `bytedance/seedance-2.5`
+ * piece and the job settled at **4,519,359 µUSD** (`med_16gdmhzkv0zwaw4afgxf6x7dh1`) —
+ * **299,851 µUSD per second**.
  *
- * At `MAX_SECONDS` that is **6,923,400 µUSD** (~$6.92), and it is the number every ceiling below
- * has to clear. It doubled when the format did — the old figure was ~$3.32 for the fifteen seconds
- * the prompts used to demand — which is the real price of the length fix and is stated here rather
- * than discovered by an operator reading a bill.
+ * The figure before this one was 230,780, taken from the provider's own invoice for the same model
+ * on the same day. It was not wrong, it was the wrong QUANTITY: the ledger debits the org the
+ * platform's price, and it is the ledger the per-task ceiling is checked against. Sizing a budget
+ * from the supplier's cost understates every ceiling by the markup — here 30% — and the way that
+ * failure presents is a render that is admitted and then blows the ceiling mid-turn, which is
+ * exactly what the $2 ceiling did on the first production session.
+ *
+ * Nothing publishes a price for a video model, so this comes from a real settled job and is the
+ * only honest figure available; re-measure it through the PLATFORM when the default model changes.
+ *
+ * At `MAX_SECONDS` that is **8,995,530 µUSD** (~$9.00), and it is the number every ceiling below
+ * has to clear. It has tripled since the prompts demanded fifteen seconds of Veo (~$3.32) — the
+ * real price of the format, stated here rather than discovered by an operator reading a bill.
  */
-export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 230_780;
+export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 299_851;
 
 /**
  * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
@@ -427,15 +434,15 @@ export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 230_780;
  * calls draw on the same ceiling. At $2 the very first production session on production spent the
  * money, blew the ceiling and parked with the video already rendered.
  *
- * $20/task is one render with ~3x of headroom, and it is what every seat carries: the budget is the
+ * $20/task is one render with ~2x of headroom, and it is what every seat carries: the budget is the
  * blueprint's, not a template's, so no crew can quietly hold a ceiling its flagship action cannot
  * clear. $60/day is per AGENT, not per channel — it holds the manager's three fires ($30 of
  * ceiling between them) or the specialist's daily render with room for the retries a failed one
  * costs. Retune per channel after the first week.
  *
  * *** THE HEADROOM NARROWED WHEN THE FORMAT GREW, AND THAT IS DELIBERATE. *** A render was ~$3.32
- * against a $20 ceiling; at `MAX_SECONDS` it is ~$6.63, so the ceiling now holds one render and its
- * turns rather than one render and five spare. The producer's own fire is raised to match below
+ * against a $20 ceiling; at `MAX_SECONDS` it is ~$9.00 as the ledger bills it, so the ceiling now
+ * holds one render and its turns rather than one render and five spare. The producer's own fire is raised to match below
  * (`$15`), because a $10 fire that can no longer pay for a 30-second render plus the turns around
  * it is a cron that fails every night at the same point — which is exactly the failure the $2
  * ceiling caused the first time. Neither figure may be raised without re-reading
@@ -443,7 +450,7 @@ export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 230_780;
  */
 const budget = {
   cap_micro_usd: 60_000_000, // $60/day
-  max_task_micro_usd: 20_000_000, // $20/task — a ~$6.63 render plus the turns that brief and file it, each holding its quote until the turn commits.
+  max_task_micro_usd: 20_000_000, // $20/task — a ~$9.00 render plus the turns that brief and file it, each holding its quote until the turn commits.
   period: "day",
 } as const;
 
