@@ -35,6 +35,8 @@ import {
   platformsFromAnswers,
   platformOf,
   referencesFromAnswers,
+  referenceKindOf,
+  referencesOf,
 } from "./templates/template.ts";
 import { declaration } from "./naive.config.ts";
 import { channelPlatform, channelPlatforms, forgetChannelPlatform } from "./server/channel.ts";
@@ -565,6 +567,32 @@ describe("the question that asks what to model the channel on", () => {
   });
 
   /**
+   * *** THE THREE KINDS ARE NOT EQUAL, AND THE STUDY BRANCHES ON WHICH ONE IT GOT. *** A still can
+   * be opened with `view_image` and written from; a `fil_` id is the same thing without needing a
+   * public URL; a link is TEXT ONLY, because nothing samples frames out of a video. Getting this
+   * classification wrong is how the crew treats a link as though it had seen the video (ADR-0752).
+   */
+  it("tells a still from a file id from a link", () => {
+    expect(referenceKindOf("https://cdn.example.test/still-01.jpg")).toBe("image");
+    expect(referenceKindOf("https://cdn.example.test/f.PNG?v=2")).toBe("image");
+    expect(referenceKindOf("fil_00000000000000000000000001")).toBe("file");
+    expect(referenceKindOf("https://www.tiktok.com/@z3lkw/video/7681830866623991072")).toBe("link");
+    expect(referenceKindOf("@mrballen")).toBe("link");
+    // A page whose path merely contains the word is still a page.
+    expect(referenceKindOf("https://example.test/images/gallery")).toBe("link");
+  });
+
+  it("classifies a mixed answer in the customer's order", () => {
+    const ctx = { answers: [{ key: REFERENCE_ANSWER_KEY, label: "Model on", value: "https://www.tiktok.com/@z3lkw/video/768\nhttps://cdn.example.test/a.jpg\nfil_00000000000000000000000002" }] };
+    expect(referencesOf(ctx)).toEqual([
+      { kind: "link", value: "https://www.tiktok.com/@z3lkw/video/768" },
+      { kind: "image", value: "https://cdn.example.test/a.jpg" },
+      { kind: "file", value: "fil_00000000000000000000000002" },
+    ]);
+    expect(referencesOf({ answers: [] })).toEqual([]);
+  });
+
+  /**
    * The card is what turns the answer into something the crew can work from, and its two blockers
    * are what make the answer reach the channel's voice and look rather than just sitting in the
    * context. It must NOT be blocked itself, and it must NOT ask the operator anything: `ask_operator`
@@ -578,17 +606,28 @@ describe("the question that asks what to model the channel on", () => {
     expect(study.body).not.toMatch(/ask_operator/);
     // Both halves: what to do with a reference, and what to do with none.
     expect(study.body).toMatch(/If it names no reference/);
-    expect(study.body).toMatch(/clip_video/);
     expect(study.body).toMatch(/reference teardown/);
+    // *** IT LOOKS, RATHER THAN READING ABOUT. *** This card named `clip_video` — a CLIPPING tool
+    // whose output is transcript-derived text — and the crew planned the wrong genre from a
+    // caption (ADR-0752). The tool that actually opens a picture is `view_image`, and the card
+    // must say what to do when there is nothing to open rather than guessing confidently.
+    expect(study.body).toMatch(/view_image/);
+    expect(study.body).not.toMatch(/clip_video/);
+    expect(study.body).toMatch(/saw no frames/);
     for (const key of ["hook-style", "look"]) {
       expect(tasks.find((one) => one.key === key)!.blocked_by, key).toContain("reference-study");
     }
-    // And the seat that studies it holds the one tool that can actually watch a video.
+    // And the seat that studies it holds the tool that can actually look at one.
     const writer = TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")!;
-    expect(writer.tools?.configs["clip_video"]).toMatchObject({ enabled: true });
+    expect(writer.tools?.configs["view_image"]).toMatchObject({ enabled: true });
     // No other faceless seat is granted it: it is a day-one cost, not a standing one.
     for (const agent of TEMPLATES.faceless.agents.filter((a) => a.name !== "scriptwriter")) {
-      expect(agent.tools?.configs["clip_video"]?.enabled ?? false, agent.name).not.toBe(true);
+      expect(agent.tools?.configs["view_image"]?.enabled ?? false, agent.name).not.toBe(true);
+    }
+    // And no seat gets a browser for it. A page screenshot is not worth a content agent that can
+    // navigate and act on any site — `templates.test.ts` holds every seat of both templates to it.
+    for (const agent of TEMPLATES.faceless.agents) {
+      expect(agent.tools?.configs["browser"]?.enabled ?? false, agent.name).not.toBe(true);
     }
   });
 });

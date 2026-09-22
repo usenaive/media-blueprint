@@ -210,8 +210,8 @@ export const REFERENCE_QUESTION: SetupQuestion = {
   label: "A channel or video to model this on",
   type: "text",
   optional: true,
-  placeholder: "A channel or video URL, or @handle — one per line",
-  help: "Optional, and the most useful thing you can give the team. Point at work you want this channel to feel like and it is studied once, up front: the hooks, the pacing, the voice, the caption shape. Every brief, script, render and review is then measured against it. Leave it blank and the team works from your niche alone.",
+  placeholder: "A link, or image URLs — one per line",
+  help: "Optional, and the most useful thing you can give the team. Paste a channel or video link, and/or the URLs of a few stills from it — stills are worth far more than a link, because the team can actually look at those. It is studied once, up front: the shot grammar, the hooks, the pacing, the caption shape. Every brief, script, render and review is then measured against it. Leave it blank and the team works from your niche alone.",
 };
 
 /**
@@ -228,6 +228,41 @@ export const REFERENCE_QUESTION: SetupQuestion = {
  * whitespace is `[]`, the same as an unanswered question, because the two mean the same thing to
  * every seat that reads this.
  */
+export type ReferenceKind = "image" | "file" | "link";
+
+/** One thing the customer pointed at, and what the crew can actually do with it. */
+export interface Reference {
+  kind: ReferenceKind;
+  value: string;
+}
+
+/** Extensions a provider will render as a picture; anything else is a link, not a still. */
+const IMAGE_SUFFIX = /\.(png|jpe?g|gif|webp)(\?|#|$)/i;
+
+/**
+ * *** WHAT KIND OF THING THE CUSTOMER GAVE US, WHICH DECIDES WHAT THE STUDY CAN DO. ***
+ *
+ * The three answers are not equal and the crew must not pretend they are.
+ *
+ *   · `image` — a URL ending in a picture. The best answer: `view_image` opens it and the study is
+ *     written from what is actually on screen.
+ *   · `file`  — a `fil_` id already in the org's library, from an upload or an earlier session.
+ *     Same as `image`, and the one that needs no public URL.
+ *   · `link`  — a channel or video page. The crew can read its text and screenshot the PAGE, but
+ *     nothing here samples FRAMES out of a video (`clip_video` returns transcript-derived text and
+ *     the session has no ffmpeg). A video link alone is therefore the WEAKEST answer, and the
+ *     study card is written to say so rather than to guess from a caption — which is exactly how
+ *     a crew ends up planning the wrong genre with confidence (ADR-0752).
+ */
+export const referenceKindOf = (value: string): ReferenceKind => {
+  if (/^fil_[0-9a-z]+$/i.test(value)) return "file";
+  return IMAGE_SUFFIX.test(value) ? "image" : "link";
+};
+
+/** The references classified, in the customer's order — what `reference-study` branches on. */
+export const referencesOf = (context: unknown): Reference[] =>
+  referencesFromAnswers(context).map((value) => ({ kind: referenceKindOf(value), value }));
+
 export const referencesFromAnswers = (context: unknown): string[] => {
   const answers = Array.isArray(context)
     ? context
@@ -502,7 +537,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
-  "find_files", "find_stock_photo", "session_spend",
+  "find_files", "view_image", "find_stock_photo", "session_spend",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;

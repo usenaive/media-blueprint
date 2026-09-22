@@ -162,6 +162,7 @@ const PLAN_FIELDS = {
   facts: arr("generation: the checkable claims the script rests on, each with where it came from. A claim you could not source belongs out of the script rather than in it unsourced.", FACT),
   sound: SOUND,
   reference_pattern: str("Which pattern of this channel's reference teardown the piece is an instance of. Leave unset when the context names no reference."),
+  reference_frames: arr("The stills this piece is rendered against — fil_ ids or image URLs from the reference teardown. Handed to the renderer so the look is conditioned on the reference itself rather than on a description of it.", { type: "string" }),
 };
 
 export const toolsFor = (channels: readonly PostPlatform[]) => [
@@ -398,6 +399,7 @@ const planExtras = (plan: ReturnType<typeof planOf>) => ({
   ...(plan.facts === undefined ? {} : { facts: plan.facts }),
   ...(plan.sound === undefined ? {} : { sound: plan.sound }),
   ...(plan.referencePattern === undefined ? {} : { referencePattern: plan.referencePattern }),
+  ...(plan.referenceFrames === undefined ? {} : { referenceFrames: plan.referenceFrames }),
 });
 
 /** The plan fields both project tools take, checked; `kind` says which half is required. */
@@ -418,6 +420,7 @@ const planOf = (params: Record<string, unknown>) => ({
   facts: factsOf(params),
   sound: soundOf(params),
   referencePattern: optional(params, "reference_pattern"),
+  referenceFrames: linesOf(params, "reference_frames"),
 });
 
 /**
@@ -589,7 +592,15 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       // (`scenesPrompt`). Derived on read, never stored: a plan edited after a read must not be
       // rendered from a prompt built before it.
       if (project.kind !== "generation" || project.scenes === undefined) return project;
-      return { ...project, render_prompt: scenesPrompt(project), render_seconds: project.scenes.reduce((sum, s) => sum + s.seconds, 0) };
+      return {
+        ...project,
+        render_prompt: scenesPrompt(project),
+        render_seconds: project.scenes.reduce((sum, s) => sum + s.seconds, 0),
+        // Handed back beside the prompt so the renderer passes them straight to `generate_video`
+        // as `image_urls` rather than deciding for itself whether a plan has a reference: the
+        // seat's whole instruction is "render exactly what get_project gave you".
+        ...(project.referenceFrames === undefined ? {} : { render_reference_images: project.referenceFrames }),
+      };
     }
     case "create_project": {
       const kind: ProjectKind | undefined = oneOf(params, "kind", PROJECT_KINDS);

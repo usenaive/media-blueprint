@@ -176,6 +176,17 @@ export interface VideoProject {
    * optionally.
    */
   referencePattern?: string;
+  /**
+   * The stills this piece is rendered AGAINST — `fil_` ids or image URLs from the channel's
+   * reference teardown.
+   *
+   * Describing a reference in words and hoping the model reconstructs it is the lossy path; the
+   * providers take reference images directly, and the one this channel renders with publishes
+   * dedicated image-to-video and reference-to-video endpoints. This field is what lets a plan say
+   * "make it look like THESE" rather than only "make it look cinematic and photoreal". Absent on a
+   * channel whose operator gave a link and no stills, which is the common case.
+   */
+  referenceFrames?: string[];
   /** The sessions bound to this plan, oldest first (`server/store.ts` `recordSession`). */
   sessions: ProjectSession[];
   /** Earlier renders, superseded by a revision; the current one is the post's `mediaUrl`. */

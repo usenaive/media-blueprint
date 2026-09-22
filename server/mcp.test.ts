@@ -495,6 +495,32 @@ describe("mcp tools", () => {
   });
 
   /**
+   * §16.2 / ADR-0752: a plan may name the stills it is rendered AGAINST, and `get_project` hands
+   * them to the renderer beside the prompt. Describing a reference in words and hoping the model
+   * rebuilds it is the lossy path; the provider takes reference images directly, so the seat's
+   * instruction stays "render exactly what get_project gave you" and the decision stays on the plan.
+   */
+  it("carries a plan's reference stills through to the renderer's read", async () => {
+    const store = freshStore();
+    const filed = text<{ id: string }>((await handleMcp(call("create_project", {
+      kind: "generation", title: "t", brief: "b", ...PLAN,
+      reference_frames: ["fil_00000000000000000000000001", "https://cdn.example.test/still.jpg", "  "],
+    }), store, null))!);
+    // Blanks are dropped rather than stored, exactly as every other list field on a plan.
+    const read = text<{ referenceFrames: string[]; render_reference_images: string[] }>(
+      (await handleMcp(call("get_project", { id: filed.id }), store, null))!,
+    );
+    expect(read.referenceFrames).toEqual(["fil_00000000000000000000000001", "https://cdn.example.test/still.jpg"]);
+    expect(read.render_reference_images).toEqual(read.referenceFrames);
+
+    // A plan that names none carries no key at all — the renderer must not be handed an empty list
+    // and left to wonder whether the reference was dropped or never given.
+    const bare = text<{ id: string }>((await handleMcp(call("create_project", { kind: "generation", title: "t", brief: "b", ...PLAN }), store, null))!);
+    const plain = text<Record<string, unknown>>((await handleMcp(call("get_project", { id: bare.id }), store, null))!);
+    expect("render_reference_images" in plain).toBe(false);
+  });
+
+  /**
    * *** PUNCTUATION IS CONTENT IN A RENDER PROMPT, AND THIS WAS FOUND BY RUNNING IT. ***
    *
    * The unit tests asserted the prompt CONTAINED each shot and passed while the real output read

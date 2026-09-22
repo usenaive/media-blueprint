@@ -67,7 +67,7 @@ export type NewProjectInput = Pick<VideoProject, "kind" | "title" | "brief"> &
  * The plan fields beyond its shots (`seed/projects.ts`), named once so `NewProjectInput` and
  * `ProjectPatch` cannot drift: a field a plan can be created with is a field it can be fixed with.
  */
-type PlanExtra = "hook" | "rejectedHooks" | "retention" | "cta" | "facts" | "sound" | "referencePattern";
+type PlanExtra = "hook" | "rejectedHooks" | "retention" | "cta" | "facts" | "sound" | "referencePattern" | "referenceFrames";
 
 /**
  * What may change on a plan. `status` is the lifecycle (`PROJECT_STATUSES`); a move to `rendered`
@@ -285,6 +285,7 @@ export function openStoreOver(
         ...(input.facts === undefined ? {} : { facts: input.facts }),
         ...(input.sound === undefined ? {} : { sound: input.sound }),
         ...(input.referencePattern === undefined ? {} : { referencePattern: input.referencePattern }),
+        ...(input.referenceFrames === undefined ? {} : { referenceFrames: input.referenceFrames }),
         sessions: [],
       };
       state.projects.unshift(project);
@@ -316,6 +317,7 @@ export function openStoreOver(
       if (patch.facts !== undefined) project.facts = patch.facts;
       if (patch.sound !== undefined) project.sound = patch.sound;
       if (patch.referencePattern !== undefined) project.referencePattern = patch.referencePattern;
+      if (patch.referenceFrames !== undefined) project.referenceFrames = patch.referenceFrames;
       const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
       // The plan and its row publish to the same place, so retargeting the plan retargets the row
       // while the row is still the crew's (pending or ready); an approved row is the operator's.
