@@ -624,10 +624,10 @@ describe("the question that asks what to model the channel on", () => {
     for (const agent of TEMPLATES.faceless.agents.filter((a) => a.name !== "scriptwriter")) {
       expect(agent.tools?.configs["view_image"]?.enabled ?? false, agent.name).not.toBe(true);
     }
-    // And no seat gets a browser for it. A page screenshot is not worth a content agent that can
-    // navigate and act on any site — `templates.test.ts` holds every seat of both templates to it.
+    // And every seat holds the browser, so the study can open a channel page and look at it —
+    // `templates.test.ts` holds all ten of them to `allow`.
     for (const agent of TEMPLATES.faceless.agents) {
-      expect(agent.tools?.configs["browser"]?.enabled ?? false, agent.name).not.toBe(true);
+      expect(agent.tools?.configs["browser"], agent.name).toMatchObject({ enabled: true, permission: "allow" });
     }
   });
 });

@@ -620,6 +620,31 @@ const LIBRARY_TOOL = "find_files";
 const SPEND_TOOL = "session_spend";
 
 /**
+ * *** THE BROWSER, HELD BY EVERY SEAT, AT `allow`. ***
+ *
+ * It was denied to all ten seats of both templates, on the reasoning that a content crew needs no
+ * shell and that denying the sandbox also keeps a session from provisioning a machine it would
+ * never use. The browser was swept up in that and it does not belong there: it provisions no
+ * sandbox (`BrowserOpenSpec.computerId` is optional — for a browser-only agent the browser IS the
+ * box), and it is the difference between a crew that can read the internet and one that can only
+ * search it.
+ *
+ * It matters most on this template now that `screenshot` returns the picture rather than a file id
+ * (§16.2, ADR-0752). A seat can open a channel page, LOOK at it, and write what it saw — the
+ * reference study, a scout checking whether a format is really moving, the manager reading how a
+ * competitor captions. Before the image crossing a screenshot was worth nothing to the agent that
+ * took it, which is most of why denying this looked free.
+ *
+ * `allow`, not `ask`: the operator's gate is the approval queue on the way OUT (`social.post`,
+ * every connection tool), and a seat that has to ask permission to read a web page is a seat that
+ * stops dead on a 06:00 cron with nobody awake to answer. Reading is not the act this channel
+ * gates. What it costs is a hosted browser session per use, which is real and is the honest reason
+ * to keep the crons pointed at `web_search`/`web_fetch` for bulk reading and the browser for the
+ * pages that have to be seen.
+ */
+const BROWSER_TOOL = "browser";
+
+/**
  * Held by every agent of every template, so the publish rule is the blueprint's and not a
  * template's to drop: `social.accounts` to know where a post is for, `social.post` behind `ask` so
  * the one outward act always stops at the Approvals screen (see `toolset`).
@@ -684,7 +709,9 @@ const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
  * It widens nothing else, because everything else CAN be named: every built-in this crew was not
  * granted is written `deny` above the default, including all six sandbox tools — a content agent
  * needs no shell, and denying them is also what keeps the session from provisioning (and billing) a
- * machine it would never use.
+ * machine it would never use. The BROWSER is not one of those and is granted to every seat
+ * (`BROWSER_TOOL`): it provisions no sandbox, and since its screenshot began returning the picture
+ * it is how a seat reads a page it has to actually see.
  */
 export const toolset = (names: readonly string[], handoffs: readonly string[] = []) => ({
   default_config: { permission: "ask" as const },
@@ -852,7 +879,7 @@ export const agent = (decl: {
   budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${APPROVAL_GATE}`,
-  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, SPEND_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
+  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, SPEND_TOOL, BROWSER_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
   handoffs: decl.handoffs ?? false,
   /**

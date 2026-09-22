@@ -535,7 +535,13 @@ describe("the crews", () => {
         for (const sandbox of ["bash", "read", "write", "edit", "ls", "find"]) {
           expect(permissionFor(template, agent.name, sandbox)).toBe("deny");
         }
-        expect(permissionFor(template, agent.name, "browser")).toBe("deny");
+        // *** THE BROWSER IS THE ONE EXCEPTION, AND IT IS `allow`. *** It was swept into the
+        // sandbox denial and does not belong there: it provisions no machine, and since its
+        // screenshot began returning the picture rather than a file id (§16.2) it is how a seat
+        // reads a page it has to actually see. `allow` because this channel gates the way OUT —
+        // the approval queue — not reading, and a 06:00 cron that had to ask permission to open a
+        // page would stop dead with nobody awake to answer.
+        expect(permissionFor(template, agent.name, "browser")).toBe("allow");
         for (const spends of ["generate_speech", "transcribe_audio", "find_stock_photo"]) {
           expect(permissionFor(template, agent.name, spends)).toBe("deny");
         }

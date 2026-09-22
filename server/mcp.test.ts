@@ -664,6 +664,69 @@ describe("mcp tools", () => {
     expect(text<{ status: string }>((await handleMcp(call("update_project", { id: dropped.id, status: "planned" }), store, null))!).status).toBe("planned");
   });
 
+  /**
+   * *** A REVISION EDITS SHOTS, AND THE NEXT RENDER IS THE EDITED ONES. ***
+   *
+   * The operator's note is the one way a rendered plan renders again, and on a multi-shot plan the
+   * note is almost always about ONE shot — "shot 3 should be slower", "lose the text on the hook".
+   * So the loop that has to work is: edit the scenes with `update_project`, re-read, and get back a
+   * `render_prompt` built from what the plan says NOW. The prompt is derived on read for exactly
+   * this reason — one cached at render time would re-render the piece the operator asked to change.
+   *
+   * The length guard still applies to the edit: a revision that pushes the piece outside the format
+   * is refused while it is still free, not discovered on the second bill.
+   */
+  it("re-renders a revised multi-shot plan from the edited scenes, and still holds the format", async () => {
+    const store = freshStore();
+    const plan = text<{ id: string }>((await handleMcp(call("create_project", {
+      kind: "generation", title: "Four beats", brief: "b", hook: "h", style_template: "Marble & ink",
+      scenes: [
+        { beat: "hook", seconds: 5, prompt: "a marble bust, candlelight", text: "Rehearse losing it all." },
+        { beat: "setup", seconds: 6, prompt: "a bare table, one bowl" },
+        { beat: "turn", seconds: 6, prompt: "the bowl in hard side light" },
+        { beat: "payoff", seconds: 4, prompt: "the bust again, wider" },
+      ],
+    }), store, null))!);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
+    store.openRevision(plan.id, "ses_rev", "shot 3 is too quick, and drop the on-screen text");
+
+    // The renderer applies the operator's note to the SCENES. A whole-array write, because that is
+    // what the tool takes — the seat re-sends the plan's shots with the one it was asked to change.
+    const edited = text<{ scenes: { seconds: number }[] }>((await handleMcp(call("update_project", {
+      id: plan.id,
+      scenes: [
+        { beat: "hook", seconds: 5, prompt: "a marble bust, candlelight" },
+        { beat: "setup", seconds: 6, prompt: "a bare table, one bowl" },
+        { beat: "turn", seconds: 9, prompt: "the bowl in hard side light, held longer" },
+        { beat: "payoff", seconds: 4, prompt: "the bust again, wider" },
+      ],
+    }), store, null))!);
+    expect(edited.scenes.map((one) => one.seconds)).toEqual([5, 6, 9, 4]);
+
+    // Re-read: the prompt is the EDITED piece, at its new length, with the dropped text gone.
+    const read = text<{ render_prompt: string; render_seconds: number }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!);
+    expect(read.render_seconds).toBe(24);
+    expect(read.render_prompt).toContain("24 seconds in total, 4 shots in order");
+    expect(read.render_prompt).toContain("Shot 3 (turn), 9s: the bowl in hard side light, held longer.");
+    expect(read.render_prompt).not.toContain("On-screen text");
+
+    // The second render lands and supersedes the first, and the revision is spent.
+    const done = text<{ status: string; renders: { mediaUrl: string }[] }>((await handleMcp(call("update_project", {
+      id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer",
+    }), store, null))!);
+    expect(done).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1" }] });
+    expect(done).not.toHaveProperty("revision");
+
+    // And an edit that takes the piece outside the format is refused while it is still free.
+    store.openRevision(plan.id, "ses_rev2", "make it a minute");
+    const tooLong = (await handleMcp(call("update_project", {
+      id: plan.id, scenes: [{ beat: "hook", seconds: 60, prompt: "one very long shot" }],
+    }), store, null)) as CallResult;
+    expect(tooLong.result.isError).toBe(true);
+    expect(tooLong.result.content[0]!.text).toMatch(/the scenes run 60s in all/);
+  });
+
   it("refuses the sweep's write on a plan the operator is revising: a revised plan goes forward only", async () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
