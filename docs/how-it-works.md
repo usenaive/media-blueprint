@@ -38,7 +38,7 @@ Setup questions are capped at three by the SDK (`parseProject`). Both templates 
 
 Both templates share `channel-manager` (the `required` seat, and the one Chat talks to —
 `routes.ts` looks it up by name). Every agent runs `anthropic/claude-sonnet-5` with a budget of
-$60/day and $20/task (`templates/template.ts`, sized around one ~$3.32 render).
+$60/day and $20/task (`templates/template.ts`, sized around one ~$6.63 render).
 
 ### faceless
 
@@ -364,7 +364,7 @@ second project, do not approve or post anything." The producer's and clipper's b
 (`templates/`), and the manager's says a revision is the operator's move, never its own.
 
 A note on a `rendered` plan is the one message on this screen that spends: it renders the plan
-again, at `ONE_RENDER_MICRO_USD` (~$3.32, measured). So the composer says so under itself before a
+again, at `ONE_RENDER_MICRO_USD` (~$6.63, measured per second). So the composer says so under itself before a
 word is typed, and Enter arms the spend rather than making it — the press that sends it is a button
 naming the price. Every other note here (a plan's words, a render already out) costs nothing and
 leaves on Enter as it always did.

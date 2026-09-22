@@ -206,7 +206,7 @@ describe("a brief in production", () => {
   /**
    * *** THE ONLY KILL SWITCH BEFORE THE PAID STEP. ***
    *
-   * The producer renders what is filed on its own schedule and a render is ~$3.32
+   * The producer renders what is filed on its own schedule and a render is ~$6.63
    * (`ONE_RENDER_MICRO_USD`), so a brief that is off-brand or legally risky has to be stoppable
    * while it is still a brief. There is deliberately no Approve beside it: a brief is not a piece
    * to clear, and approving one stranded the row in a status no seat picks up.

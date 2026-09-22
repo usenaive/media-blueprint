@@ -61,7 +61,13 @@ export interface NewPostInput {
  * and `postId` ties it to the brief row it was written from, when there is one.
  */
 export type NewProjectInput = Pick<VideoProject, "kind" | "title" | "brief"> &
-  Partial<Pick<VideoProject, "platform" | "account" | "agent" | "postId" | "styleTemplate" | "model" | "scenes" | "sources" | "caption">>;
+  Partial<Pick<VideoProject, "platform" | "account" | "agent" | "postId" | "styleTemplate" | "model" | "scenes" | "sources" | "caption" | PlanExtra>>;
+
+/**
+ * The plan fields beyond its shots (`seed/projects.ts`), named once so `NewProjectInput` and
+ * `ProjectPatch` cannot drift: a field a plan can be created with is a field it can be fixed with.
+ */
+type PlanExtra = "hook" | "rejectedHooks" | "retention" | "cta" | "facts" | "sound" | "referencePattern";
 
 /**
  * What may change on a plan. `status` is the lifecycle (`PROJECT_STATUSES`); a move to `rendered`
@@ -69,7 +75,7 @@ export type NewProjectInput = Pick<VideoProject, "kind" | "title" | "brief"> &
  * post when the plan has none — so the one write that ends a render also files it for review.
  */
 export type ProjectPatch = Partial<
-  Pick<VideoProject, "status" | "title" | "brief" | "account" | "platform" | "styleTemplate" | "model" | "scenes" | "sources" | "caption">
+  Pick<VideoProject, "status" | "title" | "brief" | "account" | "platform" | "styleTemplate" | "model" | "scenes" | "sources" | "caption" | PlanExtra>
 > & { mediaUrl?: string; renderedBy?: string };
 
 export interface Store {
@@ -272,6 +278,13 @@ export function openStoreOver(
         ...(input.scenes === undefined ? {} : { scenes: input.scenes }),
         ...(input.sources === undefined ? {} : { sources: input.sources }),
         ...(input.caption === undefined ? {} : { caption: input.caption }),
+        ...(input.hook === undefined ? {} : { hook: input.hook }),
+        ...(input.rejectedHooks === undefined ? {} : { rejectedHooks: input.rejectedHooks }),
+        ...(input.retention === undefined ? {} : { retention: input.retention }),
+        ...(input.cta === undefined ? {} : { cta: input.cta }),
+        ...(input.facts === undefined ? {} : { facts: input.facts }),
+        ...(input.sound === undefined ? {} : { sound: input.sound }),
+        ...(input.referencePattern === undefined ? {} : { referencePattern: input.referencePattern }),
         sessions: [],
       };
       state.projects.unshift(project);
@@ -296,6 +309,13 @@ export function openStoreOver(
       if (patch.scenes !== undefined) project.scenes = patch.scenes;
       if (patch.sources !== undefined) project.sources = patch.sources;
       if (patch.caption !== undefined) project.caption = patch.caption;
+      if (patch.hook !== undefined) project.hook = patch.hook;
+      if (patch.rejectedHooks !== undefined) project.rejectedHooks = patch.rejectedHooks;
+      if (patch.retention !== undefined) project.retention = patch.retention;
+      if (patch.cta !== undefined) project.cta = patch.cta;
+      if (patch.facts !== undefined) project.facts = patch.facts;
+      if (patch.sound !== undefined) project.sound = patch.sound;
+      if (patch.referencePattern !== undefined) project.referencePattern = patch.referencePattern;
       const post = project.postId === undefined ? undefined : state.posts.find((p) => p.id === project.postId);
       // The plan and its row publish to the same place, so retargeting the plan retargets the row
       // while the row is still the crew's (pending or ready); an approved row is the operator's.

@@ -21,7 +21,7 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 | `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **three questions** (what the channel is about, **where it posts** — one network or
+studio asks **four questions** (what the channel is about, **where it posts** — one network or
 several — and how often), every agent reads the answers back through the platform's
 `project_context` tool, and each opens a **day-one** session that turns those answers into the
 channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
@@ -156,7 +156,7 @@ credentials.
 
 Every agent's `system` opens with the same paragraph — *read `project_context` before anything
 else; the answers there are the client's, not yours to invent* — and closes with the approval
-gate. Between them is the seat's own brief, 150–400 words. Every agent also holds the
+gate. Between them is the seat's own brief, 120–400 words. Every agent also holds the
 dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, and the two doors to
 you (`ask_operator`, `request_tools`, both `ask`); the **Tools** column lists what is granted on
 top of that. Every seat carries the same ceilings — **$20 a task and $60 a day, per agent** —
@@ -170,9 +170,9 @@ it is printed in dollars here.
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($10) | `look` — picks the style templates this channel renders in · `first-render` — renders the first piece, once there is a plan |
+| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
 | `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `hook-style` — writes the channel's voice · `first-scripts` — turns the five briefs into video projects |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `clip_video` (the reference study only), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
 | `analyst` | Performance | — | — | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
 
 ### `clipping`
@@ -189,17 +189,17 @@ Only the `channel-manager` is `required` — it is the seat the dashboard's Chat
 other seat can be left unticked when the template is installed, and its crons are then never armed
 and its cards never seeded — `up` refuses a card whose assignee this run did not provision. The `channel` app is `required` too: it is the crew's queue and MCP endpoint.
 
-### The three questions
+### The setup questions
 
-The studio asks these before anything exists, and the engine refuses a template with a fourth — in
-its own words, *"a template asks at most 3 before anything is provisioned — a fourth belongs to the
+The studio asks these before anything exists, and the engine refuses a template with a fifth — in
+its own words, *"a template asks at most 4 before anything is provisioned — a fifth belongs to the
 crew's first conversation"*. There is no onboarding screen in the dashboard: one place to ask, one
 place the answers live.
 
-| Template | 1 | 2 | 3 |
-|---|---|---|---|
-| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Reference channels for inspiration** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| Template | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **A channel or video to model this on** — text, **optional** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `clipping` | **Reference channels for inspiration** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | — | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 
 The middle one is the same question on both templates, and it is the one this channel cannot run
 without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
@@ -209,10 +209,20 @@ goes to the **first** one you ticked. It used to be a constant in the code — a
 expected to edit and re-deploy — so every install of this blueprint filed for the same network
 whoever installed it and whatever they had connected.
 
-Three is a budget, so asking that one meant not asking another. The slot came from *"tone and
-audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager now asks for it
-with `ask_operator` in its day-one session, which is exactly where the engine's refusal says a
-fourth question belongs. Nothing was dropped — it moved from the form to the conversation.
+Three required questions is a budget, so asking that one meant not asking another. The slot came
+from *"tone and audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager
+now asks for it with `ask_operator` in its day-one session, which is exactly where the engine's
+refusal says a further question belongs. Nothing was dropped — it moved from the form to the
+conversation.
+
+**The fourth question is `faceless`'s, and it is the only one you may leave blank.** *A channel or
+video to model this on* — paste a link or a handle, one per line. Give one and the crew studies it
+once, on day one, and files a **reference teardown** post: the hook patterns, the first three
+seconds, how fast it cuts, the voice, the caption shape, the formats it repeats. Every brief, script,
+render and queue sweep afterwards is measured against that teardown, and each plan records which of
+its patterns it was executing. Leave it blank and nothing changes — the study card closes in a line
+and the team works from your niche, exactly as it did before the question existed. That is why the
+engine now allows a fourth at all: it may only be a question whose absence costs nothing.
 
 The answers are the install's project context. Each agent reads them through the platform's
 read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
@@ -243,7 +253,7 @@ already fine is how a warning gets ignored. Once the right account is connected 
 line goes quiet and names the handles.
 
 **The crew keeps filing while nothing is connected, on purpose.** A queue is a review surface, not
-a publish action: refusing to file would throw away a render that has already been paid for (~$3.32
+a publish action: refusing to file would throw away a render that has already been paid for (~$6.63
 each, see [What it costs](#-what-it-costs)), and every day-one session opens minutes after the
 install, before anyone has had a chance to connect anything — so refusing would mean an empty first
 day and seven day-one cards spent on nothing. What is not acceptable is filing *silently*, which is
@@ -265,17 +275,23 @@ open one `intake` session, all of them in the same minute, with no way to say wh
 the scriptwriter read an empty queue and filed *"the trend-scout hasn't filed any briefs yet"* as its
 finding while the scout was filing five. A card names what it waits on (`blocked_by`), and a card
 with an open blocker is not due, so its seat is not started and not billed until the work it needs
-exists. Seven cards per template, four of which wait on nothing and open together:
+exists. Eight cards on `faceless` and seven on `clipping`; the ones that wait on nothing open together:
 
 | | `faceless` | `clipping` | waits on |
 |---|---|---|---|
 | **opens the install** | `channel-plan` *(manager)* | `channel-plan` *(manager)* | — |
 | | `first-briefs` *(scout)* | `first-moments` *(scout)* | — |
-| | `look` *(producer)* | `source-check` *(clipper)* | — |
-| | `hook-style` *(writer)* | `caption-style` *(editor)* | — |
+| | `reference-study` *(writer)* | `source-check` *(clipper)* | — |
+| | `look` *(producer)* | `caption-style` *(editor)* | the teardown, so the look is chosen from the reference rather than the niche |
+| | `hook-style` *(writer)* | — | the teardown, so the channel's voice is derived rather than invented |
 | **then** | `report-frame` *(analyst)* | `report-frame` *(analyst)* | the channel plan, whose slot count is the week it measures against |
 | | `first-scripts` *(writer)* | `first-cuts` *(clipper)* | the briefs/moments, and the seat's own set-up card |
 | **last** | `first-render` *(producer)* | `first-captions` *(editor)* | the plan it renders / the clip it captions |
+
+On `faceless` the study is what the reference question buys: it runs once, before the two cards that
+decide how this channel sounds and looks, so both are read off the reference instead of guessed from
+the niche word. With no reference answered it closes in a line within the minute and those two open a
+card's delay later, exactly as they used to.
 
 Each card's body is the brief the seat reads when it wakes, and it ends with the same paragraph
 (`CARD_ORDER` in [`templates/template.ts`](templates/template.ts)): read the card, claim it, file the
@@ -287,9 +303,10 @@ the queue or answers comments, because Monday 07:30, daily 08:00 and daily 18:00
 
 **What it costs to start.** A card carries no budget of its own — the tick starts an ordinary
 session on the assignee's own ceiling — so a fresh install can spend at most one **$20 task** per
-card, seven cards each ($140 on `faceless`, $140 on `clipping`), and only one of those sessions
-renders anything (~$3.32, see [What it costs](#-what-it-costs)). It is a ceiling and not a bill: the
-four set-up cards are reads and one filing each. The five intakes it replaced were capped lower
+card, eight cards on `faceless` and seven on `clipping` ($160 on `faceless`, $140 on `clipping`), and
+only one of those sessions renders anything (~$6.63, see [What it costs](#-what-it-costs)). It is a
+ceiling and not a bill: the set-up cards are reads and one filing each, and the reference study adds
+one clip job on an install that named a reference and nothing at all on one that did not. The five intakes it replaced were capped lower
 ($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
 mattered. Nothing day one makes is published: everything lands in the queue as pending, for you to
 approve. The Home screen lists the cards the apply seeded; the board itself is where their progress
@@ -509,7 +526,7 @@ blueprint, and not by whichever template happens to list the tool.
 ## 🔁 Switching template
 
 A template is data ([`templates/`](templates)): the crew and its prompts, the tool allow-lists,
-the post kinds it files, the three questions the studio asks and the words the queue prints. Nothing
+the post kinds it files, the setup questions the studio asks and the words the queue prints. Nothing
 about the machine changes with it — same screens, same routes, same `/mcp`, same app.
 
 ```ts
