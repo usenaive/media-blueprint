@@ -162,7 +162,7 @@ const PLAN_FIELDS = {
   facts: arr("generation: the checkable claims the script rests on, each with where it came from. A claim you could not source belongs out of the script rather than in it unsourced.", FACT),
   sound: SOUND,
   reference_pattern: str("Which pattern of this channel's reference teardown the piece is an instance of. Leave unset when the context names no reference."),
-  reference_frames: arr("The stills this piece is rendered against — fil_ ids or image URLs from the reference teardown. Handed to the renderer so the look is conditioned on the reference itself rather than on a description of it.", { type: "string" }),
+  reference_frames: arr("The stills this piece is rendered against, as PUBLIC image URLs — not fil_ ids, which generate_video cannot fetch. The FIRST is used as the opening frame of the render, so choose one that is the shot you want to open on; the rest are carried for the operator and for a later render that can take more. A fil_ id is for LOOKING at with view_image, which is a different job.", { type: "string" }),
 };
 
 export const toolsFor = (channels: readonly PostPlatform[]) => [

@@ -181,10 +181,22 @@ export interface VideoProject {
    * reference teardown.
    *
    * Describing a reference in words and hoping the model reconstructs it is the lossy path; the
-   * providers take reference images directly, and the one this channel renders with publishes
-   * dedicated image-to-video and reference-to-video endpoints. This field is what lets a plan say
-   * "make it look like THESE" rather than only "make it look cinematic and photoreal". Absent on a
-   * channel whose operator gave a link and no stills, which is the common case.
+   * provider takes a reference image directly. This field is what lets a plan say "make it look
+   * like THIS" rather than only "make it look cinematic and photoreal". Absent on a channel whose
+   * operator gave a link and no stills, which is the common case.
+   *
+   * *** WHAT THE PLATFORM ACTUALLY CONSUMES TODAY, WHICH IS LESS THAN THIS FIELD SUGGESTS. ***
+   * `generate_video` takes `image_urls`, and the adapter uses exactly `imageUrls[0]`, mapped to
+   * `frame_images[{ frame_type: "first_frame" }]`. So of a list, ONE is used, and it conditions the
+   * opening FRAME rather than the style across the piece — the model this channel renders with
+   * publishes a reference-to-video endpoint taking up to 50 images, but nothing here reaches it.
+   * The field stays plural because the plan is the durable record and a later render will take
+   * more; the producer is told which one is load-bearing.
+   *
+   * They must be PUBLIC http(s) URLs. A `fil_` id is refused by `generate_video`, whose argument is
+   * `z.string().url()` — the API can mint a signed link for a file, but no tool in this crew's
+   * grant does. A `fil_` id is for LOOKING at with `view_image`; a URL is for rendering from. Two
+   * different jobs, and conflating them is a render that fails validation after the plan is filed.
    */
   referenceFrames?: string[];
   /** The sessions bound to this plan, oldest first (`server/store.ts` `recordSession`). */
