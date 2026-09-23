@@ -9,12 +9,23 @@ a post lives. Everything below is read off the code; file paths are given so it 
   `/api/*` routes (`server/routes.ts`), the `/mcp` endpoint (`server/mcp.ts`), the store
   (`server/store.ts`, `server/api-entry.ts`) and the approval flow.
 - **Template** = data: the crew, its prompts, tool allow-lists, post kinds, the setup questions,
-  and the words the queue prints (`templates/faceless.ts`, `templates/clipping.ts`).
+  and the words the queue prints (`templates/faceless.ts`, `templates/longform.ts`,
+  `templates/clipping.ts`).
+- There are **three**: `faceless` (shown as Naive Short Form v1, 15–30s), `longform` (Naive Long
+  Form v1, 60–180s) and `clipping` (Naive Clipping v1, 15–60s). The wire ids do not change —
+  `install.template` is a stored string on every provisioned org, so renaming one orphans every
+  real install that carries it. Only the display names are new.
 - `templates/index.ts` — `ACTIVE` picks the running template (`faceless` by default,
   `NAIVE_TEMPLATE` overrides). Switching is an edit of that line plus `naive up`.
-- `naive.config.ts` hands `naive up` **both** templates plus their demo seeds, so switching only
-  ever widens: an agent only the other template declares is kept running (its crons keep firing
+- `naive.config.ts` hands `naive up` **every** template it can plus their demo seeds, so switching
+  only ever widens: an agent only another template declares is kept running (its crons keep firing
   and billing — the README's "Switching template" covers the `removed` remedy).
+- **`longform` is not provisionable yet.** `defineProject` refuses any template list that is not
+  the engine's own registry for the blueprint, and `@usenaive-sdk/blueprints@0.7.0` has
+  `media: ["faceless", "clipping"]`. `naive.config.ts` therefore declares the intersection of what
+  this repo carries and what the installed engine admits, read off the exported `BLUEPRINTS`; the
+  `^0.8.0` pin in `package.json` is the version that adds `longform`, and the day it resolves the
+  declaration widens on its own with no edit to that file.
 
 ## 2. What `naive up` provisions
 
@@ -22,7 +33,7 @@ From `naive.config.ts`:
 
 | Resource | What |
 | --- | --- |
-| Project `media` | template `ACTIVE.name`, the running template's setup questions (`ACTIVE.questions`) — 4 on `faceless`, 3 on `clipping` |
+| Project `media` | template `ACTIVE.name`, the running template's setup questions (`ACTIVE.questions`) — 4 on `faceless` and `longform`, 3 on `clipping` |
 | Identity `channel` | the one persona every agent, cron and social route acts as |
 | App `channel` (fullstack, required) | `deploy_dir: dist`, `mcp: "/mcp"`, env `NAIVE_API_KEY` (from env), `DASHBOARD_TOKEN` + `DASHBOARD_PASSWORD` (platform-generated); platform also injects `VETTA_MCP_TOKEN`, `NAIVE_API_URL`, `NAIVE_IDENTITY_ID`, `DATABASE_URL` |
 | Agents | the template's crew (5 seats each) |
@@ -30,27 +41,30 @@ From `naive.config.ts`:
 | Board cards | one per `tasks[]` entry on the org orchestrator's board (§31.11), keyed `media:<key>`; the API's tick wakes each assignee whose card is `todo` and unblocked. Replaces the intakes — a template that seeds `tasks` declares none |
 
 Setup questions are capped at four by the SDK (`parseProject`, `@usenaive-sdk/blueprints@0.7.0`;
-0.6.0 capped them at three). Both templates spend one on `platform` (multi-select of YouTube Shorts
-/ TikTok / Instagram Reels) and one on `cadence`; `faceless` asks `niche`, `clipping` asks `sources`
-(reference channel URLs). `faceless` spends the fourth on `reference` — a channel or video to model
-the piece on, the one question that may be left blank (ADR-0757). The displaced question
-(tone/audience) is asked by the channel manager on day one via `ask_operator`.
+0.6.0 capped them at three). Every template spends one on `platform` (multi-select of YouTube
+Shorts / TikTok / Instagram Reels) and one on `cadence`; `faceless` and `longform` ask `niche`,
+`clipping` asks `sources` (reference channel URLs). The two generating templates spend the fourth
+on `reference` — a channel or video to model the piece on, the one question that may be left blank
+(ADR-0757). The displaced question (tone/audience) is asked by the channel manager on day one via
+`ask_operator`.
 
 ## 3. The crews
 
-Both templates share `channel-manager` (the `required` seat, and the one Chat talks to —
-`routes.ts` looks it up by name). Every agent runs `anthropic/claude-sonnet-5` with a budget of
-$60/day and $20/task (`templates/template.ts`, sized around one ~$9.00 render).
+Every template shares `channel-manager` (the `required` seat, and the one Chat talks to —
+`routes.ts` looks it up by name) and `analyst`. Every agent runs `anthropic/claude-sonnet-5` with a
+budget of $60/day and $20/task (`templates/template.ts`, sized around one ~$9.00 render) — except
+Long Form's `producer` at **$150/day and $75/task**, which renders `ceil(seconds / 60)` segments
+and joins them in one session.
 
 ### faceless
 
 | Agent | Role | Extra tools | Skills | Hands off to | Crons (America/New_York) |
 | --- | --- | --- | --- | --- | --- |
-| channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | Mon 09:00 plan · daily 08:00 queue sweep · daily 18:00 comments |
-| trend-scout | Trends & briefs | web_search, web_fetch | seo-content-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
-| scriptwriter | Hooks & scripts | web_search, web_fetch, view_image (the day-one reference study only) | short-video-hooks, caption-writing | producer | daily 06:30 |
-| producer | Video production | generate_video (models pinned: veo-3.1, seedance-2.5), generate_image | short-video-hooks | — | daily 07:00 |
-| analyst | Performance | — | — | — | Mon 07:30 |
+| channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | Mon 09:00 plan (+ teardown refresh) · daily 08:00 queue sweep · daily 18:00 comments |
+| trend-scout | Trends & briefs | web_search, web_fetch | video-trend-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
+| scriptwriter | Hooks & scripts | web_search, web_fetch, view_image, **bash** (samples frames out of the exemplars) | short-video-hooks, caption-writing, reference-teardown | producer | daily 06:30 |
+| producer | Video production | generate_video (models pinned: veo-3.1, seedance-2.5), generate_image | — | — | daily 07:00 |
+| analyst | Performance | — | channel-report | — | Mon 07:30 |
 
 Pipeline: scout files briefs at `stage: brief` → `send_to_agent(scriptwriter, wait:false)` with
 the ids → scriptwriter claims the brief (`scripting`, `expected_stage: brief`) and writes the
@@ -62,6 +76,34 @@ scenes with `generate_video`, and finishes it (`status: rendered`, `expected_sta
 `media_url`) — that write puts the video and caption on the brief's row at `stage: rendered`.
 Crons are the fallback that picks up whatever a handoff missed.
 
+### longform
+
+| Agent | Role | Extra tools | Skills | Hands off to | Crons (America/New_York) |
+| --- | --- | --- | --- | --- | --- |
+| channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | as above |
+| researcher | Topics & sourcing | web_search, web_fetch | video-trend-brief | writer | Mon/Wed/Fri 05:00 |
+| writer | Arc & script | web_search, web_fetch, view_image, **bash**, publish_file | long-form-arc, caption-writing | producer | Mon/Wed/Fri 05:30 |
+| producer | Render & assembly | generate_video (models pinned), **bash**, publish_file | video-assembly | — | Mon/Wed/Fri 06:00 ($70) |
+| analyst | Performance | — | channel-report | — | Mon 07:30 |
+
+Pipeline: researcher files a topic brief carrying **1–3 exemplar video URLs** for that topic and
+format → writer opens the exemplars *before* planning (browser for the page and its stills, bash
+to sample frames across the video) and files the video project, where **every scene names the
+exemplar and the moment its grammar came from** → producer renders and assembles.
+
+**Assembly is the part with no tool behind it.** `generate_video` bounds `seconds` at
+`.int().min(1).max(60)` (`packages/core/src/schema/media.ts:102`), so a 60–180s piece is
+`segmentsOf(length)` = `ceil(max / 60)` = **3** separate renders. Nothing on the platform joins
+video — `clip_video` cuts and never joins — so the producer joins its own segments with **ffmpeg
+in its sandbox** and then calls `publish_file`. That is the entire reason this seat holds `bash`
+and a $75 ceiling.
+
+Because segments are generated independently they never match mid-shot: a seam inside a continuous
+shot is a visible cut in the finished file. So the writer must end a shot exactly on each
+60-second mark, and the producer must check that it did before rendering. The demo plans in
+`seed/projects.ts` (`LONGFORM_PROJECT_SEEDS`) are written that way on purpose, seams called out in
+a comment beside the scenes.
+
 ### clipping
 
 | Agent | Role | Extra tools | Skills | Crons |
@@ -69,8 +111,8 @@ Crons are the fallback that picks up whatever a handoff missed.
 | channel-manager | Channel lead | web_search, web_fetch | caption-writing | as above |
 | scout | Source watch | web_search, web_fetch | clip-selection | daily 06:00 |
 | clipper | Clip production | clip_video | clip-selection | daily 07:00 |
-| caption-editor | Captions & titles | web_search | caption-writing, short-video-hooks | daily 07:30 |
-| analyst | Performance | — | — | Mon 07:30 |
+| caption-editor | Captions & titles | web_search | caption-writing | daily 07:30 |
+| analyst | Performance | — | channel-report | Mon 07:30 |
 
 No handoffs here; the chain is ordered purely by cron time (plans → cuts → captions). The scout
 files each moment as a **clipping project** (`channel.create_project`, `kind: clipping`: the
@@ -111,8 +153,17 @@ clipping projects.
 - `default_config.permission = "ask"` — this is how connected-account tools
   (`<connector>.<operation>`, not enumerable ahead of time) become reachable, and every such call
   parks at the Approvals screen.
-- Every `BUILTIN_TOOLS` entry the seat was not granted is `deny` by name — including all sandbox
-  tools (bash/read/write/…), so no session provisions a machine.
+- Every `BUILTIN_TOOLS` entry the seat was not granted is `deny` by name — including the sandbox
+  tools (read/write/edit/ls/find/…), so no session provisions a machine.
+- **`bash` is the one sandbox tool a seat may hold on purpose, and three do:** Short Form's
+  `scriptwriter` and Long Form's `writer` sample frames out of the exemplars they plan against,
+  and Long Form's `producer` joins its segments with ffmpeg. It is written by name either way —
+  `{enabled: true, permission: "allow"}` on those three, `{enabled: false, permission: "deny"}` on
+  everyone else — never left to the default; `naive.config.test.ts` asserts exactly that shape on
+  every agent. The reason it was granted at all: nothing in this pipeline had ever seen a video.
+  `view_image` takes `fil_` ids and refuses URLs, and `browser` screenshots a page rather than a
+  frame, so without a shell no seat could look inside the piece it was modelling. Measured cost of
+  frames → vision → teardown was **$0.027** against a ~$9.00 render.
 - Granted `allow`: `project_context`, `read_skill` (if the seat has skills), the seat's own tools,
   `social.accounts`, and the ten dashboard tools `channel.list_posts / get_post / create_post /
   update_post / list_projects / get_project / create_project / update_project /
@@ -146,6 +197,18 @@ Nothing here approves, rejects or publishes.
 
 The `create_post.platform` description is generated per request from the customer's setup answer
 (`toolsFor(channels)`), so two installs read two different sentences.
+
+**The length a plan is held to is the running template's, not the blueprint's.** `server/mcp.ts`
+reads `ACTIVE.length` rather than a module constant, so `create_project` refuses a generation plan
+whose scenes do not sum into *this* template's window — 15–30s on `faceless`, 60–180s on
+`longform`, and the refusal quotes the same range the crew was briefed with. While it was a
+constant, that check was Short Form's 15–30 on every template: a Long Form crew could not file a
+plan of the length its own card asked for, and the refusal named a range nobody had given it.
+
+The same read decides how the tool describes assembly. At one segment the scenes are *"rendered as
+ONE video, not joined"*; past `generate_video`'s 60s ceiling the description instead tells the
+planner the piece is rendered in segments the producer joins with ffmpeg, and to put the beats on
+those seams rather than across them.
 
 ## 7. Storage — what "the DB" actually is
 
