@@ -2,7 +2,7 @@ import { ChevronRight, Clapperboard, RotateCcw, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { apiGet, apiSend, messageOf } from "../api";
-import { Card, Clamp, Facts, PageHeader, PlatformChip, SectionHead } from "../components/kit";
+import { Card, Clamp, Facts, PageHeader, PlatformChip, SectionHead, StillPreview } from "../components/kit";
 import { type VideoProject, type ProjectStatus } from "../data";
 import { ACTIVE } from "../../templates";
 import { RENDERER } from "../../templates/template";
@@ -82,6 +82,9 @@ export function Scenes({ scenes }: { scenes: Scene[] }) {
           <span className="font-mono text-xs text-ink-3">{i + 1}</span>
           <span className="text-right font-mono text-xs tabular-nums text-ink-2">{scene.seconds}s</span>
           <div className="min-w-0 space-y-1">
+            {/* The beat is what makes a shot list readable as a script: an operator scanning for a
+                plan with no `turn`, or three shots of `setup`, can see it without watching anything. */}
+            {scene.beat ? <span className="chip chip-plain mb-1 mr-2 align-middle">{scene.beat}</span> : null}
             <Clamp text={scene.prompt} lines={1} />
             {scene.voiceover ? <Line label="Voiceover" text={scene.voiceover} prose /> : null}
             {scene.text ? <Line label="On screen" text={scene.text} prose /> : null}
@@ -90,6 +93,147 @@ export function Scenes({ scenes }: { scenes: Scene[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * THE HEAD OF A GENERATION PLAN — what an operator decides a piece on before ~$9.00 is spent on it.
+ *
+ * The first line, what keeps anyone watching past it, the one ask, which of the channel's reference
+ * patterns this piece is executing, the hooks that lost to the kept one, and the stills the render
+ * opens on. Each is a field on the plan now rather than a sentence buried in the brief, which is the
+ * point: they can be read at a glance and, where the planner did not write them, be missing visibly.
+ *
+ * It lives here beside `Scenes` and `Sources` because the Projects list and the Studio's Plan tab
+ * both draw a plan and already share those two — a third and fourth block copied between them is
+ * how the two views start disagreeing about what a plan is.
+ */
+export function PlanHead({ project }: { project: VideoProject }) {
+  const rejected = project.rejectedHooks ?? [];
+  const frames = project.referenceFrames ?? [];
+  if (
+    project.hook === undefined &&
+    project.retention === undefined &&
+    project.cta === undefined &&
+    project.referencePattern === undefined &&
+    rejected.length === 0 &&
+    frames.length === 0
+  ) {
+    return null;
+  }
+  return (
+    <>
+      <Section label="The piece">
+        <div className="space-y-1.5">
+          {project.hook ? <Line label="Hook" text={project.hook} prose /> : null}
+          {rejected.length > 0 ? <RejectedHooks hooks={rejected} /> : null}
+          {project.retention ? <Line label="Holds them" text={project.retention} prose /> : null}
+          {project.cta ? <Line label="Close" text={project.cta} prose /> : null}
+          {project.referencePattern ? <Line label="Reference" text={project.referencePattern} prose /> : null}
+        </div>
+      </Section>
+      {frames.length > 0 ? <ReferenceFrames frames={frames} /> : null}
+    </>
+  );
+}
+
+/**
+ * The hooks the seat wrote and did not keep, and why the kept one beat them — under the hook that
+ * won, closed, and never beside it.
+ *
+ * It is the one place an operator judging a hook wants it: "is this the best line they had" is not
+ * a question the kept line can answer by itself, and the seat is briefed to write three and keep one
+ * precisely so there is a comparison to show. Four lines given equal weight would read as four
+ * candidates and invite the operator to re-pick, which is the seat's work done twice; a disclosure
+ * says the plan has an answer and shows its working to anyone who doubts it.
+ *
+ * Until now it was written by `create_project`, seeded, and asked for by name in four separate
+ * prompts — and shown to nobody, which made every one of those instructions a write to /dev/null.
+ */
+function RejectedHooks({ hooks }: { hooks: string[] }) {
+  return (
+    <details className="group">
+      <summary className="prop-label flex cursor-pointer select-none items-center gap-1.5">
+        <ChevronRight size={14} strokeWidth={1.75} className="self-center transition-transform group-open:rotate-90" aria-hidden />
+        Hooks not kept
+        <span className="tabular-nums">{hooks.length}</span>
+      </summary>
+      <ul className="mt-1.5 space-y-1">
+        {hooks.map((hook, i) => (
+          <li key={`${i}:${hook}`} className="border-l border-line pl-2.5">
+            <Clamp text={hook} lines={2} className="[&>p]:text-xs" />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
+ * THE STILLS THE PIECE RENDERS AGAINST — and which ONE of them the render actually opens on.
+ *
+ * `generate_video` takes `image_urls` and the adapter uses exactly `imageUrls[0]`, mapped to the
+ * render's `first_frame` (`seed/projects.ts`, on `referenceFrames`). So one of these decides the
+ * shot a ~$9.00 piece starts on. The plan has carried them since the reference question was asked,
+ * the server hands them to the producer as `render_reference_images`, and no screen drew them: the
+ * operator pressing Render could not see the opening frame they were buying, and could not tell a
+ * plan that had one from a plan that had none.
+ *
+ * The first is marked and the rest are not, because that asymmetry is the truth about the field and
+ * a row of equal thumbnails is the lie — an operator counting three stills would otherwise approve
+ * a piece believing all three condition it.
+ */
+export function ReferenceFrames({ frames }: { frames: string[] }) {
+  return (
+    <Section label="Reference stills" count={frames.length}>
+      <ul className="flex flex-wrap gap-2">
+        {frames.map((frame, i) => (
+          <li key={`${i}:${frame}`} className="w-28 min-w-0">
+            <StillPreview src={frame} label={i === 0 ? "The frame this render opens on" : `Reference still ${i + 1}, carried on the plan`} />
+            {i === 0 ? <div className="mt-1 text-center"><span className="chip chip-chosen">Opening frame</span></div> : null}
+          </li>
+        ))}
+      </ul>
+      {frames.length > 1 ? (
+        <p className="mt-1.5 text-xs text-ink-3">Only the first reaches this render; the rest are kept on the plan.</p>
+      ) : null}
+    </Section>
+  );
+}
+
+/**
+ * The plan's checkable half: the claims it rests on beside where each came from, and how it sounds.
+ * A source is never hidden behind a disclosure — a plan whose facts are unsourced is one nobody can
+ * approve honestly, and the operator should not have to open anything to find that out.
+ */
+export function PlanDetail({ project }: { project: VideoProject }) {
+  const facts = project.facts ?? [];
+  const sound = project.sound;
+  if (facts.length === 0 && sound === undefined) return null;
+  return (
+    <>
+      {facts.length > 0 ? (
+        <Section label="Facts" count={facts.length}>
+          <ul className="list">
+            {facts.map((fact, i) => (
+              <li key={i} className="px-3 py-2">
+                <Clamp text={fact.claim} lines={2} />
+                <p className="mt-1 truncate text-xs text-ink-3" title={fact.source}>{fact.source}</p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+      {sound !== undefined ? (
+        <Section label="Sound">
+          <div className="space-y-1.5">
+            {sound.music ? <Line label="Music" text={sound.music} prose /> : null}
+            {sound.voice ? <Line label="Voice" text={sound.voice} prose /> : null}
+            {sound.sfx !== undefined && sound.sfx.length > 0 ? <Line label="SFX" text={sound.sfx.join("; ")} prose /> : null}
+          </div>
+        </Section>
+      ) : null}
+    </>
   );
 }
 
@@ -298,6 +442,8 @@ export function Projects() {
                   <Clamp text={p.brief} lines={2} />
                 </Section>
 
+                <PlanHead project={p} />
+
                 {p.kind === "generation" && p.scenes !== undefined && p.scenes.length > 0 ? (
                   <Section label="Scenes" count={p.scenes.length}>
                     <Scenes scenes={p.scenes} />
@@ -310,6 +456,7 @@ export function Projects() {
                   </Section>
                 ) : null}
 
+                <PlanDetail project={p} />
                 {p.caption ? (
                   <details className="group">
                     <summary className="prop-label flex cursor-pointer select-none items-center gap-1.5">

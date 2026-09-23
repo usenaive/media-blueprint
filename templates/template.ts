@@ -28,23 +28,32 @@ export const PROJECT_NAME = "media";
  * studio asks it before the crew is provisioned, the answer lands on the install, and every agent
  * reads it back through `project_context`.
  *
- * *** THERE ARE THREE OF THEM, AND THE LIMIT IS REAL. MEASURED, NOT ASSUMED. ***
+ * *** THERE ARE FOUR OF THEM, AND THE LIMIT IS REAL. MEASURED, NOT ASSUMED. ***
  *
- * `defineProject` refuses a fourth outright, and it is worth having the sentence here because the
+ * `defineProject` refuses a fifth outright, and it is worth having the sentence here because the
  * schema does not show it: `questions` is `z.array(QuestionFieldSchema)` with no bound, and the
  * cap is a separate check in `parseProject`, applied only when the project names a `template` —
- * which this one always does. Run against `@usenaive-sdk/blueprints@0.4.0`, the version this repo
- * pins and `naive up` runs, a four-question declaration comes back:
+ * which this one always does. Run against `@usenaive-sdk/blueprints@0.7.0`, the version this repo
+ * pins and `naive up` runs, a five-question declaration comes back:
  *
- *     template "faceless" asks 4 questions, but a template asks at most 3 before anything is
- *     provisioned — a fourth belongs to the crew's first conversation
+ *     template "faceless" asks 5 questions, but a template asks at most 4 before anything is
+ *     provisioned — a fifth belongs to the crew's first conversation
  *
- * So the three slots are a budget, and spending one is choosing what NOT to ask. `PLATFORM_QUESTION`
- * below took a slot from `audience` on `faceless` and from `niche` on `clipping`, because a channel
- * that does not know where it posts fills a queue nothing can publish, while tone and audience are
- * one sentence the channel manager asks for in its first session — which is the home the engine's
- * own refusal names for them. Both displaced questions are asked there (`channelManager`), so
- * nothing was dropped; it moved to the conversation instead of the form.
+ * *** IT WAS THREE, AND THE FOURTH SLOT WAS BOUGHT BY `optional` (ADR-0757). *** The cap is not
+ * arithmetic, it is "a person answers these in one sitting before anything is provisioned" — so a
+ * fourth question that may be left BLANK costs a glance rather than an answer, and the sitting
+ * survives it. That is the only kind of fourth this repo may add: `REFERENCE_QUESTION` below is
+ * `optional: true`, and a channel installed without an answer to it behaves exactly as it did
+ * before the question existed.
+ *
+ * The other three slots are still a budget, and spending one is choosing what NOT to ask.
+ * `PLATFORM_QUESTION` below took a slot from `audience` on `faceless` and from `niche` on
+ * `clipping`, because a channel that does not know where it posts fills a queue nothing can
+ * publish, while tone and audience are one sentence the channel manager asks for in its first
+ * session — which is the home the engine's own refusal names for them. Both displaced questions are
+ * asked there (`channelManager`), so nothing was dropped; it moved to the conversation instead of
+ * the form. The fourth slot did NOT buy them back, and must not be read as having done: an
+ * optional question is one whose absence changes nothing, and neither of those is that.
  */
 export type SetupQuestion = NonNullable<DefineInput["questions"]>[number];
 
@@ -167,6 +176,114 @@ export const labelsOf = (platforms: readonly PostPlatform[]): string => {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 };
 
+/** The key the platform stores the reference answer under, and the one name every reader of it uses. */
+export const REFERENCE_ANSWER_KEY = "reference";
+
+/**
+ * *** WHAT GOOD LOOKS LIKE ON THIS CHANNEL, IN THE CUSTOMER'S OWN EXAMPLE — AND IT MAY BE BLANK. ***
+ *
+ * The other three questions say what the channel is about, where it goes and how often. None of
+ * them says what it should be LIKE, and the crew's answer to that was previously invented from the
+ * niche: the scriptwriter wrote a hook style on day one out of nothing but the niche word, every
+ * plan after was written to that, and nobody could say whether it resembled anything that works.
+ * The style templates do not fill the hole — all nine are fixed seeds about LOOK (`Marble & ink`,
+ * `Claymation`), identical for every install, and silent on pacing, structure and voice.
+ *
+ * So this asks the one person who knows: point at a channel or a video you want this to be like.
+ * `reference-study` (`templates/faceless.ts`) watches it once on day one and files a teardown every
+ * later seat reads, so the answer reaches planning, rendering and the queue sweep through one post
+ * rather than through four seats re-fetching a URL.
+ *
+ * `optional: true` DELIBERATELY, and it is the whole reason a fourth question is allowed at all
+ * (ADR-0757; see `SetupQuestion` above). Plenty of customers have no reference in mind, and a
+ * mandatory field would extract a made-up one — worse than silence, because a crew cannot tell an
+ * invented reference from a real one and would spend the install imitating a guess. Left blank, the
+ * answer is ABSENT from `project_context` (not `""`), `referencesFromAnswers` returns an empty list,
+ * `reference-study` closes in one line, and every prompt below falls through its "when the context
+ * names no reference" clause to exactly what it did before.
+ *
+ * `type: "text"` rather than a choice: there is no list of channels to offer, and the answer is a
+ * URL or a handle. Several are allowed, one per line, because "be like these two" is a real answer.
+ */
+export const REFERENCE_QUESTION: SetupQuestion = {
+  key: REFERENCE_ANSWER_KEY,
+  label: "A channel or video to model this on",
+  type: "text",
+  optional: true,
+  placeholder: "A link, or image URLs — one per line",
+  help: "Optional, and the most useful thing you can give the team. Paste a channel or video link, and/or the URLs of a few stills from it — stills are worth far more than a link, because the team can actually look at those. It is studied once, up front: the shot grammar, the hooks, the pacing, the caption shape. Every brief, script, render and review is then measured against it. Leave it blank and the team works from your niche alone.",
+};
+
+/**
+ * The references the customer named, in their order — or `[]` when they named none.
+ *
+ * Takes either the whole `project_context` body (`{ template, answers, updated_at }`) or the bare
+ * answers array, exactly as `platformsFromAnswers` does and for the same reason: the server reads
+ * the first and the browser is handed the same object. One reference per line, trimmed, blanks
+ * dropped, each kept once.
+ *
+ * It does NOT validate that a line is a URL. A customer may write `@mrballen` or `Veritasium`, and
+ * a seat with `web_search` can find either — refusing them here would turn the most useful kind of
+ * answer into no answer at all. What it does refuse is emptiness dressed as an answer: a field of
+ * whitespace is `[]`, the same as an unanswered question, because the two mean the same thing to
+ * every seat that reads this.
+ */
+export type ReferenceKind = "image" | "file" | "link";
+
+/** One thing the customer pointed at, and what the crew can actually do with it. */
+export interface Reference {
+  kind: ReferenceKind;
+  value: string;
+}
+
+/** Extensions a provider will render as a picture; anything else is a link, not a still. */
+const IMAGE_SUFFIX = /\.(png|jpe?g|gif|webp)(\?|#|$)/i;
+
+/**
+ * *** WHAT KIND OF THING THE CUSTOMER GAVE US, WHICH DECIDES WHAT THE STUDY CAN DO. ***
+ *
+ * The three answers are not equal and the crew must not pretend they are.
+ *
+ *   · `image` — a URL ending in a picture. The best answer, and the BROWSER's: `goto` it and the
+ *     screenshot comes back as a picture, so the study is written from what is actually on screen.
+ *   · `file`  — a `fil_` id already in the org's library, from an upload, a screenshot the session
+ *     just took, or an earlier session. The same study, and the only kind `view_image` will take:
+ *     its argument is `file_ids`, and a URL is refused as `validation_failed` before a byte is
+ *     read (§16.2). That refusal is why these two are classified apart rather than merged into
+ *     "a picture" — they are the same value to a reader and different tools to a seat.
+ *   · `link`  — a channel or video page. The crew can read its text and screenshot the PAGE, but
+ *     nothing here samples FRAMES out of a video (`clip_video` returns transcript-derived text and
+ *     the session has no ffmpeg). A video link alone is therefore the WEAKEST answer, and the
+ *     study card is written to say so rather than to guess from a caption — which is exactly how
+ *     a crew ends up planning the wrong genre with confidence (ADR-0758).
+ */
+export const referenceKindOf = (value: string): ReferenceKind => {
+  if (/^fil_[0-9a-z]+$/i.test(value)) return "file";
+  return IMAGE_SUFFIX.test(value) ? "image" : "link";
+};
+
+/** The references classified, in the customer's order — what `reference-study` branches on. */
+export const referencesOf = (context: unknown): Reference[] =>
+  referencesFromAnswers(context).map((value) => ({ kind: referenceKindOf(value), value }));
+
+export const referencesFromAnswers = (context: unknown): string[] => {
+  const answers = Array.isArray(context)
+    ? context
+    : ((context as { answers?: unknown } | null | undefined)?.answers ?? []);
+  if (!Array.isArray(answers)) return [];
+  const answer = (answers as { key?: unknown; value?: unknown }[]).find((row) => row?.key === REFERENCE_ANSWER_KEY);
+  const values = Array.isArray(answer?.value) ? answer.value : [answer?.value];
+  const named: string[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    for (const line of value.split("\n")) {
+      const one = line.trim();
+      if (one !== "" && !named.includes(one)) named.push(one);
+    }
+  }
+  return named;
+};
+
 /** One kind of post a template's crew files. `id` is what a row carries; the label is what a screen prints. */
 export interface PostKindDecl {
   id: PostKind;
@@ -222,15 +339,18 @@ export interface MediaTemplate {
    */
   platform: PostPlatform;
   /**
-   * The questions the studio asks once, before anything exists — three, because the engine refuses
-   * a fourth on a project that names a template (the refusal is quoted on `SetupQuestion` above,
-   * and `naive.config.test.ts` holds it to that count). The tuple is the type-level half of that
-   * budget: a template cannot quietly ask a fourth and discover it at `naive up`.
+   * The questions the studio asks once, before anything exists — three or four, because the engine
+   * refuses a fifth on a project that names a template (the refusal is quoted on `SetupQuestion`
+   * above, and `naive.config.test.ts` holds it to the count). The union of the two tuple widths is
+   * the type-level half of that budget: a template cannot quietly ask a fifth and discover it at
+   * `naive up`, and it cannot ask two questions and call it a setup form either.
    *
-   * One of the three is `PLATFORM_QUESTION`, which every template of this blueprint asks, because
-   * where a channel posts is not the blueprint's to decide. A template chooses the other two.
+   * One of them is always `PLATFORM_QUESTION`, which every template of this blueprint asks, because
+   * where a channel posts is not the blueprint's to decide. A FOURTH is allowed only if it is
+   * `optional` — see `SetupQuestion` — and today exactly one template spends it, on
+   * `REFERENCE_QUESTION`.
    */
-  questions: [SetupQuestion, SetupQuestion, SetupQuestion];
+  questions: [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
   /**
    * The crew's first work, as cards on the organization's board (§31.11) — the set-up every seat
    * owes once, in the order it actually has to happen. `naive.config.ts` hands the RUNNING
@@ -249,33 +369,91 @@ export interface MediaTemplate {
 }
 
 /**
+ * *** HOW LONG A PIECE IS, AND IT IS THE ONE PLACE THE NUMBER IS WRITTEN. ***
+ *
+ * It used to be the words "under fifteen seconds in all", typed into the scriptwriter's brief, its
+ * cron and its day-one card — and contradicted by the very skill those prompts tell the writer to
+ * load: `naive/short-video-hooks` taught a five-beat script laid out across 30–60 seconds. The
+ * writer read a structure it was forbidden to use and filed the only thing that fits in fifteen
+ * seconds, which is three shots and a caption. That is not a plan for a video, and it is why the
+ * planning read as thin.
+ *
+ * 15–30 seconds is the format, and the skill now teaches the same range. The floor is real: under
+ * fifteen there is no room for the turn, so the payoff arrives before the viewer has a reason to
+ * want it. The ceiling is the format's and also the wire's neighbour — `generate_video` accepts
+ * `seconds` up to 60, so 30 leaves the tool's own limit well clear.
+ */
+export const MIN_SECONDS = 15;
+export const MAX_SECONDS = 30;
+/** "between 15 and 30 seconds" — the range as every prompt says it, so no two of them can drift. */
+export const LENGTH_PHRASE = `between ${MIN_SECONDS} and ${MAX_SECONDS} seconds`;
+
+/**
+ * *** A PIECE IS ONE RENDER, WHATEVER ITS SCENE COUNT — READ THIS BEFORE PLANNING AROUND IT. ***
+ *
+ * Nothing on this platform joins video: `BUILTIN_TOOLS` has `clip_video`, which CUTS, and no
+ * concat, stitch or compose tool exists. So a plan's scenes are not rendered one by one and
+ * assembled — they are compiled into ONE `generate_video` call whose prompt is the shots in order
+ * and whose `seconds` is their sum. Multi-scene here means a multi-SHOT prompt, which is what the
+ * video models actually take, and it is the reason `scenesPrompt` (`server/mcp.ts`) exists rather
+ * than each seat spelling the compilation out for itself.
+ *
+ * The consequence to keep in mind when editing any producer prompt below: per-scene `seconds` is a
+ * budget the model is asked to honour, not a cut the machine enforces. Plan shots that a single
+ * continuous generation can carry.
+ */
+export const SCENES_ARE_ONE_RENDER = true;
+
+/**
  * What one render actually costs, measured rather than guessed.
  *
- * PRODUCTION, 2026-09-07: one 10-second 1080x1920 video was debited **2,210,000 µUSD**
- * (`led_vna2cf3v27phg8meh4tdnxfcx0`) — 221,000 µUSD per second. The producer is briefed for a short
- * "under 15 seconds", so the length it is actually asked for costs up to ~3,320,000 µUSD, and that
- * is the number every ceiling below has to clear. Nothing publishes a price for a video model, so
- * this figure comes from a real invoice and is the only honest one available; re-measure it when the
- * model changes.
+ * *** IT IS WHAT THE PLATFORM CHARGES, NOT WHAT THE PROVIDER COSTS, AND THE TWO ARE 30% APART. ***
+ *
+ * MEASURED 2026-09-22 THROUGH THE PLATFORM, which is the only measurement that means anything
+ * here: a producer agent on staging rendered a 15.07-second 720x1280 `bytedance/seedance-2.5`
+ * piece and the job settled at **4,519,359 µUSD** (`med_16gdmhzkv0zwaw4afgxf6x7dh1`) —
+ * **299,851 µUSD per second**.
+ *
+ * The figure before this one was 230,780, taken from the provider's own invoice for the same model
+ * on the same day. It was not wrong, it was the wrong QUANTITY: the ledger debits the org the
+ * platform's price, and it is the ledger the per-task ceiling is checked against. Sizing a budget
+ * from the supplier's cost understates every ceiling by the markup — here 30% — and the way that
+ * failure presents is a render that is admitted and then blows the ceiling mid-turn, which is
+ * exactly what the $2 ceiling did on the first production session.
+ *
+ * Nothing publishes a price for a video model, so this comes from a real settled job and is the
+ * only honest figure available; re-measure it through the PLATFORM when the default model changes.
+ *
+ * At `MAX_SECONDS` that is **8,995,530 µUSD** (~$9.00), and it is the number every ceiling below
+ * has to clear. It has tripled since the prompts demanded fifteen seconds of Veo (~$3.32) — the
+ * real price of the format, stated here rather than discovered by an operator reading a bill.
  */
-export const ONE_RENDER_MICRO_USD = 3_320_000;
+export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 299_851;
 
 /**
  * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
- * the per-task ceiling has to hold one render of the length the producer is briefed for (~$3.32)
+ * the per-task ceiling has to hold one render of the length the producer is briefed for (~$9.00)
  * **plus** the session's own model calls, because the render's admission hold and the turn's model
  * calls draw on the same ceiling. At $2 the very first production session on production spent the
  * money, blew the ceiling and parked with the video already rendered.
  *
- * $20/task is one render with ~6x of headroom, and it is what every seat carries: the budget is the
+ * $20/task is one render with ~2x of headroom, and it is what every seat carries: the budget is the
  * blueprint's, not a template's, so no crew can quietly hold a ceiling its flagship action cannot
  * clear. $60/day is per AGENT, not per channel — it holds the manager's three fires ($30 of
- * ceiling between them) or the specialist's daily $10 render with room for the retries a failed
- * one costs. Retune per channel after the first week.
+ * ceiling between them) or the specialist's daily render with room for the retries a failed one
+ * costs. Retune per channel after the first week.
+ *
+ * *** THE HEADROOM NARROWED WHEN THE FORMAT GREW, AND THAT IS DELIBERATE. *** A render was ~$3.32
+ * against a $20 ceiling; at `MAX_SECONDS` it is ~$9.00 as the ledger bills it, so the ceiling now
+ * holds one render and its turns rather than one render and five spare. The producer's own fire is raised to match below
+ * (`$15`), because a $10 fire that can no longer pay for a 30-second render plus the turns around
+ * it is a cron that fails every night at the same point — which is exactly the failure the $2
+ * ceiling caused the first time. Neither figure may be raised without re-reading
+ * `ONE_RENDER_MICRO_USD`: these are derived from it, not chosen.
  */
 const budget = {
   cap_micro_usd: 60_000_000, // $60/day
-  max_task_micro_usd: 20_000_000, // $20/task — a ~$3.32 render plus the turns that brief and file it, each holding its quote until the turn commits.
+  max_task_micro_usd: 20_000_000, // $20/task — a ~$9.00 render plus the turns that brief and file it, each holding its quote until the turn commits.
   period: "day",
 } as const;
 
@@ -285,9 +463,36 @@ const model = "anthropic/claude-sonnet-5";
  * The paragraph every template agent's `system` opens with (plan §2.4). The setup answers — niche,
  * audience, cadence, the sources — are the client's; the tool is how they are read, and the one
  * place they are true.
+ *
+ * *** THE REFERENCE RULE IS NOT HERE, AND THAT WAS MEASURED RATHER THAN PREFERRED. *** It was: the
+ * approval gate lives in this shared layer for a good reason — a rule every seat needs is a rule no
+ * seat can be written without — and the reference clause was put beside it on the same logic. Two
+ * things said otherwise. It cost 111 words on EVERY system prompt, and `clipping`'s clipper and
+ * scout sit at exactly the 400-word bound this repo holds itself to (`templates.test.ts`), so a
+ * shared sentence of any length breaks two seats that were already full. And it was wrong for those
+ * seats anyway: the reference teardown is a `faceless` object, produced by its `reference-study`
+ * card. `clipping` has its own `sources` question, which means something stronger and different —
+ * cut from these channels and nowhere else — so telling its clipper to read a teardown is telling
+ * it to look for a post that will never exist on that template.
+ *
+ * So the rule lives in `REFERENCE_RULE` below and is carried by the `faceless` seats that act on
+ * it. `templates.test.ts` holds every one of them to it, which is the same protection the preamble
+ * was bought for.
  */
 export const CONTEXT_PREAMBLE =
   "Read `project_context` before anything else; the answers there are the client's, not yours to invent. Every brief, script, clip, caption and plan you make is for the niche, the audience and the cadence written there — when an answer is missing, ask the operator rather than filling it in.";
+
+/**
+ * What every `faceless` seat is told about the customer's reference, in one sentence each way.
+ *
+ * Written to be INERT when the question was left blank — which it will be on plenty of installs,
+ * since `REFERENCE_QUESTION` is optional. An unanswered question is absent from `project_context`
+ * entirely (the platform lists only answered ones), so "names one" is a condition the model can
+ * actually evaluate, and the second half restores exactly the behaviour this template had before
+ * the question existed. The seats add their own sentence about what they do with it.
+ */
+export const REFERENCE_RULE =
+  "Where the context names a reference, the crew's reference teardown post is this channel's standard: read it before you plan, make or check anything, and name the pattern you followed. Where it names none, work from the niche alone and invent no reference.";
 
 /**
  * The paragraph every card body ends with, and the race it is the answer to.
@@ -318,8 +523,17 @@ export const CARD_ORDER =
  * The one rule every agent of every template shares: the operator's approval queue is the only way
  * out. It also names the two rows the channel works in — the post, which is the finished piece, and
  * the video project, which is the plan it is made from — so every seat reads the same two words.
+ *
+ * Exported so `templates.test.ts` can measure a seat's OWN brief. The README's rule is "between
+ * them is the seat's own brief, 150–400 words", and the test used to approximate that by bounding
+ * the whole `system` at 400 — which silently charged every author for the ~209 words of preamble
+ * and gate they do not write and cannot shorten. The effect was visible in the prompts: every seat
+ * of both templates sat at 394–400, written up against a ceiling two thirds of which was not
+ * theirs, and the planning brief had spent what was left on mechanics. Stripping both ends is what
+ * the documented rule actually says, and it is a stricter test than the old one in the way that
+ * matters — it now also asserts that the system ENDS with the gate, which nothing checked before.
  */
-const approvalGate =
+export const APPROVAL_GATE =
   "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file: `agent` your name, `account` the connected account (channel.list_accounts), `media_url` the video, `source` its origin, `platform` the network. A brief is a pending post with no media yet; a video project is the plan a video is made from — another seat renders or cuts it, and that files the post. The operator approves every row on the dashboard. session_spend reads what this session was charged, per media job: quote it, never estimate. The tools offered this turn are the complete list of what you can do right now: do not invent a capability. A tool or model you lack: request it once with request_tools — exact tool, permission, model in config.models, why — then wait; a refusal is final. A fact only the operator has: ask once with ask_operator, then wait. A connected account's tools appear once it is connected; none offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
@@ -333,7 +547,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
-  "find_files", "find_stock_photo", "session_spend",
+  "find_files", "view_image", "find_stock_photo", "session_spend",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
@@ -350,8 +564,31 @@ export const BUILTIN_TOOLS = [
  *
  * First is the default. The rest are named so the producer can still reach for a different look
  * without an operator editing this file; narrowing the list narrows what it can choose.
+ *
+ * *** SEEDANCE 2.5 IS THE DEFAULT, AND THE REASON IS THE FORMAT THIS TEMPLATE RENDERS. ***
+ *
+ * Both ids were checked against the live catalogues on 2026-09-21 rather than assumed: the provider
+ * this blueprint's `generate_video` reads publishes `bytedance/seedance-2.5` and `google/veo-3.1`
+ * among its 29 video models, so both below resolve.
+ *
+ * What decided the order is what the catalogue says Seedance 2.5 does: *"generates native
+ * 30-second single-shot video at up to 720p from a single text prompt, reasoning about the whole
+ * shot at once so motion, lighting, and subject identity stay coherent from first frame to last."*
+ * That is this template's format exactly — `MAX_SECONDS` is 30, and a plan's scenes are compiled
+ * into ONE prompt for ONE generation (`scenesPrompt`) because nothing here joins clips. A model
+ * whose native length is the format's ceiling, and which reasons over the whole shot at once, is
+ * the one that holds a four-beat plan together; Veo's own generations are shorter, so the same
+ * prompt comes back truncated or hurried.
+ *
+ * *** AND THE WORD "SINGLE-SHOT" IS A REAL CONSTRAINT, NOT MARKETING. *** Seedance reasons about
+ * one continuous take. Our plans are multi-BEAT and the compiled prompt asks for shots in order,
+ * which this model reads as movement within one take rather than as cuts. In practice that means a
+ * plan whose beats are camera and subject changes renders well, and a plan whose beats are hard
+ * cuts between unrelated scenes renders as a drift between them. Plan the beats as one continuous
+ * take that develops — `naive/short-video-hooks` is written that way — and prefer Veo only when a
+ * piece genuinely needs a hard cut.
  */
-export const VIDEO_MODELS: readonly string[] = ["google/veo-3.1", "bytedance/seedance-2.5"];
+export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
 
 /**
  * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
@@ -391,6 +628,31 @@ const LIBRARY_TOOL = "find_files";
  * reads, it names no other session, and a guess dressed up as a figure is worse than the number.
  */
 const SPEND_TOOL = "session_spend";
+
+/**
+ * *** THE BROWSER, HELD BY EVERY SEAT, AT `allow`. ***
+ *
+ * It was denied to all ten seats of both templates, on the reasoning that a content crew needs no
+ * shell and that denying the sandbox also keeps a session from provisioning a machine it would
+ * never use. The browser was swept up in that and it does not belong there: it provisions no
+ * sandbox (`BrowserOpenSpec.computerId` is optional — for a browser-only agent the browser IS the
+ * box), and it is the difference between a crew that can read the internet and one that can only
+ * search it.
+ *
+ * It matters most on this template now that `screenshot` returns the picture rather than a file id
+ * (§16.2, ADR-0758). A seat can open a channel page, LOOK at it, and write what it saw — the
+ * reference study, a scout checking whether a format is really moving, the manager reading how a
+ * competitor captions. Before the image crossing a screenshot was worth nothing to the agent that
+ * took it, which is most of why denying this looked free.
+ *
+ * `allow`, not `ask`: the operator's gate is the approval queue on the way OUT (`social.post`,
+ * every connection tool), and a seat that has to ask permission to read a web page is a seat that
+ * stops dead on a 06:00 cron with nobody awake to answer. Reading is not the act this channel
+ * gates. What it costs is a hosted browser session per use, which is real and is the honest reason
+ * to keep the crons pointed at `web_search`/`web_fetch` for bulk reading and the browser for the
+ * pages that have to be seen.
+ */
+const BROWSER_TOOL = "browser";
 
 /**
  * Held by every agent of every template, so the publish rule is the blueprint's and not a
@@ -457,7 +719,9 @@ const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
  * It widens nothing else, because everything else CAN be named: every built-in this crew was not
  * granted is written `deny` above the default, including all six sandbox tools — a content agent
  * needs no shell, and denying them is also what keeps the session from provisioning (and billing) a
- * machine it would never use.
+ * machine it would never use. The BROWSER is not one of those and is granted to every seat
+ * (`BROWSER_TOOL`): it provisions no sandbox, and since its screenshot began returning the picture
+ * it is how a seat reads a page it has to actually see.
  */
 export const toolset = (names: readonly string[], handoffs: readonly string[] = []) => ({
   default_config: { permission: "ask" as const },
@@ -543,13 +807,13 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
     input:
-      "Plan the week. Read the channel's niche, audience and cadence (project_context), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Brief the specialists through the plan, not by publishing anything yourself.",
+      "Plan the week. Read the channel's niche, audience and cadence (project_context), the reference teardown if this channel has one (channel.list_posts, source \"reference teardown\"), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Where there is a teardown, say for each slot which of the reference's formats it is an instance of — a week of slots that are all the same format is a week the reference would not have made. Brief the specialists through the plan, not by publishing anything yourself.",
     budget_micro_usd: 10_000_000, // $10 — the widest read of the week, once a week.
   }),
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Where this channel has a reference teardown (channel.list_posts, source \"reference teardown\"), that sweep is also the review: read each row's plan (channel.get_project by its projectId) against the teardown and check the three things you can actually check without watching the video — the hook is the plan's hook line and not a restatement of the topic, the caption is in the reference's caption shape, and the beats run hook, setup, turn, payoff, cta rather than three shots of the same idea. You cannot watch the render, so never claim you did: judge the plan and the caption, name any drift in one line at the end of the caption so the operator sees it beside the Approve button, and leave the row for them to decide. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
     budget_micro_usd: 10_000_000, // $10 — a read and a few patches.
   }),
   schedule({
@@ -624,8 +888,8 @@ export const agent = (decl: {
   model,
   budget,
   description: decl.description,
-  system: `${CONTEXT_PREAMBLE} ${decl.brief} ${approvalGate}`,
-  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, SPEND_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
+  system: `${CONTEXT_PREAMBLE} ${decl.brief} ${APPROVAL_GATE}`,
+  tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, SPEND_TOOL, BROWSER_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
   skills: decl.skills,
   handoffs: decl.handoffs ?? false,
   /**
@@ -643,16 +907,21 @@ export const agent = (decl: {
  * The channel manager, shared by both templates because the manager is: the seat the dashboard's
  * Chat talks to (`server/routes.ts` looks it up by this name), so it is the one `required` agent —
  * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
- * names the rest of the crew in the brief, which is the only line that differs between templates.
+ * names the rest of the crew in the brief.
+ *
+ * `review` is the second line that differs, and it is separate for the reason `REFERENCE_RULE` is
+ * not in the preamble: the teardown is a `faceless` object, so `clipping`'s manager must not be
+ * told to read one. It also has to be a parameter rather than a suffix, because a seat carrying
+ * both templates' rules would breach the 400-word bound this repo holds every `system` to.
  */
-export const channelManager = (specialists: string): AgentDecl =>
+export const channelManager = (specialists: string, review = ""): AgentDecl =>
   agent({
     name: "channel-manager",
     role: "Channel lead",
     required: true,
     description:
       "Runs the channel: plans the week from the cadence answer, briefs the team, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
-    brief: `You are the channel manager, the person the operator talks to in Chat. You keep the calendar full at the cadence the context names and no fuller: more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and never do their work: the video projects (channel.list_projects) are theirs to plan and make, and revising a rendered one is the operator's move, never yours. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption what you could not fix. Every evening you read the comments through a connected account's tools and reply as the channel. When the operator asks in Chat, answer with what the queue actually holds, and route work to the seat it belongs to.`,
+    brief: `You are the channel manager, the person the operator talks to in Chat. You keep the calendar full at the cadence the context names and no fuller: more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and never do their work: the video projects (channel.list_projects) are theirs to plan and make, and revising a rendered one is the operator's move, never yours. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption what you could not fix.${review} Every evening you read the comments through a connected account's tools and reply as the channel. When the operator asks in Chat, answer with what the queue actually holds, and route work to the seat it belongs to.`,
     tools: ["web_search", "web_fetch"],
     skills: ["naive/caption-writing"],
     schedules: CHANNEL_MANAGER_SCHEDULES,
@@ -662,10 +931,11 @@ export const channelManager = (specialists: string): AgentDecl =>
  * The manager's own card, shared by both templates because the manager is — and it is the head of
  * both boards for the same reason its Monday fire is the head of both weeks.
  *
- * *** `firstAsk` IS THE QUESTION THE SETUP FORM HAD NO SLOT FOR. *** The studio asks three (see
- * `SetupQuestion`) and `PLATFORM_QUESTION` takes one of them, because where the channel posts gates
- * whether anything it makes can be published at all. What it displaced is named by the template and
- * asked here — but LAST, after the plan is filed and this card is closed.
+ * *** `firstAsk` IS THE QUESTION THE SETUP FORM HAD NO SLOT FOR. *** The studio asks at most four
+ * (see `SetupQuestion`), `PLATFORM_QUESTION` takes one because where the channel posts gates
+ * whether anything it makes can be published at all, and the fourth is spent on the optional
+ * reference. What that displaced is named by the template and asked here — but LAST, after the plan
+ * is filed and this card is closed.
  *
  * *** THE ASK IS THE ONE THING ON THIS BOARD THAT CAN WAIT ON A HUMAN, SO IT IS NOT ALLOWED TO
  * GATE ANYTHING. *** `ask_operator` parks the session with the question in front of the operator
@@ -683,5 +953,5 @@ export const channelPlanCard = (firstAsk: string): Task =>
     key: "channel-plan",
     title: "Ask the operator the question the form had no room for, then file the channel plan",
     assignee: "channel-manager",
-    body: `Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published. The setup form asks three questions and no more, so one thing this channel needs is not in there: ${firstAsk} Read it from the niche and the networks, write it into the plan as its second line, and say there that it is your reading and not the operator's answer. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. Close this card with the post's id in the note: the analyst is blocked on it and reads the plan's slot count as the week it will be measuring against. THEN, once the card is closed and not before, ask the operator to confirm that line with ask_operator, once. It is last because asking parks your session until they answer, and the crew waiting behind this card must not wait on a person who may not open the dashboard today. Their answer reaches you here, and every fire from then on works to it.`,
+    body: `Read project_context — what this channel is about, where it posts and how often — and the queue (channel.list_posts) and connected accounts (channel.list_accounts). Write the channel plan from the cadence answer: how many slots a week, which days and times they fall on in the channel's timezone, which post kind and which account each slot is for, and what the first two weeks look like. The context names the networks this channel posts to — one or several; name each of them with no account connected yet as the first line of the plan — until one is connected nothing the team files for that network can be published. The setup form asks four questions and no more, so one thing this channel needs is not in there: ${firstAsk} Read it from the niche, the networks and the reference teardown if the crew has filed one (channel.list_posts, source "reference teardown"), write it into the plan as its second line, and say there that it is your reading and not the operator's answer. File it as a pending post with no media, \`source\` "channel plan", so the operator can read it and the team can work to it. Close this card with the post's id in the note: the analyst is blocked on it and reads the plan's slot count as the week it will be measuring against. THEN, once the card is closed and not before, ask the operator to confirm that line with ask_operator, once. It is last because asking parks your session until they answer, and the crew waiting behind this card must not wait on a person who may not open the dashboard today. Their answer reaches you here, and every fire from then on works to it.`,
   });

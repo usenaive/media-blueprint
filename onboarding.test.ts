@@ -27,11 +27,16 @@ import {
   PLATFORM_ANSWER_KEY,
   PLATFORM_CHOICES,
   PLATFORM_QUESTION,
+  REFERENCE_ANSWER_KEY,
+  REFERENCE_QUESTION,
   labelOf,
   labelsOf,
   platformFromAnswers,
   platformsFromAnswers,
   platformOf,
+  referencesFromAnswers,
+  referenceKindOf,
+  referencesOf,
 } from "./templates/template.ts";
 import { declaration } from "./naive.config.ts";
 import { channelPlatform, channelPlatforms, forgetChannelPlatform } from "./server/channel.ts";
@@ -90,12 +95,16 @@ describe("the question that asks where the channel posts", () => {
    *
    * This test is the reason nobody has to re-derive that: it asks the real engine.
    */
-  it("fits the three the engine will actually install, and a fourth is refused by name", async () => {
-    for (const template of both) expect(template.questions, template.name).toHaveLength(3);
+  it("fits what the engine will actually install, and a fifth is refused by name", async () => {
+    // Three REQUIRED per template, and `faceless` spends the fourth slot on the optional reference.
+    for (const template of both) {
+      expect(template.questions.filter((q) => q.optional !== true), template.name).toHaveLength(3);
+      expect(template.questions.length, template.name).toBeLessThanOrEqual(4);
+    }
     const { defineProject } = await import("@usenaive-sdk/blueprints");
-    const fourth = { key: "extra", label: "One more thing", type: "text" as const };
-    const four = { ...declaration, questions: [...declaration.questions, fourth] };
-    expect(() => defineProject(four)).toThrow(/asks 4 questions, but a template asks at most 3/);
+    const extra = { key: "extra", label: "One more thing", type: "text" as const };
+    const over = { ...declaration, questions: [...declaration.questions, extra, extra] };
+    expect(() => defineProject(over)).toThrow(/asks \d+ questions, but a template asks at most 4/);
     // And the declaration as it stands is one the engine accepts.
     expect(() => defineProject(declaration)).not.toThrow();
   });
@@ -141,11 +150,17 @@ describe("the question that asks where the channel posts", () => {
    * limit was the blueprint's taste or the platform's rule. It is the platform's, and the file now
    * quotes the refusal it was measured from.
    */
-  it("says where the three-question limit actually comes from", () => {
+  it("says where the question limit actually comes from, and against which engine", () => {
     const source = readFileSync(new URL("./templates/template.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/Exactly three \(§4 of the plan\)/);
-    expect(source).toMatch(/a template asks at most 3 before anything is/);
-    expect(source).toMatch(/@usenaive-sdk\/blueprints@0\.4\.0/);
+    expect(source).toMatch(/a template asks at most 4 before anything is/);
+    // The version the quote was measured against must be the one this repo pins, or the quote is
+    // a claim about an engine nobody here runs.
+    const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    const pinned = pkg.devDependencies["@usenaive-sdk/blueprints"]!.replace(/^[^\d]*/, "");
+    expect(source).toContain(`@usenaive-sdk/blueprints@${pinned}`);
   });
 
   /**
@@ -159,12 +174,12 @@ describe("the question that asks where the channel posts", () => {
       expect(plan.assignee, template.name).toBe("channel-manager");
       expect(plan.blocked_by ?? [], template.name).toEqual([]);
       expect(plan.body, template.name).toMatch(/ask_operator/);
-      expect(plan.body, template.name).toMatch(/setup form asks three questions/);
+      expect(plan.body, template.name).toMatch(/setup form asks four questions/);
     }
     expect(TEMPLATES.faceless.tasks[0]!.body).toMatch(/tone and who it is for/);
     expect(TEMPLATES.clipping.tasks[0]!.body).toMatch(/who these clips are for/);
     // And what a template asks beside the platform question is still its own.
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", PLATFORM_ANSWER_KEY, "cadence"]);
+    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", PLATFORM_ANSWER_KEY, "reference", "cadence"]);
     expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", PLATFORM_ANSWER_KEY, "cadence"]);
   });
 });
@@ -475,4 +490,144 @@ describe("the line that says whether the account is connected", () => {
     expect(js).toContain("/context");
     expect(js).toContain("/social/accounts");
   }, 30_000);
+});
+
+/**
+ * THE FOURTH QUESTION — the one a person may leave blank, and the whole reason the engine's cap
+ * moved from three to four (ADR-0757).
+ *
+ * Everything here is really one property: an install that answered nothing must behave exactly as
+ * this template did before the question existed. That is what makes an optional question safe to
+ * hang a board card, two blockers and five prompts off — and it is the property that quietly breaks
+ * first, because the interesting path is the answered one and nobody re-reads the other.
+ */
+describe("the question that asks what to model the channel on", () => {
+  it("is optional, is free text, and is asked only by the template that can act on it", () => {
+    expect(REFERENCE_QUESTION.optional).toBe(true);
+    // Free text, because there is no list of channels to offer and the answer is a URL or a handle.
+    expect(REFERENCE_QUESTION.type).toBe("text");
+    expect(REFERENCE_QUESTION.key).toBe(REFERENCE_ANSWER_KEY);
+    // The help is the only place a person is told what giving one actually does.
+    expect(REFERENCE_QUESTION.help ?? "").toMatch(/studied|measured|blank/i);
+    expect((REFERENCE_QUESTION.help ?? "").length).toBeGreaterThan(40);
+
+    expect(TEMPLATES.faceless.questions).toContain(REFERENCE_QUESTION);
+    // `clipping` does not take it: its `sources` question already names channels, and means
+    // something stronger — cut from these and nowhere else.
+    expect(TEMPLATES.clipping.questions).not.toContain(REFERENCE_QUESTION);
+    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toContain("sources");
+  });
+
+  /** It sits third, so the form reads as what the channel is, where it goes, what it is like, how often. */
+  it("is asked after the network and before the cadence", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", PLATFORM_ANSWER_KEY, REFERENCE_ANSWER_KEY, "cadence"]);
+  });
+
+  /** `naive up` reads the declaration, not the template — the question has to reach it. */
+  it("reaches `naive up` as the one optional question", () => {
+    expect(declaration.questions.map((q) => q.key)).toContain(REFERENCE_ANSWER_KEY);
+    expect(declaration.questions.filter((q) => q.optional === true).map((q) => q.key)).toEqual([REFERENCE_ANSWER_KEY]);
+  });
+
+  describe("the answer, read back", () => {
+    const ctx = (value: unknown) => ({ answers: [{ key: REFERENCE_ANSWER_KEY, label: "Model on", value }] });
+
+    it("reads one reference per line, in the customer's order, each once", () => {
+      expect(referencesFromAnswers(ctx("https://youtube.com/@a\n@b\nhttps://youtube.com/@a"))).toEqual([
+        "https://youtube.com/@a",
+        "@b",
+      ]);
+      // Surrounding space is the customer's typing, not an answer.
+      expect(referencesFromAnswers(ctx("  @only  "))).toEqual(["@only"]);
+      // It takes the bare answers array too, the way `platformsFromAnswers` does — the server reads
+      // the context body and the browser is handed the same object.
+      expect(referencesFromAnswers(ctx("@x").answers)).toEqual(["@x"]);
+    });
+
+    /**
+     * *** THE UNANSWERED PATH, WHICH IS THE ONE THAT HAS TO KEEP WORKING. *** An optional question
+     * left blank is ABSENT from `project_context` — the platform lists only answered ones — so the
+     * shapes below are all the ways "no reference" actually arrives, and every one of them is the
+     * same empty list rather than a crash, a `[""]`, or a reference nobody named.
+     */
+    it("says there is no reference for every shape an unanswered question arrives in", () => {
+      for (const nothing of [ctx(""), ctx("   "), ctx("\n \n"), ctx(undefined), ctx(7), ctx([]), { answers: [] }, {}, null, undefined, "not a context"]) {
+        expect(referencesFromAnswers(nothing), JSON.stringify(nothing) ?? "undefined").toEqual([]);
+      }
+    });
+
+    /**
+     * It does NOT require a URL. A customer may write `@mrballen` or `Veritasium`, and a seat with
+     * `web_search` finds either — refusing them would turn the most natural kind of answer into no
+     * answer at all, which on an optional question means silently getting nothing.
+     */
+    it("keeps a handle or a name, not just a URL", () => {
+      expect(referencesFromAnswers(ctx("Veritasium"))).toEqual(["Veritasium"]);
+    });
+  });
+
+  /**
+   * *** THE THREE KINDS ARE NOT EQUAL, AND THE STUDY BRANCHES ON WHICH ONE IT GOT. *** A still can
+   * be opened with `view_image` and written from; a `fil_` id is the same thing without needing a
+   * public URL; a link is TEXT ONLY, because nothing samples frames out of a video. Getting this
+   * classification wrong is how the crew treats a link as though it had seen the video (ADR-0758).
+   */
+  it("tells a still from a file id from a link", () => {
+    expect(referenceKindOf("https://cdn.example.test/still-01.jpg")).toBe("image");
+    expect(referenceKindOf("https://cdn.example.test/f.PNG?v=2")).toBe("image");
+    expect(referenceKindOf("fil_00000000000000000000000001")).toBe("file");
+    expect(referenceKindOf("https://www.tiktok.com/@z3lkw/video/7681830866623991072")).toBe("link");
+    expect(referenceKindOf("@mrballen")).toBe("link");
+    // A page whose path merely contains the word is still a page.
+    expect(referenceKindOf("https://example.test/images/gallery")).toBe("link");
+  });
+
+  it("classifies a mixed answer in the customer's order", () => {
+    const ctx = { answers: [{ key: REFERENCE_ANSWER_KEY, label: "Model on", value: "https://www.tiktok.com/@z3lkw/video/768\nhttps://cdn.example.test/a.jpg\nfil_00000000000000000000000002" }] };
+    expect(referencesOf(ctx)).toEqual([
+      { kind: "link", value: "https://www.tiktok.com/@z3lkw/video/768" },
+      { kind: "image", value: "https://cdn.example.test/a.jpg" },
+      { kind: "file", value: "fil_00000000000000000000000002" },
+    ]);
+    expect(referencesOf({ answers: [] })).toEqual([]);
+  });
+
+  /**
+   * The card is what turns the answer into something the crew can work from, and its two blockers
+   * are what make the answer reach the channel's voice and look rather than just sitting in the
+   * context. It must NOT be blocked itself, and it must NOT ask the operator anything: `ask_operator`
+   * parks the session, and two cards wait behind this one.
+   */
+  it("is studied once on day one, before the cards that decide how the channel sounds and looks", () => {
+    const tasks = TEMPLATES.faceless.tasks;
+    const study = tasks.find((one) => one.key === "reference-study")!;
+    expect(study.assignee).toBe("scriptwriter");
+    expect(study.blocked_by ?? []).toEqual([]);
+    expect(study.body).not.toMatch(/ask_operator/);
+    // Both halves: what to do with a reference, and what to do with none.
+    expect(study.body).toMatch(/If it names no reference/);
+    expect(study.body).toMatch(/reference teardown/);
+    // *** IT LOOKS, RATHER THAN READING ABOUT. *** This card named `clip_video` — a CLIPPING tool
+    // whose output is transcript-derived text — and the crew planned the wrong genre from a
+    // caption (ADR-0758). The tool that actually opens a picture is `view_image`, and the card
+    // must say what to do when there is nothing to open rather than guessing confidently.
+    expect(study.body).toMatch(/view_image/);
+    expect(study.body).not.toMatch(/clip_video/);
+    expect(study.body).toMatch(/saw no frames/);
+    for (const key of ["hook-style", "look"]) {
+      expect(tasks.find((one) => one.key === key)!.blocked_by, key).toContain("reference-study");
+    }
+    // And the seat that studies it holds the tool that can actually look at one.
+    const writer = TEMPLATES.faceless.agents.find((a) => a.name === "scriptwriter")!;
+    expect(writer.tools?.configs["view_image"]).toMatchObject({ enabled: true });
+    // No other faceless seat is granted it: it is a day-one cost, not a standing one.
+    for (const agent of TEMPLATES.faceless.agents.filter((a) => a.name !== "scriptwriter")) {
+      expect(agent.tools?.configs["view_image"]?.enabled ?? false, agent.name).not.toBe(true);
+    }
+    // And every seat holds the browser, so the study can open a channel page and look at it —
+    // `templates.test.ts` holds all ten of them to `allow`.
+    for (const agent of TEMPLATES.faceless.agents) {
+      expect(agent.tools?.configs["browser"], agent.name).toMatchObject({ enabled: true, permission: "allow" });
+    }
+  });
 });

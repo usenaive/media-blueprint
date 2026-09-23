@@ -13,6 +13,11 @@ import type { Post, VideoProject } from "../data";
 import { Approvals, postIdOf } from "./Approvals";
 import { POLL_EVERY, REVISION_SPEND, Studio, elapsed, versionsOf, type StudioData } from "./Studio";
 import { FACELESS_PROJECT_SEEDS } from "../../seed/projects";
+import { ONE_RENDER_MICRO_USD } from "../../templates/template";
+
+/** What the screen prints a re-render costs, derived from the same measured figure it reads,
+ * so re-measuring the render cost cannot leave this asserting a price nothing charges. */
+const renderCost = (ONE_RENDER_MICRO_USD / 1_000_000).toFixed(2);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -215,6 +220,27 @@ describe("the Studio", () => {
     expect(host.textContent).toContain("rendered");
   });
 
+  /**
+   * The Studio draws a plan through the Projects list's own `PlanHead`, which is why that block
+   * lives there: the operator who opens a plan in the Studio to judge it has to see the same
+   * opening frame, and the same discarded hooks, as the one deciding it from the list.
+   */
+  it("carries the reference stills and the hooks that lost onto the Plan tab", async () => {
+    const project: VideoProject = {
+      ...rendered,
+      rejectedHooks: ["Nobody keeps these — too flat, it concedes the point in the first word."],
+      referenceFrames: ["https://cdn.example.test/tablets.jpg"],
+    };
+    await mount(wire(() => json({ ...studio, project })));
+
+    await click("Plan");
+    expect(host.querySelector("img")?.getAttribute("src")).toBe(project.referenceFrames![0]);
+    expect(host.querySelector(".chip-chosen")?.textContent).toBe("Opening frame");
+    const folded = host.querySelector<HTMLDetailsElement>("details")!;
+    expect(folded.open).toBe(false);
+    expect(folded.textContent).toContain(project.rejectedHooks![0]!);
+  });
+
   it("approves the post through PATCH, as the queue does, and the controls go away", async () => {
     const fetchMock = wire(
       () => json(studio),
@@ -384,7 +410,7 @@ describe("the Studio", () => {
    * *** THE PRICE, SAID BEFORE IT IS SPENT. ***
    *
    * A note on a rendered plan buys a whole second cut of a video that was paid for once already
-   * (`ONE_RENDER_MICRO_USD`, ~$3.32 measured). It used to leave on one Enter, with no price
+   * (`ONE_RENDER_MICRO_USD`, measured). It used to leave on one Enter, with no price
    * anywhere on the screen. Enter arms the spend instead of making it, and the press that spends
    * names the money.
    */
@@ -395,7 +421,7 @@ describe("the Studio", () => {
     );
     await mount(fetchMock);
     const sends = () => fetchMock.mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === "POST");
-    expect(host.textContent).not.toContain("about $3.32");
+    expect(host.textContent).not.toContain(`about $${renderCost}`);
 
     await write("Make scene 2 dusk");
     await click("Send");
@@ -403,7 +429,7 @@ describe("the Studio", () => {
     // Pressed again — a hand that slams Enter twice does not buy a render either.
     await click("Send");
     expect(sends()).toHaveLength(0);
-    expect(host.textContent).toContain("about $3.32");
+    expect(host.textContent).toContain(`about $${renderCost}`);
     expect(host.querySelector("textarea")!.value).toBe("Make scene 2 dusk");
     expect(host.querySelectorAll(".bubble-you").length).toBe(0);
 

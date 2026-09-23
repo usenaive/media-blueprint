@@ -8,7 +8,7 @@
  *
  * The blueprint is the machine — the screens, `/api/*`, `/mcp`, the store, the approval flow — and
  * it is shared by every template it carries. The template is data: the crew and its prompts, the
- * tool allow-lists, the post kinds, the three setup questions and the words the queue prints
+ * tool allow-lists, the post kinds, the setup questions and the words the queue prints
  * (`templates/`). Switching template is an edit of `ACTIVE` in `templates/index.ts` plus
  * `naive up`, on the same clone and the same app.
  *
@@ -59,17 +59,20 @@ export const declaration = {
   templates,
 
   /**
-   * The three things the studio asks before anything is provisioned (`canonical-spec §7.1`): what
-   * the channel is about, WHERE IT POSTS, and how often. The answers land on the install and reach
-   * every agent through the built-in `project_context` tool (§31.8) — there is no other place they
-   * are asked, which is why the dashboard has no onboarding screen of its own.
+   * What the studio asks before anything is provisioned (`canonical-spec §7.1`): what the channel
+   * is about, WHERE IT POSTS, how often, and — on `faceless` — what to model it on. The answers
+   * land on the install and reach every agent through the built-in `project_context` tool (§31.8)
+   * — there is no other place they are asked, which is why the dashboard has no onboarding screen
+   * of its own.
    *
-   * The engine refuses a fourth, and it is not a style rule — `parseProject` in
-   * `@usenaive-sdk/blueprints@0.4.0` throws "a template asks at most 3 before anything is
-   * provisioned" for any project that names a template, which this one always does. So the middle
-   * slot is spent on the network deliberately: a channel that does not know where it posts fills a
-   * queue nothing can publish, while the question it displaced is asked by the channel manager in
-   * its first session (`templates/template.ts`, `channelManager`).
+   * The cap is the engine's and not a style rule — `parseProject` in
+   * `@usenaive-sdk/blueprints@0.7.0` throws "a template asks at most 4 before anything is
+   * provisioned" for any project that names a template, which this one always does. Three of the
+   * four are required, so the middle slot is spent on the network deliberately: a channel that does
+   * not know where it posts fills a queue nothing can publish, while the question it displaced is
+   * asked by the channel manager in its first session (`templates/template.ts`, `channelManager`).
+   * The fourth is `faceless`'s reference, and it is allowed to exist only because it is optional
+   * (ADR-0757): an install that leaves it blank is the install this template had before it.
    */
   questions: ACTIVE.questions,
 
@@ -85,7 +88,7 @@ export const declaration = {
    * *** IT IS THE RUNNING TEMPLATE'S, AND ONLY THE RUNNING TEMPLATE'S. *** `templates` above hands
    * `up` both crews so the switch can widen rather than narrow, but `tasks` is the project's own
    * field and the engine folds no template's into it — so this line is what carries them, exactly
-   * as `questions` above carries the running template's three. A switch of `ACTIVE` re-applies with
+   * as `questions` above carries the running template's own. A switch of `ACTIVE` re-applies with
    * the new crew's cards; the old crew's, already on the board, are left where they are, which is
    * the same rule as its agents.
    *

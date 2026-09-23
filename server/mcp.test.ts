@@ -2,9 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authError, handleMcp, TOOLS } from "./mcp";
+import { authError, handleMcp, scenesPrompt, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { TEMPLATES } from "../templates/index.ts";
+import { VIDEO_MODELS } from "../templates/template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 
 const dirs: string[] = [];
@@ -23,6 +24,21 @@ const rpc = (method: string, params?: unknown, id = 1) => JSON.stringify({ jsonr
 const call = (name: string, args: Record<string, unknown>) => rpc("tools/call", { name, arguments: args });
 type CallResult = { result: { content: { text: string }[]; isError?: boolean } };
 const text = <T>(answer: object): T => JSON.parse((answer as CallResult).result.content[0]!.text) as T;
+
+/**
+ * The smallest generation plan `create_project` accepts, for the tests that are about something
+ * else. Two things make it the smallest: a `hook`, which a plan is now refused without, and shots
+ * whose seconds land inside the format (`MIN_SECONDS`..`MAX_SECONDS`) — the scenes ARE the render,
+ * so their sum is the video's length and is checked when the plan is filed rather than discovered
+ * on the bill.
+ */
+const PLAN = {
+  hook: "He slept on the floor on purpose.",
+  scenes: [
+    { prompt: "A bare stone floor at dawn", seconds: 8, beat: "hook" },
+    { prompt: "A hand pushing a mattress away", seconds: 10, beat: "turn" },
+  ],
+};
 
 describe("mcp auth", () => {
   it("refuses every request with a JSON-RPC error when no token was injected", () => {
@@ -327,7 +343,7 @@ describe("mcp tools", () => {
    * `expected_stage` guarded the START of the render and nothing guarded its end: no field recorded
    * that a render had been bought. So the manager's 08:00 sweep, putting a claim a dead session left
    * at `rendering` back to `scripted`, was an instruction to render the same piece a second time —
-   * ~$3.32 (`ONE_RENDER_MICRO_USD`) of video the channel already owns — and a producer whose stale
+   * ~$9.00 (`ONE_RENDER_MICRO_USD`) of video the channel already owns — and a producer whose stale
    * completion write landed unguarded overwrote the render that replaced it.
    *
    * The media on the row is the receipt. A row that carries one cannot go back to a stage before
@@ -400,30 +416,60 @@ describe("mcp tools", () => {
       (await handleMcp(call("create_post", { caption: "Why the Stoics slept on the floor", agent: "trend-scout", stage: "brief" }), store, null))!,
     );
     const scenes = [
-      { prompt: "A bare stone floor at dawn, one thin blanket", seconds: 4, voiceover: "Seneca slept on the floor on purpose.", text: "on purpose" },
-      { prompt: "A hand pushing a soft mattress away", seconds: 5, voiceover: "Comfort, he said, is the thing you should fear.", model: "bytedance/seedance-2.5" },
+      { prompt: "A bare stone floor at dawn, one thin blanket", seconds: 6, beat: "hook", voiceover: "Seneca slept on the floor on purpose.", text: "on purpose" },
+      { prompt: "A hand pushing a soft mattress away", seconds: 12, beat: "turn", voiceover: "Comfort, he said, is the thing you should fear.", model: "bytedance/seedance-2.5" },
     ];
     const plan = text<{ id: string; kind: string; status: string; statusAt: string; postId?: string; model?: string; platform: string; scenes: unknown[]; agent?: string }>(
       (await handleMcp(call("create_project", {
         kind: "generation", post_id: brief.id, agent: "scriptwriter", title: "Sleep on the floor", brief: "Comfort is the trap.",
         style_template: "Sunlit stoic", scenes, caption: "Seneca slept on the floor. #stoicism",
+        hook: "Seneca slept on the floor on purpose.",
+        rejected_hooks: ["The richest man in Rome owned one blanket.", " "],
+        retention: "The mattress shove at 0:06 is the visual turn; the reason lands at 0:12.",
+        cta: "Read Letter 18.",
+        facts: [{ claim: "Seneca practised poverty a few days a month", source: "Letters to Lucilius, 18" }],
+        sound: { music: "Low drone, no drop", voice: "Unhurried, close-mic", sfx: ["Cloth shove on the mattress", ""] },
+        reference_pattern: "cold open on the object",
       }), store, null))!,
     );
-    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: "google/veo-3.1", agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
+    // The model a plan takes when it names none is the FIRST pin, derived rather than spelled: the
+    // default moved to Seedance 2.5 and a test naming the old one would have gone on passing while
+    // every plan rendered with something else.
+    expect(plan).toMatchObject({ kind: "generation", status: "planned", postId: brief.id, model: VIDEO_MODELS[0], agent: "scriptwriter", platform: TEMPLATES.faceless.platform });
     expect(plan.id).toBe(brief.id);
     expect(plan.statusAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(plan.scenes).toEqual(scenes);
-    expect(store.read().posts.find((p) => p.id === brief.id)).toMatchObject({ stage: "scripted", projectId: plan.id });
-    expect(text<{ id: string }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!).id).toBe(plan.id);
+    // The whole plan, not just its shots: every field the writer was briefed to fill lands on the
+    // row, and the blank lines it may have sent are dropped rather than stored as empty strings.
+    expect(plan).toMatchObject({
+      hook: "Seneca slept on the floor on purpose.",
+      rejectedHooks: ["The richest man in Rome owned one blanket."],
+      retention: "The mattress shove at 0:06 is the visual turn; the reason lands at 0:12.",
+      cta: "Read Letter 18.",
+      facts: [{ claim: "Seneca practised poverty a few days a month", source: "Letters to Lucilius, 18" }],
+      sound: { music: "Low drone, no drop", voice: "Unhurried, close-mic", sfx: ["Cloth shove on the mattress"] },
+      referencePattern: "cold open on the object",
+    });
+    // `get_project` hands the renderer the prompt the shots compile to and their sum, so no seat
+    // has to compose one out of prose — and cannot drop a shot while summarising.
+    const read = text<{ id: string; render_prompt: string; render_seconds: number }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!);
+    expect(read.id).toBe(plan.id);
+    expect(read.render_seconds).toBe(18);
+    expect(read.render_prompt).toContain("18 seconds in total, 2 shots in order");
+    expect(read.render_prompt).toContain("Shot 1 (hook), 6s: A bare stone floor at dawn, one thin blanket");
+    expect(read.render_prompt).toContain('On-screen text: "on purpose".');
+    expect(read.render_prompt).toContain("Shot 2 (turn), 12s:");
+    expect(read.render_prompt).toContain("Look: Sunlit stoic");
+    expect(read.render_prompt).toContain("Narration voice: Unhurried, close-mic");
     expect(text<{ id: string }[]>((await handleMcp(call("list_projects", { status: "planned", kind: "generation" }), store, null))!).map((p) => p.id)).toContain(plan.id);
     expect(text<{ id: string }[]>((await handleMcp(call("list_projects", { kind: "clipping" }), store, null))!).map((p) => p.id)).not.toContain(plan.id);
 
     // One plan per brief, and none on a row that is already rendered.
-    const second = (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Again", brief: "x", scenes }), store, null)) as CallResult;
+    const second = (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Again", brief: "x", hook: "h", scenes }), store, null)) as CallResult;
     expect(second.result.isError).toBe(true);
     expect(second.result.content[0]!.text).toMatch(/already has a plan/);
     const rendered = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Done", media_url: "https://cdn.example/d.mp4" }), store, null))!);
-    const onRendered = (await handleMcp(call("create_project", { kind: "generation", post_id: rendered.id, title: "Again", brief: "x", scenes }), store, null)) as CallResult;
+    const onRendered = (await handleMcp(call("create_project", { kind: "generation", post_id: rendered.id, title: "Again", brief: "x", hook: "h", scenes }), store, null)) as CallResult;
     expect(onRendered.result.content[0]!.text).toMatch(/already has media attached/);
   });
 
@@ -444,8 +490,152 @@ describe("mcp tools", () => {
     expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 3 }], model: "openai/sora" })).toMatch(/model must be one of/);
     expect(await refused({ kind: "clipping", title: "t", brief: "b", sources: [{ url: "ftp://x", reason: "r" }] })).toMatch(/sources\[0\]\.url must be an http\(s\) URL/);
     expect(await refused({ kind: "clipping", title: "t", brief: "b", sources: [{ url: "https://youtu.be/x" }] })).toMatch(/sources\[0\]\.reason/);
-    expect(await refused({ kind: "generation", post_id: "post_nope", title: "t", brief: "b", scenes: [{ prompt: "p", seconds: 3 }] })).toMatch(/no such post/);
+    expect(await refused({ kind: "generation", post_id: "post_nope", title: "t", brief: "b", ...PLAN })).toMatch(/no such post/);
     expect(store.read().projects).toHaveLength(before);
+  });
+
+  /**
+   * *** WHAT HAPPENS TO A PLAN WRITTEN BEFORE ANY OF THIS — the backward-compatibility contract. ***
+   *
+   * An install that upgrades carries plans with no `hook`, no `beat`, none of the seven new fields,
+   * the old default model, and — because the old prompts demanded "under fifteen seconds in all" —
+   * a scene list that is now BELOW the format's floor. All of it must keep working, because the
+   * alternative is an upgrade that strands a queue.
+   *
+   * It does, with exactly one deliberate exception, pinned at the bottom: RE-WRITING a legacy plan's
+   * scenes is refused, because the length check runs on the write. That is the right answer rather
+   * than a grandfather clause — the channel's format is 15–30s now, so a piece being re-cut should
+   * come out conforming — but it is a behaviour change and it belongs in a test rather than in
+   * somebody's afternoon. The refusal names the remedy ("re-cut the shots"), and every patch that
+   * does NOT touch scenes — the 08:00 sweep's caption and status fixes, the claim, the finish — is
+   * untouched, which is what keeps a live queue moving through the upgrade.
+   */
+  it("keeps a plan written before any of this readable, patchable, claimable and renderable", async () => {
+    const store = freshStore();
+    const legacy = {
+      id: "proj_old1", kind: "generation" as const, status: "planned" as const,
+      statusAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+      title: "Legacy 9s plan", brief: "written before any of this", platform: "youtube" as const,
+      styleTemplate: "Marble & ink", model: "google/veo-3.1",
+      scenes: [{ prompt: "a bust", seconds: 4 }, { prompt: "a table", seconds: 5 }],
+      caption: "old caption", sessions: [],
+    };
+    store.read().projects.push(legacy);
+
+    const read = text<Record<string, unknown>>((await handleMcp(call("get_project", { id: legacy.id }), store, null))!);
+    expect(read.title).toBe("Legacy 9s plan");
+    // Its model is preserved rather than rewritten to the new default, and nothing is invented on it.
+    expect(read.model).toBe("google/veo-3.1");
+    for (const added of ["hook", "retention", "cta", "facts", "sound", "referenceFrames", "referencePattern"]) {
+      expect(read[added], added).toBeUndefined();
+    }
+    expect((read.scenes as { beat?: string }[]).every((one) => one.beat === undefined)).toBe(true);
+    // A prompt is still compiled for it, at its own length — the read does not enforce the format.
+    expect(read.render_seconds).toBe(9);
+    expect(read.render_prompt).toContain("9 seconds in total, 2 shots in order");
+
+    // Every patch that does not touch scenes still applies: this is the daily sweep and the claim.
+    const swept = text<{ caption: string }>((await handleMcp(call("update_project", { id: legacy.id, caption: "fixed by the sweep" }), store, null))!);
+    expect(swept.caption).toBe("fixed by the sweep");
+    const claimed = text<{ status: string }>((await handleMcp(call("update_project", { id: legacy.id, status: "rendering", expected_status: "planned" }), store, null))!);
+    expect(claimed.status).toBe("rendering");
+    const done = text<{ status: string }>((await handleMcp(call("update_project", {
+      id: legacy.id, status: "rendered", expected_status: "rendering", media_url: "https://cdn.example.test/old.mp4", agent: "producer",
+    }), store, null))!);
+    expect(done.status).toBe("rendered");
+
+    // THE ONE EXCEPTION, and it is deliberate: re-cutting it must bring it into the format.
+    store.openRevision(legacy.id, "ses_rev", "tighten it");
+    const reWritten = (await handleMcp(call("update_project", { id: legacy.id, scenes: legacy.scenes }), store, null)) as CallResult;
+    expect(reWritten.result.isError).toBe(true);
+    expect(reWritten.result.content[0]!.text).toMatch(/the scenes run 9s in all[\s\S]*Re-cut the shots/);
+  });
+
+  /**
+   * §16.2 / ADR-0758: a plan may name the stills it is rendered AGAINST, and `get_project` hands
+   * them to the renderer beside the prompt. Describing a reference in words and hoping the model
+   * rebuilds it is the lossy path; the provider takes reference images directly, so the seat's
+   * instruction stays "render exactly what get_project gave you" and the decision stays on the plan.
+   */
+  it("carries a plan's reference stills through to the renderer's read", async () => {
+    const store = freshStore();
+    const filed = text<{ id: string }>((await handleMcp(call("create_project", {
+      kind: "generation", title: "t", brief: "b", ...PLAN,
+      reference_frames: ["fil_00000000000000000000000001", "https://cdn.example.test/still.jpg", "  "],
+    }), store, null))!);
+    // Blanks are dropped rather than stored, exactly as every other list field on a plan.
+    const read = text<{ referenceFrames: string[]; render_reference_images: string[] }>(
+      (await handleMcp(call("get_project", { id: filed.id }), store, null))!,
+    );
+    expect(read.referenceFrames).toEqual(["fil_00000000000000000000000001", "https://cdn.example.test/still.jpg"]);
+    expect(read.render_reference_images).toEqual(read.referenceFrames);
+
+    // A plan that names none carries no key at all — the renderer must not be handed an empty list
+    // and left to wonder whether the reference was dropped or never given.
+    const bare = text<{ id: string }>((await handleMcp(call("create_project", { kind: "generation", title: "t", brief: "b", ...PLAN }), store, null))!);
+    const plain = text<Record<string, unknown>>((await handleMcp(call("get_project", { id: bare.id }), store, null))!);
+    expect("render_reference_images" in plain).toBe(false);
+  });
+
+  /**
+   * *** PUNCTUATION IS CONTENT IN A RENDER PROMPT, AND THIS WAS FOUND BY RUNNING IT. ***
+   *
+   * The unit tests asserted the prompt CONTAINED each shot and passed while the real output read
+   * "…candlelight On-screen text:" — two clauses run together — and closed a question with a full
+   * stop: `Voiceover: "…afraid of?".`. A planner's field is a phrase, not a sentence: `prompt`
+   * arrives without a full stop and a `voiceover` usually arrives with one. The model reads this
+   * as prose, so both are fixed at the join and held here.
+   */
+  it("punctuates the compiled prompt: one stop per clause, and never two", () => {
+    const prompt = scenesPrompt({
+      styleTemplate: "Marble & ink",
+      sound: { music: "Low drone, no drop", voice: "Unhurried", sfx: ["Bowl on stone"] },
+      scenes: [
+        { prompt: "A marble bust, candlelight", seconds: 15, beat: "hook", text: "Rehearse losing it all.", voiceover: "Is this what I was afraid of?" },
+      ],
+    });
+    // The shot's phrase gains the stop it did not carry, before the next clause begins.
+    expect(prompt).toContain('Shot 1 (hook), 15s: A marble bust, candlelight. On-screen text:');
+    // Text and voiceover already end in punctuation, so nothing is added after the quote.
+    expect(prompt).toContain('On-screen text: "Rehearse losing it all." Voiceover: "Is this what I was afraid of?"');
+    // Nowhere does a quote close onto a second stop, or a stop double up.
+    expect(prompt).not.toMatch(/"\.|\.\.(?!\.)|\?\.|!\./);
+    // A phrase with no punctuation of its own still gets exactly one.
+    expect(prompt).toContain("Music: Low drone, no drop.");
+    expect(prompt).toContain("Narration voice: Unhurried.");
+    expect(prompt).toContain("Sound design: Bowl on stone.");
+  });
+
+  /**
+   * *** THE LENGTH AND THE HOOK ARE REFUSED HERE, WHERE A REFUSAL IS STILL FREE. ***
+   *
+   * Both used to be words in a prompt — "under fifteen seconds in all", "hook in the first scene" —
+   * and a prompt is a request. A plan that ran to fifty seconds was filed, queued, rendered, and the
+   * first sign of it was the bill; a plan with no hook was simply a plan with no hook, and nothing
+   * anywhere could tell. The scenes ARE the render, so their sum is the video's length, and the one
+   * place that fact can be enforced is the write that files it.
+   */
+  it("refuses a plan outside the format's length, and a generation plan with no hook", async () => {
+    const store = freshStore();
+    const refused = async (args: Record<string, unknown>) => {
+      const answer = (await handleMcp(call("create_project", args), store, null)) as CallResult;
+      expect(answer.result.isError).toBe(true);
+      return answer.result.content[0]!.text;
+    };
+    const shots = (...seconds: number[]) => seconds.map((s) => ({ prompt: "p", seconds: s }));
+    expect(await refused({ kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(4, 5) })).toMatch(
+      /the scenes run 9s in all, and a piece on this channel is between 15 and 30 seconds/,
+    );
+    expect(await refused({ kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(20, 20) })).toMatch(/run 40s in all/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: shots(20) })).toMatch(/generation plan needs a hook/);
+    // The bounds are inclusive at both ends, and one scene is a legal piece: ">= 1 scene", not ">1".
+    for (const seconds of [15, 30]) {
+      const ok = (await handleMcp(call("create_project", { kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(seconds) }), store, null)) as CallResult;
+      expect(ok.result.isError).toBeUndefined();
+    }
+    // A clipping plan is cut, not generated, so the generation rules do not reach it.
+    const cut = (await handleMcp(call("create_project", { kind: "clipping", title: "t", brief: "b", sources: [{ url: "https://youtu.be/x", reason: "r" }] }), store, null)) as CallResult;
+    expect(cut.result.isError).toBeUndefined();
   });
 
   /**
@@ -510,7 +700,7 @@ describe("mcp tools", () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
     const plan = text<{ id: string }>(
-      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }], caption: "Final caption. #stoicism" }), store, null))!,
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", ...PLAN, caption: "Final caption. #stoicism" }), store, null))!,
     );
     const row = () => store.read().posts.find((p) => p.id === brief.id);
     await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
@@ -524,18 +714,81 @@ describe("mcp tools", () => {
     expect(store.read().posts).toHaveLength(posts);
     expect(row()).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "https://cdn.example/floor.mp4", caption: "Final caption. #stoicism", title: "Final caption. #stoicism", agent: "producer", projectId: plan.id });
     // A dropped plan can only come back to planned.
-    const dropped = text<{ id: string }>((await handleMcp(call("create_project", { kind: "generation", title: "Drop me", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!);
+    const dropped = text<{ id: string }>((await handleMcp(call("create_project", { kind: "generation", title: "Drop me", brief: "b", ...PLAN }), store, null))!);
     await handleMcp(call("update_project", { id: dropped.id, status: "dropped" }), store, null);
     const claim = (await handleMcp(call("update_project", { id: dropped.id, status: "rendering" }), store, null)) as CallResult;
     expect(claim.result.content[0]!.text).toMatch(/project is dropped; put it back to planned first/);
     expect(text<{ status: string }>((await handleMcp(call("update_project", { id: dropped.id, status: "planned" }), store, null))!).status).toBe("planned");
   });
 
+  /**
+   * *** A REVISION EDITS SHOTS, AND THE NEXT RENDER IS THE EDITED ONES. ***
+   *
+   * The operator's note is the one way a rendered plan renders again, and on a multi-shot plan the
+   * note is almost always about ONE shot — "shot 3 should be slower", "lose the text on the hook".
+   * So the loop that has to work is: edit the scenes with `update_project`, re-read, and get back a
+   * `render_prompt` built from what the plan says NOW. The prompt is derived on read for exactly
+   * this reason — one cached at render time would re-render the piece the operator asked to change.
+   *
+   * The length guard still applies to the edit: a revision that pushes the piece outside the format
+   * is refused while it is still free, not discovered on the second bill.
+   */
+  it("re-renders a revised multi-shot plan from the edited scenes, and still holds the format", async () => {
+    const store = freshStore();
+    const plan = text<{ id: string }>((await handleMcp(call("create_project", {
+      kind: "generation", title: "Four beats", brief: "b", hook: "h", style_template: "Marble & ink",
+      scenes: [
+        { beat: "hook", seconds: 5, prompt: "a marble bust, candlelight", text: "Rehearse losing it all." },
+        { beat: "setup", seconds: 6, prompt: "a bare table, one bowl" },
+        { beat: "turn", seconds: 6, prompt: "the bowl in hard side light" },
+        { beat: "payoff", seconds: 4, prompt: "the bust again, wider" },
+      ],
+    }), store, null))!);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
+    await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
+    store.openRevision(plan.id, "ses_rev", "shot 3 is too quick, and drop the on-screen text");
+
+    // The renderer applies the operator's note to the SCENES. A whole-array write, because that is
+    // what the tool takes — the seat re-sends the plan's shots with the one it was asked to change.
+    const edited = text<{ scenes: { seconds: number }[] }>((await handleMcp(call("update_project", {
+      id: plan.id,
+      scenes: [
+        { beat: "hook", seconds: 5, prompt: "a marble bust, candlelight" },
+        { beat: "setup", seconds: 6, prompt: "a bare table, one bowl" },
+        { beat: "turn", seconds: 9, prompt: "the bowl in hard side light, held longer" },
+        { beat: "payoff", seconds: 4, prompt: "the bust again, wider" },
+      ],
+    }), store, null))!);
+    expect(edited.scenes.map((one) => one.seconds)).toEqual([5, 6, 9, 4]);
+
+    // Re-read: the prompt is the EDITED piece, at its new length, with the dropped text gone.
+    const read = text<{ render_prompt: string; render_seconds: number }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!);
+    expect(read.render_seconds).toBe(24);
+    expect(read.render_prompt).toContain("24 seconds in total, 4 shots in order");
+    expect(read.render_prompt).toContain("Shot 3 (turn), 9s: the bowl in hard side light, held longer.");
+    expect(read.render_prompt).not.toContain("On-screen text");
+
+    // The second render lands and supersedes the first, and the revision is spent.
+    const done = text<{ status: string; renders: { mediaUrl: string }[] }>((await handleMcp(call("update_project", {
+      id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer",
+    }), store, null))!);
+    expect(done).toMatchObject({ status: "rendered", renders: [{ mediaUrl: "fil_v1" }] });
+    expect(done).not.toHaveProperty("revision");
+
+    // And an edit that takes the piece outside the format is refused while it is still free.
+    store.openRevision(plan.id, "ses_rev2", "make it a minute");
+    const tooLong = (await handleMcp(call("update_project", {
+      id: plan.id, scenes: [{ beat: "hook", seconds: 60, prompt: "one very long shot" }],
+    }), store, null)) as CallResult;
+    expect(tooLong.result.isError).toBe(true);
+    expect(tooLong.result.content[0]!.text).toMatch(/the scenes run 60s in all/);
+  });
+
   it("refuses the sweep's write on a plan the operator is revising: a revised plan goes forward only", async () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
     const plan = text<{ id: string }>(
-      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", ...PLAN }), store, null))!,
     );
     await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
     await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
@@ -575,7 +828,7 @@ describe("mcp tools", () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft caption", agent: "trend-scout", stage: "brief" }), store, null))!);
     const plan = text<{ id: string }>(
-      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "Floor", brief: "b", ...PLAN }), store, null))!,
     );
     await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
     await handleMcp(call("update_project", { id: plan.id, status: "rendered", expected_status: "rendering", media_url: "fil_v1", agent: "producer" }), store, null);
@@ -596,7 +849,7 @@ describe("mcp tools", () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft", agent: "trend-scout", stage: "brief" }), store, null))!);
     const plan = text<{ id: string }>(
-      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "T", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "T", brief: "b", ...PLAN }), store, null))!,
     );
     const row = () => store.read().posts.find((p) => p.id === brief.id);
     await handleMcp(call("update_project", { id: plan.id, platform: "tiktok", account: "@clips" }), store, null);
@@ -610,7 +863,7 @@ describe("mcp tools", () => {
     const store = freshStore();
     const brief = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Draft", agent: "trend-scout", stage: "brief" }), store, null))!);
     const plan = text<{ id: string }>(
-      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "T", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null))!,
+      (await handleMcp(call("create_project", { kind: "generation", post_id: brief.id, title: "T", brief: "b", ...PLAN }), store, null))!,
     );
     await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
     // The operator rejects the scripted brief before the 07:00 run lands: the plan goes with it,
@@ -626,7 +879,7 @@ describe("mcp tools", () => {
 
     const other = text<{ id: string }>((await handleMcp(call("create_post", { caption: "Other", agent: "trend-scout", stage: "brief" }), store, null))!);
     store.updatePost(other.id, { status: "rejected" });
-    const late = (await handleMcp(call("create_project", { kind: "generation", post_id: other.id, title: "T", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null)) as CallResult;
+    const late = (await handleMcp(call("create_project", { kind: "generation", post_id: other.id, title: "T", brief: "b", ...PLAN }), store, null)) as CallResult;
     expect(late.result.content[0]!.text).toMatch(/post is rejected; a plan is written on a pending or ready brief/);
     // A rendered plan stays rendered when its post is rejected: the money is spent, the record stands.
     const cut = text<{ id: string; postId: string }>(
@@ -725,7 +978,7 @@ describe("binding a plan to the session writing it", () => {
     const clip = text<{ id: string }>((await file(store, who))!);
     await handleMcp(call("update_project", { id: clip.id, status: "rendering", expected_status: "planned" }), store, null, who);
     const made = text<{ id: string }>(
-      (await handleMcp(call("create_project", { kind: "generation", agent: "scriptwriter", title: "Floor", brief: "b", scenes: [{ prompt: "p", seconds: 4 }] }), store, null, who))!,
+      (await handleMcp(call("create_project", { kind: "generation", agent: "scriptwriter", title: "Floor", brief: "b", ...PLAN }), store, null, who))!,
     );
     await handleMcp(call("update_project", { id: made.id, status: "rendering", expected_status: "planned" }), store, null, who);
     expect(asked).toEqual(["scout", "clipper", "scriptwriter", "producer"]);

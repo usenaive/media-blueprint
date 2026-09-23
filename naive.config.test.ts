@@ -59,7 +59,7 @@ describe("naive.config", () => {
   });
 
   /**
-   * Plan §2.4/§4: the engine carries `role`, `skills`, `required`, the three setup questions and —
+   * Plan §2.4/§4: the engine carries `role`, `skills`, `required`, the setup questions and —
    * since `^0.6.0` — `tasks` through `defineProject`. Read back off `project`, not the template, so
    * a downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
    *
@@ -70,9 +70,11 @@ describe("naive.config", () => {
    * empty dashboard. Reading the count off `project` is the assertion that the installed engine
    * really carries the field.
    */
-  it("hands `up` the crew's roles, skills, cards and the three setup questions", () => {
+  it("hands `up` the crew's roles, skills, cards and the running template's setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
-    expect(project.questions).toHaveLength(3);
+    // Three required, plus the optional fourth where the running template spends it (ADR-0757).
+    expect(project.questions.length).toBe(ACTIVE.questions.length);
+    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(3);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.
@@ -80,7 +82,7 @@ describe("naive.config", () => {
       expect(agent.skills?.every((skill) => skill.startsWith("naive/"))).toBe(true);
     }
     expect(project.tasks).toEqual(ACTIVE.tasks);
-    expect(project.tasks).toHaveLength(7);
+    expect(project.tasks).toHaveLength(ACTIVE.tasks.length);
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
     // The dashboard is the crew's queue and MCP endpoint: an install cannot untick it.
     expect(project.apps[0]?.required).toBe(true);

@@ -138,6 +138,31 @@ describe("a question", () => {
     expect(unanswered(question.fields, { model: "alibaba/wan-3.0" })).toEqual([]);
   });
 
+  /**
+   * *** A FIELD THAT SAID IT NEED NOT BE ANSWERED IS NOT "STILL UNANSWERED". ***
+   *
+   * `optional: true` (§7.1) is the platform's one documented way out of "every field must be
+   * answered", and this screen's own copy of `QuestionField` had no such member — so `unanswered`
+   * read every field as required and held back an answer the platform (`assertAnswers`) would have
+   * taken. An agent parking on a question with an optional field could not be answered from this
+   * dashboard at all, and nothing the operator typed into that field was an answer rather than an
+   * invention.
+   *
+   * Left blank it is ABSENT and never `""`: the platform refuses an empty string for an optional
+   * field exactly as for a required one, so the key has to leave the body altogether.
+   */
+  it("sends a question whose optional field was left blank, with that key absent rather than empty", () => {
+    const fields = [
+      { key: "model", label: "Model", type: "text" as const },
+      { key: "reference", label: "Reference to imitate", type: "text" as const, optional: true },
+    ];
+    expect(unanswered(fields, trimmed(fields, { model: "alibaba/wan-3.0" }))).toEqual([]);
+    expect(unanswered(fields, trimmed(fields, { model: "alibaba/wan-3.0", reference: "   " }))).toEqual([]);
+    expect(trimmed(fields, { model: "alibaba/wan-3.0", reference: "   " })).toEqual({ model: "alibaba/wan-3.0" });
+    // The escape is the optional field's alone: the required one beside it is refused as before.
+    expect(unanswered(fields, trimmed(fields, { model: "   ", reference: "a channel" }))).toEqual(["Model"]);
+  });
+
   it("drops a blank 'other' entry from a multi-choice, alone or beside a listed option", () => {
     // The free-text slot of a multi-select is one more array entry: `["   "]` is as unanswered as
     // `"   "`, and `["tiktok", "   "]` goes out as `["tiktok"]`. Listed options are kept verbatim.
@@ -325,6 +350,42 @@ describe("the Approvals screen", () => {
     const [url, init] = send.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/sessions/ses_q/answers");
     expect(JSON.parse(init.body as string)).toEqual({ tool_call_id: "tc_q", answers: { model: "alibaba/wan-3.0", why: "it is pinned" } });
+    expect(host.textContent).toContain("Answered. producer picks up with your answer.");
+  });
+
+  /** The same card, on the question the screen used to be unable to answer at all. */
+  it("answers a question with an optional field left blank, and says on the form which one that is", async () => {
+    const question = {
+      prompt: "I can imitate a reference if this channel has one. Which model may I render with?",
+      fields: [
+        { key: "model", label: "Model", type: "text" as const },
+        { key: "reference", label: "Reference to imitate", type: "text" as const, optional: true },
+      ],
+    };
+    const send = await mount([
+      session({
+        id: "ses_q",
+        stop_reason: "awaiting_answer",
+        pending_actions: [{ kind: "question", tool_call_id: "tc_q", name: "ask_operator", args: {}, question }],
+      }),
+    ]);
+    send.mockResolvedValueOnce(json({ id: "ses_q" }, 202));
+
+    // The operator is told which field they may skip, or they invent something to get past it.
+    expect(texts(".prop-label")).toEqual(["Question", "Your answer", "Model", "Reference to imitate· optional"]);
+
+    const model = host.querySelectorAll<HTMLInputElement>("input.input")[0]!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(model, "alibaba/wan-3.0");
+      model.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Answer");
+
+    const [url, init] = send.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/sessions/ses_q/answers");
+    // The blank optional key is absent from the body, not `""` — which the platform refuses.
+    expect(JSON.parse(init.body as string)).toEqual({ tool_call_id: "tc_q", answers: { model: "alibaba/wan-3.0" } });
     expect(host.textContent).toContain("Answered. producer picks up with your answer.");
   });
 

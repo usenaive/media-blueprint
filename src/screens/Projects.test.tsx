@@ -55,6 +55,8 @@ const click = async (label: string) => {
 const tab = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[role=tab]")).find((t) => t.textContent?.startsWith(label))!;
 const tabCount = (label: string) => Number(tab(label).querySelector("span")?.textContent);
 const labels = () => Array.from(host.querySelectorAll("dt")).map((dt) => dt.textContent);
+/** The label beside a value on a plan — what `Line` and `Section` draw, which is not a `dt`. */
+const propLabels = () => Array.from(host.querySelectorAll(".prop-label")).map((el) => el.textContent?.trim());
 const card = () => host.querySelector("section.panel")!;
 const tick = async (ms: number) => {
   await act(async () => {
@@ -87,6 +89,105 @@ describe("the Projects screen", () => {
     // Pressed once: the button is spent until the renderer's claim moves the row.
     expect(host.querySelector<HTMLButtonElement>("button.btn-primary")?.disabled).toBe(true);
     expect(host.textContent).toContain("Planned — waiting for a render");
+  });
+
+  /**
+   * *** THE WHOLE PLAN HAS TO REACH THE SCREEN, OR IT IS NOT A RICHER PLAN. ***
+   *
+   * Seven fields were added to a generation plan so the planning seat had somewhere to put a
+   * hook, a structure, a reason to keep watching and a sourced claim. An operator who cannot read
+   * them is approving the same row they were approving before, so this renders the real seed — the
+   * one `pnpm serve` shows — and asserts each one is on the page rather than only in the store.
+   */
+  it("draws the whole plan: hook, retention, close, reference, beats, facts with sources, sound", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    await mount(vi.fn().mockResolvedValue(json([planned])));
+    const text = host.textContent ?? "";
+
+    // The head of the plan — what the operator decides on before a render is paid for.
+    expect(text).toContain(planned.hook!);
+    expect(text).toContain(planned.retention!);
+    expect(text).toContain(planned.cta!);
+    expect(text).toContain(planned.referencePattern!);
+    expect(propLabels()).toEqual(expect.arrayContaining(["The piece", "Hook", "Holds them", "Close", "Reference"]));
+
+    // A claim is never shown without where it came from: an unsourced fact reads as checked.
+    const fact = planned.facts![0]!;
+    expect(text).toContain(fact.claim);
+    expect(text).toContain(fact.source);
+
+    // Sound, and the beat on every shot — what makes a shot list readable as a script.
+    expect(text).toContain(planned.sound!.music!);
+    expect(text).toContain(planned.sound!.voice!);
+    for (const scene of planned.scenes ?? []) expect(text).toContain(scene.beat!);
+
+    // And the length the format now requires, summed on the row.
+    const seconds = (planned.scenes ?? []).reduce((sum, scene) => sum + scene.seconds, 0);
+    expect(seconds).toBeGreaterThanOrEqual(15);
+    expect(seconds).toBeLessThanOrEqual(30);
+    expect(text).toContain(`${seconds}s`);
+  });
+
+  /**
+   * *** ONE OF THESE STILLS DECIDES THE OPENING FRAME OF A ~$9.00 RENDER. ***
+   *
+   * `referenceFrames` was written by `create_project`, handed to the producer as
+   * `render_reference_images`, and drawn by nothing: the operator pressing Render could not see the
+   * frame the piece would open on, or that the plan named one at all. The asymmetry is the part
+   * that has to survive onto the screen — `imageUrls[0]` is the render's `first_frame` and the rest
+   * reach nothing — because three equal thumbnails say the opposite of what the platform does.
+   */
+  it("draws the reference stills, marks only the one the render opens on, and links what is not a picture", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    const frames = ["https://cdn.example.test/bust.jpg", "fil_00000000000000000000000001", "https://example.test/mood-board"];
+    await mount(vi.fn().mockResolvedValue(json([{ ...planned, referenceFrames: frames }])));
+
+    expect(propLabels()).toEqual(expect.arrayContaining([`Reference stills${frames.length}`]));
+    // A public URL is fetched as it stands; a library id goes through the dashboard's own file
+    // proxy, and neither is passed to the video player a post's `fil_` media would use.
+    expect(Array.from(card().querySelectorAll("img")).map((img) => img.getAttribute("src"))).toEqual([
+      frames[0],
+      "/api/files/fil_00000000000000000000000001",
+    ]);
+    expect(card().querySelector(`a[href="${frames[2]}"]`)).not.toBeNull();
+    expect(card().querySelectorAll("[data-video-poster]")).toHaveLength(0);
+
+    expect(Array.from(card().querySelectorAll(".chip-chosen")).map((chip) => chip.textContent)).toEqual(["Opening frame"]);
+    expect(card().textContent).toContain("Only the first reaches this render");
+  });
+
+  /**
+   * The hooks the seat wrote and threw away, and why. It is the seat's working, asked for by name in
+   * four prompts and shown on no screen — so the operator judging the kept line had nothing to judge
+   * it against. It stays secondary: folded shut, under the hook that won, never beside it.
+   */
+  it("folds the hooks that lost under the hook that won", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    await mount(vi.fn().mockResolvedValue(json([planned])));
+
+    const folded = card().querySelector<HTMLDetailsElement>("details")!;
+    expect(folded.open).toBe(false);
+    expect(folded.querySelector("summary")?.textContent).toBe(`Hooks not kept${planned.rejectedHooks!.length}`);
+    for (const hook of planned.rejectedHooks!) expect(folded.textContent).toContain(hook);
+    // Under the kept hook in the card, not before it: the plan's answer reads first.
+    const body = card().textContent ?? "";
+    expect(body.indexOf(planned.hook!)).toBeLessThan(body.indexOf(planned.rejectedHooks![0]!));
+  });
+
+  /**
+   * The same screen, on a plan written before any of those fields existed — which is every plan on
+   * an install that upgrades. `PlanHead` and `PlanDetail` return null rather than drawing empty
+   * rows, so an old plan reads exactly as it did and nothing appears as a blank labelled line.
+   */
+  it("draws a plan from before these fields without empty rows", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    const { hook, retention, cta, referencePattern, facts, sound, rejectedHooks, ...old } = planned;
+    await mount(vi.fn().mockResolvedValue(json([{ ...old, scenes: (old.scenes ?? []).map(({ beat, ...s }) => s) }])));
+
+    expect(host.textContent).toContain(old.title);
+    expect(propLabels()).not.toEqual(expect.arrayContaining(["The piece", "Hook", "Holds them", "Close", "Reference"]));
+    expect(host.textContent).not.toContain("Facts");
+    expect(host.textContent).not.toContain("Sound");
   });
 
   it("names the clipper on a clipping plan, and shows the refusal when nobody can take it", async () => {
@@ -131,9 +232,12 @@ describe("the Projects screen", () => {
     });
     expect(card().textContent).toContain("Voiceover");
 
-    const caption = card().querySelector<HTMLDetailsElement>("details")!;
-    expect(caption.open).toBe(false);
-    expect(caption.querySelector("summary")?.textContent).toBe("Caption");
+    // Two disclosures on this plan: the hooks that lost, folded under the hook that won, and the
+    // caption at the foot of the card. Both are closed — the card's default reading is the plan.
+    const folded = Array.from(card().querySelectorAll<HTMLDetailsElement>("details"));
+    expect(folded.map((d) => d.querySelector("summary")?.textContent)).toEqual(["Hooks not kept1", "Caption"]);
+    expect(folded.every((d) => !d.open)).toBe(true);
+    const caption = folded[folded.length - 1]!;
     // Every label inside the card is the same micro label; the eyebrow is for the page's sections.
     expect(caption.querySelector("summary")?.className).toContain("prop-label");
     expect(card().querySelector(".eyebrow")).toBeNull();
@@ -194,7 +298,7 @@ describe("the Projects screen", () => {
     await act(async () => tab("Rendered").click());
     expect(card().querySelector(".chip-credit")?.textContent).toBe("Rendered");
     expect(card().querySelector("a[href='/posts']")?.textContent).toBe("post_9f2a");
-    expect(studio()?.getAttribute("href")).toBe("/studio/post_9f2a");
+    expect(studio()?.getAttribute("href")).toBe("/studio/proj_9f2a");
     await act(async () => tab("Dropped").click());
     expect(card().querySelector(".chip-fail")?.textContent).toBe("Dropped");
     expect(buttons()).toContain("Restore");

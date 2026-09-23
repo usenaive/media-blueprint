@@ -8,7 +8,7 @@ import { Clamp, Facts, MediaPreview, PlatformChip, StatusChip, ago, clock, usd }
 import type { Post, VideoProject } from "../data";
 import { sessionState } from "./Chat";
 import { moveBody } from "./Posts";
-import { ProjectStatusChip, Scenes, Section, Sources, rangeOf, total } from "./Projects";
+import { PlanDetail, PlanHead, ProjectStatusChip, Scenes, Section, Sources, rangeOf, total } from "./Projects";
 import { ONE_RENDER_MICRO_USD, RENDERER } from "../../templates/template";
 
 export interface StudioSession {
@@ -80,7 +80,7 @@ export const voiceOf = (project: VideoProject | null): { seat: string; placehold
 
 /**
  * WHAT A RE-RENDER COSTS, SAID BEFORE IT IS SPENT. A note on a rendered plan renders it again at
- * `ONE_RENDER_MICRO_USD` (~$3.32, measured — `templates/template.ts`), on a video that was paid for
+ * `ONE_RENDER_MICRO_USD` (~$9.00, measured per second — `templates/template.ts`), on a video that was paid for
  * once already. So Enter arms the spend rather than making it, and this is the press that spends;
  * every other note in this Studio — a plan's words, a render already out — costs nothing and sends
  * on Enter as before.
@@ -194,6 +194,7 @@ function PlanTab({ project }: { project: VideoProject }) {
       <Section label="Brief">
         <Clamp text={project.brief} lines={3} />
       </Section>
+      <PlanHead project={project} />
       {project.kind === "generation" && project.scenes !== undefined && project.scenes.length > 0 ? (
         <Section label="Scenes" count={project.scenes.length}>
           <Scenes scenes={project.scenes} />
@@ -204,6 +205,7 @@ function PlanTab({ project }: { project: VideoProject }) {
           <Sources sources={sources} />
         </Section>
       ) : null}
+      <PlanDetail project={project} />
       {project.caption ? (
         <details className="group">
           <summary className="prop-label flex cursor-pointer select-none items-center gap-1.5">

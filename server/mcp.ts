@@ -14,9 +14,9 @@ import { channelPlatform, channelPlatforms } from "./channel.ts";
 import { notActivated, proxyFetch, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
-import { PROJECT_KINDS, PROJECT_STATUSES, type ClipSource, type ProjectKind, type ProjectSession, type ProjectStatus, type Scene } from "../seed/projects.ts";
+import { PROJECT_KINDS, PROJECT_STATUSES, SCENE_BEATS, type ClipSource, type Fact, type ProjectKind, type ProjectSession, type ProjectStatus, type Scene, type Sound } from "../seed/projects.ts";
 import { ACTIVE } from "../templates/index.ts";
-import { labelOf, RENDERER, VIDEO_MODELS } from "../templates/template.ts";
+import { labelOf, LENGTH_PHRASE, MAX_SECONDS, MIN_SECONDS, RENDERER, VIDEO_MODELS } from "../templates/template.ts";
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -73,7 +73,9 @@ const obj = (props: Record<string, unknown>, required: string[]) =>
   ({ type: "object", properties: props, required }) as const;
 const str = (description: string) => ({ type: "string", description }) as const;
 const num = (description: string) => ({ type: "number", description }) as const;
-const arr = (description: string, items: ReturnType<typeof obj>) => ({ type: "array", description, items }) as const;
+/** `items` is an object schema for a list of rows, or `{ type: "string" }` for a list of lines. */
+const arr = (description: string, items: ReturnType<typeof obj> | { type: "string" }) =>
+  ({ type: "array", description, items }) as const;
 
 const OPERATOR_ONLY = "Approving, rejecting and publishing are operator actions on the dashboard; no tool does them.";
 
@@ -115,10 +117,24 @@ const DEAD_CLAIM_MS = 86_400_000;
 const SCENE = obj({
   prompt: str("What the frame shows — the prompt generate_video renders, written inside the style template's look"),
   seconds: num("Running time of the shot, in seconds"),
+  beat: str(`Which beat of the script this shot is doing: ${SCENE_BEATS.join("|")}. A piece runs them in that order; two beats may share a shot, one beat never spans two.`),
   voiceover: str("The narration said over it, as text. No narrator voices exist yet, so this is the line a voice will read."),
   text: str("Text on the frame — the hook, on the first scene"),
   model: str(`A video model for this shot when it differs from the project's: ${VIDEO_MODELS.join("|")}`),
 }, ["prompt", "seconds"]);
+
+/** One checkable claim of a generation plan, as the tool takes it. */
+const FACT = obj({
+  claim: str("The claim the script makes, in one line"),
+  source: str("Where it came from — a URL, or the named work. A claim you could not source belongs out of the script."),
+}, ["claim", "source"]);
+
+/** How the piece sounds, as the tool takes it. */
+const SOUND = obj({
+  music: str("The music bed: genre, tempo, where it drops"),
+  voice: str("Who the narration sounds like: person, pace, register"),
+  sfx: arr("Sound design moments worth naming, in scene order", { type: "string" }),
+}, []);
 
 /** One source of a clipping plan, as the tool takes it. */
 const SOURCE = obj({
@@ -131,14 +147,22 @@ const SOURCE = obj({
 /** The plan's own fields, shared by `create_project` and `update_project`. */
 const PLAN_FIELDS = {
   title: str("The piece, in a line"),
-  brief: str("The reasoning: the idea, why now, the hook direction — what the render is for. The operator reads this before anything is spent."),
+  brief: str("The reasoning: the idea, why now, why this audience — what the render is for. The operator reads this before anything is spent."),
   platform: str(`Where the piece is for: ${POST_PLATFORMS.join("|")}. Defaults to the brief row's network, else the channel's own.`),
   account: str("The connected account it is for, from list_accounts"),
   style_template: str("generation: the style template the scenes are written in, by name (list_style_templates)"),
   model: str(`generation: the video model the scenes render in, one of ${VIDEO_MODELS.join("|")}. Defaults to the first.`),
-  scenes: arr("generation: the shots in order — prompt, seconds, voiceover, on-screen text. Required for a generation plan; keep the total under fifteen seconds.", SCENE),
+  scenes: arr(`generation: the shots in order — prompt, seconds, beat, voiceover, on-screen text. Required for a generation plan. The seconds must sum to ${LENGTH_PHRASE}, and the shots are rendered as ONE video, not joined: nothing here cuts between them, so the sum is what generate_video is asked for and each prompt is a shot inside that one generation.`, SCENE),
   sources: arr("clipping: the source videos and the moment in each — url, from, to, reason. Required for a clipping plan.", SOURCE),
   caption: str("The publishable caption, hashtags included; it goes on the post when the render lands"),
+  hook: str("generation: the first line of the piece, verbatim — what is said and what is on the frame at 0:00. It is the one line that decides whether the rest is watched."),
+  rejected_hooks: arr("generation: the hooks you wrote and did not keep, and why the kept one beat them", { type: "string" }),
+  retention: str("generation: what holds the viewer past 0:03, and past 0:07. A piece with no answer here ends at 0:03."),
+  cta: str("generation: the one action the close asks for. One, not three."),
+  facts: arr("generation: the checkable claims the script rests on, each with where it came from. A claim you could not source belongs out of the script rather than in it unsourced.", FACT),
+  sound: SOUND,
+  reference_pattern: str("Which pattern of this channel's reference teardown the piece is an instance of. Leave unset when the context names no reference."),
+  reference_frames: arr("The stills this piece is rendered against, as PUBLIC image URLs — not fil_ ids, which generate_video cannot fetch. The FIRST is used as the opening frame of the render, so choose one that is the shot you want to open on; the rest are carried for the operator and for a later render that can take more. A fil_ id is for LOOKING at with view_image, which is a different job.", { type: "string" }),
 };
 
 export const toolsFor = (channels: readonly PostPlatform[]) => [
@@ -168,7 +192,7 @@ export const toolsFor = (channels: readonly PostPlatform[]) => [
     kind: str(`Optional filter: ${PROJECT_KINDS.join("|")}`),
   }, []) },
   { name: "get_project", description: "One video project by id, with its scenes or sources in full.", inputSchema: obj({ id: str("Project id (proj_…)") }, ["id"]) },
-  { name: "create_project", description: `Write the plan a video is made from, before anyone spends on it. A generation plan is the scenes, the style template and the model the producer renders with; a clipping plan is the source videos, the moments in them and why each one. Name the brief row it was written from as post_id and that row moves to scripted with the plan on it; a plan with no row gets its post when the render lands. Sign it with your name as agent. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "create_project", description: `Write the plan a video is made from, before anyone spends on it. A generation plan is the whole piece decided before the money: the hook, the beats as scenes, what holds the viewer, the facts it rests on and where they came from, the sound, the look, the model and the caption. A clipping plan is the source videos, the moments in them and why each one. A generation plan's scenes run ${LENGTH_PHRASE} in total and are rendered as ONE video — nothing joins clips — so plan shots one continuous generation can carry. Name the brief row it was written from as post_id and that row moves to scripted with the plan on it; a plan with no row gets its post when the render lands. Sign it with your name as agent. ${OPERATOR_ONLY}`, inputSchema: obj({
     kind: str(`${PROJECT_KINDS.join("|")} — rendered from scenes with generate_video, or cut from a source with clip_video`),
     post_id: str("The brief row (post_…) this plan is for, when there is one"),
     agent: str("Your own name, as the roster lists it — who planned this"),
@@ -191,6 +215,55 @@ export const toolsFor = (channels: readonly PostPlatform[]) => [
  * them without a request in hand. What a live `tools/list` answers is `toolsFor(the resolved one)`.
  */
 export const TOOLS = toolsFor([ACTIVE.platform]);
+
+/**
+ * *** A PLAN'S SCENES, COMPILED INTO THE ONE PROMPT `generate_video` IS ACTUALLY GIVEN. ***
+ *
+ * Nothing on this platform joins video, so a multi-scene plan is not several renders assembled —
+ * it is ONE generation whose prompt describes the shots in order. That compilation used to live in
+ * prose, in the producer's brief and again in its cron ("the prompt is the scenes in order with
+ * their seconds, voiceover, on-screen text and look"), which is to say it lived nowhere: two
+ * paragraphs asking a model to do a formatting job, differently each night, with the result
+ * unreadable by anyone afterwards.
+ *
+ * It is a function now, and the producer is told to call `get_project` and render exactly the
+ * `render_prompt` that comes back with it. That is the whole of the change: the seat still decides
+ * nothing about the plan, and now it cannot quietly drop a scene while summarising one.
+ *
+ * `seconds` is the sum, because the sum is the video's length. It is not enforced here — `scenesOf`
+ * refuses a plan outside the format when it is filed, which is where a refusal is still free.
+ */
+export const scenesPrompt = (project: { scenes?: Scene[]; styleTemplate?: string; sound?: Sound }): string => {
+  const scenes = project.scenes ?? [];
+  // A planner's field is a phrase, not a sentence: `prompt` arrives with no full stop and a
+  // `voiceover` usually arrives with one. Running this for real showed both — "…candlelight
+  // On-screen text:" ran two clauses together, and `Voiceover: "…afraid of?".` closed a question
+  // with a full stop. The prompt is read by a model as prose, so punctuation is content here.
+  const stop = (text: string): string => {
+    const said = text.trim();
+    return /[.!?…]$/.test(said) ? said : `${said}.`;
+  };
+  const quoted = (label: string, text: string): string => {
+    const said = text.trim();
+    return `${label}: "${said}"${/[.!?…]$/.test(said) ? "" : "."}`;
+  };
+  const shots = scenes.map((scene, i) => {
+    const parts = [`Shot ${i + 1}${scene.beat === undefined ? "" : ` (${scene.beat})`}, ${scene.seconds}s: ${stop(scene.prompt)}`];
+    if (scene.text !== undefined) parts.push(quoted("On-screen text", scene.text));
+    if (scene.voiceover !== undefined) parts.push(quoted("Voiceover", scene.voiceover));
+    return parts.join(" ");
+  });
+  const total = scenes.reduce((sum, scene) => sum + scene.seconds, 0);
+  const lines = [
+    `One continuous vertical video, ${total} seconds in total, ${shots.length} shot${shots.length === 1 ? "" : "s"} in order.`,
+    ...(project.styleTemplate === undefined ? [] : [`Look: ${project.styleTemplate}, held across every shot.`]),
+    ...(project.sound?.music === undefined ? [] : [`Music: ${stop(project.sound.music)}`]),
+    ...(project.sound?.voice === undefined ? [] : [`Narration voice: ${stop(project.sound.voice)}`]),
+    ...(project.sound?.sfx === undefined ? [] : [`Sound design: ${stop(project.sound.sfx.join("; "))}`]),
+    ...shots,
+  ];
+  return lines.join("\n");
+};
 
 class ToolError extends Error {}
 const need = (params: Record<string, unknown>, key: string, at = ""): string => {
@@ -223,25 +296,79 @@ const isHttpUrl = (value: string): boolean => {
   }
 };
 
-/** The scenes a caller sent, each checked, or undefined when none were. */
+/**
+ * The scenes a caller sent, each checked, or undefined when none were.
+ *
+ * *** THE LENGTH IS CHECKED HERE, WHICH IS THE ONE PLACE IT CANNOT BE IGNORED. *** It used to be
+ * the words "under fifteen seconds in all" in three prompts, and a prompt is a request: a plan that
+ * ran to fifty seconds was filed, queued and rendered, and the first sign of it was the bill. The
+ * sum is the number `generate_video` is actually asked for — nothing joins clips, so the shots are
+ * one generation — so a plan whose sum is outside the format is not a plan this channel can make,
+ * and the refusal arrives while it is still free to fix.
+ */
 const scenesOf = (params: Record<string, unknown>): Scene[] | undefined => {
   if (params.scenes === undefined) return undefined;
   if (!Array.isArray(params.scenes) || params.scenes.length === 0) throw new ToolError("scenes must be a non-empty array");
-  return params.scenes.map((raw, i): Scene => {
+  const scenes = params.scenes.map((raw, i): Scene => {
     if (!isRecord(raw)) throw new ToolError(`scenes[${i}] must be an object`);
     const seconds = raw.seconds;
     if (typeof seconds !== "number" || !(seconds > 0)) throw new ToolError(`scenes[${i}].seconds must be a positive number`);
     const model = oneOf(raw, "model", VIDEO_MODELS);
+    const beat = oneOf(raw, "beat", SCENE_BEATS);
     const voiceover = optional(raw, "voiceover");
     const text = optional(raw, "text");
     return {
       prompt: need(raw, "prompt", `scenes[${i}].`),
       seconds,
+      ...(beat === undefined ? {} : { beat }),
       ...(voiceover === undefined ? {} : { voiceover }),
       ...(text === undefined ? {} : { text }),
       ...(model === undefined ? {} : { model }),
     };
   });
+  const total = scenes.reduce((sum, scene) => sum + scene.seconds, 0);
+  if (total < MIN_SECONDS || total > MAX_SECONDS) {
+    throw new ToolError(
+      `the scenes run ${total}s in all, and a piece on this channel is ${LENGTH_PHRASE} — the shots are rendered as one video, so their seconds are its length. Re-cut the shots rather than dropping the beats.`,
+    );
+  }
+  return scenes;
+};
+
+/** The facts a caller sent, each with its source, or undefined when none were. */
+const factsOf = (params: Record<string, unknown>): Fact[] | undefined => {
+  if (params.facts === undefined) return undefined;
+  if (!Array.isArray(params.facts)) throw new ToolError("facts must be an array");
+  return params.facts.map((raw, i): Fact => {
+    if (!isRecord(raw)) throw new ToolError(`facts[${i}] must be an object`);
+    // Both halves required, because half a fact is the thing this field exists to stop: a claim
+    // with no source reads as checked and is not, which is worse than no claim at all.
+    return { claim: need(raw, "claim", `facts[${i}].`), source: need(raw, "source", `facts[${i}].`) };
+  });
+};
+
+/** A list of lines a caller sent — blanks dropped — or undefined when the key was absent. */
+const linesOf = (params: Record<string, unknown>, key: string): string[] | undefined => {
+  if (params[key] === undefined) return undefined;
+  if (!Array.isArray(params[key])) throw new ToolError(`${key} must be an array of strings`);
+  const lines = (params[key] as unknown[]).flatMap((one) => (typeof one === "string" && one.trim() !== "" ? [one.trim()] : []));
+  return lines.length === 0 ? undefined : lines;
+};
+
+/** How the piece sounds, or undefined when the caller said nothing about it. */
+const soundOf = (params: Record<string, unknown>): Sound | undefined => {
+  const raw = params.sound;
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) throw new ToolError("sound must be an object");
+  const music = optional(raw, "music");
+  const voice = optional(raw, "voice");
+  const sfx = linesOf(raw, "sfx");
+  const sound = {
+    ...(music === undefined ? {} : { music }),
+    ...(voice === undefined ? {} : { voice }),
+    ...(sfx === undefined ? {} : { sfx }),
+  };
+  return Object.keys(sound).length === 0 ? undefined : sound;
 };
 
 /** The sources a caller sent, each checked, or undefined when none were. */
@@ -258,6 +385,23 @@ const sourcesOf = (params: Record<string, unknown>): ClipSource[] | undefined =>
   });
 };
 
+/**
+ * The plan fields beyond the shots, as a patch — spread by both project tools so the two cannot
+ * drift apart the way a hand-written list of eight `...(x === undefined ? {} : { x })` lines in two
+ * places would. Absent stays absent: an omitted key is not written, so a patch that says nothing
+ * about the sound does not erase it.
+ */
+const planExtras = (plan: ReturnType<typeof planOf>) => ({
+  ...(plan.hook === undefined ? {} : { hook: plan.hook }),
+  ...(plan.rejectedHooks === undefined ? {} : { rejectedHooks: plan.rejectedHooks }),
+  ...(plan.retention === undefined ? {} : { retention: plan.retention }),
+  ...(plan.cta === undefined ? {} : { cta: plan.cta }),
+  ...(plan.facts === undefined ? {} : { facts: plan.facts }),
+  ...(plan.sound === undefined ? {} : { sound: plan.sound }),
+  ...(plan.referencePattern === undefined ? {} : { referencePattern: plan.referencePattern }),
+  ...(plan.referenceFrames === undefined ? {} : { referenceFrames: plan.referenceFrames }),
+});
+
 /** The plan fields both project tools take, checked; `kind` says which half is required. */
 const planOf = (params: Record<string, unknown>) => ({
   title: optional(params, "title"),
@@ -269,6 +413,14 @@ const planOf = (params: Record<string, unknown>) => ({
   scenes: scenesOf(params),
   sources: sourcesOf(params),
   caption: optional(params, "caption"),
+  hook: optional(params, "hook"),
+  rejectedHooks: linesOf(params, "rejected_hooks"),
+  retention: optional(params, "retention"),
+  cta: optional(params, "cta"),
+  facts: factsOf(params),
+  sound: soundOf(params),
+  referencePattern: optional(params, "reference_pattern"),
+  referenceFrames: linesOf(params, "reference_frames"),
 });
 
 /**
@@ -396,7 +548,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       // `expected_stage` guards the START of the render; nothing guarded its end, and no field
       // recorded that a render had been paid for. So the manager's 08:00 sweep, putting a claim a
       // dead session left behind back to `scripted`, was an instruction to render a second time —
-      // ~$3.32 (`ONE_RENDER_MICRO_USD`) for a video the channel already owns. The media on the row
+      // ~$9.00 (`ONE_RENDER_MICRO_USD`) for a video the channel already owns. The media on the row
       // IS the record: a row that carries one has been through the paid step, so it cannot be moved
       // back to a stage that precedes it, by the sweep or by anything else. Forward is untouched —
       // the producer's own write lands `rendered` with the video attached in the same call.
@@ -435,7 +587,20 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
     case "get_project": {
       const project = store.read().projects.find((p) => p.id === need(params, "id"));
       if (!project) throw new ToolError("no such project");
-      return project;
+      // A generation plan is handed back WITH the prompt its shots compile to, so the seat that
+      // renders it does not have to compose one out of prose and cannot drop a shot while doing so
+      // (`scenesPrompt`). Derived on read, never stored: a plan edited after a read must not be
+      // rendered from a prompt built before it.
+      if (project.kind !== "generation" || project.scenes === undefined) return project;
+      return {
+        ...project,
+        render_prompt: scenesPrompt(project),
+        render_seconds: project.scenes.reduce((sum, s) => sum + s.seconds, 0),
+        // Handed back beside the prompt so the renderer passes them straight to `generate_video`
+        // as `image_urls` rather than deciding for itself whether a plan has a reference: the
+        // seat's whole instruction is "render exactly what get_project gave you".
+        ...(project.referenceFrames === undefined ? {} : { render_reference_images: project.referenceFrames }),
+      };
     }
     case "create_project": {
       const kind: ProjectKind | undefined = oneOf(params, "kind", PROJECT_KINDS);
@@ -445,6 +610,12 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       // one: scenes for a generation plan, sources for a clipping plan, refused rather than filed.
       if (kind === "generation" && plan.scenes === undefined) throw new ToolError("a generation plan needs scenes: the shots generate_video renders, in order");
       if (kind === "clipping" && plan.sources === undefined) throw new ToolError("a clipping plan needs sources: the videos to cut from and the moment in each");
+      // The hook is the line the piece lives or dies on, and it was the one thing a plan had no
+      // field for. Required at CREATE only: a later `update_project` patches a plan that already
+      // has one, and a clipping plan's hook is the moment it cut, which `sources[].reason` carries.
+      if (kind === "generation" && plan.hook === undefined) {
+        throw new ToolError("a generation plan needs a hook: the first line of the piece, verbatim — what is said and what is on the frame at 0:00");
+      }
       const postId = optional(params, "post_id");
       const brief = postId === undefined ? undefined : store.read().posts.find((p) => p.id === postId);
       if (postId !== undefined) {
@@ -469,6 +640,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         ...(plan.scenes === undefined ? {} : { scenes: plan.scenes }),
         ...(plan.sources === undefined ? {} : { sources: plan.sources }),
         ...(plan.caption === undefined ? {} : { caption: plan.caption }),
+        ...planExtras(plan),
       });
       await bind(store, whoIsRunning, filed.id, agent, "planned");
       return filed;
@@ -528,6 +700,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
         ...(plan.scenes === undefined ? {} : { scenes: plan.scenes }),
         ...(plan.sources === undefined ? {} : { sources: plan.sources }),
         ...(plan.caption === undefined ? {} : { caption: plan.caption }),
+        ...planExtras(plan),
       });
       // The claim names no seat; the plan's kind does.
       if (moved !== null && (status === "rendering" || status === "rendered")) await bind(store, whoIsRunning, id, agent ?? RENDERER[project.kind], "rendered");
