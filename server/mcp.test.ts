@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authError, handleMcp, scenesPrompt, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
-import { TEMPLATES } from "../templates/index.ts";
-import { VIDEO_MODELS } from "../templates/template.ts";
+import { ACTIVE, TEMPLATES } from "../templates/index.ts";
+import { lengthPhrase, VIDEO_MODELS } from "../templates/template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 
 const dirs: string[] = [];
@@ -32,10 +32,19 @@ const text = <T>(answer: object): T => JSON.parse((answer as CallResult).result.
  * so their sum is the video's length and is checked when the plan is filed rather than discovered
  * on the bill.
  */
+/**
+ * A legal generation plan on WHATEVER TEMPLATE IS RUNNING, which is why the first shot is derived.
+ *
+ * `create_project` length-checks the scenes against `ACTIVE.length`, so a fixture with fixed
+ * seconds is only a legal piece on the template those seconds were written for — every test that
+ * reuses it is then refused on the others, and the refusal surfaces as "not valid JSON" when the
+ * test parses the error text as a plan. The piece runs `min + 3`: on `faceless` and `clipping`
+ * that is the 8s + 10s it has always been.
+ */
 const PLAN = {
   hook: "He slept on the floor on purpose.",
   scenes: [
-    { prompt: "A bare stone floor at dawn", seconds: 8, beat: "hook" },
+    { prompt: "A bare stone floor at dawn", seconds: ACTIVE.length.min - 7, beat: "hook" },
     { prompt: "A hand pushing a mattress away", seconds: 10, beat: "turn" },
   ],
 };
@@ -415,8 +424,11 @@ describe("mcp tools", () => {
     const brief = text<{ id: string }>(
       (await handleMcp(call("create_post", { caption: "Why the Stoics slept on the floor", agent: "trend-scout", stage: "brief" }), store, null))!,
     );
+    // Derived from the running template's floor for the reason `PLAN` is: the write is
+    // length-checked against `ACTIVE.length`. On `faceless` and `clipping` this is 6s + 12s.
+    const hookSeconds = ACTIVE.length.min - 9;
     const scenes = [
-      { prompt: "A bare stone floor at dawn, one thin blanket", seconds: 6, beat: "hook", voiceover: "Seneca slept on the floor on purpose.", text: "on purpose" },
+      { prompt: "A bare stone floor at dawn, one thin blanket", seconds: hookSeconds, beat: "hook", voiceover: "Seneca slept on the floor on purpose.", text: "on purpose" },
       { prompt: "A hand pushing a soft mattress away", seconds: 12, beat: "turn", voiceover: "Comfort, he said, is the thing you should fear.", model: "bytedance/seedance-2.5" },
     ];
     const plan = text<{ id: string; kind: string; status: string; statusAt: string; postId?: string; model?: string; platform: string; scenes: unknown[]; agent?: string }>(
@@ -454,9 +466,9 @@ describe("mcp tools", () => {
     // has to compose one out of prose — and cannot drop a shot while summarising.
     const read = text<{ id: string; render_prompt: string; render_seconds: number }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!);
     expect(read.id).toBe(plan.id);
-    expect(read.render_seconds).toBe(18);
-    expect(read.render_prompt).toContain("18 seconds in total, 2 shots in order");
-    expect(read.render_prompt).toContain("Shot 1 (hook), 6s: A bare stone floor at dawn, one thin blanket");
+    expect(read.render_seconds).toBe(hookSeconds + 12);
+    expect(read.render_prompt).toContain(`${hookSeconds + 12} seconds in total, 2 shots in order`);
+    expect(read.render_prompt).toContain(`Shot 1 (hook), ${hookSeconds}s: A bare stone floor at dawn, one thin blanket`);
     expect(read.render_prompt).toContain('On-screen text: "on purpose".');
     expect(read.render_prompt).toContain("Shot 2 (turn), 12s:");
     expect(read.render_prompt).toContain("Look: Sunlit stoic");
@@ -623,19 +635,66 @@ describe("mcp tools", () => {
       return answer.result.content[0]!.text;
     };
     const shots = (...seconds: number[]) => seconds.map((s) => ({ prompt: "p", seconds: s }));
-    expect(await refused({ kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(4, 5) })).toMatch(
-      /the scenes run 9s in all, and a piece on this channel is between 15 and 30 seconds/,
+    // The numbers are the RUNNING template's, not Short Form's. They were written out while this
+    // server enforced a module constant, so every template read 15–30 and the literals were true by
+    // accident; now that it reads `ACTIVE.length`, a literal here is a test that only passes on
+    // `faceless` — and the artifact publisher builds every template of this repo in one pass.
+    const { min, max } = ACTIVE.length;
+    const under = [Math.floor((min - 1) / 2), Math.ceil((min - 1) / 2)] as const;
+    expect(await refused({ kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(...under) })).toMatch(
+      new RegExp(`the scenes run ${min - 1}s in all, and a piece on this channel is ${lengthPhrase(ACTIVE.length)}`),
     );
-    expect(await refused({ kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(20, 20) })).toMatch(/run 40s in all/);
-    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: shots(20) })).toMatch(/generation plan needs a hook/);
+    expect(await refused({ kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(max, 10) })).toMatch(
+      new RegExp(`run ${max + 10}s in all`),
+    );
+    expect(await refused({ kind: "generation", title: "t", brief: "b", scenes: shots(min) })).toMatch(/generation plan needs a hook/);
     // The bounds are inclusive at both ends, and one scene is a legal piece: ">= 1 scene", not ">1".
-    for (const seconds of [15, 30]) {
+    for (const seconds of [min, max]) {
       const ok = (await handleMcp(call("create_project", { kind: "generation", title: "t", brief: "b", hook: "h", scenes: shots(seconds) }), store, null)) as CallResult;
       expect(ok.result.isError).toBeUndefined();
     }
     // A clipping plan is cut, not generated, so the generation rules do not reach it.
     const cut = (await handleMcp(call("create_project", { kind: "clipping", title: "t", brief: "b", sources: [{ url: "https://youtu.be/x", reason: "r" }] }), store, null)) as CallResult;
     expect(cut.result.isError).toBeUndefined();
+  });
+
+  /**
+   * *** THE WINDOW THIS SERVER ENFORCES IS THE RUNNING TEMPLATE'S, AND THE TEST ABOVE CANNOT SEE
+   * THAT, WHICH IS WHY THIS ONE EXISTS. *** Those numbers are Short Form's and `ACTIVE` is Short
+   * Form, so a module constant and a template field are indistinguishable there. They are not
+   * indistinguishable in production: one `/mcp` serves whichever template is installed, and against
+   * a constant a Long Form crew briefed for 60–180 seconds has every plan of its own length refused
+   * by this server, in a refusal quoting a range nobody briefed it with.
+   *
+   * So the bounds are asserted against `ACTIVE.length` rather than against 15 and 30 — the same
+   * assertion, derived from the one place the number now lives — and the refusal is held to
+   * quoting that template's own phrase and no other.
+   */
+  it("refuses against the running template's own length, and quotes that template's range", async () => {
+    const store = freshStore();
+    const plan = async (seconds: number) =>
+      (await handleMcp(
+        call("create_project", { kind: "generation", title: "t", brief: "b", hook: "h", scenes: [{ prompt: "p", seconds }] }),
+        store,
+        null,
+      )) as CallResult;
+
+    for (const seconds of [ACTIVE.length.min, ACTIVE.length.max]) {
+      expect((await plan(seconds)).result.isError, `${seconds}s`).toBeUndefined();
+    }
+    for (const seconds of [ACTIVE.length.min - 1, ACTIVE.length.max + 1]) {
+      const refusal = await plan(seconds);
+      expect(refusal.result.isError, `${seconds}s`).toBe(true);
+      expect(refusal.result.content[0]!.text).toContain(lengthPhrase(ACTIVE.length));
+    }
+    // And the same phrase is what a planner is told before it files: the tool description and the
+    // refusal cannot disagree, because both read the one window.
+    const described = JSON.stringify(TOOLS.find((tool) => tool.name === "create_project"));
+    expect(described).toContain(lengthPhrase(ACTIVE.length));
+    for (const other of Object.values(TEMPLATES)) {
+      if (other.length.min === ACTIVE.length.min && other.length.max === ACTIVE.length.max) continue;
+      expect(described, other.name).not.toContain(lengthPhrase(other.length));
+    }
   });
 
   /**
@@ -735,13 +794,18 @@ describe("mcp tools", () => {
    */
   it("re-renders a revised multi-shot plan from the edited scenes, and still holds the format", async () => {
     const store = freshStore();
+    // The shot lengths are derived from the running template's floor, not written out: this test
+    // is about the revision loop, but the write it goes through is length-checked against
+    // `ACTIVE.length`, so fixed seconds would make it a test that only passes on one template.
+    // The first shot absorbs the difference; the piece runs `min + 6`, and `min + 9` once revised.
+    const { min, max } = ACTIVE.length;
     const plan = text<{ id: string }>((await handleMcp(call("create_project", {
       kind: "generation", title: "Four beats", brief: "b", hook: "h", style_template: "Marble & ink",
       scenes: [
-        { beat: "hook", seconds: 5, prompt: "a marble bust, candlelight", text: "Rehearse losing it all." },
+        { beat: "hook", seconds: min - 9, prompt: "a marble bust, candlelight", text: "Rehearse losing it all." },
         { beat: "setup", seconds: 6, prompt: "a bare table, one bowl" },
         { beat: "turn", seconds: 6, prompt: "the bowl in hard side light" },
-        { beat: "payoff", seconds: 4, prompt: "the bust again, wider" },
+        { beat: "payoff", seconds: 3, prompt: "the bust again, wider" },
       ],
     }), store, null))!);
     await handleMcp(call("update_project", { id: plan.id, status: "rendering", expected_status: "planned" }), store, null);
@@ -753,18 +817,18 @@ describe("mcp tools", () => {
     const edited = text<{ scenes: { seconds: number }[] }>((await handleMcp(call("update_project", {
       id: plan.id,
       scenes: [
-        { beat: "hook", seconds: 5, prompt: "a marble bust, candlelight" },
+        { beat: "hook", seconds: min - 9, prompt: "a marble bust, candlelight" },
         { beat: "setup", seconds: 6, prompt: "a bare table, one bowl" },
         { beat: "turn", seconds: 9, prompt: "the bowl in hard side light, held longer" },
-        { beat: "payoff", seconds: 4, prompt: "the bust again, wider" },
+        { beat: "payoff", seconds: 3, prompt: "the bust again, wider" },
       ],
     }), store, null))!);
-    expect(edited.scenes.map((one) => one.seconds)).toEqual([5, 6, 9, 4]);
+    expect(edited.scenes.map((one) => one.seconds)).toEqual([min - 9, 6, 9, 3]);
 
     // Re-read: the prompt is the EDITED piece, at its new length, with the dropped text gone.
     const read = text<{ render_prompt: string; render_seconds: number }>((await handleMcp(call("get_project", { id: plan.id }), store, null))!);
-    expect(read.render_seconds).toBe(24);
-    expect(read.render_prompt).toContain("24 seconds in total, 4 shots in order");
+    expect(read.render_seconds).toBe(min + 9);
+    expect(read.render_prompt).toContain(`${min + 9} seconds in total, 4 shots in order`);
     expect(read.render_prompt).toContain("Shot 3 (turn), 9s: the bowl in hard side light, held longer.");
     expect(read.render_prompt).not.toContain("On-screen text");
 
@@ -778,10 +842,10 @@ describe("mcp tools", () => {
     // And an edit that takes the piece outside the format is refused while it is still free.
     store.openRevision(plan.id, "ses_rev2", "make it a minute");
     const tooLong = (await handleMcp(call("update_project", {
-      id: plan.id, scenes: [{ beat: "hook", seconds: 60, prompt: "one very long shot" }],
+      id: plan.id, scenes: [{ beat: "hook", seconds: max + 1, prompt: "one very long shot" }],
     }), store, null)) as CallResult;
     expect(tooLong.result.isError).toBe(true);
-    expect(tooLong.result.content[0]!.text).toMatch(/the scenes run 60s in all/);
+    expect(tooLong.result.content[0]!.text).toMatch(new RegExp(`the scenes run ${max + 1}s in all`));
   });
 
   it("refuses the sweep's write on a plan the operator is revising: a revised plan goes forward only", async () => {

@@ -8,13 +8,22 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type PostStage, type PostStatus } from "../seed/posts.ts";
-import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, type ProjectSession, type ProjectStatus, type Render, type VideoProject } from "../seed/projects.ts";
+import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, LONGFORM_PROJECT_SEEDS, type ProjectSession, type ProjectStatus, type Render, type VideoProject } from "../seed/projects.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
 import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
 
-/** The demo rows of each template; a deployment starts empty, so these are `pnpm serve` only. */
-const SEEDS: Record<TemplateName, Post[]> = { faceless: FACELESS_SEEDS, clipping: CLIPPING_SEEDS };
-const PROJECT_SEEDS: Record<TemplateName, VideoProject[]> = { faceless: FACELESS_PROJECT_SEEDS, clipping: CLIPPING_PROJECT_SEEDS };
+/**
+ * The demo rows of each template; a deployment starts empty, so these are `pnpm serve` only.
+ *
+ * `longform` shows the Short Form POST rows — it files the same two post kinds, and a demo row is
+ * a screen filler rather than a claim about a crew. Its PLANS are its own, because a long-form
+ * plan is the one thing here that does not look like a short one: its scenes run to two or three
+ * minutes and their shot boundaries land on the 60-second segment seams the producer renders
+ * against, so Short Form's plans on that template's Projects screen would be a worked example of
+ * the mistake its writer brief exists to prevent.
+ */
+const SEEDS: Record<TemplateName, Post[]> = { faceless: FACELESS_SEEDS, clipping: CLIPPING_SEEDS, longform: FACELESS_SEEDS };
+const PROJECT_SEEDS: Record<TemplateName, VideoProject[]> = { faceless: FACELESS_PROJECT_SEEDS, clipping: CLIPPING_PROJECT_SEEDS, longform: LONGFORM_PROJECT_SEEDS };
 
 /**
  * The setup answers are deliberately NOT here. The studio asks them once, before the crew exists
