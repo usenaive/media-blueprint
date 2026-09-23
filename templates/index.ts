@@ -19,9 +19,10 @@
  */
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS } from "./faceless.ts";
+import { LONGFORM } from "./longform.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
-export type { MediaTemplate, PostKindDecl, SetupQuestion, TemplateName } from "./template.ts";
+export type { Length, MediaTemplate, PostKindDecl, SetupQuestion, TemplateName } from "./template.ts";
 export {
   CHANNEL_IDENTITY,
   CHANNEL_TIMEZONE,
@@ -34,9 +35,19 @@ export {
   platformsFromAnswers,
   platformOf,
   PROJECT_NAME,
+  lengthPhrase,
+  segmentsOf,
 } from "./template.ts";
 
-export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING };
+/**
+ * The three templates, keyed by the id the WIRE carries — which is not what a person is shown.
+ *
+ * `faceless` is "Naive Short Form v1", `clipping` is "Naive Clipping v1", `longform` is
+ * "Naive Long Form v1". The ids do not change and cannot: `install.template` is a stored string on
+ * every provisioned org, so renaming one orphans every real install that carries it. A display name
+ * is a word on a screen; this key is a foreign key.
+ */
+export const TEMPLATES: Record<TemplateName, MediaTemplate> = { faceless: FACELESS, clipping: CLIPPING, longform: LONGFORM };
 
 /**
  * The template this repository runs. Editing this line and running `naive up` is the switch, and

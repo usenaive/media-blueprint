@@ -18,7 +18,7 @@ import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/bluepri
 import type { PostKind, PostPlatform } from "../seed/posts.ts";
 import type { ProjectKind } from "../seed/projects.ts";
 
-export type TemplateName = "faceless" | "clipping";
+export type TemplateName = "faceless" | "clipping" | "longform";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on this app and its installs. */
 export const PROJECT_NAME = "media";
@@ -33,8 +33,9 @@ export const PROJECT_NAME = "media";
  * `defineProject` refuses a fifth outright, and it is worth having the sentence here because the
  * schema does not show it: `questions` is `z.array(QuestionFieldSchema)` with no bound, and the
  * cap is a separate check in `parseProject`, applied only when the project names a `template` —
- * which this one always does. Run against `@usenaive-sdk/blueprints@0.7.0`, the version this repo
- * pins and `naive up` runs, a five-question declaration comes back:
+ * which this one always does. Run against `@usenaive-sdk/blueprints@0.7.0` — the version this cap
+ * was measured on; `package.json` now pins `^0.8.0`, which is not on npm yet and is resolved at
+ * rollout — a five-question declaration comes back:
  *
  *     template "faceless" asks 5 questions, but a template asks at most 4 before anything is
  *     provisioned — a fifth belongs to the crew's first conversation
@@ -298,7 +299,8 @@ export interface PostKindDecl {
  * not exist in `@usenaive-sdk/blueprints@0.5.0`: `parseProject` strips what its schema does not
  * know, so a template that declared these under the old pin published an artifact reading
  * `tasks: []` — no board, no cards, an empty dashboard, and no refusal anywhere to say why. That is
- * exactly what `media@1.2.0` shipped. The pin is `^0.6.0` in `package.json` for this one reason.
+ * exactly what `media@1.2.0` shipped. It is the floor under the pin in `package.json`, which has
+ * moved up since (`^0.8.0`) and may never move back below it.
  *
  * `key` is the card's idempotency handle (`media:<key>` on the wire), so a re-apply answers the
  * same card rather than filing a second copy; `assignee` is an agent NAME and `up` refuses one no
@@ -309,9 +311,101 @@ export interface PostKindDecl {
  */
 export type Task = NonNullable<DefineInput["tasks"]>[number];
 
+/**
+ * *** HOW LONG A PIECE IS ON THIS TEMPLATE — AND IT IS A TEMPLATE'S NUMBER, NOT THE BLUEPRINT'S. ***
+ *
+ * It was two module constants, `MIN_SECONDS`/`MAX_SECONDS`, and that was true for exactly as long
+ * as every template this repo carried made the same 15–30-second piece. The way it breaks once one
+ * of them does not is worth stating, because nothing in the prompts would have shown it: ONE `/mcp`
+ * serves whichever template is active, and `scenesOf` (`server/mcp.ts`) refuses any plan whose
+ * scenes do not sum into the window it reads. Against a module constant a 180-second Long Form plan
+ * is refused by this blueprint's own server before a renderer ever sees it — a template that cannot
+ * file a plan of the length its own brief asks for, and a refusal quoting a range nobody briefed.
+ *
+ * So the window is the template's: `scenesOf` reads the ACTIVE template's, and its refusal quotes
+ * that template's own numbers.
+ *
+ * `min` is not decoration. Under a floor there is no room for the turn, so the payoff arrives
+ * before the viewer has a reason to want it; the floor is what stops a plan collapsing into three
+ * shots and a caption, which is exactly what this blueprint's planning used to read as.
+ */
+export interface Length {
+  /** The shortest a piece of this template may run, in seconds — measured as the sum of its scenes. */
+  min: number;
+  /** The longest, measured the same way. */
+  max: number;
+}
+
+/**
+ * *** SHORT FORM: 15–30 SECONDS, AND THE CEILING IS WHAT ONE `generate_video` CALL CARRIES. ***
+ *
+ * It used to be the words "under fifteen seconds in all", typed into the scriptwriter's brief, its
+ * cron and its day-one card — and contradicted by the very skill those prompts tell the writer to
+ * load: `naive/short-video-hooks` taught a five-beat script laid out across 30–60 seconds. The
+ * writer read a structure it was forbidden to use and filed the only thing that fits in fifteen
+ * seconds, which is three shots and a caption. That is why the planning read as thin.
+ *
+ * 15–30 is the format, and the skill now teaches the same range. The ceiling is the format's and
+ * also the wire's neighbour — `generate_video` bounds `seconds` at 60 — so 30 leaves the tool's own
+ * limit well clear and one plan is still one call.
+ */
+export const SHORT_FORM_LENGTH: Length = { min: 15, max: 30 };
+
+/**
+ * *** CLIPPING: 15–60 SECONDS, AND THE BAND IS THE TOOL'S OWN RATHER THAN A TASTE. ***
+ *
+ * `clip_video` defaults its cut band to 15–60 seconds (`packages/core/src/schema/media.ts`), and
+ * that tool is what a clipping plan actually becomes: the clipper hands it a source URL and picks
+ * among the clips it returns. Three different numbers were in circulation for this one thing — the
+ * `clip-selection` skill said 20–45s, the tool says 15–60, the landing page said "under sixty" —
+ * and only one of them is enforced by anything that runs. The tool's is that one, so it is the one
+ * written here and the one every surface is held to.
+ */
+export const CLIPPING_LENGTH: Length = { min: 15, max: 60 };
+
+/**
+ * *** LONG FORM: 60–180 SECONDS, WHICH IS UP TO THREE RENDERS AND A JOIN, NOT ONE CALL. ***
+ *
+ * `generate_video` takes `seconds` bounded `.int().min(1).max(60)`, so 180 seconds is not a length
+ * this platform can be asked for in one call, whatever a prompt says. A Long Form piece is
+ * therefore `ceil(seconds / 60)` SEGMENTS — at most three — each its own `generate_video` call,
+ * joined with ffmpeg in the producer's own sandbox and filed with `publish_file`. There is no
+ * concat, stitch or compose tool on this platform: `clip_video` CUTS and never joins, so the join
+ * is the producer's shell or it does not happen, and a plan's beats have to survive that seam.
+ *
+ * The consequence that sizes the money is `renderMicroUsd` below: a Long Form producer renders up
+ * to three segments in ONE session, so its ceiling has to clear three renders and the turns around
+ * them, not one.
+ */
+export const LONG_FORM_LENGTH: Length = { min: 60, max: 180 };
+
+/** The longest one `generate_video` call may be asked for — `seconds` is `.int().min(1).max(60)` on the wire. */
+export const MAX_RENDER_SECONDS = 60;
+
+/**
+ * How many `generate_video` calls a piece of this length is, at worst: one for anything inside the
+ * tool's own ceiling, `ceil(max / 60)` — and a join — for anything past it. It is what sizes the
+ * producer's ceiling, so it is derived rather than typed into a budget.
+ */
+export const segmentsOf = (length: Length): number => Math.ceil(length.max / MAX_RENDER_SECONDS);
+
+/**
+ * "between 15 and 30 seconds" — the range as every prompt of THAT template says it.
+ *
+ * It was one module constant interpolated into every brief, cron and card. One phrase across three
+ * templates is one of them right and two of them lying to their own crew, so the phrase is derived
+ * from the template's own window here and nowhere else.
+ */
+export const lengthPhrase = (length: Length): string => `between ${length.min} and ${length.max} seconds`;
+
 export interface MediaTemplate {
   /** Spelled exactly as `defineProject({ template })` names it. */
   name: TemplateName;
+  /**
+   * How long a piece of this template runs: the window `scenesOf` (`server/mcp.ts`) refuses a plan
+   * outside of, and the numbers `lengthPhrase` puts into this template's own prompts. See `Length`.
+   */
+  length: Length;
   /** One line for the operator: what this crew does. */
   description: string;
   /** The crew, declared as `naive.config.ts` declares any agent. */
@@ -369,24 +463,20 @@ export interface MediaTemplate {
 }
 
 /**
- * *** HOW LONG A PIECE IS, AND IT IS THE ONE PLACE THE NUMBER IS WRITTEN. ***
+ * *** THESE THREE ARE SHORT FORM'S NUMBERS, AND NOTHING ELSE'S. READ `Length` BEFORE USING ONE. ***
  *
- * It used to be the words "under fifteen seconds in all", typed into the scriptwriter's brief, its
- * cron and its day-one card — and contradicted by the very skill those prompts tell the writer to
- * load: `naive/short-video-hooks` taught a five-beat script laid out across 30–60 seconds. The
- * writer read a structure it was forbidden to use and filed the only thing that fits in fifteen
- * seconds, which is three shots and a caption. That is not a plan for a video, and it is why the
- * planning read as thin.
+ * They were the blueprint's: one length, one phrase, every template. They are kept under their old
+ * names because the Short Form template, its screens and its tests all read them and the values are
+ * unchanged — but they are no longer "the" length, and a template whose window is not 15–30 that
+ * reaches for one of these puts a number in front of its crew that its own `/mcp` will refuse.
  *
- * 15–30 seconds is the format, and the skill now teaches the same range. The floor is real: under
- * fifteen there is no room for the turn, so the payoff arrives before the viewer has a reason to
- * want it. The ceiling is the format's and also the wire's neighbour — `generate_video` accepts
- * `seconds` up to 60, so 30 leaves the tool's own limit well clear.
+ * The rule for anything written from here on: take the window from the template (`MediaTemplate.length`)
+ * and the words from `lengthPhrase(length)`. Long Form and Clipping have their own windows above.
  */
-export const MIN_SECONDS = 15;
-export const MAX_SECONDS = 30;
-/** "between 15 and 30 seconds" — the range as every prompt says it, so no two of them can drift. */
-export const LENGTH_PHRASE = `between ${MIN_SECONDS} and ${MAX_SECONDS} seconds`;
+export const MIN_SECONDS = SHORT_FORM_LENGTH.min;
+export const MAX_SECONDS = SHORT_FORM_LENGTH.max;
+/** "between 15 and 30 seconds" — Short Form's phrase, and `lengthPhrase(SHORT_FORM_LENGTH)` exactly. */
+export const LENGTH_PHRASE = lengthPhrase(SHORT_FORM_LENGTH);
 
 /**
  * *** A PIECE IS ONE RENDER, WHATEVER ITS SCENE COUNT — READ THIS BEFORE PLANNING AROUND IT. ***
@@ -424,11 +514,33 @@ export const SCENES_ARE_ONE_RENDER = true;
  * Nothing publishes a price for a video model, so this comes from a real settled job and is the
  * only honest figure available; re-measure it through the PLATFORM when the default model changes.
  *
- * At `MAX_SECONDS` that is **8,995,530 µUSD** (~$9.00), and it is the number every ceiling below
- * has to clear. It has tripled since the prompts demanded fifteen seconds of Veo (~$3.32) — the
- * real price of the format, stated here rather than discovered by an operator reading a bill.
+ * At Short Form's 30 seconds that is **8,995,530 µUSD** (~$9.00), and it is the number every
+ * ceiling below has to clear. It has tripled since the prompts demanded fifteen seconds of Veo
+ * (~$3.32) — the real price of the format, stated here rather than discovered by an operator
+ * reading a bill.
  */
-export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 299_851;
+export const MICRO_USD_PER_SECOND = 299_851;
+
+/**
+ * What rendering a whole piece of this length costs the org, at its longest.
+ *
+ * *** IT IS NOT ONE CALL ON EVERY TEMPLATE, AND THAT IS THE WHOLE REASON THIS IS A FUNCTION. ***
+ * A piece longer than `MAX_RENDER_SECONDS` is rendered as `segmentsOf(length)` separate
+ * `generate_video` calls and joined afterwards, all inside ONE producer session — so what the
+ * session's ceiling must clear is every segment, not one of them. Sizing a long-form ceiling from
+ * a single render is the same mistake that parked the first production session with the video
+ * already bought: the money is spent, the ceiling refuses, and the work is stranded mid-turn.
+ *
+ * The arithmetic is `max * MICRO_USD_PER_SECOND` either way, because seconds are what the ledger
+ * bills; the segment count is what makes those seconds land in one session rather than three.
+ */
+export const renderMicroUsd = (length: Length): number => length.max * MICRO_USD_PER_SECOND;
+
+/**
+ * Short Form's render (~$9.00), kept under its old name for the screens and prompts that quote it.
+ * Anything sized for another template derives its own with `renderMicroUsd(template.length)`.
+ */
+export const ONE_RENDER_MICRO_USD = renderMicroUsd(SHORT_FORM_LENGTH);
 
 /**
  * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
@@ -451,11 +563,35 @@ export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 299_851;
  * ceiling caused the first time. Neither figure may be raised without re-reading
  * `ONE_RENDER_MICRO_USD`: these are derived from it, not chosen.
  */
-const budget = {
-  cap_micro_usd: 60_000_000, // $60/day
-  max_task_micro_usd: 20_000_000, // $20/task — a ~$9.00 render plus the turns that brief and file it, each holding its quote until the turn commits.
+export interface Budget {
+  cap_micro_usd: number;
+  max_task_micro_usd: number;
+  period: "day";
+}
+
+/**
+ * A seat's ceilings, written as the two numbers that are actually chosen — what one task may spend,
+ * and what a day of them may. Both are derived from `renderMicroUsd` of the template the seat
+ * belongs to, never picked because they are round.
+ */
+export const budgetOf = (max_task_micro_usd: number, cap_micro_usd: number): Budget => ({
+  cap_micro_usd,
+  max_task_micro_usd,
   period: "day",
-} as const;
+});
+
+/**
+ * What a seat carries unless its template says otherwise: one Short Form render (~$9.00) with room
+ * for the turns around it, and a day of those.
+ *
+ * *** A SEAT THAT RENDERS LONGER PIECES MUST NOT TAKE THIS ONE. *** A Long Form producer renders up
+ * to `segmentsOf(LONG_FORM_LENGTH)` segments in ONE session — `renderMicroUsd(LONG_FORM_LENGTH)` is
+ * ~$53.97 of video before a single model call — so this ceiling refuses it mid-turn with two
+ * segments already bought. That template passes its own `budget` to `agent()` below; the numbers
+ * are stated there, beside the crew they pay for, because they are that template's and not the
+ * blueprint's.
+ */
+const budget = budgetOf(20_000_000, 60_000_000);
 
 const model = "anthropic/claude-sonnet-5";
 
@@ -483,16 +619,27 @@ export const CONTEXT_PREAMBLE =
   "Read `project_context` before anything else; the answers there are the client's, not yours to invent. Every brief, script, clip, caption and plan you make is for the niche, the audience and the cadence written there — when an answer is missing, ask the operator rather than filling it in.";
 
 /**
- * What every `faceless` seat is told about the customer's reference, in one sentence each way.
+ * What every seat that plans, makes or checks a piece is told about the reference, in one sentence
+ * each way. Appended to those briefs on every template, so the word budget is measured.
  *
- * Written to be INERT when the question was left blank — which it will be on plenty of installs,
- * since `REFERENCE_QUESTION` is optional. An unanswered question is absent from `project_context`
- * entirely (the platform lists only answered ones), so "names one" is a condition the model can
- * actually evaluate, and the second half restores exactly the behaviour this template had before
- * the question existed. The seats add their own sentence about what they do with it.
+ * *** THE SECOND HALF USED TO FORBID THE WRONG THING, AND IT IS WHY THE PLANNING WAS THIN. *** It
+ * read "work from the niche alone and invent no reference". The ban on INVENTING is right and is
+ * kept: a crew cannot tell a made-up reference from a real one, and one sentence of fiction is then
+ * imitated for the life of the install. But "work from the niche alone" also forbade LOOKING, and
+ * the two are not the same act. On an install with no answer — and the question is optional, so
+ * that is plenty of them — nothing in this pipeline had ever seen a video: the study was a day-one
+ * card that closed in a line, the scout researched topics as text, the writer researched claims as
+ * text, and every piece forever was planned against nothing. A controlled run of the two settings
+ * showed what that costs: the blind crew planned the wrong genre outright while the seeing one
+ * matched its reference, and the frames that bought the difference cost $0.027 against a $9.00
+ * render.
+ *
+ * So: named, read the teardown; unnamed, go and find real ones and file what you actually saw. The
+ * guard that survives both halves is the one that was always doing the work — never describe a
+ * reference you did not open.
  */
 export const REFERENCE_RULE =
-  "Where the context names a reference, the crew's reference teardown post is this channel's standard: read it before you plan, make or check anything, and name the pattern you followed. Where it names none, work from the niche alone and invent no reference.";
+  "Where the context names a reference, the crew's reference teardown post is this channel's standard: read it before you plan, make or check anything, and name the pattern you followed. Where it names none, find two or three real videos in this niche that already do this format well, study them, and file a teardown from what you actually saw — and never describe a reference you did not open.";
 
 /**
  * The paragraph every card body ends with, and the race it is the answer to.
@@ -807,13 +954,13 @@ export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
   schedule({
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
     input:
-      "Plan the week. Read the channel's niche, audience and cadence (project_context), the reference teardown if this channel has one (channel.list_posts, source \"reference teardown\"), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Where there is a teardown, say for each slot which of the reference's formats it is an instance of — a week of slots that are all the same format is a week the reference would not have made. Brief the specialists through the plan, not by publishing anything yourself.",
+      "Plan the week. Read the channel's niche, audience and cadence (project_context), the reference teardown if this channel has one (channel.list_posts, source \"reference teardown\"), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Where there is a teardown, say for each slot which of the reference's formats it is an instance of — a week of slots that are all the same format is a week the reference would not have made. THEN REFRESH THE TEARDOWN, because this is the one fire that does: the reference is a living channel and the post on file was written on install day, so read the reference again against what this channel has actually published since, and where the format has moved — a new hook shape, a different cut rhythm, a format it has stopped making — file a FRESH teardown post (`source` \"reference teardown\", `naive/reference-teardown` is the procedure) saying what changed and what it was. Where nothing moved, say so in the plan in one line and file nothing; a second teardown that only repeats the first is a post every seat now has to disambiguate. Brief the specialists through the plan, not by publishing anything yourself.",
     budget_micro_usd: 10_000_000, // $10 — the widest read of the week, once a week.
   }),
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Where this channel has a reference teardown (channel.list_posts, source \"reference teardown\"), that sweep is also the review: read each row's plan (channel.get_project by its projectId) against the teardown and check the three things you can actually check without watching the video — the hook is the plan's hook line and not a restatement of the topic, the caption is in the reference's caption shape, and the beats run hook, setup, turn, payoff, cta rather than three shots of the same idea. You cannot watch the render, so never claim you did: judge the plan and the caption, name any drift in one line at the end of the caption so the operator sees it beside the Approve button, and leave the row for them to decide. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Where this channel has a reference teardown (channel.list_posts, source \"reference teardown\"), that sweep is also the review: read each row's plan (channel.get_project by its projectId) against the teardown and check the three things you can actually check without watching the video — the hook is the plan's hook line and not a restatement of the topic, the caption is in the reference's caption shape, and the beats run hook, setup, turn, payoff, cta rather than three shots of the same idea. And on every plan, teardown or not, check the one thing that is always checkable: does each scene name the exemplar and the moment its grammar came from. A plan that attributes nothing was invented rather than modelled, and that is the drift worth naming first. You cannot watch the render, so never claim you did: judge the plan and the caption, name any drift in one line at the end of the caption so the operator sees it beside the Approve button, and leave the row for them to decide. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
     budget_micro_usd: 10_000_000, // $10 — a read and a few patches.
   }),
   schedule({
@@ -860,6 +1007,12 @@ export const agent = (decl: {
   description: string;
   /** The agent's own part of the system prompt, between the preamble and the gate. */
   brief: string;
+  /**
+   * This seat's ceilings, where the shared ones (`budget` above) do not fit what it is briefed to
+   * make. Omitted is the blueprint's default, which clears one Short Form render and its turns; a
+   * seat that renders more than that in one session states its own, sized from `renderMicroUsd`.
+   */
+  budget?: Budget;
   /** The platform tools this agent may call; the dashboard's own and `project_context` are added for it. */
   tools: string[];
   /** `naive/<slug>` refs into the platform's skill catalogue; read with `read_skill`. */
@@ -886,7 +1039,7 @@ export const agent = (decl: {
   role: decl.role,
   ...(decl.required === undefined ? {} : { required: decl.required }),
   model,
-  budget,
+  budget: decl.budget ?? budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${APPROVAL_GATE}`,
   tools: toolset([CONTEXT_TOOL, LIBRARY_TOOL, SPEND_TOOL, BROWSER_TOOL, ...(decl.skills.length > 0 ? ["read_skill"] : []), ...decl.tools, ...SOCIAL, ...BOARD, ...DASHBOARD_TOOLS], decl.handoffs ?? []),
