@@ -22,7 +22,8 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
 studio asks **four questions** (what the channel is about, **where it posts** — one network or
-several — and how often), every agent reads the answers back through the platform's
+several — how often, and, optionally, a channel or video to model it on), every agent reads the
+answers back through the platform's
 `project_context` tool, and each opens a **day-one** session that turns those answers into the
 channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
 
@@ -63,7 +64,7 @@ flowchart LR
 A freshly provisioned channel has **no posts**, and every screen shows its empty state until
 you or an agent files something. That is the truth about a new deployment: the dashboard never
 ships rows that pretend to be work someone did — the first rows are the ones the day-one
-sessions file from your three answers.
+sessions file from your setup answers.
 
 ## 🚀 Get started
 
@@ -157,10 +158,12 @@ credentials.
 Every agent's `system` opens with the same paragraph — *read `project_context` before anything
 else; the answers there are the client's, not yours to invent* — and closes with the approval
 gate. Between them is the seat's own brief, 120–400 words. Every agent also holds the
-dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, and the two doors to
-you (`ask_operator`, `request_tools`, both `ask`); the **Tools** column lists what is granted on
-top of that. Every seat carries the same ceilings — **$20 a task and $60 a day, per agent** —
-sized so one render of the length the producer is briefed for fits inside a single task
+dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, the managed `browser`
+(its screenshot comes back as a picture, which is how any seat reads a page it has to actually
+see), and the two doors to you (`ask_operator`, `request_tools`, both `ask`); the **Tools**
+column lists what is granted on top of that. Every seat carries the same ceilings — **$20 a task
+and $60 a day, per agent** — sized so one render of the length the producer is briefed for fits
+inside a single task
 (`ONE_RENDER_MICRO_USD` in [`templates/template.ts`](templates/template.ts)); each timer and each
 day one below carries its own budget inside them. Money is integer micro-USD in the declarations;
 it is printed in dollars here.
@@ -172,7 +175,7 @@ it is printed in dollars here.
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
 | `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
 | `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `clip_video` (the reference study only), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `view_image` (the reference study only), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
 | `analyst` | Performance | — | — | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
 
 ### `clipping`
@@ -216,8 +219,10 @@ refusal says a further question belongs. Nothing was dropped — it moved from t
 conversation.
 
 **The fourth question is `faceless`'s, and it is the only one you may leave blank.** *A channel or
-video to model this on* — paste a link or a handle, one per line. Give one and the crew studies it
-once, on day one, and files a **reference teardown** post: the hook patterns, the first three
+video to model this on* — paste a link, a handle, or the URLs of a few stills, one per line.
+Stills are worth the most: they are the only thing the crew can actually look at. Give one and
+the crew studies it once, on day one, and files a **reference teardown** post: the hook
+patterns, the first three
 seconds, how fast it cuts, the voice, the caption shape, the formats it repeats. Every brief, script,
 render and queue sweep afterwards is measured against that teardown, and each plan records which of
 its patterns it was executing. Leave it blank and nothing changes — the study card closes in a line
@@ -253,7 +258,7 @@ already fine is how a warning gets ignored. Once the right account is connected 
 line goes quiet and names the handles.
 
 **The crew keeps filing while nothing is connected, on purpose.** A queue is a review surface, not
-a publish action: refusing to file would throw away a render that has already been paid for (~$6.63
+a publish action: refusing to file would throw away a render that has already been paid for (~$9.00
 each, see [What it costs](#-what-it-costs)), and every day-one session opens minutes after the
 install, before anyone has had a chance to connect anything — so refusing would mean an empty first
 day and seven day-one cards spent on nothing. What is not acceptable is filing *silently*, which is
@@ -304,10 +309,10 @@ the queue or answers comments, because Monday 07:30, daily 08:00 and daily 18:00
 **What it costs to start.** A card carries no budget of its own — the tick starts an ordinary
 session on the assignee's own ceiling — so a fresh install can spend at most one **$20 task** per
 card, eight cards on `faceless` and seven on `clipping` ($160 on `faceless`, $140 on `clipping`), and
-only one of those sessions renders anything (~$6.63, see [What it costs](#-what-it-costs)). It is a
-ceiling and not a bill: the set-up cards are reads and one filing each, and the reference study adds
-one clip job on an install that named a reference and nothing at all on one that did not. The five intakes it replaced were capped lower
-($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
+only one of those sessions renders anything (~$9.00, see [What it costs](#-what-it-costs)). It is a
+ceiling and not a bill: the set-up cards are reads and one filing each, and the reference study
+adds one browser session on an install that named a reference and nothing at all on one that did
+not. The five intakes it replaced were capped lower ($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
 mattered. Nothing day one makes is published: everything lands in the queue as pending, for you to
 approve. The Home screen lists the cards the apply seeded; the board itself is where their progress
 lives.
@@ -373,8 +378,8 @@ the caption and drops the render, so a "published" post there ships a line of te
 work behind. The list this replaced admitted six of those and excluded `youtube` and `instagram` —
 two of the three that take the work.
 
-**Where *this* channel posts is yours**, answered in setup (see [The three
-questions](#the-three-questions)) — **one network or several** — and read back by everything that
+**Where *this* channel posts is yours**, answered in setup (see [The setup
+questions](#the-setup-questions)) — **one network or several** — and read back by everything that
 stamps a target: the store's default, the `create_post` tool description the crew reads before
 filing, and the line on Home and Posts. The answer is read as a list (`platformsFromAnswers`): every
 recognised pick in your order, each once, anything unrecognised dropped. With several picked, the
@@ -394,10 +399,10 @@ first"*, which `channel.update_post` can do.
 
 | Screen | What it does |
 |---|---|
-| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your three answers, from the latest applied install — "not configured" without a platform key), the day-one cards the apply seeded, approvals due, the crew with each agent's next fire, and the queue by status |
+| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your setup answers, from the latest applied install — "not configured" without a platform key), the day-one cards the apply seeded, approvals due, the crew with each agent's next fire, and the queue by status |
 | Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
-| Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
+| Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to the piece it decides — hook, the hooks it did not keep, what holds them, the close, the reference pattern, and the reference stills with the one the render opens on marked — then to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
 | Studio | One video and the session that made it: `GET /api/studio/:id` (a project or post id) answers the plan, its post and the latest of the plan's sessions read live; **Revise** (`POST /api/studio/:id/revise {message}`) sends your note to that session — queued, never interrupting a paid render — or opens a new renderer session on the same plan. It is the one way a rendered plan renders again, and it refuses an approved or posted video: reject it first |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
 | Analytics | Views and likes, summed from the posts this channel actually published |
@@ -454,7 +459,7 @@ an edit plus a re-apply.
 | the model, budget or approval gate every agent shares | [`templates/template.ts`](templates/template.ts) | `naive up` |
 | when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
-| the post kinds, the three setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
+| the post kinds, the setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
 | where the channel posts | **you answer it in the studio** — no edit, no deploy | nothing |
 | a seat's role or skills | `role`, `skills` in its `agent({ … })` call | `naive up` |
 | what a seat is asked for on day one, and what it waits on | its `task({ … })` in the template's `tasks` | `naive up` |
@@ -616,7 +621,7 @@ export default defineProject({
   name: "media",
   blueprint: "media",
   template: ACTIVE.name,                 // chosen in templates/index.ts
-  questions: ACTIVE.questions,           // the three the studio asks: subject, network, cadence
+  questions: ACTIVE.questions,           // what the studio asks: subject, network, reference, cadence
   templates: [                           // every template this repo carries
     { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
     { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },
@@ -655,7 +660,7 @@ The config can declare more than this template uses:
 | Key | What it provisions |
 |---|---|
 | `apps[]` | `name`, `type`, `description`, `deploy_dir`, `mcp` (the path of the app's own MCP endpoint; fullstack only), and `env` — literals, `{ from_env }` or `{ generate: true }`, written as the app's secrets |
-| `questions[]` | the setup questions (`text` or `choice`); at most three when a `template` is set |
+| `questions[]` | the setup questions (`text` or `choice`), each `optional` or not; at most four when a `template` is set. Needs `@usenaive-sdk/blueprints@^0.7.0` — 0.6.0 caps them at three and refuses `faceless`'s fourth outright |
 | `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
 | `tasks[]` | the crew's first work as cards on the organization's board: `key` (idempotent as `media:<key>`), `title`, `body`, `assignee` (an agent **name**) and `blocked_by` (sibling keys). Needs `@usenaive-sdk/blueprints@^0.6.0` — 0.5.0 strips the field without saying so |
 | `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |

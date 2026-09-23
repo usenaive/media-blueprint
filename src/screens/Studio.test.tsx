@@ -220,6 +220,27 @@ describe("the Studio", () => {
     expect(host.textContent).toContain("rendered");
   });
 
+  /**
+   * The Studio draws a plan through the Projects list's own `PlanHead`, which is why that block
+   * lives there: the operator who opens a plan in the Studio to judge it has to see the same
+   * opening frame, and the same discarded hooks, as the one deciding it from the list.
+   */
+  it("carries the reference stills and the hooks that lost onto the Plan tab", async () => {
+    const project: VideoProject = {
+      ...rendered,
+      rejectedHooks: ["Nobody keeps these — too flat, it concedes the point in the first word."],
+      referenceFrames: ["https://cdn.example.test/tablets.jpg"],
+    };
+    await mount(wire(() => json({ ...studio, project })));
+
+    await click("Plan");
+    expect(host.querySelector("img")?.getAttribute("src")).toBe(project.referenceFrames![0]);
+    expect(host.querySelector(".chip-chosen")?.textContent).toBe("Opening frame");
+    const folded = host.querySelector<HTMLDetailsElement>("details")!;
+    expect(folded.open).toBe(false);
+    expect(folded.textContent).toContain(project.rejectedHooks![0]!);
+  });
+
   it("approves the post through PATCH, as the queue does, and the controls go away", async () => {
     const fetchMock = wire(
       () => json(studio),

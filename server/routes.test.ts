@@ -1324,7 +1324,7 @@ describe("the Studio", () => {
   };
   const row = (id: string, status: string, extra: Record<string, unknown> = {}) => json({ id, status, stop_reason: status === "idle" ? "end_turn" : null, created_at: "2026-09-15T08:00:00Z", agent_id: "agt_producer", ...extra });
   const session = (status: string) => (method: string, url: URL) => (method === "GET" && /^\/v1\/sessions\/ses_\w+$/.test(url.pathname) ? row(url.pathname.slice("/v1/sessions/".length), status) : undefined);
-  /** The demo queue with its rendered plan (`post_9f2a`, one id from plan to post) and a brief-born plan under a different post id. */
+  /** The demo queue with its rendered plan (`proj_9f2a` on `post_9f2a`) and a brief-born plan under a different post id. */
   const studioState = () => {
     const state = demoState();
     const brief = state.posts.find((p) => p.id === "post_8e1b")!;
@@ -1334,7 +1334,7 @@ describe("the Studio", () => {
     plan.postId = brief.id;
     return state;
   };
-  const rendered = (state: StoreState) => state.projects.find((p) => p.id === "post_9f2a")!;
+  const rendered = (state: StoreState) => state.projects.find((p) => p.id === "proj_9f2a")!;
   const post = (state: StoreState, id: string) => state.posts.find((p) => p.id === id)!;
 
   describe("the read", () => {
@@ -1383,12 +1383,12 @@ describe("the Studio", () => {
       const logs: Record<string, Record<string, unknown>> = {
         "ses_other/events?limit=100": { data: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "proj_zzz", status: "rendering" } } }] },
         "ses_maker/events?limit=100": {
-          data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "Render video project post_9f2a now" } }],
+          data: [{ seq: 1, type: "message.completed", data: { role: "user", content: "Render video project proj_9f2a now" } }],
           has_more: true,
           next_cursor: "100",
         },
         "ses_maker/events?limit=100&after_seq=100": {
-          data: [{ seq: 104, type: "tool.started", data: { name: "channel.update_project", args: { id: "post_9f2a", status: "rendering", expected_status: "planned" } }, created_at: "2026-09-13T10:00:00Z" }],
+          data: [{ seq: 104, type: "tool.started", data: { name: "channel.update_project", args: { id: "proj_9f2a", status: "rendering", expected_status: "planned" } }, created_at: "2026-09-13T10:00:00Z" }],
         },
       };
       const hits = upstream((method, url) => {
@@ -1463,11 +1463,11 @@ describe("the Studio", () => {
         log.push(url.pathname);
         if (url.pathname === "/v1/sessions") {
           // Another open, racing this one, records the maker while the document is let go.
-          store.recordSession("post_9f2a", { id: "ses_first", role: "rendered", at: "2026-09-13T10:00:00Z" });
+          store.recordSession("proj_9f2a", { id: "ses_first", role: "rendered", at: "2026-09-13T10:00:00Z" });
           return json({ data: [{ id: "ses_maker", status: "idle", stop_reason: "end_turn", created_at: "2026-09-13T09:00:00Z" }] });
         }
         if (url.pathname === "/v1/sessions/ses_maker/events") {
-          return json({ data: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "post_9f2a", status: "rendering" } }, created_at: "2026-09-13T10:00:00Z" }] });
+          return json({ data: [{ seq: 1, type: "tool.started", data: { name: "channel.update_project", args: { id: "proj_9f2a", status: "rendering" } }, created_at: "2026-09-13T10:00:00Z" }] });
         }
         return session("idle")(method, url);
       });
@@ -1561,13 +1561,13 @@ describe("the Studio", () => {
       const ctx = ctxOver(state);
       for (const status of ["approved", "rejected", "ready"]) {
         expect(await handleRequest(req("PATCH", "/api/posts/post_9f2a", JSON.stringify({ status })), ctx)).toEqual({
-          status: 409, body: { error: "a revision of post_9f2a is being made — the new cut lands pending, so the verdict waits for it" },
+          status: 409, body: { error: "a revision of proj_9f2a is being made — the new cut lands pending, so the verdict waits for it" },
         });
       }
       expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", mediaUrl: "fil_v1" });
       expect(rendered(state)).toMatchObject({ status: "rendering", revision: { note: "Tighter: cut scene two to three seconds." } });
       // The finishing write lands the new cut pending, and the verdict is the operator's again.
-      const mcp = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "post_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } };
+      const mcp = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "proj_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } };
       expect((await handleRequest(req("POST", "/mcp", JSON.stringify(mcp), { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"))).status).toBe(200);
       expect(post(state, "post_9f2a")).toMatchObject({ status: "pending", stage: "rendered", mediaUrl: "fil_v2" });
       expect(rendered(state)).not.toHaveProperty("revision");
@@ -1644,7 +1644,7 @@ describe("the Studio", () => {
       expect(reply).toEqual({ status: 202, body: { session: "ses_render", acceptedSeq: 41, opened: false } });
       const sent = hits.find((h) => h.method === "POST")!;
       expect(sent.url).toBe("/v1/sessions/ses_render/messages");
-      expect(sent.body).toEqual({ message: FRAME("post_9f2a", "fil_v1", "producer"), queue: true });
+      expect(sent.body).toEqual({ message: FRAME("proj_9f2a", "fil_v1", "producer"), queue: true });
       expect(hits.filter((h) => h.url === "/v1/sessions")).toEqual([]);
       // The one way through "a rendered plan is final": the plan is rendering again, on the operator's note.
       expect(rendered(state)).toMatchObject({ status: "rendering", revision: { sessionId: "ses_render", note: "Tighter: cut scene two to three seconds." } });
@@ -1679,7 +1679,7 @@ describe("the Studio", () => {
       expect(hits.map((h) => h.url).filter((u) => u.includes("ses_writer"))).toEqual([]);
       expect(hits.filter((h) => h.url.endsWith("/messages"))).toEqual([]);
       expect(hits.find((h) => h.method === "POST" && h.url === "/v1/sessions")?.body).toEqual({
-        agent_id: "agt_producer", message: FRAME("post_9f2a", "fil_v1", "producer"), metadata: { project_id: "post_9f2a" },
+        agent_id: "agt_producer", message: FRAME("proj_9f2a", "fil_v1", "producer"), metadata: { project_id: "proj_9f2a" },
       });
       expect(rendered(state).sessions).toEqual([...planner, { id: "ses_fresh", role: "revised", at: expect.any(String) }]);
       // And the screen reads the same session the note went to.
@@ -1716,7 +1716,7 @@ describe("the Studio", () => {
         expect(await revise(state, "post_9f2a")).toEqual({ status: 202, body: { session: "ses_fresh", acceptedSeq: 0, opened: true } });
         const created = hits.find((h) => h.method === "POST")!;
         expect(created.url).toBe("/v1/sessions");
-        expect(created.body).toEqual({ agent_id: "agt_producer", message: FRAME("post_9f2a", "fil_v1", "producer"), metadata: { project_id: "post_9f2a" } });
+        expect(created.body).toEqual({ agent_id: "agt_producer", message: FRAME("proj_9f2a", "fil_v1", "producer"), metadata: { project_id: "proj_9f2a" } });
         expect(hits.filter((h) => h.url.endsWith("/messages"))).toEqual([]);
         expect(rendered(state).sessions).toEqual([...sessions, { id: "ses_fresh", role: "revised", at: expect.any(String) }]);
         expect(rendered(state)).toMatchObject({ status: "rendering", revision: { sessionId: "ses_fresh" } });
@@ -1832,7 +1832,7 @@ describe("the Studio", () => {
       });
       expect((await handleRequest(req("POST", "/api/studio/post_9f2a/revise", '{"message":"shorter"}'), ctxOver(state, CONFIG))).status).toBe(202);
       const openedAt = rendered(state).statusAt;
-      const finish = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "post_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } });
+      const finish = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "update_project", arguments: { id: "proj_9f2a", status: "rendered", expected_status: "rendering", media_url: "fil_v2", agent: "producer" } } });
       const answer = await handleRequest(req("POST", "/mcp", finish, { authorization: "Bearer tok" }), ctxOver(state, CONFIG, "tok"));
       expect(JSON.stringify(answer.body)).not.toContain("isError");
       // Archived as it landed, by the session that made it — not as of the claim, by the session it opened.

@@ -28,8 +28,15 @@ import { Avatar, Card, Clamp, MediaPreview, PageHeader, SectionHead, ago } from 
  * it was not offered, so a dashboard that could not answer it left the agent asking the void.
  */
 
-/** One field of a question, as the agent wrote it (`canonical-spec §7.1`). */
-export type QuestionField = { key: string; label: string; help?: string } & (
+/**
+ * One field of a question, as the agent wrote it (`canonical-spec §7.1`).
+ *
+ * `optional` sits on the base beside `help`, exactly where the platform's own `QuestionField` puts
+ * it, and is absent rather than `false` for the same reason: a field claims it, or it does not.
+ * This type is a hand-written copy of that contract, and a copy that is missing a member does not
+ * fail to compile — it silently decides something. See `unanswered` for what this one decided.
+ */
+export type QuestionField = { key: string; label: string; help?: string; optional?: boolean } & (
   | { type: "text"; placeholder?: string }
   | { type: "choice"; options: string[]; multiple?: boolean; other?: boolean }
 );
@@ -182,21 +189,38 @@ export const keyOf = (item: Pick<Parked, "sessionId" | "toolCallId">): string =>
 /**
  * The answers as they will be sent: free text trimmed, a blank entry dropped, a listed option kept
  * exactly as the agent wrote it (the platform checks a closed choice against the option string).
+ *
+ * A key whose value cleans away to nothing is dropped WHOLE, not sent as `""`. The platform refuses
+ * a blank as firmly for an optional field as for a required one — what `optional` admits is the key
+ * being ABSENT (`assertAnswers`), and an empty string is a value, which a crew cannot tell apart
+ * from an answer somebody meant. It costs a required field nothing: `unanswered` reads an absent key
+ * and a blank one the same way, and refuses to send either.
  */
 export const trimmed = (fields: readonly QuestionField[], answers: Answers): Answers => {
   const clean = (field: QuestionField | undefined, value: string) =>
     field?.type === "choice" && field.options.includes(value) ? value : value.trim();
   return Object.fromEntries(
-    Object.entries(answers).map(([key, value]) => {
-      const field = fields.find((one) => one.key === key);
-      return [key, Array.isArray(value) ? value.map((one) => clean(field, one)).filter((one) => one !== "") : clean(field, value)];
-    }),
+    Object.entries(answers)
+      .map(([key, value]): [string, string | string[]] => {
+        const field = fields.find((one) => one.key === key);
+        return [key, Array.isArray(value) ? value.map((one) => clean(field, one)).filter((one) => one !== "") : clean(field, value)];
+      })
+      .filter(([, value]) => value.length > 0),
   );
 };
 
-/** The labels of every field still unanswered; the platform refuses a partial answer (§7.2). */
+/**
+ * The labels of every field still unanswered; the platform refuses a partial answer (§7.2).
+ *
+ * *** EXCEPT THE FIELD THAT SAID IT NEED NOT BE ANSWERED. *** `optional: true` (§7.1) is the one
+ * documented way out of "every field must be answered", and it exists for the question whose answer
+ * improves the work without gating it — a reference to imitate, say. This check did not know the
+ * flag, so it held back the whole answer over a field the platform would have accepted as absent,
+ * and the refusal was ours: the agent stayed parked, the operator was told the field was "still
+ * unanswered", and there was nothing they could type to get past it that was not an invention.
+ */
 export const unanswered = (fields: readonly QuestionField[], answers: Answers): string[] =>
-  fields.filter((field) => (answers[field.key] ?? "").length === 0).map((field) => field.label);
+  fields.filter((field) => field.optional !== true && (answers[field.key] ?? "").length === 0).map((field) => field.label);
 
 /** What the server confirmed about one decision. Never written before its reply lands. */
 interface Decided {
@@ -550,7 +574,12 @@ function AnswerField({ id, field, value, onChange }: {
   const other = field.type === "choice" ? chosen.find((c) => !field.options.includes(c)) ?? "" : "";
   return (
     <div className="min-w-0">
-      <label className="prop-label block" htmlFor={id}>{field.label}</label>
+      {/* A field that may be left blank says so, or the operator invents an answer to get past it —
+          and an invented answer is worse than an absent one, because the crew cannot tell them apart. */}
+      <label className="prop-label block" htmlFor={id}>
+        {field.label}
+        {field.optional ? <span className="ml-1.5 normal-case tracking-normal opacity-70">· optional</span> : null}
+      </label>
       {field.help ? <p className="mt-0.5 text-xs text-ink-3">{field.help}</p> : null}
       {field.type === "text" ? (
         <input id={id} className="input mt-1.5 w-full" placeholder={field.placeholder ?? ""}

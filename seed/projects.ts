@@ -5,7 +5,7 @@
  * everything decided BEFORE the paid step: for a generated piece the scenes, the prompts, the
  * model and the look; for a cut piece the source videos, the moments in them and why each one.
  * The planning seat writes the project; a different seat renders or cuts it; the render lands
- * on a post. Splitting the two is what lets the operator read the plan before ~$3.32 is spent on
+ * on a post. Splitting the two is what lets the operator read the plan before ~$9.00 is spent on
  * it, and what lets a render be redone from the same plan rather than from a caption.
  *
  * Same rules as `seed/posts.ts`: plain data, shared by the store and the routes, demo rows for
@@ -177,8 +177,8 @@ export interface VideoProject {
    */
   referencePattern?: string;
   /**
-   * The stills this piece is rendered AGAINST — `fil_` ids or image URLs from the channel's
-   * reference teardown.
+   * The stills this piece is rendered AGAINST — the PUBLIC image URLs the channel's reference
+   * teardown named, in the operator's own words.
    *
    * Describing a reference in words and hoping the model reconstructs it is the lossy path; the
    * provider takes a reference image directly. This field is what lets a plan say "make it look
@@ -260,7 +260,7 @@ export const FACELESS_PROJECT_SEEDS: VideoProject[] = [
     caption: "The 5am debate, settled 1,900 years ago. #stoicism #marcusaurelius",
   },
   {
-    id: "post_9f2a", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(2), sessions: [],
+    id: "proj_9f2a", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(2), sessions: [],
     renders: [{ mediaUrl: "fil_9f2a_v1", at: daysAgo(1.5) }],
     title: "3 stoic rules nobody follows", agent: "scriptwriter", platform: "youtube", account: "@dailystoic", postId: "post_9f2a",
     brief: "Three rules from the Enchiridion the niche quotes and does not keep. Rule two is the one that stings, so it goes in the middle.",

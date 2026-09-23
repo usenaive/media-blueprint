@@ -191,7 +191,9 @@ export const CLIPPING: MediaTemplate = {
   kinds: [{ id: "clip", label: "Clip" }],
 
   /**
-   * Three, because the engine refuses a fourth (`templates/template.ts`, `SetupQuestion`). The slot
+   * Three, where the engine now allows four (ADR-0757) — clipping simply has no fourth worth asking.
+   * `faceless` spends its fourth on the reference question; this template's sources arrive as a list, so
+   * there is nothing a form could ask here that the channel plan does not answer better. The slot
    * `PLATFORM_QUESTION` takes was `niche` — "Niche / audience" — and the channel manager asks for
    * it in its day-one session instead. The references question keeps its slot whatever else goes: it is
    * the one answer no seat may work without, and no crew may infer.

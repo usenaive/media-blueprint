@@ -8,7 +8,7 @@ a post lives. Everything below is read off the code; file paths are given so it 
 - **Blueprint** = the machine, shared by every template: the React dashboard (`src/`), the
   `/api/*` routes (`server/routes.ts`), the `/mcp` endpoint (`server/mcp.ts`), the store
   (`server/store.ts`, `server/api-entry.ts`) and the approval flow.
-- **Template** = data: the crew, its prompts, tool allow-lists, post kinds, three setup questions,
+- **Template** = data: the crew, its prompts, tool allow-lists, post kinds, the setup questions,
   and the words the queue prints (`templates/faceless.ts`, `templates/clipping.ts`).
 - `templates/index.ts` — `ACTIVE` picks the running template (`faceless` by default,
   `NAIVE_TEMPLATE` overrides). Switching is an edit of that line plus `naive up`.
@@ -22,23 +22,25 @@ From `naive.config.ts`:
 
 | Resource | What |
 | --- | --- |
-| Project `media` | template `ACTIVE.name`, 3 setup questions (`ACTIVE.questions`) |
+| Project `media` | template `ACTIVE.name`, the running template's setup questions (`ACTIVE.questions`) — 4 on `faceless`, 3 on `clipping` |
 | Identity `channel` | the one persona every agent, cron and social route acts as |
 | App `channel` (fullstack, required) | `deploy_dir: dist`, `mcp: "/mcp"`, env `NAIVE_API_KEY` (from env), `DASHBOARD_TOKEN` + `DASHBOARD_PASSWORD` (platform-generated); platform also injects `VETTA_MCP_TOKEN`, `NAIVE_API_URL`, `NAIVE_IDENTITY_ID`, `DATABASE_URL` |
 | Agents | the template's crew (5 seats each) |
 | Schedules | every agent's crons, owned as a complete set (omission deletes; matched by exact cron string) |
 | Board cards | one per `tasks[]` entry on the org orchestrator's board (§31.11), keyed `media:<key>`; the API's tick wakes each assignee whose card is `todo` and unblocked. Replaces the intakes — a template that seeds `tasks` declares none |
 
-Setup questions are capped at three by the SDK (`parseProject`). Both templates spend one on
-`platform` (multi-select of YouTube Shorts / TikTok / Instagram Reels) and one on `cadence`;
-`faceless` asks `niche`, `clipping` asks `sources` (reference channel URLs). The displaced question
+Setup questions are capped at four by the SDK (`parseProject`, `@usenaive-sdk/blueprints@0.7.0`;
+0.6.0 capped them at three). Both templates spend one on `platform` (multi-select of YouTube Shorts
+/ TikTok / Instagram Reels) and one on `cadence`; `faceless` asks `niche`, `clipping` asks `sources`
+(reference channel URLs). `faceless` spends the fourth on `reference` — a channel or video to model
+the piece on, the one question that may be left blank (ADR-0757). The displaced question
 (tone/audience) is asked by the channel manager on day one via `ask_operator`.
 
 ## 3. The crews
 
 Both templates share `channel-manager` (the `required` seat, and the one Chat talks to —
 `routes.ts` looks it up by name). Every agent runs `anthropic/claude-sonnet-5` with a budget of
-$60/day and $20/task (`templates/template.ts`, sized around one ~$6.63 render).
+$60/day and $20/task (`templates/template.ts`, sized around one ~$9.00 render).
 
 ### faceless
 
@@ -46,7 +48,7 @@ $60/day and $20/task (`templates/template.ts`, sized around one ~$6.63 render).
 | --- | --- | --- | --- | --- | --- |
 | channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | Mon 09:00 plan · daily 08:00 queue sweep · daily 18:00 comments |
 | trend-scout | Trends & briefs | web_search, web_fetch | seo-content-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
-| scriptwriter | Hooks & scripts | web_search, web_fetch | short-video-hooks, caption-writing | producer | daily 06:30 |
+| scriptwriter | Hooks & scripts | web_search, web_fetch, view_image (the day-one reference study only) | short-video-hooks, caption-writing | producer | daily 06:30 |
 | producer | Video production | generate_video (models pinned: veo-3.1, seedance-2.5), generate_image | short-video-hooks | — | daily 07:00 |
 | analyst | Performance | — | — | — | Mon 07:30 |
 
@@ -226,6 +228,14 @@ interface VideoProject {
   scenes?: Scene[];           // generation: the shots, in order
   sources?: ClipSource[];     // clipping: the videos to cut from, and why
   caption?: string;           // the publishable caption, copied to the post when the render lands
+  hook?: string;              // generation: the first line, verbatim — what is said and what is on the frame at 0:00
+  rejectedHooks?: string[];   // the hooks written and not kept, and why the kept one beat them
+  retention?: string;         // what holds the viewer past 0:03, and past 0:07
+  cta?: string;               // the one action the close asks for
+  facts?: Fact[];             // the claims the script rests on, each with its source
+  sound?: Sound;              // music, voice and sound design
+  referencePattern?: string;  // which pattern of the teardown this piece is an instance of
+  referenceFrames?: string[]; // public image URLs; the producer passes the FIRST as the render's opening frame
   sessions: ProjectSession[]; // the sessions that touched it — the one the Studio talks to is the last
   renders?: Render[];         // the videos a revision replaced, oldest first
   backfilledAt?: string;      // a legacy plan whose sessions were looked for and not found — looked for once
@@ -236,7 +246,9 @@ interface VideoProject {
     replaces?: Render;        // the video it re-renders, captured when the revision opened
   };
 }
-interface Scene      { prompt: string; seconds: number; voiceover?: string; text?: string; model?: string }
+interface Scene      { prompt: string; seconds: number; beat?: SceneBeat; voiceover?: string; text?: string; model?: string }
+interface Fact       { claim: string; source: string }
+interface Sound      { music?: string; voice?: string; sfx?: string[] }
 interface ClipSource { url: string; from?: string; to?: string; reason: string }
 interface ProjectSession { id: string; role: "planned" | "rendered" | "revised"; at: string }
 interface Render         { mediaUrl: string; at: string; sessionId?: string }
@@ -364,7 +376,7 @@ second project, do not approve or post anything." The producer's and clipper's b
 (`templates/`), and the manager's says a revision is the operator's move, never its own.
 
 A note on a `rendered` plan is the one message on this screen that spends: it renders the plan
-again, at `ONE_RENDER_MICRO_USD` (~$6.63, measured per second). So the composer says so under itself before a
+again, at `ONE_RENDER_MICRO_USD` (~$9.00, measured per second). So the composer says so under itself before a
 word is typed, and Enter arms the spend rather than making it — the press that sends it is a button
 naming the price. Every other note here (a plan's words, a render already out) costs nothing and
 leaves on Enter as it always did.

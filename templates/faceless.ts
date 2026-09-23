@@ -59,7 +59,7 @@ import {
   channelManager,
   channelPlanCard,
   LENGTH_PHRASE,
-  MAX_SECONDS,
+  ONE_RENDER_MICRO_USD,
   PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   REFERENCE_QUESTION,
@@ -104,10 +104,17 @@ export const FACELESS: MediaTemplate = {
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
           input:
             "Make the next piece. Read the niche and tone (project_context) and the planned generation projects (channel.list_projects, status planned, kind generation); claim the next one — channel.update_project, status rendering, expected_status planned; refused means it is not yours, take the next; and a rendered plan is one the channel has paid for, so never render it again. Read the plan in full (channel.get_project): it comes back with `render_prompt`, its shots already compiled into the one prompt this piece renders as, and `render_seconds`, their sum. Call generate_video once with exactly that prompt, seconds `render_seconds`, aspect_ratio 9:16 and the plan's model, passing the first of any `render_reference_images` the read carried as image_urls, which becomes the opening frame — do not rewrite the prompt and do not drop a shot to shorten it. Wait for the file. Finish it with channel.update_project — status rendered, expected_status rendering, media_url, your name as agent; refused there means the plan moved on while you rendered, so say so and stop rather than render a second time. In the note, name the plan's reference_pattern where it has one, so the manager's sweep can read what this piece was meant to be. If nothing is planned, render nothing and stop. If generate_video is not among your tools, or it refuses for want of a model, render nothing: request exactly what is missing with request_tools — generate_video at allow, with the model to render with in config.models — once, then wait; if it is granted, carry on with the piece, and if it is refused, stop for tonight.",
-          // $15 — a render is now up to ~$6.63 (a piece runs to MAX_SECONDS, where it used to stop
-          // at fifteen), and the fire has to hold that plus the turns that read the plan and file
-          // it. At $10 this cron would have failed every night at the same point once the format
-          // grew. It stays under the seat's $20 per-task ceiling.
+          // $15 — and the figure it is sized against is ~$9.00, not the ~$6.63 this line used to
+          // claim. `ONE_RENDER_MICRO_USD` is what the LEDGER debits for a `MAX_SECONDS` piece
+          // (8,995,530 µUSD, measured through the platform); ~$6.63 was the provider's own invoice
+          // for the same render, which understates every ceiling by the markup. A fire has to hold
+          // the render's admission hold PLUS the turns that read the plan and file it, so at $15
+          // that is $9.00 held and ~$6 left for a handful of model calls — enough, and deliberately
+          // not raised to the seat's $20 per-task ceiling, because a fire sitting exactly on its
+          // agent's ceiling has no margin left when the two are checked against each other.
+          // `templates.test.ts` pins the headroom to the constant rather than to this number, so
+          // the next price move fails the suite instead of failing this cron every night at the
+          // same point — which is what $10 did once the format grew.
           budget_micro_usd: 15_000_000,
         }),
       ],
@@ -162,15 +169,19 @@ export const FACELESS: MediaTemplate = {
        * that matters, and the crew plans from a caption. Measured: it planned the wrong genre
        * outright (ADR-0758).
        *
-       * `view_image` is the tool that actually looks (§16.2): it opens the stills the operator gave
-       * us and the study is written from what is on screen. It is day-one only — the ongoing crons
-       * never call it and the brief above never mentions it.
+       * `view_image` is the tool that actually looks (§16.2), AND IT LOOKS BY ID: its argument is
+       * `file_ids`, so what it opens is what the org already holds — an upload the operator made, a
+       * still they named as `fil_`, the id a screenshot from this same session was filed under. A
+       * URL never reaches it; it is refused as `validation_failed`. It is day-one only — the
+       * ongoing crons never call it and the brief above never mentions it.
        *
        * `browser` is NOT listed here because every seat already holds it (`BROWSER_TOOL`,
-       * `template.ts`) — and its screenshot now returns the picture rather than a file id, which is
-       * what makes a channel link worth opening at all. A page still shows thumbnails and titles
-       * rather than the inside of a video, so the question's help text is still the honest remedy:
-       * give stills.
+       * `template.ts`) — and it is the other half, the one that turns a URL into something visible:
+       * its screenshot files the page and hands back the picture ALONGSIDE the `fil_` id it was
+       * filed under. So the still URLs the question actually asks for are the browser's work, never
+       * `view_image`'s, and the card below has to say which is which. A page still shows thumbnails
+       * and titles rather than the inside of a video, so the question's help text is still the
+       * honest remedy: give stills.
        */
       tools: ["web_search", "web_fetch", "view_image"],
       skills: ["naive/short-video-hooks", "naive/caption-writing"],
@@ -245,7 +256,7 @@ export const FACELESS: MediaTemplate = {
    *     on `look` (a plan names the style template it renders in, and the producer picks which ones
    *     this channel uses).
    *   · `first-render` waits on `first-scripts`: the producer renders a plan, and there is no plan
-   *     before the writer files one. It is the one card that spends real money (~$6.63,
+   *     before the writer files one. It is the one card that spends real money (~$9.00,
    *     `ONE_RENDER_MICRO_USD`) and it is last for that reason too.
    *
    * Nothing else is blocked, and that is a decision rather than an omission: a blocker that is not
@@ -272,11 +283,16 @@ export const FACELESS: MediaTemplate = {
      * teardown is a post rather than a new row type: every seat already reads posts, the operator
      * can read it too, and nothing in the store or the screens had to change to carry it.
      *
-     * `clip_video` is granted for this and only this. It downloads a public video URL, transcribes
-     * it and scores it, returning captioned clips — it is the only tool on this platform that can
-     * genuinely watch the reference rather than read a page about it. It costs one clip job per
-     * install, once. `web_search` and `web_fetch` are the fallback and the whole job when the
-     * reference is a channel rather than a single video.
+     * `view_image` is granted for this and only this, and the browser every seat holds does the
+     * other half. WHICH ONE OPENS A REFERENCE IS DECIDED BY WHAT THE OPERATOR PASTED, and the card
+     * below has to say so in as many words, because the two do not overlap: `view_image` takes
+     * `file_ids` and refuses anything else outright — `validation_failed: <value> is not a fil_
+     * id` — so the still URLs the question actually asks for can never go to it. Those are the
+     * browser's: `goto` the URL, `screenshot`, and the picture comes back beside the `fil_` id the
+     * shot was filed under. `view_image` is then for the ids — an upload the operator made, a
+     * still they named as `fil_`, a screenshot this session just took — four at a time.
+     * `web_search` and `web_fetch` are the text half, and the whole job when the reference is a
+     * channel rather than a picture. It costs one browser session per install, once.
      *
      * IT BLOCKS NOTHING WHEN THERE IS NO REFERENCE, which is what makes an optional question safe
      * to build a card on: the card is assigned and unblocked either way, so the seat is woken
@@ -289,7 +305,7 @@ export const FACELESS: MediaTemplate = {
       key: "reference-study",
       title: "Study the reference this channel is modelled on, and file the teardown",
       assignee: "scriptwriter",
-      body: "Read project_context. If it names no reference, file nothing, close this card with a note saying there is no reference and that the team works from the niche alone, and stop — that is a complete answer to this card and the seats behind it open immediately. Otherwise study what it names and file ONE reference teardown. WHAT YOU DO DEPENDS ON WHAT KIND OF THING EACH ONE IS, and you must not treat them as equal. An image URL or a fil_ id: open it with view_image, up to four at a time, and write from what is actually on screen — this is the only path that shows you the reference itself, so do it first and lean on it hardest. A page link: web_fetch it for the titles, the descriptions and the first lines, then browser goto it and screenshot it — the screenshot comes back as a picture you can actually look at, so you can see the thumbnails, the framing they favour and how the page presents itself. That is still the OUTSIDE of a video: nothing here samples frames out of one, so a link tells you what a page shows and nothing about what happens inside the piece — if every reference you were given is a link, the first line of the teardown must say that you saw no frames and ask the operator, in that post, to add two or three stills to the reference answer. Do not stop to ask them directly: two cards wait on this one, and a question parks your session. Then write the teardown as a pending post with no media and no stage, `source` \"reference teardown\", specific enough to plan a render from: WHAT IT ACTUALLY IS, in one line, naming the technique you can see — live footage, animation, a composite, a face swap — because getting this wrong is how a channel imitates the wrong genre; the hook patterns and the exact words of two or three; what happens in the first three seconds; how fast it cuts and how many shots a piece runs to; the shot grammar and what the camera does; wardrobe, props and anything branded; the narration and the caption shape; the formats it repeats, named, because the scout briefs against those names; what it never does; and its length. Mark every line you INFERRED rather than saw, and if you saw no frames at all say so in the first line of the post — a teardown that guesses confidently is far worse than one that is short, because everything downstream trusts it. Where you were given stills, name their fil_ ids in the post so the scriptwriter can put them on its plans. Put the post's id in the note. Do not write hooks, scripts or briefs here: the cards behind this one do that, and they read what you filed.",
+      body: "Read project_context. If it names no reference, file nothing, close this card with a note saying there is no reference and that the team works from the niche alone, and stop — that is a complete answer to this card and the seats behind it open immediately. Otherwise study what it names and file ONE reference teardown. WHAT YOU DO DEPENDS ON WHAT KIND OF THING EACH ONE IS, and you must not treat them as equal, because a different tool opens each and they do not substitute for one another. A still — a URL ending .jpg, .jpeg, .png, .gif or .webp: browser goto that URL and screenshot it. The screenshot comes back as a picture you can actually look at, and the browser is the ONLY way a URL becomes something you can see; view_image does not take URLs, it takes fil_ ids the organization already holds, and it refuses anything else. A fil_ id: that one goes to view_image, up to four at a time — an upload the operator made, a still they named as fil_, or the id your own screenshot was filed under. Stills are the only path that shows you the reference itself, so take them first and lean on them hardest. A handle or a title rather than a link — @someone, a channel's name: web_search it for its page, then treat what you find as the next case. A page or video link: web_fetch it for the titles, the descriptions and the first lines, then browser goto it and screenshot it, so you can see the thumbnails, the framing they favour and how the page presents itself. That is still the OUTSIDE of a video: nothing here samples frames out of one, so a link tells you what a page shows and nothing about what happens inside the piece — if every reference you were given is a link, the first line of the teardown must say that you saw no frames and ask the operator, in that post, to add two or three stills to the reference answer. Do not stop to ask them directly: two cards wait on this one, and a question parks your session. Then write the teardown as a pending post with no media and no stage, `source` \"reference teardown\", specific enough to plan a render from: WHAT IT ACTUALLY IS, in one line, naming the technique you can see — live footage, animation, a composite, a face swap — because getting this wrong is how a channel imitates the wrong genre; the hook patterns and the exact words of two or three; what happens in the first three seconds; how fast it cuts and how many shots a piece runs to; the shot grammar and what the camera does; wardrobe, props and anything branded; the narration and the caption shape; the formats it repeats, named, because the scout briefs against those names; what it never does; and its length. Mark every line you INFERRED rather than saw, and if you saw no frames at all say so in the first line of the post — a teardown that guesses confidently is far worse than one that is short, because everything downstream trusts it. Where you were given still URLs, copy them into the post exactly as the operator wrote them — those PUBLIC URLs are what a plan carries as `reference_frames`, and the producer passes the first as the piece's opening frame, so a URL you retyped is a render that fails. A fil_ still is the other half of that split and stops here: generate_video fetches a URL and refuses a fil_ id, so name one as a reference you looked at and never as a reference frame. Never name your own screenshots there either: a picture of a page is not a frame of the reference. Put the post's id in the note. Do not write hooks, scripts or briefs here: the cards behind this one do that, and they read what you filed.",
     }),
     task({
       key: "look",
@@ -323,7 +339,7 @@ export const FACELESS: MediaTemplate = {
       key: "first-render",
       title: "Render the channel's first piece from the first plan",
       assignee: "producer",
-      body: `There is a plan now — the scriptwriter's card closed, and its note names the project ids. Take the oldest planned generation project (channel.list_projects, status planned, kind generation) and claim it before you spend anything: channel.update_project, status rendering, expected_status planned; refused means another has it, so take the next. Read the plan in full (channel.get_project). It comes back with \`render_prompt\` — its shots already compiled into the one prompt this piece renders as, because nothing here joins clips — and \`render_seconds\`, their sum, which is ${LENGTH_PHRASE}. Call generate_video once with exactly that prompt, seconds \`render_seconds\`, aspect_ratio 9:16 and the plan's model. Do not rewrite the prompt, do not summarise it, and do not drop a shot to make it shorter — the plan was checked when it was filed. Wait for the file. Finish it: channel.update_project, status rendered, expected_status rendering, the video as \`media_url\`, your name as \`agent\`. Refused there means it moved on while you rendered: say so and stop rather than render a second time — a rendered plan is one the channel has already paid for, and this one costs about $${(MAX_SECONDS * 0.221).toFixed(2)}. ONE piece today, not five; your 07:00 fire takes the next one tomorrow. Name the project you rendered in the note, and its reference_pattern where it has one.`,
+      body: `There is a plan now — the scriptwriter's card closed, and its note names the project ids. Take the oldest planned generation project (channel.list_projects, status planned, kind generation) and claim it before you spend anything: channel.update_project, status rendering, expected_status planned; refused means another has it, so take the next. Read the plan in full (channel.get_project). It comes back with \`render_prompt\` — its shots already compiled into the one prompt this piece renders as, because nothing here joins clips — and \`render_seconds\`, their sum, which is ${LENGTH_PHRASE}. Call generate_video once with exactly that prompt, seconds \`render_seconds\`, aspect_ratio 9:16 and the plan's model. Do not rewrite the prompt, do not summarise it, and do not drop a shot to make it shorter — the plan was checked when it was filed. Wait for the file. Finish it: channel.update_project, status rendered, expected_status rendering, the video as \`media_url\`, your name as \`agent\`. Refused there means it moved on while you rendered: say so and stop rather than render a second time — a rendered plan is one the channel has already paid for, and this one costs about $${(ONE_RENDER_MICRO_USD / 1_000_000).toFixed(2)}. ONE piece today, not five; your 07:00 fire takes the next one tomorrow. Name the project you rendered in the note, and its reference_pattern where it has one.`,
       blocked_by: ["first-scripts"],
     }),
   ],

@@ -244,10 +244,13 @@ const IMAGE_SUFFIX = /\.(png|jpe?g|gif|webp)(\?|#|$)/i;
  *
  * The three answers are not equal and the crew must not pretend they are.
  *
- *   · `image` — a URL ending in a picture. The best answer: `view_image` opens it and the study is
- *     written from what is actually on screen.
- *   · `file`  — a `fil_` id already in the org's library, from an upload or an earlier session.
- *     Same as `image`, and the one that needs no public URL.
+ *   · `image` — a URL ending in a picture. The best answer, and the BROWSER's: `goto` it and the
+ *     screenshot comes back as a picture, so the study is written from what is actually on screen.
+ *   · `file`  — a `fil_` id already in the org's library, from an upload, a screenshot the session
+ *     just took, or an earlier session. The same study, and the only kind `view_image` will take:
+ *     its argument is `file_ids`, and a URL is refused as `validation_failed` before a byte is
+ *     read (§16.2). That refusal is why these two are classified apart rather than merged into
+ *     "a picture" — they are the same value to a reader and different tools to a seat.
  *   · `link`  — a channel or video page. The crew can read its text and screenshot the PAGE, but
  *     nothing here samples FRAMES out of a video (`clip_video` returns transcript-derived text and
  *     the session has no ffmpeg). A video link alone is therefore the WEAKEST answer, and the
@@ -429,7 +432,7 @@ export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 299_851;
 
 /**
  * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
- * the per-task ceiling has to hold one render of the length the producer is briefed for (~$3.32)
+ * the per-task ceiling has to hold one render of the length the producer is briefed for (~$9.00)
  * **plus** the session's own model calls, because the render's admission hold and the turn's model
  * calls draw on the same ceiling. At $2 the very first production session on production spent the
  * money, blew the ceiling and parked with the video already rendered.

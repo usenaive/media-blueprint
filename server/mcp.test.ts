@@ -343,7 +343,7 @@ describe("mcp tools", () => {
    * `expected_stage` guarded the START of the render and nothing guarded its end: no field recorded
    * that a render had been bought. So the manager's 08:00 sweep, putting a claim a dead session left
    * at `rendering` back to `scripted`, was an instruction to render the same piece a second time —
-   * ~$6.63 (`ONE_RENDER_MICRO_USD`) of video the channel already owns — and a producer whose stale
+   * ~$9.00 (`ONE_RENDER_MICRO_USD`) of video the channel already owns — and a producer whose stale
    * completion write landed unguarded overwrote the render that replaced it.
    *
    * The media on the row is the receipt. A row that carries one cannot go back to a stage before

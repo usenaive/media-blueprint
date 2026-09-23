@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
+import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, referenceKindOf, RENDERER, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -111,6 +111,77 @@ describe("the crews", () => {
     for (const agent of TEMPLATES.clipping.agents) {
       expect(agent.system ?? "", `clipping/${agent.name}`).not.toMatch(/teardown/i);
     }
+  });
+
+  /**
+   * *** THE PRIMARY PATH HAS TO BE ONE THE TOOLS ACTUALLY ALLOW. ***
+   *
+   * `reference-study` opened with *"An image URL or a fil_ id: open it with view_image"*, and an
+   * image URL is exactly what `REFERENCE_QUESTION`'s help steers every operator into giving —
+   * *"the URLs of a few stills"*. `view_image` takes `file_ids` and nothing else: a URL is refused
+   * as `validation_failed: <url> is not a fil_ id` before a byte is read. So the card's best
+   * branch answered a refusal, and since `hook-style` and `look` both wait on this card and
+   * `first-scripts` and `first-render` wait on those, the whole day-one chain stalled behind a
+   * card that could not close.
+   *
+   * The seat holds `web_search`, `web_fetch`, `view_image` and the `browser` every seat carries,
+   * and that fixes the split: the browser goes to a URL and hands its screenshot back as a
+   * picture; `view_image` opens the `fil_` ids the org already holds. Asserted against
+   * `referenceKindOf`, which is what actually classifies an answer, so a card that grows a fourth
+   * branch cannot quietly lose one of these three.
+   */
+  it("sends each kind of reference to a tool that can open it, and never a URL to view_image", () => {
+    const body = TEMPLATES.faceless.tasks.find((task) => task.key === "reference-study")!.body!;
+    // The three answers the classifier can return; the card owes a branch to each.
+    expect(referenceKindOf("https://cdn.example/still.jpg")).toBe("image");
+    expect(referenceKindOf("fil_9f2a")).toBe("file");
+    expect(referenceKindOf("https://youtube.com/@dailystoic")).toBe("link");
+
+    // `image` — the browser's, and said before `view_image` is mentioned at all, because that
+    // order is what stops a seat reaching for the tool that will refuse it.
+    const urlBranch = /browser goto that URL and screenshot/;
+    expect(body).toMatch(urlBranch);
+    expect(body.search(urlBranch)).toBeLessThan(body.indexOf("view_image"));
+    expect(body).toMatch(/view_image does not take URLs/);
+    // `file` — the one thing `view_image` is for.
+    expect(body).toMatch(/A fil_ id: that one goes to view_image/);
+    // `link` — the page's text and the page's picture, and still the outside of a video.
+    expect(body).toMatch(/A page or video link: web_fetch it[^.]*screenshot it/);
+    expect(body).toMatch(/OUTSIDE of a video/);
+    // And the answer that is no answer still closes the card in a line, which is the whole reason
+    // a fourth question was allowed to be optional.
+    expect(body).toMatch(/names no reference, file nothing, close this card/);
+
+    // Every tool the card reaches for is one this seat is actually granted.
+    const granted = toolsOf(TEMPLATES.faceless, "scriptwriter");
+    for (const tool of ["web_search", "web_fetch", "view_image", "browser"]) expect(granted).toContain(tool);
+    expect(body).not.toMatch(/clip_video/);
+  });
+
+  /**
+   * *** AND THE SPLIT HAS TO SURVIVE INTO THE PLAN, BECAUSE ONE OF THE TWO VALUES RENDERS. ***
+   *
+   * The teardown is what the scriptwriter reads when it fills `reference_frames`, and that field is
+   * PUBLIC image URLs and nothing else: `generate_video` takes `image_urls`, its argument is a URL,
+   * and a `fil_` id written there is a plan that fails validation after it was filed and approved
+   * (`server/mcp.ts`, and `referenceFrames` in `seed/projects.ts`).
+   *
+   * The card used to close with *"name them in the post exactly as the operator wrote them — those
+   * are what a plan carries as `reference_frames`"* two paragraphs after calling a `fil_` id a
+   * still — so the one body both defined a still as either kind and told the seat to copy either
+   * kind forward. A card that contradicts itself is worse than one that omits, because the seat
+   * acts on whichever sentence it read last, and the cost of reading the wrong one lands on the
+   * producer as a refused render nobody planned for.
+   */
+  it("carries only the operator's still URLs into a plan's reference frames, and says a fil_ id stops here", () => {
+    const body = TEMPLATES.faceless.tasks.find((task) => task.key === "reference-study")!.body!;
+    expect(body).toMatch(/still URLs, copy them into the post exactly as the operator wrote them/);
+    expect(body).toMatch(/those PUBLIC URLs are what a plan carries as `reference_frames`/);
+    // The half that does not render is named as not rendering, in the tool's own terms.
+    expect(body).toMatch(/generate_video fetches a URL and refuses a fil_ id/);
+    expect(body).toMatch(/never as a reference frame/);
+    // Once, in one sentence: a second mention is a second definition, which is what this fixed.
+    expect(body.match(/reference_frames/g)).toHaveLength(1);
   });
 
   it("requires only the seat the dashboard's Chat is wired to", () => {
@@ -285,7 +356,7 @@ describe("the crews", () => {
      * A claim on the way in and nothing on the way out is half a guard: the producer's completion
      * write landed whatever had happened to the plan while it rendered, so a stale session could
      * overwrite the render that replaced it, and neither the producer nor the manager was told that
-     * a rendered plan is one the channel has already paid ~$6.63 for. Both are said in the brief
+     * a rendered plan is one the channel has already paid ~$9.00 for. Both are said in the brief
      * and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat only after it
      * has spent the money.
      */
@@ -800,6 +871,31 @@ describe("the channel's clock", () => {
     // session's own ceiling, so a fire capped under a render is the same failure one level down.
     const producer = TEMPLATES.faceless.agents.find((one) => one.name === "producer");
     expect(producer?.schedules?.[0]?.budget_micro_usd).toBeGreaterThan(ONE_RENDER_MICRO_USD);
+  });
+
+  /**
+   * *** THE PRICE MOVED AND THE PROMPT DID NOT. *** The `first-render` body told the producer a
+   * render costs about $6.63 — `MAX_SECONDS * 0.221`, a literal re-derivation of a figure that had
+   * since been re-measured through the platform's ledger into `ONE_RENDER_MICRO_USD` (~$9.00). A
+   * seat deciding whether it may render a second time was reading a third off the real number, and
+   * the 07:00 fire was sized against the same stale figure. Both are held to the constant here:
+   * the body by computing the same string the template does, the fire by deriving its floor from
+   * the constant rather than from the number written beside it — so the next re-measurement fails
+   * this test instead of failing that cron every night at the same point.
+   */
+  it("quotes the render at what the ledger bills, in the card the producer reads and the fire that pays for it", () => {
+    const render = `$${(ONE_RENDER_MICRO_USD / 1_000_000).toFixed(2)}`;
+    const body = TEMPLATES.faceless.tasks.find((task) => task.key === "first-render")!.body!;
+    expect(body).toContain(render);
+    // Exactly one price is quoted at the agent, and it is that one.
+    expect(body.match(/\$\d+\.\d\d/g)).toEqual([render]);
+
+    const producer = TEMPLATES.faceless.agents.find((one) => one.name === "producer")!;
+    const fire = producer.schedules![0]!;
+    // The render's admission hold plus the turns that read the plan and file it draw on one ceiling.
+    expect(fire.budget_micro_usd).toBeGreaterThanOrEqual(ONE_RENDER_MICRO_USD + 5_000_000);
+    // And a fire is one task, so it stays inside the seat's own per-task ceiling.
+    expect(fire.budget_micro_usd).toBeLessThanOrEqual(producer.budget.max_task_micro_usd);
   });
 
   it("tells each fire what to do, in its own words", () => {
