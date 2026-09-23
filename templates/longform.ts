@@ -101,6 +101,7 @@ export const LONGFORM: MediaTemplate = {
       // are a second act that restates the first and a seam that lands inside a shot. Both are
       // readable in the plan, which is the only thing this seat can honestly read.
       " That sweep is also this channel's only review, and on a piece rendered in segments there are two things to read beyond the caption: the plan's acts actually change gear — a second act that restates the first is a three-minute piece with one minute in it — and no segment boundary falls inside a continuous shot, because two independently rendered segments never match mid-shot and the seam shows. Judge the plan, never the render: nothing here can watch a video, so never claim you did, and flag any drift in one line at the end of the caption so the operator sees it beside the Approve button.",
+      { reference: true, planCheck: "the acts change gear rather than restating one another, and no segment boundary falls inside a continuous shot" },
     ),
     agent({
       name: "researcher",

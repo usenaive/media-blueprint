@@ -60,7 +60,7 @@ export const CLIPPING: MediaTemplate = {
   description: "Repurposes existing video in one niche: cuts the best moments out of the reference channels and captions them.",
 
   agents: [
-    channelManager("the scout, the clipper and the caption-editor"),
+    channelManager("the scout, the clipper and the caption-editor", "", { reference: false, planCheck: "" }),
     agent({
       name: "clipper",
       role: "Clip production",

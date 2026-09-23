@@ -441,7 +441,7 @@ export interface MediaTemplate {
    *
    * One of them is always `PLATFORM_QUESTION`, which every template of this blueprint asks, because
    * where a channel posts is not the blueprint's to decide. A FOURTH is allowed only if it is
-   * `optional` — see `SetupQuestion` — and today exactly one template spends it, on
+   * `optional` — see `SetupQuestion` — and today two of the three spend it, on
    * `REFERENCE_QUESTION`.
    */
   questions: [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
@@ -479,20 +479,26 @@ export const MAX_SECONDS = SHORT_FORM_LENGTH.max;
 export const LENGTH_PHRASE = lengthPhrase(SHORT_FORM_LENGTH);
 
 /**
- * *** A PIECE IS ONE RENDER, WHATEVER ITS SCENE COUNT — READ THIS BEFORE PLANNING AROUND IT. ***
+ * *** HOW MANY RENDERS A PIECE IS, AND WHY IT IS NO LONGER ONE NUMBER. ***
  *
- * Nothing on this platform joins video: `BUILTIN_TOOLS` has `clip_video`, which CUTS, and no
- * concat, stitch or compose tool exists. So a plan's scenes are not rendered one by one and
- * assembled — they are compiled into ONE `generate_video` call whose prompt is the shots in order
- * and whose `seconds` is their sum. Multi-scene here means a multi-SHOT prompt, which is what the
- * video models actually take, and it is the reason `scenesPrompt` (`server/mcp.ts`) exists rather
- * than each seat spelling the compilation out for itself.
+ * Nothing on this platform JOINS video for you: `BUILTIN_TOOLS` has `clip_video`, which cuts, and
+ * no concat tool exists. For a piece that fits in one call that means the scenes are compiled into
+ * ONE `generate_video` whose prompt is the shots in order and whose `seconds` is their sum — which
+ * is what `scenesPrompt` (`server/mcp.ts`) exists to do, rather than each seat spelling the
+ * compilation out for itself.
+ *
+ * `generate_video` takes at most `MAX_RENDER_SECONDS` in one call, so a template whose window runs
+ * past that is rendered in `segmentsOf(length)` segments and joined by its own producer — with
+ * `fetch_file` to get the rendered bytes onto its sandbox and ffmpeg to concatenate them. This used
+ * to be an exported `SCENES_ARE_ONE_RENDER = true` under a headline saying a piece is always one
+ * render. Long Form made that false, nothing ever read the constant, and a false constant under the
+ * loudest comment in the file is what the next reader believes. `segmentsOf()` is the answer now.
  *
  * The consequence to keep in mind when editing any producer prompt below: per-scene `seconds` is a
  * budget the model is asked to honour, not a cut the machine enforces. Plan shots that a single
- * continuous generation can carry.
+ * continuous generation can carry — and, where a piece is segmented, put every segment boundary on
+ * a shot change, because two independent generations never match mid-shot.
  */
-export const SCENES_ARE_ONE_RENDER = true;
 
 /**
  * What one render actually costs, measured rather than guessed.
@@ -675,13 +681,13 @@ export const CARD_ORDER =
  * them is the seat's own brief, 150–400 words", and the test used to approximate that by bounding
  * the whole `system` at 400 — which silently charged every author for the ~209 words of preamble
  * and gate they do not write and cannot shorten. The effect was visible in the prompts: every seat
- * of both templates sat at 394–400, written up against a ceiling two thirds of which was not
+ * of every template sat at 394–400, written up against a ceiling two thirds of which was not
  * theirs, and the planning brief had spent what was left on mechanics. Stripping both ends is what
  * the documented rule actually says, and it is a stricter test than the old one in the way that
  * matters — it now also asserts that the system ENDS with the gate, which nothing checked before.
  */
 export const APPROVAL_GATE =
-  "You work for a short-form video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file: `agent` your name, `account` the connected account (channel.list_accounts), `media_url` the video, `source` its origin, `platform` the network. A brief is a pending post with no media yet; a video project is the plan a video is made from — another seat renders or cuts it, and that files the post. The operator approves every row on the dashboard. session_spend reads what this session was charged, per media job: quote it, never estimate. The tools offered this turn are the complete list of what you can do right now: do not invent a capability. A tool or model you lack: request it once with request_tools — exact tool, permission, model in config.models, why — then wait; a refusal is final. A fact only the operator has: ask once with ask_operator, then wait. A connected account's tools appear once it is connected; none offered, say so and stop. Never describe a video you did not render or a post you did not file.";
+  "You work for a video channel. File every finished piece as a pending post with channel.create_post; never publish it yourself. Sign what you file: `agent` your name, `account` the connected account (channel.list_accounts), `media_url` the video, `source` its origin, `platform` the network. A brief is a pending post with no media yet; a video project is the plan a video is made from — another seat renders or cuts it, and that files the post. The operator approves every row on the dashboard. session_spend reads what this session was charged, per media job: quote it, never estimate. The tools offered this turn are the complete list of what you can do right now: do not invent a capability. A tool or model you lack: request it once with request_tools — exact tool, permission, model in config.models, why — then wait; a refusal is final. A fact only the operator has: ask once with ask_operator, then wait. A connected account's tools appear once it is connected; none offered, say so and stop. Never describe a video you did not render or a post you did not file.";
 
 /**
  * Every built-in tool the platform publishes, as a literal.
@@ -785,7 +791,7 @@ const SPEND_TOOL = "session_spend";
 /**
  * *** THE BROWSER, HELD BY EVERY SEAT, AT `allow`. ***
  *
- * It was denied to all ten seats of both templates, on the reasoning that a content crew needs no
+ * It was denied to all ten seats of every template, on the reasoning that a content crew needs no
  * shell and that denying the sandbox also keeps a session from provisioning a machine it would
  * never use. The browser was swept up in that and it does not belong there: it provisions no
  * sandbox (`BrowserOpenSpec.computerId` is optional — for a browser-only agent the browser IS the
@@ -949,24 +955,49 @@ export const schedule = (decl: { cron: string; input: string; budget_micro_usd: 
 });
 
 /**
- * The channel manager's week, shared by both templates because the manager is.
+ * The channel manager's week — and what it is allowed to say depends on the template it runs on.
  *
- * Three fires, and the cadence the landing copy already promises: the plan on Monday, the queue and
- * the comments every day. They are staggered around the specialist's morning fire below — the plan
- * is filed before the week's production starts, the queue is swept after the night's piece has
- * landed in it, and the comments are read at the end of the day.
+ * *** IT USED TO BE ONE SHARED ARRAY, AND THAT WAS WRONG IN THREE SEPARATE WAYS. *** Every
+ * template got byte-identical crons, so the Monday fire ordered a teardown refresh on `clipping`,
+ * which has no reference question, no teardown card and no teardown post to refresh — an
+ * instruction that can never succeed. It also named `naive/reference-teardown` as the procedure
+ * while every manager carried `naive/caption-writing` alone, so `read_skill` answered "no skill is
+ * available" on all three. And the daily sweep asked whether "the beats run hook, setup, turn,
+ * payoff, cta", which is Short Form's shape: `longform` plans are built in acts, and `clipping`
+ * plans carry sources and no scenes at all.
+ *
+ * So the week is a function of the template now. `reference` decides whether this channel keeps a
+ * teardown, and `planCheck` is the one thing this template's sweep can actually read off a plan —
+ * empty where a plan has no scenes to read.
  */
-export const CHANNEL_MANAGER_SCHEDULES: ScheduleDecl[] = [
+export interface ManagerWeek {
+  /** Does this template keep a reference teardown? `clipping` does not. */
+  reference: boolean;
+  /** What the daily sweep checks on a plan, as the sentence it is asked. Empty where there is nothing to check. */
+  planCheck: string;
+}
+
+export const channelManagerSchedules = (week: ManagerWeek): ScheduleDecl[] => [
   schedule({
     cron: "0 9 * * 1", // Monday 09:00, channel time — the week's plan, before anything is produced against it.
     input:
-      "Plan the week. Read the channel's niche, audience and cadence (project_context), the reference teardown if this channel has one (channel.list_posts, source \"reference teardown\"), what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out. Where there is a teardown, say for each slot which of the reference's formats it is an instance of — a week of slots that are all the same format is a week the reference would not have made. THEN REFRESH THE TEARDOWN, because this is the one fire that does: the reference is a living channel and the post on file was written on install day, so read the reference again against what this channel has actually published since, and where the format has moved — a new hook shape, a different cut rhythm, a format it has stopped making — file a FRESH teardown post (`source` \"reference teardown\", `naive/reference-teardown` is the procedure) saying what changed and what it was. Where nothing moved, say so in the plan in one line and file nothing; a second teardown that only repeats the first is a post every seat now has to disambiguate. Brief the specialists through the plan, not by publishing anything yourself.",
+      "Plan the week. Read the channel's niche, audience and cadence (project_context), " +
+      (week.reference ? "the reference teardown if this channel has one (channel.list_posts, source \"reference teardown\"), " : "") +
+      "what has posted and what is still queued (channel.list_posts), and the looks available to produce in (channel.list_style_templates). Then file this week's plan: one brief per slot the cadence calls for, each naming the style template, the account it is for (channel.list_accounts) and the day it should go out." +
+      (week.reference
+        ? " Where there is a teardown, say for each slot which of the reference's formats it is an instance of — a week of slots that are all the same format is a week the reference would not have made. THEN REFRESH THE TEARDOWN, because this is the one fire that does: the reference is a living channel and the post on file was written on install day, so read the reference again against what this channel has actually published since, and where the format has moved — a new hook shape, a different cut rhythm, a format it has stopped making — file a FRESH teardown post (`source` \"reference teardown\", `naive/reference-teardown` is the procedure) saying what changed and what it was. Where nothing moved, say so in the plan in one line and file nothing; a second teardown that only repeats the first is a post every seat now has to disambiguate."
+        : "") +
+      " Brief the specialists through the plan, not by publishing anything yourself.",
     budget_micro_usd: 10_000_000, // $10 — the widest read of the week, once a week.
   }),
   schedule({
     cron: "0 8 * * *", // Daily 08:00 — the queue, an hour after the night's piece is filed.
     input:
-      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix. Where this channel has a reference teardown (channel.list_posts, source \"reference teardown\"), that sweep is also the review: read each row's plan (channel.get_project by its projectId) against the teardown and check the three things you can actually check without watching the video — the hook is the plan's hook line and not a restatement of the topic, the caption is in the reference's caption shape, and the beats run hook, setup, turn, payoff, cta rather than three shots of the same idea. And on every plan, teardown or not, check the one thing that is always checkable: does each scene name the exemplar and the moment its grammar came from. A plan that attributes nothing was invented rather than modelled, and that is the drift worth naming first. You cannot watch the render, so never claim you did: judge the plan and the caption, name any drift in one line at the end of the caption so the operator sees it beside the Approve button, and leave the row for them to decide. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
+      "Sweep the queue. Read every pending and ready post (channel.list_posts), and on each one fix the caption, the kind and the scheduled day with channel.update_post so the operator opens the dashboard to rows that are ready to approve. Flag in the caption anything you could not fix." +
+      (week.planCheck === ""
+        ? ""
+        : ` Where this channel has a reference teardown (channel.list_posts, source "reference teardown"), that sweep is also the review: read each row's plan (channel.get_project by its projectId) against the teardown and check what you can actually check without watching the video — the hook is the plan's hook line and not a restatement of the topic, the caption is in the reference's caption shape, and ${week.planCheck}. And on every plan, teardown or not, check the one thing that is always checkable: does each scene name the exemplar and the moment its grammar came from. A plan that attributes nothing was invented rather than modelled, and that is the drift worth naming first.`) +
+      " You cannot watch the render, so never claim you did: judge the plan and the caption, name any drift in one line at the end of the caption so the operator sees it beside the Approve button, and leave the row for them to decide. A row at stage scripting or rendering whose stageAt is more than a day old was claimed by a session that died: put it back for the next fire — scripting to brief, rendering to scripted — with expected_stage set to the stage it shows, and leave a younger claim alone. Never send back a row that already carries a media_url: that render happened and was paid for, so take that one forward to rendered instead — sending it back would buy the same video twice, and the tool refuses it. Then the plans (channel.list_projects): a video project at rendering whose statusAt is more than a day old is the same dead claim — put it back to planned with channel.update_project and expected_status rendering; a rendered one is final. Approve, reject and publish are the operator's — never yours.",
     budget_micro_usd: 10_000_000, // $10 — a read and a few patches.
   }),
   schedule({
@@ -1063,7 +1094,7 @@ export const agent = (decl: {
 });
 
 /**
- * The channel manager, shared by both templates because the manager is: the seat the dashboard's
+ * The channel manager, shared by every template because the manager is: the seat the dashboard's
  * Chat talks to (`server/routes.ts` looks it up by this name), so it is the one `required` agent —
  * a channel without it has a queue nobody plans and a chat window nobody answers. `specialists`
  * names the rest of the crew in the brief.
@@ -1071,9 +1102,9 @@ export const agent = (decl: {
  * `review` is the second line that differs, and it is separate for the reason `REFERENCE_RULE` is
  * not in the preamble: the teardown is a `faceless` object, so `clipping`'s manager must not be
  * told to read one. It also has to be a parameter rather than a suffix, because a seat carrying
- * both templates' rules would breach the 400-word bound this repo holds every `system` to.
+ * every template' rules would breach the 400-word bound this repo holds every `system` to.
  */
-export const channelManager = (specialists: string, review = ""): AgentDecl =>
+export const channelManager = (specialists: string, review = "", week: ManagerWeek): AgentDecl =>
   agent({
     name: "channel-manager",
     role: "Channel lead",
@@ -1082,12 +1113,12 @@ export const channelManager = (specialists: string, review = ""): AgentDecl =>
       "Runs the channel: plans the week from the cadence answer, briefs the team, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
     brief: `You are the channel manager, the person the operator talks to in Chat. You keep the calendar full at the cadence the context names and no fuller: more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and never do their work: the video projects (channel.list_projects) are theirs to plan and make, and revising a rendered one is the operator's move, never yours. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption what you could not fix.${review} Every evening you read the comments through a connected account's tools and reply as the channel. When the operator asks in Chat, answer with what the queue actually holds, and route work to the seat it belongs to.`,
     tools: ["web_search", "web_fetch"],
-    skills: ["naive/caption-writing"],
-    schedules: CHANNEL_MANAGER_SCHEDULES,
+    skills: week.reference ? ["naive/caption-writing", "naive/reference-teardown"] : ["naive/caption-writing"],
+    schedules: channelManagerSchedules(week),
   });
 
 /**
- * The manager's own card, shared by both templates because the manager is — and it is the head of
+ * The manager's own card, shared by every template because the manager is — and it is the head of
  * both boards for the same reason its Monday fire is the head of both weeks.
  *
  * *** `firstAsk` IS THE QUESTION THE SETUP FORM HAD NO SLOT FOR. *** The studio asks at most four
