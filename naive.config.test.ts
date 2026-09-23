@@ -1,4 +1,5 @@
 /** The blueprint as `naive up` would read it: it parses, it names its template, and every agent carries the approval gate. */
+import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
@@ -14,7 +15,15 @@ describe("naive.config", () => {
     expect(TEMPLATES[ACTIVE.name]).toBe(ACTIVE);
     // Every template the blueprint has, carried by this one repo: the engine refuses a repo that
     // carries only some, because switching to a missing one would be a re-clone.
-    expect(declaration.templates.map((one) => one.name).sort()).toEqual(["clipping", "faceless"]);
+    // What the repo hands `up` is what this repo carries AND the installed engine admits — the
+    // engine refuses any other list. Read off `BLUEPRINTS` rather than written out, so the day
+    // `longform` lands in that const the declaration widens on its own.
+    const admits = BLUEPRINTS.media?.templates ?? [];
+    expect(admits.length).toBeGreaterThan(0);
+    expect(declaration.templates.map((one) => one.name).sort()).toEqual([...admits].sort());
+    // The gap is one-directional and this is the side that must never open: a template the engine
+    // knows and this repo does not carry is a `naive up` that cannot provision it at all.
+    for (const name of admits) expect(Object.keys(TEMPLATES)).toContain(name);
   });
 
   it("declares the dashboard and the running template's agents, each gated on operator approval", () => {
@@ -28,7 +37,12 @@ describe("naive.config", () => {
       // written `deny` by name, so the default governs only the tools a connected account
       // contributes — whose names come from the org's live connections and cannot be written here.
       expect(agent.tools?.default_config.permission).toBe("ask");
-      expect(agent.tools?.configs["bash"]).toEqual({ enabled: false, permission: "deny" });
+      // The shell is the one built-in a seat may be granted on purpose — Short Form's scriptwriter
+      // samples frames out of the exemplars it plans against, Long Form's producer joins its
+      // segments with ffmpeg — so what is asserted here is that it is written by name either way,
+      // never left to the default. Which seats hold one is `templates/templates.test.ts`'s list.
+      const bash = agent.tools?.configs["bash"];
+      expect(bash, agent.name).toEqual(bash?.enabled === true ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" });
     }
   });
 
@@ -106,12 +120,16 @@ describe("naive.config", () => {
    * along with every row that is the operator's: the posts, the accounts, the app and its MCP
    * token. Listing the other crew here would make switching template a destructive act.
    */
-  it("keeps the other template's crew instead of tombstoning it", () => {
+  it("keeps the other templates' crews instead of tombstoning it", () => {
     expect("removed" in declaration).toBe(false);
     expect(project.removed).toEqual({ apps: [], agents: [], skills: [], identities: [], vaults: [] });
-    const other = ACTIVE.name === "faceless" ? TEMPLATES.clipping : TEMPLATES.faceless;
-    const onlyTheirs = other.agents
-      .map((agent) => agent.name)
+    // EVERY sibling that was declared, not one of them. With more than two templates a rule
+    // checked against a single other crew passes while a third is quietly tombstoned. It reads
+    // `declaration.templates`, not `TEMPLATES`, because `kept` can only name a crew `up` was
+    // handed — a template the installed engine does not admit is absent from both.
+    const others = declaration.templates.filter((one) => one.name !== ACTIVE.name);
+    expect(others.length).toBeGreaterThan(0);
+    const onlyTheirs = [...new Set(others.flatMap((one) => one.agents.map((agent) => agent.name)))]
       .filter((name) => !ACTIVE.agents.some((mine) => mine.name === name));
     expect(onlyTheirs.length).toBeGreaterThan(0);
     for (const name of onlyTheirs) {

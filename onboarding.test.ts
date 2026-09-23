@@ -154,13 +154,36 @@ describe("the question that asks where the channel posts", () => {
     const source = readFileSync(new URL("./templates/template.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/Exactly three \(§4 of the plan\)/);
     expect(source).toMatch(/a template asks at most 4 before anything is/);
-    // The version the quote was measured against must be the one this repo pins, or the quote is
-    // a claim about an engine nobody here runs.
+    /*
+     * The quote is a MEASUREMENT, so the comment has to name the engine it was taken on — a
+     * version named as the one `naive up` runs when it is not is a claim about an engine nobody
+     * here has run.
+     *
+     * *** THIS USED TO DEMAND THE MEASURED VERSION BE THE PINNED ONE, AND THAT IS ONLY TRUE WHILE
+     * THE PIN SITS STILL. *** It moves ahead of the measurement in the ordinary case: a pin is
+     * raised for a feature the next release carries, and the release is not on npm the day the pin
+     * is written. Re-measuring is not possible then, and re-typing the new number beside the quote
+     * would be inventing the measurement rather than taking it. So what is required now is the
+     * honest pair — the version measured, and, whenever the pin has moved past it, the pin itself
+     * named in the same comment so the reader is told which is which.
+     */
     const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
       devDependencies: Record<string, string>;
     };
-    const pinned = pkg.devDependencies["@usenaive-sdk/blueprints"]!.replace(/^[^\d]*/, "");
-    expect(source).toContain(`@usenaive-sdk/blueprints@${pinned}`);
+    const range = pkg.devDependencies["@usenaive-sdk/blueprints"]!;
+    const pinned = range.replace(/^[^\d]*/, "");
+    const measured = /@usenaive-sdk\/blueprints@(\d+\.\d+\.\d+)(?!`? in)/.exec(source)?.[1];
+    expect(measured, "the comment names no engine the refusal was measured on").toBeDefined();
+    // Never measured on an engine NEWER than the one this repo will install. Compared field by
+    // field: `"0.10.0" <= "0.9.0"` is true as strings, and would pass a measurement from an engine
+    // ahead of the pin.
+    const behindOrEqual = (a: string, b: string): boolean => {
+      const [x, y] = [a.split(".").map(Number), b.split(".").map(Number)];
+      for (let i = 0; i < 3; i += 1) if (x[i] !== y[i]) return (x[i] ?? 0) < (y[i] ?? 0);
+      return true;
+    };
+    expect(behindOrEqual(measured!, pinned), `measured on ${measured}, pinned ${pinned}`).toBe(true);
+    if (measured !== pinned) expect(source, "the pin moved past the measurement without saying so").toContain(range);
   });
 
   /**
@@ -603,17 +626,26 @@ describe("the question that asks what to model the channel on", () => {
     const study = tasks.find((one) => one.key === "reference-study")!;
     expect(study.assignee).toBe("scriptwriter");
     expect(study.blocked_by ?? []).toEqual([]);
-    expect(study.body).not.toMatch(/ask_operator/);
-    // Both halves: what to do with a reference, and what to do with none.
-    expect(study.body).toMatch(/If it names no reference/);
+    // It names `ask_operator` only to forbid it: asking parks the session with two cards behind it.
+    expect(study.body).toMatch(/ask_operator parks your session with two cards waiting behind this one/);
+    expect(study.body).not.toMatch(/ask the operator|ask_operator, once/);
+    // Both halves, and the second one INVERTED. It used to read "no reference: file nothing, close
+    // this card" — the ban on INVENTING a reference quietly banning LOOKING for one, on the branch
+    // most installs take, since the question is optional. That is how a channel came to plan every
+    // piece it ever made against nothing anyone had watched. It now goes and finds real ones.
+    expect(study.body).toMatch(/NAMES NO REFERENCE YOU DO NOT STOP AND YOU DO NOT ASK/);
+    expect(study.body).toMatch(/Invent no reference — but go and find/);
+    expect(study.body).not.toMatch(/file nothing, close this card/);
     expect(study.body).toMatch(/reference teardown/);
-    // *** IT LOOKS, RATHER THAN READING ABOUT. *** This card named `clip_video` — a CLIPPING tool
-    // whose output is transcript-derived text — and the crew planned the wrong genre from a
-    // caption (ADR-0758). The tool that actually opens a picture is `view_image`, and the card
-    // must say what to do when there is nothing to open rather than guessing confidently.
-    expect(study.body).toMatch(/view_image/);
+    // *** IT LOOKS, RATHER THAN READING ABOUT, AND THE PROCEDURE FOR LOOKING IS NOW A SKILL. ***
+    // This card named `clip_video` once — a CLIPPING tool whose output is transcript-derived text —
+    // and the crew planned the wrong genre from a caption (ADR-0758). The tool-per-kind split that
+    // replaced it (browser for a URL, `view_image` for a `fil_` id, frames through the shell) is
+    // `naive/reference-teardown`'s now, because the manager's weekly refresh and the scriptwriter's
+    // per-piece exemplar study read the same procedure and a card cannot be read by them.
+    expect(study.body).toMatch(/read_skill `naive\/reference-teardown`/);
+    expect(study.body).toMatch(/how to sample frames with bash/);
     expect(study.body).not.toMatch(/clip_video/);
-    expect(study.body).toMatch(/saw no frames/);
     for (const key of ["hook-style", "look"]) {
       expect(tasks.find((one) => one.key === key)!.blocked_by, key).toContain("reference-study");
     }
