@@ -129,6 +129,52 @@ describe("the Projects screen", () => {
   });
 
   /**
+   * *** ONE OF THESE STILLS DECIDES THE OPENING FRAME OF A ~$9.00 RENDER. ***
+   *
+   * `referenceFrames` was written by `create_project`, handed to the producer as
+   * `render_reference_images`, and drawn by nothing: the operator pressing Render could not see the
+   * frame the piece would open on, or that the plan named one at all. The asymmetry is the part
+   * that has to survive onto the screen — `imageUrls[0]` is the render's `first_frame` and the rest
+   * reach nothing — because three equal thumbnails say the opposite of what the platform does.
+   */
+  it("draws the reference stills, marks only the one the render opens on, and links what is not a picture", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    const frames = ["https://cdn.example.test/bust.jpg", "fil_00000000000000000000000001", "https://example.test/mood-board"];
+    await mount(vi.fn().mockResolvedValue(json([{ ...planned, referenceFrames: frames }])));
+
+    expect(propLabels()).toEqual(expect.arrayContaining([`Reference stills${frames.length}`]));
+    // A public URL is fetched as it stands; a library id goes through the dashboard's own file
+    // proxy, and neither is passed to the video player a post's `fil_` media would use.
+    expect(Array.from(card().querySelectorAll("img")).map((img) => img.getAttribute("src"))).toEqual([
+      frames[0],
+      "/api/files/fil_00000000000000000000000001",
+    ]);
+    expect(card().querySelector(`a[href="${frames[2]}"]`)).not.toBeNull();
+    expect(card().querySelectorAll("[data-video-poster]")).toHaveLength(0);
+
+    expect(Array.from(card().querySelectorAll(".chip-chosen")).map((chip) => chip.textContent)).toEqual(["Opening frame"]);
+    expect(card().textContent).toContain("Only the first reaches this render");
+  });
+
+  /**
+   * The hooks the seat wrote and threw away, and why. It is the seat's working, asked for by name in
+   * four prompts and shown on no screen — so the operator judging the kept line had nothing to judge
+   * it against. It stays secondary: folded shut, under the hook that won, never beside it.
+   */
+  it("folds the hooks that lost under the hook that won", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    await mount(vi.fn().mockResolvedValue(json([planned])));
+
+    const folded = card().querySelector<HTMLDetailsElement>("details")!;
+    expect(folded.open).toBe(false);
+    expect(folded.querySelector("summary")?.textContent).toBe(`Hooks not kept${planned.rejectedHooks!.length}`);
+    for (const hook of planned.rejectedHooks!) expect(folded.textContent).toContain(hook);
+    // Under the kept hook in the card, not before it: the plan's answer reads first.
+    const body = card().textContent ?? "";
+    expect(body.indexOf(planned.hook!)).toBeLessThan(body.indexOf(planned.rejectedHooks![0]!));
+  });
+
+  /**
    * The same screen, on a plan written before any of those fields existed — which is every plan on
    * an install that upgrades. `PlanHead` and `PlanDetail` return null rather than drawing empty
    * rows, so an old plan reads exactly as it did and nothing appears as a blank labelled line.
@@ -186,9 +232,12 @@ describe("the Projects screen", () => {
     });
     expect(card().textContent).toContain("Voiceover");
 
-    const caption = card().querySelector<HTMLDetailsElement>("details")!;
-    expect(caption.open).toBe(false);
-    expect(caption.querySelector("summary")?.textContent).toBe("Caption");
+    // Two disclosures on this plan: the hooks that lost, folded under the hook that won, and the
+    // caption at the foot of the card. Both are closed — the card's default reading is the plan.
+    const folded = Array.from(card().querySelectorAll<HTMLDetailsElement>("details"));
+    expect(folded.map((d) => d.querySelector("summary")?.textContent)).toEqual(["Hooks not kept1", "Caption"]);
+    expect(folded.every((d) => !d.open)).toBe(true);
+    const caption = folded[folded.length - 1]!;
     // Every label inside the card is the same micro label; the eyebrow is for the page's sections.
     expect(caption.querySelector("summary")?.className).toContain("prop-label");
     expect(card().querySelector(".eyebrow")).toBeNull();

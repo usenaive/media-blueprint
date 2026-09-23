@@ -158,6 +158,32 @@ describe("the crews", () => {
     expect(body).not.toMatch(/clip_video/);
   });
 
+  /**
+   * *** AND THE SPLIT HAS TO SURVIVE INTO THE PLAN, BECAUSE ONE OF THE TWO VALUES RENDERS. ***
+   *
+   * The teardown is what the scriptwriter reads when it fills `reference_frames`, and that field is
+   * PUBLIC image URLs and nothing else: `generate_video` takes `image_urls`, its argument is a URL,
+   * and a `fil_` id written there is a plan that fails validation after it was filed and approved
+   * (`server/mcp.ts`, and `referenceFrames` in `seed/projects.ts`).
+   *
+   * The card used to close with *"name them in the post exactly as the operator wrote them — those
+   * are what a plan carries as `reference_frames`"* two paragraphs after calling a `fil_` id a
+   * still — so the one body both defined a still as either kind and told the seat to copy either
+   * kind forward. A card that contradicts itself is worse than one that omits, because the seat
+   * acts on whichever sentence it read last, and the cost of reading the wrong one lands on the
+   * producer as a refused render nobody planned for.
+   */
+  it("carries only the operator's still URLs into a plan's reference frames, and says a fil_ id stops here", () => {
+    const body = TEMPLATES.faceless.tasks.find((task) => task.key === "reference-study")!.body!;
+    expect(body).toMatch(/still URLs, copy them into the post exactly as the operator wrote them/);
+    expect(body).toMatch(/those PUBLIC URLs are what a plan carries as `reference_frames`/);
+    // The half that does not render is named as not rendering, in the tool's own terms.
+    expect(body).toMatch(/generate_video fetches a URL and refuses a fil_ id/);
+    expect(body).toMatch(/never as a reference frame/);
+    // Once, in one sentence: a second mention is a second definition, which is what this fixed.
+    expect(body.match(/reference_frames/g)).toHaveLength(1);
+  });
+
   it("requires only the seat the dashboard's Chat is wired to", () => {
     for (const template of both) {
       expect(template.agents.filter((agent) => agent.required === true).map((agent) => agent.name)).toEqual(["channel-manager"]);

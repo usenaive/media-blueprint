@@ -177,8 +177,8 @@ export interface VideoProject {
    */
   referencePattern?: string;
   /**
-   * The stills this piece is rendered AGAINST — `fil_` ids or image URLs from the channel's
-   * reference teardown.
+   * The stills this piece is rendered AGAINST — the PUBLIC image URLs the channel's reference
+   * teardown named, in the operator's own words.
    *
    * Describing a reference in words and hoping the model reconstructs it is the lossy path; the
    * provider takes a reference image directly. This field is what lets a plan say "make it look

@@ -22,7 +22,8 @@ The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
 studio asks **four questions** (what the channel is about, **where it posts** — one network or
-several — and how often), every agent reads the answers back through the platform's
+several — how often, and, optionally, a channel or video to model it on), every agent reads the
+answers back through the platform's
 `project_context` tool, and each opens a **day-one** session that turns those answers into the
 channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
 
@@ -377,8 +378,8 @@ the caption and drops the render, so a "published" post there ships a line of te
 work behind. The list this replaced admitted six of those and excluded `youtube` and `instagram` —
 two of the three that take the work.
 
-**Where *this* channel posts is yours**, answered in setup (see [The three
-questions](#the-three-questions)) — **one network or several** — and read back by everything that
+**Where *this* channel posts is yours**, answered in setup (see [The setup
+questions](#the-setup-questions)) — **one network or several** — and read back by everything that
 stamps a target: the store's default, the `create_post` tool description the crew reads before
 filing, and the line on Home and Posts. The answer is read as a list (`platformsFromAnswers`): every
 recognised pick in your order, each once, anything unrecognised dropped. With several picked, the
@@ -401,7 +402,7 @@ first"*, which `channel.update_post` can do.
 | Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your setup answers, from the latest applied install — "not configured" without a platform key), the day-one cards the apply seeded, approvals due, the crew with each agent's next fire, and the queue by status |
 | Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
 | Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
-| Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
+| Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to the piece it decides — hook, the hooks it did not keep, what holds them, the close, the reference pattern, and the reference stills with the one the render opens on marked — then to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
 | Studio | One video and the session that made it: `GET /api/studio/:id` (a project or post id) answers the plan, its post and the latest of the plan's sessions read live; **Revise** (`POST /api/studio/:id/revise {message}`) sends your note to that session — queued, never interrupting a paid render — or opens a new renderer session on the same plan. It is the one way a rendered plan renders again, and it refuses an approved or posted video: reject it first |
 | Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
 | Analytics | Views and likes, summed from the posts this channel actually published |
@@ -458,7 +459,7 @@ an edit plus a re-apply.
 | the model, budget or approval gate every agent shares | [`templates/template.ts`](templates/template.ts) | `naive up` |
 | when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
 | the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
-| the post kinds, the three setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
+| the post kinds, the setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
 | where the channel posts | **you answer it in the studio** — no edit, no deploy | nothing |
 | a seat's role or skills | `role`, `skills` in its `agent({ … })` call | `naive up` |
 | what a seat is asked for on day one, and what it waits on | its `task({ … })` in the template's `tasks` | `naive up` |
@@ -620,7 +621,7 @@ export default defineProject({
   name: "media",
   blueprint: "media",
   template: ACTIVE.name,                 // chosen in templates/index.ts
-  questions: ACTIVE.questions,           // the three the studio asks: subject, network, cadence
+  questions: ACTIVE.questions,           // what the studio asks: subject, network, reference, cadence
   templates: [                           // every template this repo carries
     { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
     { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },
@@ -659,7 +660,7 @@ The config can declare more than this template uses:
 | Key | What it provisions |
 |---|---|
 | `apps[]` | `name`, `type`, `description`, `deploy_dir`, `mcp` (the path of the app's own MCP endpoint; fullstack only), and `env` — literals, `{ from_env }` or `{ generate: true }`, written as the app's secrets |
-| `questions[]` | the setup questions (`text` or `choice`); at most three when a `template` is set |
+| `questions[]` | the setup questions (`text` or `choice`), each `optional` or not; at most four when a `template` is set. Needs `@usenaive-sdk/blueprints@^0.7.0` — 0.6.0 caps them at three and refuses `faceless`'s fourth outright |
 | `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
 | `tasks[]` | the crew's first work as cards on the organization's board: `key` (idempotent as `media:<key>`), `title`, `body`, `assignee` (an agent **name**) and `blocked_by` (sibling keys). Needs `@usenaive-sdk/blueprints@^0.6.0` — 0.5.0 strips the field without saying so |
 | `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |

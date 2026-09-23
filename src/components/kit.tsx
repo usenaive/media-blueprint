@@ -44,6 +44,30 @@ export function MediaPreview({ src, label }: { src: string; label: string }) {
 }
 
 /**
+ * A REFERENCE STILL, WHICH IS A PICTURE AND NOT A RENDER.
+ *
+ * `MediaPreview` above reads a bare `fil_` id as a video, because on a post that is what a file id
+ * is — the thing `generate_video` filed. A plan's `referenceFrames` is the other case: an image the
+ * operator named, either as the public URL the renderer fetches or as an id already in the library,
+ * which this dashboard reads through the same `/api/files/:id` proxy. Sent through `MediaPreview`
+ * an id would come back as a `<video>` with no frames in it, which is a worse answer than none.
+ *
+ * Anything that is neither is offered as a link rather than drawn as a broken image — and it is
+ * worth seeing as a link, because a reference frame that is not a picture is a render that fails.
+ */
+export function StillPreview({ src, label }: { src: string; label: string }) {
+  const id = FILE_ID.test(src);
+  if (id || IMAGE.test(src)) {
+    return <img className="aspect-square w-full rounded-md border border-line bg-sunken object-cover" src={id ? `/api/files/${src}` : src} alt={label} />;
+  }
+  return (
+    <a className="block truncate font-mono text-xs text-ink-2 underline" href={src} target="_blank" rel="noreferrer">
+      {src}
+    </a>
+  );
+}
+
+/**
  * A VIDEO SHOWS ITS FIRST FRAME AND PLAYS WHEN PRESSED.
  *
  * `/api/files/:id` (and the platform behind it) answer a `Range`, so `preload="metadata"` costs the

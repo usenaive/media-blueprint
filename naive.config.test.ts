@@ -59,7 +59,7 @@ describe("naive.config", () => {
   });
 
   /**
-   * Plan §2.4/§4: the engine carries `role`, `skills`, `required`, the three setup questions and —
+   * Plan §2.4/§4: the engine carries `role`, `skills`, `required`, the setup questions and —
    * since `^0.6.0` — `tasks` through `defineProject`. Read back off `project`, not the template, so
    * a downgrade of `@usenaive-sdk/blueprints` goes red here rather than as a crew with no roles.
    *
