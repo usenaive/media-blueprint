@@ -82,6 +82,9 @@ export function Scenes({ scenes }: { scenes: Scene[] }) {
           <span className="font-mono text-xs text-ink-3">{i + 1}</span>
           <span className="text-right font-mono text-xs tabular-nums text-ink-2">{scene.seconds}s</span>
           <div className="min-w-0 space-y-1">
+            {/* The beat is what makes a shot list readable as a script: an operator scanning for a
+                plan with no `turn`, or three shots of `setup`, can see it without watching anything. */}
+            {scene.beat ? <span className="chip chip-plain mb-1 mr-2 align-middle">{scene.beat}</span> : null}
             <Clamp text={scene.prompt} lines={1} />
             {scene.voiceover ? <Line label="Voiceover" text={scene.voiceover} prose /> : null}
             {scene.text ? <Line label="On screen" text={scene.text} prose /> : null}
@@ -90,6 +93,70 @@ export function Scenes({ scenes }: { scenes: Scene[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * THE HEAD OF A GENERATION PLAN — what an operator decides a piece on before ~$6.63 is spent on it.
+ *
+ * The first line, what keeps anyone watching past it, the one ask, and which of the channel's
+ * reference patterns this piece is executing. Each is a field on the plan now rather than a
+ * sentence buried in the brief, which is the point: they can be read at a glance and, where the
+ * planner did not write them, be missing visibly.
+ *
+ * It lives here beside `Scenes` and `Sources` because the Projects list and the Studio's Plan tab
+ * both draw a plan and already share those two — a third and fourth block copied between them is
+ * how the two views start disagreeing about what a plan is.
+ */
+export function PlanHead({ project }: { project: VideoProject }) {
+  if (project.hook === undefined && project.retention === undefined && project.cta === undefined && project.referencePattern === undefined) {
+    return null;
+  }
+  return (
+    <Section label="The piece">
+      <div className="space-y-1.5">
+        {project.hook ? <Line label="Hook" text={project.hook} prose /> : null}
+        {project.retention ? <Line label="Holds them" text={project.retention} prose /> : null}
+        {project.cta ? <Line label="Close" text={project.cta} prose /> : null}
+        {project.referencePattern ? <Line label="Reference" text={project.referencePattern} prose /> : null}
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * The plan's checkable half: the claims it rests on beside where each came from, and how it sounds.
+ * A source is never hidden behind a disclosure — a plan whose facts are unsourced is one nobody can
+ * approve honestly, and the operator should not have to open anything to find that out.
+ */
+export function PlanDetail({ project }: { project: VideoProject }) {
+  const facts = project.facts ?? [];
+  const sound = project.sound;
+  if (facts.length === 0 && sound === undefined) return null;
+  return (
+    <>
+      {facts.length > 0 ? (
+        <Section label="Facts" count={facts.length}>
+          <ul className="list">
+            {facts.map((fact, i) => (
+              <li key={i} className="px-3 py-2">
+                <Clamp text={fact.claim} lines={2} />
+                <p className="mt-1 truncate text-xs text-ink-3" title={fact.source}>{fact.source}</p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+      {sound !== undefined ? (
+        <Section label="Sound">
+          <div className="space-y-1.5">
+            {sound.music ? <Line label="Music" text={sound.music} prose /> : null}
+            {sound.voice ? <Line label="Voice" text={sound.voice} prose /> : null}
+            {sound.sfx !== undefined && sound.sfx.length > 0 ? <Line label="SFX" text={sound.sfx.join("; ")} prose /> : null}
+          </div>
+        </Section>
+      ) : null}
+    </>
   );
 }
 
@@ -298,6 +365,8 @@ export function Projects() {
                   <Clamp text={p.brief} lines={2} />
                 </Section>
 
+                <PlanHead project={p} />
+
                 {p.kind === "generation" && p.scenes !== undefined && p.scenes.length > 0 ? (
                   <Section label="Scenes" count={p.scenes.length}>
                     <Scenes scenes={p.scenes} />
@@ -310,6 +379,7 @@ export function Projects() {
                   </Section>
                 ) : null}
 
+                <PlanDetail project={p} />
                 {p.caption ? (
                   <details className="group">
                     <summary className="prop-label flex cursor-pointer select-none items-center gap-1.5">

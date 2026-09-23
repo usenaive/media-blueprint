@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
+import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, RENDERER, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
@@ -47,10 +47,30 @@ describe("the crews", () => {
 
   /**
    * Plan §2.1/§2.4: a template is a crew a person chooses from, not a count of resources. Every
-   * seat says what it is for (`role`), opens its `system` with the shared preamble, stays inside the
-   * 150–400 words a person will actually read, and names only catalogue skills.
+   * seat says what it is for (`role`), opens its `system` with the shared preamble, CLOSES it with
+   * the approval gate, keeps its own brief inside the 150–400 words a person will actually read,
+   * and names only catalogue skills.
+   *
+   * *** IT IS THE BRIEF THAT IS BOUNDED, NOT THE SYSTEM, AND THAT IS THE README'S RULE. *** This
+   * used to bound `words(system)` at 400 — preamble and gate included. Those two are ~209 words the
+   * seat's author does not write and cannot shorten, so the test was charging every brief for them
+   * and leaving ~190. The prompts show what that did: before this change every seat of BOTH
+   * templates measured 394–400, written flat against a ceiling two thirds of which was not theirs,
+   * and the planning brief had spent its remainder on row-claiming mechanics with nothing left for
+   * the craft. Stripping both ends measures what the README actually says — "between them is the
+   * seat's own brief, 120–400 words" — and the assertions below are stricter than what they
+   * replaced, because the gate's presence at the end was never checked at all.
+   *
+   * *** THE FLOOR MOVED 150 → 120, AND IT MOVED BECAUSE IT NOW MEASURES SOMETHING. *** Against
+   * `system` a floor of 150 bound nothing at all: the preamble and gate are ~209 words on their
+   * own, so every seat cleared it before its author had written a word. Measured on the brief, the
+   * thinnest seats in this repo — `clipping`'s analyst at 137 and its caption-editor at 145 — sit
+   * under 150 and always have; nobody could see it. Padding two prompts to reach a number would be
+   * the wrong repair for a measurement bug, so the number is set where it catches a brief that
+   * genuinely says nothing rather than where it happens to exclude the two shortest. The ceiling
+   * did not move: 400 is what a person will actually read, and it is what the briefs are held to.
    */
-  it("gives every seat a role, the shared preamble, a readable system and catalogue skills", () => {
+  it("gives every seat a role, the shared preamble and gate, a readable brief and catalogue skills", () => {
     expect(CONTEXT_PREAMBLE).toMatch(/^Read `project_context` before anything else; the answers there are the client's, not yours to invent\./);
     for (const template of both) {
       for (const agent of template.agents) {
@@ -58,13 +78,38 @@ describe("the crews", () => {
         expect(agent.description, agent.name).toMatch(/\S/);
         const system = agent.system ?? "";
         expect(system.startsWith(CONTEXT_PREAMBLE), agent.name).toBe(true);
-        expect(words(system), `${template.name}/${agent.name}`).toBeGreaterThanOrEqual(150);
-        expect(words(system), `${template.name}/${agent.name}`).toBeLessThanOrEqual(400);
+        expect(system.endsWith(APPROVAL_GATE), agent.name).toBe(true);
+        const brief = system.slice(CONTEXT_PREAMBLE.length, system.length - APPROVAL_GATE.length);
+        expect(words(brief), `${template.name}/${agent.name}`).toBeGreaterThanOrEqual(120);
+        expect(words(brief), `${template.name}/${agent.name}`).toBeLessThanOrEqual(400);
         for (const skill of agent.skills ?? []) expect(CATALOGUE).toContain(skill);
         // A skill named is a skill it can read.
         if ((agent.skills ?? []).length > 0) expect(toolsOf(template, agent.name)).toContain("read_skill");
         expect(toolsOf(template, agent.name)).toContain("project_context");
       }
+    }
+  });
+
+  /**
+   * `REFERENCE_QUESTION` is optional, so the answer is absent on plenty of installs — and a rule
+   * that only half the crew carries is a crew that half-imitates. Every `faceless` seat that plans,
+   * makes or checks a piece says BOTH halves: what to do when the context names a reference, and
+   * what to do when it does not. `clipping` says neither, deliberately: the teardown is a `faceless`
+   * object, its own `sources` question means something stronger, and a clipper told to read a
+   * teardown would be hunting a post that never exists on that template.
+   */
+  it("tells every faceless seat what to do with a reference, and both halves of it", () => {
+    for (const agent of TEMPLATES.faceless.agents) {
+      const system = agent.system ?? "";
+      expect(system, `faceless/${agent.name}`).toMatch(/reference/i);
+      expect(system, `faceless/${agent.name} names no teardown`).toMatch(/teardown/i);
+      // The half that keeps an unanswered question harmless.
+      expect(system, `faceless/${agent.name} never says what to do without one`).toMatch(
+        /(names none|no reference|where there is a teardown|where there is a reference)/i,
+      );
+    }
+    for (const agent of TEMPLATES.clipping.agents) {
+      expect(agent.system ?? "", `clipping/${agent.name}`).not.toMatch(/teardown/i);
     }
   });
 
@@ -138,13 +183,17 @@ describe("the crews", () => {
    * own `max_task_micro_usd`, so the first wave is what a fresh install spends in its first minute,
    * and a blocker quietly dropped here is that bill going up without anybody deciding it should.
    */
-  it("orders each board as a real chain: four cards open, three wait", () => {
+  it("orders each board as a real chain: the cards that need nothing open, the rest wait on real work", () => {
     const chains: Record<TemplateName, Record<string, string[]>> = {
       faceless: {
         "channel-plan": [],
         "first-briefs": [],
-        look: [],
-        "hook-style": [],
+        // Needs only `project_context`, so it opens the install — and `look` and `hook-style` wait
+        // on it, because the answer to both is IN the reference when the operator named one. With
+        // no reference it closes in a line and they open a card's delay later.
+        "reference-study": [],
+        look: ["reference-study"],
+        "hook-style": ["reference-study"],
         "report-frame": ["channel-plan"],
         "first-scripts": ["first-briefs", "hook-style", "look"],
         "first-render": ["first-scripts"],
@@ -162,7 +211,12 @@ describe("the crews", () => {
     for (const template of both) {
       const chain = chains[template.name];
       expect(Object.fromEntries(template.tasks.map((task) => [task.key, task.blocked_by ?? []])), template.name).toEqual(chain);
-      expect(template.tasks.filter((task) => (task.blocked_by ?? []).length === 0), template.name).toHaveLength(4);
+      // The unblocked set is per template now: `faceless` opens three (the plan, the briefs, the
+      // reference study) because `look` and `hook-style` were moved behind the study; `clipping`
+      // still opens four. What must hold either way is that the wave is not empty and not the whole
+      // board — a card with no real blocker never waits, and a board with no open card never starts.
+      const open = template.tasks.filter((task) => (task.blocked_by ?? []).length === 0);
+      expect(open, template.name).toHaveLength(template.name === "faceless" ? 3 : 4);
       // Declaration order is dependency order: `up` writes cards one after another and a `blocked_by`
       // carries the `crd_` an EARLIER create answered, so a blocker declared after the card it
       // blocks is refused at apply time ("was not seeded in this run").
@@ -174,7 +228,8 @@ describe("the crews", () => {
     }
     // The one card that spends real money is last on `faceless`, behind the whole chain.
     expect(TEMPLATES.faceless.tasks.at(-1)?.key).toBe("first-render");
-    expect(TEMPLATES.faceless.tasks.find((t) => t.key === "first-render")?.body).toMatch(/one generate_video call/);
+    // Its body sends the renderer down the same path the brief does: the compiled prompt, unedited.
+    expect(TEMPLATES.faceless.tasks.find((t) => t.key === "first-render")?.body).toMatch(/render_prompt.*exactly that prompt.*do not drop a shot/s);
     // And no card tells a seat to hand off: the board wakes the next one, so a `send_to_agent` here
     // would open a second session on work the tick is already about to start.
     for (const template of both) {
@@ -216,8 +271,11 @@ describe("the crews", () => {
     // hands on only what it claimed.
     expect(seat("scriptwriter")?.system).toMatch(/named by id in a handoff.*Claim each before you write it.*stage scripting, expected_stage brief.*channel\.create_project, kind generation, post_id the row.*`stage` scripted.*send_to_agent the producer once, wait false.*project ids.*claimed nothing, hand on nothing/s);
     expect(seat("producer")?.system).toMatch(/named to you by the operator or a handoff.*claim it before you spend anything.*status rendering and expected_status planned.*status rendered, expected_status rendering.*You end the chain/s);
-    // Nothing on the platform joins clips, so a multi-scene plan is one render, not one per scene.
-    expect(seat("producer")?.system).toContain("one generate_video call — nothing here joins clips");
+    // Nothing on the platform joins clips, so a multi-scene plan is ONE render, not one per scene —
+    // and the compilation is `scenesPrompt`'s, not the model's. The seat is told to render exactly
+    // the `render_prompt` it was handed, which is what stops a shot being lost in a summary.
+    expect(seat("producer")?.system).toContain("nothing here joins clips");
+    expect(seat("producer")?.system).toMatch(/render_prompt.*exactly that prompt.*do not drop a shot/s);
     // The timers are the fallback, by stage and status, and they claim the same way.
     expect(seat("scriptwriter")?.schedules?.[0]?.input).toMatch(/stage brief.*stage scripting, expected_stage brief.*channel\.create_project \(kind generation, post_id the row\).*send_to_agent the producer once, wait false.*project ids/s);
     expect(seat("producer")?.schedules?.[0]?.input).toMatch(/status planned, kind generation.*status rendering, expected_status planned.*status rendered, expected_status rendering/s);
@@ -227,7 +285,7 @@ describe("the crews", () => {
      * A claim on the way in and nothing on the way out is half a guard: the producer's completion
      * write landed whatever had happened to the plan while it rendered, so a stale session could
      * overwrite the render that replaced it, and neither the producer nor the manager was told that
-     * a rendered plan is one the channel has already paid ~$3.32 for. Both are said in the brief
+     * a rendered plan is one the channel has already paid ~$6.63 for. Both are said in the brief
      * and on the timer, because the tool refusing it (`server/mcp.ts`) tells a seat only after it
      * has spent the money.
      */
@@ -377,9 +435,13 @@ describe("the crews", () => {
     }
     const seat = (template: MediaTemplate, name: string) => template.agents.find((a) => a.name === name);
     // Faceless: the scriptwriter writes a generation plan on the brief; the producer renders it.
-    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/channel\.create_project, kind generation.*scenes in order.*seconds.*voiceover.*on-screen text/s);
+    // The plan is the whole piece, not a shot list: the writer researches, picks a hook against
+    // three, lays out beats, and only then cuts shots — and every one of those lands in a field.
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/research the topic.*three hooks and keep one.*beats.*only then cut those beats into shots/s);
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/channel\.create_project, kind generation.*hook verbatim.*rejected_hooks.*retention.*facts with their sources.*sound.*cta/s);
+    expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toContain(`sum to between ${MIN_SECONDS} and ${MAX_SECONDS} seconds`);
     expect(seat(TEMPLATES.faceless, "scriptwriter")?.system).toMatch(/neither render nor find topics/);
-    expect(seat(TEMPLATES.faceless, "producer")?.system).toMatch(/channel\.get_project.*generate_video.*Do not rewrite it/s);
+    expect(seat(TEMPLATES.faceless, "producer")?.system).toMatch(/channel\.get_project.*generate_video.*Do not rewrite the prompt/s);
     // Clipping: the scout writes a clipping plan — URL, timestamps, why; the clipper cuts it.
     expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/channel\.create_project, kind clipping.*URL.*starts and ends.*why this moment/s);
     expect(seat(TEMPLATES.clipping, "scout")?.system).toMatch(/neither cut nor caption/);
@@ -412,7 +474,12 @@ describe("the crews", () => {
    * brief the operator's Chat reaches, so it never asks a seat to do it.
    */
   it("briefs each renderer for the operator's revision on the same plan, and tells the manager the revision is not its move", () => {
-    const REVISION = /A revision arrives as a message on your session: re-read the plan with channel\.get_project, apply the operator's note, finish with the same update_project write, changed (scenes|sources) on it\. Never open a second project\./;
+    // The producer's wording changed with the compilation: it applies the note to the SCENES and
+    // then renders the `render_prompt` a fresh `get_project` returns, because the prompt is derived
+    // on read and one built before the edit would render the plan as it was. The clipper, which
+    // composes nothing, still finishes in the one write. What both must still say is the part this
+    // test is for: the same plan, re-read, and never a second project.
+    const REVISION = /A revision arrives as a message on your session: re-read the plan with channel\.get_project, apply the operator's note.*Never open a second project\./s;
     for (const [template, seat] of [[TEMPLATES.faceless, RENDERER.generation], [TEMPLATES.clipping, RENDERER.clipping]] as const) {
       const renderer = template.agents.find((a) => a.name === seat);
       expect(renderer?.system, seat).toMatch(REVISION);
@@ -468,7 +535,13 @@ describe("the crews", () => {
         for (const sandbox of ["bash", "read", "write", "edit", "ls", "find"]) {
           expect(permissionFor(template, agent.name, sandbox)).toBe("deny");
         }
-        expect(permissionFor(template, agent.name, "browser")).toBe("deny");
+        // *** THE BROWSER IS THE ONE EXCEPTION, AND IT IS `allow`. *** It was swept into the
+        // sandbox denial and does not belong there: it provisions no machine, and since its
+        // screenshot began returning the picture rather than a file id (§16.2) it is how a seat
+        // reads a page it has to actually see. `allow` because this channel gates the way OUT —
+        // the approval queue — not reading, and a 06:00 cron that had to ask permission to open a
+        // page would stop dead with nobody awake to answer.
+        expect(permissionFor(template, agent.name, "browser")).toBe("allow");
         for (const spends of ["generate_speech", "transcribe_audio", "find_stock_photo"]) {
           expect(permissionFor(template, agent.name, spends)).toBe("deny");
         }
@@ -749,28 +822,43 @@ describe("the data the screens read", () => {
   });
 
   /**
-   * Three questions per template, asked by the studio before anything is provisioned — the engine
-   * refuses a fourth, and `onboarding.test.ts` holds it to that by asking the engine itself.
+   * Three or four questions per template, asked by the studio before anything is provisioned — the
+   * engine refuses a fifth, and `onboarding.test.ts` holds it to that by asking the engine itself.
    * `choice` where the answers are a short list, `text` where they are the client's own words.
    *
-   * TWO OF THE THREE ARE SHARED NOW. Where the channel posts is not a matter of template — both
-   * crews make the same vertical video and both need a network to file it for — so
-   * `PLATFORM_QUESTION` sits between the template's own question and the cadence, and each
-   * template spends its one remaining slot on the thing only it needs: the niche, or the sources.
+   * TWO OF THEM ARE SHARED. Where the channel posts is not a matter of template — both crews make
+   * the same vertical video and both need a network to file it for — so `PLATFORM_QUESTION` sits
+   * between the template's own question and the cadence, and each template spends its remaining
+   * required slot on the thing only it needs: the niche, or the sources.
+   *
+   * *** THE FOURTH IS `faceless`'s ALONE AND IT IS THE ONLY OPTIONAL ONE. *** The cap moved to four
+   * because `optional` exists (ADR-0757), so a fourth may only be a question whose absence changes
+   * nothing — and every other question here gates real work, which is why none of them moved. It
+   * sits THIRD, before the cadence: the form then reads as what the channel is, where it goes, what
+   * it should be like, and how often, rather than trailing the optional one after the schedule.
+   * `clipping` does not take it — its `sources` question already names channels, with a stronger
+   * meaning (cut from these and nowhere else), and two reference questions would be two answers
+   * that look alike and are not.
    */
-  it("asks exactly three setup questions per template, and no more anywhere", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["platform", "choice"], ["cadence", "choice"]]);
+  it("asks three setup questions per template, a fourth only on faceless, and only an optional one", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => [q.key, q.type])).toEqual([["niche", "choice"], ["platform", "choice"], ["reference", "text"], ["cadence", "choice"]]);
     expect(TEMPLATES.clipping.questions.map((q) => [q.key, q.type])).toEqual([["sources", "text"], ["platform", "choice"], ["cadence", "choice"]]);
     for (const template of both) {
-      expect(template.questions).toHaveLength(3);
+      expect(template.questions.length, template.name).toBeGreaterThanOrEqual(3);
+      expect(template.questions.length, template.name).toBeLessThanOrEqual(4);
       for (const question of template.questions) expect(question.label).toMatch(/\S/);
-      expect(new Set(template.questions.map((q) => q.key)).size).toBe(3);
+      expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
+      // A template asking four asks three that must be answered and one that need not be: the
+      // fourth slot is the optional flag's, and a required fourth would spend a person's sitting.
+      const optional = template.questions.filter((q) => q.optional === true);
+      expect(optional.length, template.name).toBe(template.questions.length - 3);
     }
+    expect(TEMPLATES.faceless.questions[2]).toMatchObject({ key: "reference", optional: true });
     // Each shared question is one question, spelled once: the cadence sizes every plan and every
     // timer, and the network is what every filed row is stamped with.
     expect(TEMPLATES.faceless.questions[1]).toBe(TEMPLATES.clipping.questions[1]);
-    expect(TEMPLATES.faceless.questions[2]).toBe(TEMPLATES.clipping.questions[2]);
-    expect(TEMPLATES.faceless.questions[2]).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
+    expect(TEMPLATES.faceless.questions.at(-1)).toBe(TEMPLATES.clipping.questions.at(-1));
+    expect(TEMPLATES.faceless.questions.at(-1)).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
   });
 
   it("prints its own words on every screen that has any", () => {

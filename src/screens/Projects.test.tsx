@@ -55,6 +55,8 @@ const click = async (label: string) => {
 const tab = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[role=tab]")).find((t) => t.textContent?.startsWith(label))!;
 const tabCount = (label: string) => Number(tab(label).querySelector("span")?.textContent);
 const labels = () => Array.from(host.querySelectorAll("dt")).map((dt) => dt.textContent);
+/** The label beside a value on a plan — what `Line` and `Section` draw, which is not a `dt`. */
+const propLabels = () => Array.from(host.querySelectorAll(".prop-label")).map((el) => el.textContent?.trim());
 const card = () => host.querySelector("section.panel")!;
 const tick = async (ms: number) => {
   await act(async () => {
@@ -87,6 +89,59 @@ describe("the Projects screen", () => {
     // Pressed once: the button is spent until the renderer's claim moves the row.
     expect(host.querySelector<HTMLButtonElement>("button.btn-primary")?.disabled).toBe(true);
     expect(host.textContent).toContain("Planned — waiting for a render");
+  });
+
+  /**
+   * *** THE WHOLE PLAN HAS TO REACH THE SCREEN, OR IT IS NOT A RICHER PLAN. ***
+   *
+   * Seven fields were added to a generation plan so the planning seat had somewhere to put a
+   * hook, a structure, a reason to keep watching and a sourced claim. An operator who cannot read
+   * them is approving the same row they were approving before, so this renders the real seed — the
+   * one `pnpm serve` shows — and asserts each one is on the page rather than only in the store.
+   */
+  it("draws the whole plan: hook, retention, close, reference, beats, facts with sources, sound", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    await mount(vi.fn().mockResolvedValue(json([planned])));
+    const text = host.textContent ?? "";
+
+    // The head of the plan — what the operator decides on before a render is paid for.
+    expect(text).toContain(planned.hook!);
+    expect(text).toContain(planned.retention!);
+    expect(text).toContain(planned.cta!);
+    expect(text).toContain(planned.referencePattern!);
+    expect(propLabels()).toEqual(expect.arrayContaining(["The piece", "Hook", "Holds them", "Close", "Reference"]));
+
+    // A claim is never shown without where it came from: an unsourced fact reads as checked.
+    const fact = planned.facts![0]!;
+    expect(text).toContain(fact.claim);
+    expect(text).toContain(fact.source);
+
+    // Sound, and the beat on every shot — what makes a shot list readable as a script.
+    expect(text).toContain(planned.sound!.music!);
+    expect(text).toContain(planned.sound!.voice!);
+    for (const scene of planned.scenes ?? []) expect(text).toContain(scene.beat!);
+
+    // And the length the format now requires, summed on the row.
+    const seconds = (planned.scenes ?? []).reduce((sum, scene) => sum + scene.seconds, 0);
+    expect(seconds).toBeGreaterThanOrEqual(15);
+    expect(seconds).toBeLessThanOrEqual(30);
+    expect(text).toContain(`${seconds}s`);
+  });
+
+  /**
+   * The same screen, on a plan written before any of those fields existed — which is every plan on
+   * an install that upgrades. `PlanHead` and `PlanDetail` return null rather than drawing empty
+   * rows, so an old plan reads exactly as it did and nothing appears as a blank labelled line.
+   */
+  it("draws a plan from before these fields without empty rows", async () => {
+    const planned = FACELESS_PROJECT_SEEDS.find((p) => p.status === "planned")!;
+    const { hook, retention, cta, referencePattern, facts, sound, rejectedHooks, ...old } = planned;
+    await mount(vi.fn().mockResolvedValue(json([{ ...old, scenes: (old.scenes ?? []).map(({ beat, ...s }) => s) }])));
+
+    expect(host.textContent).toContain(old.title);
+    expect(propLabels()).not.toEqual(expect.arrayContaining(["The piece", "Hook", "Holds them", "Close", "Reference"]));
+    expect(host.textContent).not.toContain("Facts");
+    expect(host.textContent).not.toContain("Sound");
   });
 
   it("names the clipper on a clipping plan, and shows the refusal when nobody can take it", async () => {
