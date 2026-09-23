@@ -429,7 +429,7 @@ export const ONE_RENDER_MICRO_USD = MAX_SECONDS * 299_851;
 
 /**
  * The channel's daily budget. Sized from `ONE_RENDER_MICRO_USD` above, not from a round number:
- * the per-task ceiling has to hold one render of the length the producer is briefed for (~$3.32)
+ * the per-task ceiling has to hold one render of the length the producer is briefed for (~$9.00)
  * **plus** the session's own model calls, because the render's admission hold and the turn's model
  * calls draw on the same ceiling. At $2 the very first production session on production spent the
  * money, blew the ceiling and parked with the video already rendered.

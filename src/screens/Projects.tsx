@@ -97,7 +97,7 @@ export function Scenes({ scenes }: { scenes: Scene[] }) {
 }
 
 /**
- * THE HEAD OF A GENERATION PLAN — what an operator decides a piece on before ~$6.63 is spent on it.
+ * THE HEAD OF A GENERATION PLAN — what an operator decides a piece on before ~$9.00 is spent on it.
  *
  * The first line, what keeps anyone watching past it, the one ask, and which of the channel's
  * reference patterns this piece is executing. Each is a field on the plan now rather than a

@@ -249,7 +249,7 @@ describe("the Projects screen", () => {
     await act(async () => tab("Rendered").click());
     expect(card().querySelector(".chip-credit")?.textContent).toBe("Rendered");
     expect(card().querySelector("a[href='/posts']")?.textContent).toBe("post_9f2a");
-    expect(studio()?.getAttribute("href")).toBe("/studio/post_9f2a");
+    expect(studio()?.getAttribute("href")).toBe("/studio/proj_9f2a");
     await act(async () => tab("Dropped").click());
     expect(card().querySelector(".chip-fail")?.textContent).toBe("Dropped");
     expect(buttons()).toContain("Restore");

@@ -80,7 +80,7 @@ export const voiceOf = (project: VideoProject | null): { seat: string; placehold
 
 /**
  * WHAT A RE-RENDER COSTS, SAID BEFORE IT IS SPENT. A note on a rendered plan renders it again at
- * `ONE_RENDER_MICRO_USD` (~$6.63, measured per second — `templates/template.ts`), on a video that was paid for
+ * `ONE_RENDER_MICRO_USD` (~$9.00, measured per second — `templates/template.ts`), on a video that was paid for
  * once already. So Enter arms the spend rather than making it, and this is the press that spends;
  * every other note in this Studio — a plan's words, a render already out — costs nothing and sends
  * on Enter as before.

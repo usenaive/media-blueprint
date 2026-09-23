@@ -548,7 +548,7 @@ async function callTool(name: string, params: Record<string, unknown>, store: St
       // `expected_stage` guards the START of the render; nothing guarded its end, and no field
       // recorded that a render had been paid for. So the manager's 08:00 sweep, putting a claim a
       // dead session left behind back to `scripted`, was an instruction to render a second time —
-      // ~$6.63 (`ONE_RENDER_MICRO_USD`) for a video the channel already owns. The media on the row
+      // ~$9.00 (`ONE_RENDER_MICRO_USD`) for a video the channel already owns. The media on the row
       // IS the record: a row that carries one has been through the paid step, so it cannot be moved
       // back to a stage that precedes it, by the sweep or by anything else. Forward is untouched —
       // the producer's own write lands `rendered` with the video attached in the same call.

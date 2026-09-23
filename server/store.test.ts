@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FACELESS_SEEDS } from "../seed/posts";
+import { CLIPPING_SEEDS, FACELESS_SEEDS } from "../seed/posts";
 import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS } from "../seed/projects";
 import { ACTIVE, TEMPLATES } from "../templates/index.ts";
 import { emptyState, openStore, openStoreOver, seedState, type StoreState } from "./store";
@@ -72,6 +72,35 @@ describe("the template's own state", () => {
     expect(plan.renders![0]!.mediaUrl).toMatch(/^fil_\w+$/);
     expect(plan.renders![0]!.mediaUrl).not.toBe(post.mediaUrl);
     expect(Date.parse(plan.renders![0]!.at)).toBeLessThan(Date.parse(plan.statusAt));
+  });
+
+  /**
+   * *** A PLAN'S ID AND ITS POST'S ID ARE TWO SPACES, AND THE DEMO HAD THEM AS ONE. ***
+   *
+   * The rendered `faceless` plan was seeded as `post_9f2a` — the id of the post it belongs to —
+   * and the row's `projectId` pointed at that same string. It resolved, but only because both
+   * rows were wrong in the same direction, and every lookup that takes either kind then has two
+   * right answers: the manager's 08:00 sweep reads each row's plan by `projectId`
+   * (`channel.get_project`), and `/api/studio/:id` is documented as taking "a plan's id or its
+   * post's". A demo is the shape a real install copies, so the two prefixes are held apart here
+   * and every pointer between them is required to land.
+   */
+  it("keeps a plan's id and its post's id in separate spaces, and lands every pointer between them", () => {
+    for (const [posts, plans] of [
+      [FACELESS_SEEDS, FACELESS_PROJECT_SEEDS],
+      [CLIPPING_SEEDS, CLIPPING_PROJECT_SEEDS],
+    ] as const) {
+      for (const post of posts) expect(post.id, post.title).toMatch(/^post_/);
+      for (const plan of plans) expect(plan.id, plan.title).toMatch(/^proj_/);
+      // Said as a set as well as a prefix: the prefixes are the rule, a collision is the failure.
+      expect(new Set([...posts.map((p) => p.id), ...plans.map((p) => p.id)]).size).toBe(posts.length + plans.length);
+      for (const post of posts) {
+        if (post.projectId !== undefined) expect(plans.map((p) => p.id), post.id).toContain(post.projectId);
+      }
+      for (const plan of plans) {
+        if (plan.postId !== undefined) expect(posts.map((p) => p.id), plan.id).toContain(plan.postId);
+      }
+    }
   });
 
   it("records who filed a post, what for and what from — and invents none of the three", () => {
