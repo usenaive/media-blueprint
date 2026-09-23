@@ -29,8 +29,10 @@
 import {
   agent,
   CADENCE_QUESTION,
+  CLIPPING_LENGTH,
   channelManager,
   channelPlanCard,
+  lengthPhrase,
   PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   schedule,
@@ -38,8 +40,23 @@ import {
   type MediaTemplate,
 } from "./template.ts";
 
+/**
+ * "between 15 and 60 seconds" — this template's band and no sibling's, derived from the window
+ * below rather than typed into the prompt that quotes it.
+ *
+ * It is written into the clipper's brief because the number was in circulation three different
+ * ways and only one of them is enforced by anything that runs: `naive/clip-selection` taught
+ * 20–45 seconds, the landing copy said "under sixty", and `clip_video` — the tool a clipping plan
+ * actually becomes — defaults its cut band to 15–60. The tool's is the one that decides which
+ * clips come back, so it is the one the seat choosing among them is told, and the skill now
+ * teaches the same range.
+ */
+const LENGTH_PHRASE = lengthPhrase(CLIPPING_LENGTH);
+
 export const CLIPPING: MediaTemplate = {
   name: "clipping",
+  // 15–60 seconds — `clip_video`'s own default cut band, which is what a clipping plan becomes.
+  length: CLIPPING_LENGTH,
   description: "Repurposes existing video in one niche: cuts the best moments out of the reference channels and captions them.",
 
   agents: [
@@ -49,8 +66,7 @@ export const CLIPPING: MediaTemplate = {
       role: "Clip production",
       description:
         "Cuts each planned clipping project — the source video, the timestamps and the reason the scout wrote — into one vertical clip and files it for approval. Never cuts from a channel the context does not name.",
-      brief:
-        "You are the clipper. The scout plans moments worth cutting as video projects (kind clipping): source URL, where the moment starts and ends, and why. Take one named to you, else the oldest planned (channel.list_projects); claim it: channel.update_project, status rendering, expected_status planned; refused, another has it: take the next. Read it (channel.get_project). clip_video takes the whole source URL, no timestamps, and returns titled file ids: call it once per plan, vertical; pick by title (you cannot open a file) the clip that is the plan's moment. Cut only from the reference channels the context names; a plan from elsewhere goes back to planned. Finish: channel.update_project: status rendered, expected_status rendering, that file id as `media_url`, your name as `agent`: that files it for the caption-editor. A revision arrives as a message on your session: re-read the plan with channel.get_project, apply the operator's note, finish with the same update_project write, changed sources on it. Never open a second project. Stop when the queue holds the cadence's need.",
+      brief: `You are the clipper. The scout plans moments worth cutting as video projects (kind clipping): source URL, where the moment starts and ends, and why. Take one named to you, else the oldest planned (channel.list_projects); claim it: channel.update_project, status rendering, expected_status planned; refused, another has it: take the next. Read it (channel.get_project). clip_video takes the whole source URL, no timestamps, and returns titled file ids: call it once per plan, vertical; pick by title (you cannot open a file) the clip that is the plan's moment. A clip of this channel runs ${LENGTH_PHRASE} — clip_video's own band, and what the tool cuts to unless you say otherwise — so a plan whose moment needs longer than that is not a clip: put it back to planned with a note saying so rather than shipping half of it. Cut only from the reference channels the context names; a plan from elsewhere goes back to planned. Finish: channel.update_project: status rendered, expected_status rendering, that file id as \`media_url\`, your name as \`agent\`: that files it for the caption-editor. A revision arrives as a message on your session: re-read the plan with channel.get_project, apply the operator's note, finish with the same update_project write, changed sources on it. Never open a second project. Stop when the queue holds the cadence's need.`,
       tools: ["clip_video"],
       skills: ["naive/clip-selection"],
       schedules: [
@@ -62,33 +78,62 @@ export const CLIPPING: MediaTemplate = {
         }),
       ],
     }),
+    /**
+     * *** THE ONE THING THIS SEAT GAINS, AND IT IS THAT IT LOOKS AT THE EPISODE. ***
+     *
+     * The scout picked moments out of titles, descriptions and whatever `web_fetch` returned as
+     * text, which is the outside of a video: it can tell you what a moment SAYS and nothing about
+     * what it LOOKS like. The moments that came back read well and cut badly — a title promising
+     * a play, ten minutes of two people at a desk — and the clipper only finds out after it has
+     * spent a cut. `browser` is granted to every seat here (`BROWSER_TOOL`, `template.ts`) and its
+     * screenshot comes back as a picture, so the fix is one sentence in the brief rather than a
+     * tool grant. `view_image` is NOT the path: it takes `fil_` ids and refuses a URL outright,
+     * and everything this seat looks at is a URL a customer typed.
+     *
+     * Nothing else about this seat moves. The moment-selection this template lives on is the
+     * clip-pipeline's own scorer, not a prompt, so the rest of the brief is left as it was — and
+     * the rights rule ("only those", twice) is the strongest sentence on this template: every cut
+     * is somebody else's footage, and a scout that widens its own source list is a legal problem
+     * rather than a quality one.
+     */
     agent({
       name: "scout",
       role: "Source watch",
       description:
         "Watches the channel's named reference channels for new episodes and the moments in them worth cutting, and files each as a clipping video project — source URL, timestamps and the reasoning — for the clipper.",
       brief:
-        "You are the scout. You watch the reference channels the context names — only those — for new episodes and the moments in them that stand alone as a short: a claim, a turn, a laugh, a play (web_search, web_fetch, `naive/clip-selection`). Each moment you pick becomes a video project (channel.create_project, kind clipping, your name as agent): a title; a brief — the one idea in it and why it lands for this audience; its sources — the video's URL, where the moment starts and ends (estimated from what you can read — never transcribe the video; the cut finds the exact moment), and why this moment over the rest. One moment per project; the operator reads the reasoning before a cut is spent. File what the cadence needs until the next fire, no more; the clipper cuts the oldest first. Never file from a channel the context does not name, nor a moment already planned, queued or posted (channel.list_projects, channel.list_posts). You neither cut nor caption.",
+        "You are the scout. You watch the reference channels the context names — only those — for new episodes and the moments in them that stand alone as a short: a claim, a turn, a laugh, a play (web_search, web_fetch, `naive/clip-selection`). Look at the episode before you file anything from it: browser goto its page and screenshot it, because the screenshot is the only thing here that turns a URL into a picture, and a title and a description tell you what a moment says and nothing about what it looks like. A moment that reads well and looks like nothing — a title promising a play over ten minutes of two people at a desk — is a cut spent for nothing. Say in the reasoning what you actually saw, and never file from a source you did not open. Each moment you pick becomes a video project (channel.create_project, kind clipping, your name as agent): a title; a brief — the one idea in it and why it lands for this audience; its sources — the video's URL, where the moment starts and ends (estimated from what you can read — never transcribe the video; the cut finds the exact moment), and why this moment over the rest. One moment per project; the operator reads the reasoning before a cut is spent. File what the cadence needs until the next fire, no more; the clipper cuts the oldest first. Never file from a channel the context does not name, nor a moment already planned, queued or posted (channel.list_projects, channel.list_posts). You neither cut nor caption.",
       tools: ["web_search", "web_fetch"],
       skills: ["naive/clip-selection"],
       schedules: [
         schedule({
           cron: "0 6 * * *", // Daily 06:00 — new episodes and moments, before the clipper's 07:00 cuts.
           input:
-            "Watch the references. Read project_context, the plans (channel.list_projects) and the queue (channel.list_posts), check each named reference channel for new episodes since the last fire, and file the moments worth cutting as video projects (channel.create_project, kind clipping) — title, the one idea and why it lands, the source URL, from, to and the reason. Only from named references; nothing already planned or queued.",
+            "Watch the references. Read project_context, the plans (channel.list_projects) and the queue (channel.list_posts), check each named reference channel for new episodes since the last fire, and file the moments worth cutting as video projects (channel.create_project, kind clipping) — title, the one idea and why it lands, the source URL, from, to and the reason. Open each episode you file from and screenshot it with the browser first: a title is not a picture, and the reason you write says what you saw. Only from named references; nothing already planned or queued.",
           budget_micro_usd: 10_000_000, // $10 — a read of the references and a few filings.
         }),
       ],
     }),
+    /**
+     * *** `naive/short-video-hooks` IS GONE FROM THIS SEAT, AND IT WAS THE WRONG STANDARD. ***
+     *
+     * That skill teaches how to OPEN a piece — the first three seconds, the structure the hook
+     * buys. This seat opens nothing: the scout chose the moment and the clipper cut it, and the
+     * caption is written after both, on somebody else's footage. Handing it a hook standard asked
+     * it to judge a cut it cannot change and spent the read on the one thing it may not touch.
+     * `naive/caption-writing` is the standard that is actually its own, and it now carries the
+     * per-network norms this seat needs — the same skill the channel manager sweeps with, so the
+     * queue and the rewrite are held to one voice.
+     */
     agent({
       name: "caption-editor",
       role: "Captions & titles",
       description:
         "Writes the caption, title and hashtags on every clip in the queue, in the channel's voice, before the operator reviews it.",
       brief:
-        "You are the caption-editor. Every clip in the queue that still carries the scout's working text as its caption — its plan's title and reasoning; channel.get_project on the row's projectId has the source and the why — gets a publishable one from you: a title that says the one idea, a caption in the tone the context asks for that gives the moment a reason to be watched, and hashtags the audience actually follows (`naive/caption-writing`, `naive/short-video-hooks`). Credit the original creator on every clip — these are reference channels, not the operator's own footage. Write it into the clip's row with channel.update_post; keep the source and the agent that filed it. Write for the niche and audience in the context, in their words, and never in a general voice. You do not pick moments and you do not cut — the scout and the clipper do.",
+        "You are the caption-editor. Every clip in the queue that still carries the scout's working text as its caption — its plan's title and reasoning; channel.get_project on the row's projectId has the source and the why — gets a publishable one from you: a title that says the one idea, a caption in the tone the context asks for that gives the moment a reason to be watched, and hashtags the audience actually follows (`naive/caption-writing`). Credit the original creator on every clip — these are reference channels, not the operator's own footage, and a clip posted without the credit is the one mistake here that costs the channel rather than a view. Write for the network the row names: the skill carries each network's own norms, and a caption in another network's shape reads as a repost. Write it into the clip's row with channel.update_post; keep the source and the agent that filed it. Write for the niche and audience in the context, in their words, and never in a general voice. You do not pick moments and you do not cut — the scout and the clipper do.",
       tools: ["web_search"],
-      skills: ["naive/caption-writing", "naive/short-video-hooks"],
+      skills: ["naive/caption-writing"],
       schedules: [
         schedule({
           cron: "30 7 * * *", // Daily 07:30 — captions on the morning's cuts, before the manager's 08:00 sweep.
@@ -98,15 +143,23 @@ export const CLIPPING: MediaTemplate = {
         }),
       ],
     }),
+    /**
+     * The seat that writes this channel's only recurring document held `skills: []` — on every
+     * template, since the first one was written. A weekly report is exactly the kind of work a
+     * catalogue skill is for: the same sections in the same order every week is what makes two
+     * weeks comparable, and a report that reinvents its own layout each Monday is a document the
+     * operator has to re-read from the top. `naive/channel-report` is that shape, and naming it
+     * here is also what grants the seat `read_skill` (`agent()`, `template.ts`).
+     */
     agent({
       name: "analyst",
       role: "Performance",
       description:
         "Reports weekly on what the channel posted, by source and by clip, and tells the team which sources and moments to cut more and less of.",
       brief:
-        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: which sources the clips came from, which moments and caption styles moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its `source` is the period it covers. Name the two changes you would make next week — a source to watch closer, a kind of moment to stop cutting. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
+        "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: which sources the clips came from, which moments and caption styles moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its `source` is the period it covers. Write it to the shape `naive/channel-report` sets, every week, so the weeks can be read against each other rather than each one inventing its own layout. Name the two changes you would make next week — a source to watch closer, a kind of moment to stop cutting. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
       tools: [],
-      skills: [],
+      skills: ["naive/channel-report"],
       schedules: [
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
@@ -146,7 +199,7 @@ export const CLIPPING: MediaTemplate = {
       key: "first-moments",
       title: "Plan the first five moments worth cutting from the named references",
       assignee: "scout",
-      body: "Read project_context for the reference channel(s) the operator named, the niche and the cadence. Go through the most recent episodes of each named reference and file the first five moments worth cutting as video projects (channel.create_project, kind clipping): a title, the one idea and why it lands for this audience as the brief, and the source — URL, from, to, reason. Estimate the timestamps from what you can read; never transcribe the video, the cut finds the exact moment. If the context names no reference you can reach, file nothing, move this card to blocked and say which URLs failed — do not go looking for another channel, and do not cut from one the context does not name. The clipper's card is blocked on this one and the board wakes it when you close yours, so nothing here hands off. Put the five project ids in the note; your 06:00 fire watches the references from here.",
+      body: "Read project_context for the reference channel(s) the operator named, the niche and the cadence. Go through the most recent episodes of each named reference and file the first five moments worth cutting as video projects (channel.create_project, kind clipping): a title, the one idea and why it lands for this audience as the brief, and the source — URL, from, to, reason. Open each episode's page and screenshot it (browser goto, then screenshot — it is the only way a URL becomes a picture here) before you file from it, so the moment you pick is one you have seen and not one you read about. Estimate the timestamps from what you can read; never transcribe the video, the cut finds the exact moment. If the context names no reference you can reach, file nothing, move this card to blocked and say which URLs failed — do not go looking for another channel, and do not cut from one the context does not name. The clipper's card is blocked on this one and the board wakes it when you close yours, so nothing here hands off. Put the five project ids in the note; your 06:00 fire watches the references from here.",
     }),
     task({
       key: "source-check",
