@@ -494,7 +494,7 @@ describe("the line that says whether the account is connected", () => {
 
 /**
  * THE FOURTH QUESTION — the one a person may leave blank, and the whole reason the engine's cap
- * moved from three to four (ADR-0751).
+ * moved from three to four (ADR-0757).
  *
  * Everything here is really one property: an install that answered nothing must behave exactly as
  * this template did before the question existed. That is what makes an optional question safe to
@@ -570,7 +570,7 @@ describe("the question that asks what to model the channel on", () => {
    * *** THE THREE KINDS ARE NOT EQUAL, AND THE STUDY BRANCHES ON WHICH ONE IT GOT. *** A still can
    * be opened with `view_image` and written from; a `fil_` id is the same thing without needing a
    * public URL; a link is TEXT ONLY, because nothing samples frames out of a video. Getting this
-   * classification wrong is how the crew treats a link as though it had seen the video (ADR-0752).
+   * classification wrong is how the crew treats a link as though it had seen the video (ADR-0758).
    */
   it("tells a still from a file id from a link", () => {
     expect(referenceKindOf("https://cdn.example.test/still-01.jpg")).toBe("image");
@@ -609,7 +609,7 @@ describe("the question that asks what to model the channel on", () => {
     expect(study.body).toMatch(/reference teardown/);
     // *** IT LOOKS, RATHER THAN READING ABOUT. *** This card named `clip_video` — a CLIPPING tool
     // whose output is transcript-derived text — and the crew planned the wrong genre from a
-    // caption (ADR-0752). The tool that actually opens a picture is `view_image`, and the card
+    // caption (ADR-0758). The tool that actually opens a picture is `view_image`, and the card
     // must say what to do when there is nothing to open rather than guessing confidently.
     expect(study.body).toMatch(/view_image/);
     expect(study.body).not.toMatch(/clip_video/);

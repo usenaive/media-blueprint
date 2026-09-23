@@ -72,7 +72,7 @@ describe("naive.config", () => {
    */
   it("hands `up` the crew's roles, skills, cards and the running template's setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
-    // Three required, plus the optional fourth where the running template spends it (ADR-0751).
+    // Three required, plus the optional fourth where the running template spends it (ADR-0757).
     expect(project.questions.length).toBe(ACTIVE.questions.length);
     expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(3);
     for (const agent of project.agents) {

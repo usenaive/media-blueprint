@@ -832,7 +832,7 @@ describe("the data the screens read", () => {
    * required slot on the thing only it needs: the niche, or the sources.
    *
    * *** THE FOURTH IS `faceless`'s ALONE AND IT IS THE ONLY OPTIONAL ONE. *** The cap moved to four
-   * because `optional` exists (ADR-0751), so a fourth may only be a question whose absence changes
+   * because `optional` exists (ADR-0757), so a fourth may only be a question whose absence changes
    * nothing — and every other question here gates real work, which is why none of them moved. It
    * sits THIRD, before the cadence: the form then reads as what the channel is, where it goes, what
    * it should be like, and how often, rather than trailing the optional one after the schedule.

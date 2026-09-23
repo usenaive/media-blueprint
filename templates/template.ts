@@ -39,7 +39,7 @@ export const PROJECT_NAME = "media";
  *     template "faceless" asks 5 questions, but a template asks at most 4 before anything is
  *     provisioned — a fifth belongs to the crew's first conversation
  *
- * *** IT WAS THREE, AND THE FOURTH SLOT WAS BOUGHT BY `optional` (ADR-0751). *** The cap is not
+ * *** IT WAS THREE, AND THE FOURTH SLOT WAS BOUGHT BY `optional` (ADR-0757). *** The cap is not
  * arithmetic, it is "a person answers these in one sitting before anything is provisioned" — so a
  * fourth question that may be left BLANK costs a glance rather than an answer, and the sitting
  * survives it. That is the only kind of fourth this repo may add: `REFERENCE_QUESTION` below is
@@ -195,7 +195,7 @@ export const REFERENCE_ANSWER_KEY = "reference";
  * rather than through four seats re-fetching a URL.
  *
  * `optional: true` DELIBERATELY, and it is the whole reason a fourth question is allowed at all
- * (ADR-0751; see `SetupQuestion` above). Plenty of customers have no reference in mind, and a
+ * (ADR-0757; see `SetupQuestion` above). Plenty of customers have no reference in mind, and a
  * mandatory field would extract a made-up one — worse than silence, because a crew cannot tell an
  * invented reference from a real one and would spend the install imitating a guess. Left blank, the
  * answer is ABSENT from `project_context` (not `""`), `referencesFromAnswers` returns an empty list,
@@ -252,7 +252,7 @@ const IMAGE_SUFFIX = /\.(png|jpe?g|gif|webp)(\?|#|$)/i;
  *     nothing here samples FRAMES out of a video (`clip_video` returns transcript-derived text and
  *     the session has no ffmpeg). A video link alone is therefore the WEAKEST answer, and the
  *     study card is written to say so rather than to guess from a caption — which is exactly how
- *     a crew ends up planning the wrong genre with confidence (ADR-0752).
+ *     a crew ends up planning the wrong genre with confidence (ADR-0758).
  */
 export const referenceKindOf = (value: string): ReferenceKind => {
   if (/^fil_[0-9a-z]+$/i.test(value)) return "file";
@@ -637,7 +637,7 @@ const SPEND_TOOL = "session_spend";
  * search it.
  *
  * It matters most on this template now that `screenshot` returns the picture rather than a file id
- * (§16.2, ADR-0752). A seat can open a channel page, LOOK at it, and write what it saw — the
+ * (§16.2, ADR-0758). A seat can open a channel page, LOOK at it, and write what it saw — the
  * reference study, a scout checking whether a format is really moving, the manager reading how a
  * competitor captions. Before the image crossing a screenshot was worth nothing to the agent that
  * took it, which is most of why denying this looked free.

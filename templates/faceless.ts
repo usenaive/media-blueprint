@@ -160,7 +160,7 @@ export const FACELESS: MediaTemplate = {
        * `tiktok_caption`, a virality number — all derived from the AUDIO. Pointed at a reference
        * whose whole identity is visual, every one of those fields comes back empty of the thing
        * that matters, and the crew plans from a caption. Measured: it planned the wrong genre
-       * outright (ADR-0752).
+       * outright (ADR-0758).
        *
        * `view_image` is the tool that actually looks (§16.2): it opens the stills the operator gave
        * us and the study is written from what is on screen. It is day-one only — the ongoing crons
@@ -340,7 +340,7 @@ export const FACELESS: MediaTemplate = {
 
   /**
    * Four, and the fourth is the optional one — the engine refuses a fifth, and refuses a fourth
-   * that is not optional in spirit (`templates/template.ts`, `SetupQuestion`; ADR-0751).
+   * that is not optional in spirit (`templates/template.ts`, `SetupQuestion`; ADR-0757).
    *
    * The slot `PLATFORM_QUESTION` takes was `audience` — "Tone and audience, in one line" — and that
    * question is still the first thing the channel manager asks the operator in its day-one session.

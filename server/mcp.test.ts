@@ -552,7 +552,7 @@ describe("mcp tools", () => {
   });
 
   /**
-   * §16.2 / ADR-0752: a plan may name the stills it is rendered AGAINST, and `get_project` hands
+   * §16.2 / ADR-0758: a plan may name the stills it is rendered AGAINST, and `get_project` hands
    * them to the renderer beside the prompt. Describing a reference in words and hoping the model
    * rebuilds it is the lossy path; the provider takes reference images directly, so the seat's
    * instruction stays "render exactly what get_project gave you" and the decision stays on the plan.
