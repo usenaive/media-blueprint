@@ -1333,6 +1333,9 @@ describe("the length each template makes, and the money that follows from it", (
     expect(producer.system).toMatch(/ffmpeg/);
     expect(producer.tools?.configs["bash"]).toEqual({ enabled: true, permission: "allow" });
     expect(producer.tools?.configs["publish_file"]).toEqual({ enabled: true, permission: "allow" });
+    // And the tool that gets the bytes it joins: a render leaves a `fil_` id and no file on disk,
+    // so a shell without `fetch_file` has nothing to run ffmpeg over.
+    expect(producer.tools?.configs["fetch_file"]).toEqual({ enabled: true, permission: "allow" });
     // And no seat of a single-render crew holds a shell to RENDER with: the one that does hold one
     // there is Short Form's scriptwriter, which never renders at all — it samples frames out of the
     // exemplars it plans against, and holds no `generate_video` to spend with.
@@ -1562,6 +1565,33 @@ describe("the long-form crew", () => {
   });
 
   /**
+   * *** A RENDER IS AN ID, AND ffmpeg CANNOT BE POINTED AT AN ID. *** `generate_video` answers with
+   * a `fil_` id and writes the bytes to the org's library; nothing reaches the box's disk, and no
+   * URL is retained. So `bash` alone is a producer that installs ffmpeg perfectly well and then
+   * discovers it is holding three ID STRINGS — which is what this crew shipped until `fetch_file`
+   * (the inverse of `publish_file`) existed. The grant and the order are asserted together here
+   * because either without the other is a brief the seat cannot carry out.
+   */
+  it("gives the producer the tool that turns a fil_ id into bytes, and the order that uses it", () => {
+    const brief = briefOf("producer");
+    // The grant. Four tools, and `fetch_file` is the one that was missing: without it `bash` reaches
+    // nothing the platform rendered.
+    expect(toolsOf(LF, "producer")).toContain("fetch_file");
+    expect(seat("producer")?.tools?.configs["fetch_file"]).toEqual({ enabled: true, permission: "allow" });
+    // And the name is in the blueprint's own literal, or the grant above cannot even be expressed:
+    // `toolset` builds every seat's config by filtering THIS array (`template.ts`).
+    expect(BUILTIN_TOOLS).toContain("fetch_file");
+    // The order, which is the whole procedure: fetch, probe every segment, join, probe the join.
+    expect(brief).toMatch(/fetch_file the segment ids into the sandbox/);
+    expect(brief).toMatch(/A render hands back a `fil_` id and no copy on disk/);
+    expect(brief).toMatch(/fetch_file.*ffprobe each against the plan BEFORE joining anything.*Concatenate them with ffmpeg/s);
+    // The fire says it too, and adds the half only a resumed session has: the segments a dead
+    // session already paid for are FETCHED, never rendered again.
+    expect(seat("producer")?.schedules?.[0]?.input)
+      .toMatch(/fetch_file every segment id into the sandbox — the ones you just rendered and the ones find_files turned up/);
+  });
+
+  /**
    * The assembly, which exists on no other template: render, join, PROBE, publish one file. The
    * probe is the half that is easy to drop and is the only check that the join did what it claimed
    * — and the ffmpeg-missing branch matters because a fragment published as the piece is a channel
@@ -1569,10 +1599,10 @@ describe("the long-form crew", () => {
    */
   it("makes the producer join, probe and publish ONE file, and stop rather than ship a fragment", () => {
     const brief = briefOf("producer");
-    expect(brief).toMatch(/concatenate them with ffmpeg/);
+    expect(brief).toMatch(/Concatenate them with ffmpeg's concat demuxer under -c copy/);
     expect(brief).toMatch(/probe the result — its duration must match `render_seconds`/);
     expect(brief).toMatch(/A file that does not probe is not published/);
-    expect(brief).toMatch(/If the shell has no ffmpeg, say so and stop with the segments filed/);
+    expect(brief).toMatch(/If ffmpeg is missing and cannot be installed, say so and stop with the segments filed/);
     expect(brief).toMatch(/worse than none/);
     expect(brief).toMatch(/publish_file the joined file/);
     expect(seat("producer")?.skills).toEqual(["naive/video-assembly"]);

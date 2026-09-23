@@ -689,12 +689,18 @@ export const APPROVAL_GATE =
  * It is here for the same reason `POST_PLATFORMS` is in `seed/posts.ts`: a blueprint is cloned
  * standalone and imports no workspace package at runtime. It is the list of names a toolset can
  * *enumerate* — which is exactly what the grant below turns on.
+ *
+ * SO A NAME MISSING HERE IS A TOOL NO SEAT OF THIS BLUEPRINT CAN BE GRANTED, whatever the platform
+ * publishes: the grant below builds every seat's toolset by filtering THIS array, so an unlisted
+ * name is neither allowed nor denied — it simply never reaches the agent. That is how `fetch_file`
+ * arrived: Long Form's producer is told to pull its rendered segments onto disk before ffmpeg can
+ * see them, and until the name was in this literal there was no way to hand it the tool that does.
  */
 export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
   "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
-  "find_files", "view_image", "find_stock_photo", "session_spend",
+  "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
 ] as const;
