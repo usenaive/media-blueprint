@@ -300,3 +300,94 @@ export const CLIPPING_PROJECT_SEEDS: VideoProject[] = [
     ],
   },
 ];
+
+/**
+ * The `longform` demo plans: what the writer filed for the producer, and the one thing about them
+ * that is not decoration.
+ *
+ * *** READ THE RUNNING SECONDS, NOT THE SHOT COUNT. *** A piece here is rendered as
+ * `ceil(seconds / 60)` separate `generate_video` calls and joined with ffmpeg, because the tool
+ * bounds `seconds` at 60 on the wire. Two segments are generated independently and never match
+ * mid-shot, so a segment boundary that falls inside a continuous shot is a visible cut in the
+ * finished file — which is why every plan below has a shot ENDING exactly on each 60-second mark,
+ * and why the seams are called out in a comment beside the scenes rather than left to be counted.
+ * A demo row that got this wrong would be a worked example of the one mistake this template's
+ * whole writer brief exists to prevent.
+ *
+ * Same rules as the seeds above: plain data, `pnpm serve` only, never anyone's work. They carry no
+ * `postId` because the queue rows this template shows are still Short Form's (`server/store.ts`),
+ * and a plan pointing at a row that points back at a different plan is worse than one pointing at
+ * nothing.
+ */
+export const LONGFORM_PROJECT_SEEDS: VideoProject[] = [
+  {
+    id: "proj_lf01", kind: "generation", status: "planned", statusAt: daysAgo(0), createdAt: daysAgo(0), sessions: [],
+    title: "Seneca's last morning, minute by minute", agent: "writer", platform: "youtube", account: "@dailystoic",
+    brief:
+      "Tacitus reports the death of Seneca as a scene rather than a summary, and it runs long enough to hold two minutes. Shape taken from the exemplars in the brief: the cold open and the held question from exemplar A (youtu.be/EX-A), the midpoint restatement from exemplar B (youtu.be/EX-B). Shots 1-3 open it on A's grammar; shots 4-5 are A's turn; shots 6-9 take B's slower midpoint and its close.",
+    styleTemplate: "Marble & ink", model: "bytedance/seedance-2.5",
+    hook: "He had two hours' notice.",
+    rejectedHooks: [
+      "The most famous death in Roman literature — too general, names nothing and promises nothing.",
+      "Nero sent a soldier at dawn — good, but it spends the turn in the first line and leaves the second minute with nothing to pay off.",
+    ],
+    retention:
+      "The two hours are named at 0:08 and not accounted for until 1:04, so the clock itself is the open loop; at the halfway seam the question changes from what he did to whether it worked, which is the only reason a viewer is still here at 1:00.",
+    cta: "Tacitus, Annals, book fifteen.",
+    facts: [
+      { claim: "Tacitus records that Seneca was ordered to take his own life after the Pisonian conspiracy", source: "Tacitus, Annals 15.60-64" },
+      { claim: "Seneca's own letters describe rehearsing death as a daily practice", source: "Letters to Lucilius, 26" },
+      { claim: "His wife Paulina attempted to die with him and was stopped on Nero's order", source: "Tacitus, Annals 15.63" },
+    ],
+    sound: { music: "Single sustained cello, no percussion, no drop", voice: "Unhurried, close-mic, no rise at the ends", sfx: ["Water moving at 0:52", "Door closing on the cut at 1:00"] },
+    referencePattern: "cold open on the object, question held past the midpoint",
+    // Segment 1 ends on shot 5 at exactly 60s; segment 2 runs shots 6-9 to 120s. Both seams are
+    // shot changes, which is the rule the writer's brief states twice.
+    scenes: [
+      { prompt: "A marble bust in near darkness, one hard side light, ink bleeding down the frame", seconds: 8, beat: "hook", text: "He had two hours' notice.", voiceover: "A soldier arrived at dawn with an order and a deadline." },
+      { prompt: "A wax tablet on a stone table, stylus set down, candle guttering", seconds: 14, beat: "setup", voiceover: "Seneca asked for time to write his will. The soldier refused him even that." },
+      { prompt: "Ink washing across a wall of carved Latin, letters surfacing and drowning", seconds: 12, beat: "setup", voiceover: "So he turned to the people in the room and said the only thing he had left to leave them was the pattern of his own life." },
+      { prompt: "Wide shot of a shuttered room, figures at the edges of the light, dust suspended", seconds: 12, beat: "setup", voiceover: "He had written about this exact morning for twenty years." },
+      { prompt: "Close on a hand, steady, resting flat on stone, the ink pulling back off the frame", seconds: 14, beat: "turn", voiceover: "The question was never whether he could describe it. It was whether the description had done him any good." },
+      { prompt: "A shallow bath of water in low light, steam rising, marble beyond it", seconds: 16, beat: "turn", voiceover: "It took most of the morning. His body was old and slow to let go, and the account of it is not dignified." },
+      { prompt: "The bath still, the surface settling, light moving across it", seconds: 16, beat: "payoff", voiceover: "Tacitus records every unflattering minute — and records that Seneca kept dictating through all of them." },
+      { prompt: "The wax tablet again, covered now, the stylus gone", seconds: 14, beat: "payoff", voiceover: "The rehearsal did not make it quick. It made it something he could still speak during." },
+      { prompt: "The bust once more, wider, the ink settled into flat calm water", seconds: 14, beat: "cta", voiceover: "The whole scene is in Annals fifteen. Read it once and the Letters stop sounding like advice." },
+    ],
+    caption: "He had written about this exact morning for twenty years. Tacitus, Annals 15. #stoicism #seneca #history",
+  },
+  {
+    id: "proj_lf02", kind: "generation", status: "rendered", statusAt: daysAgo(1), createdAt: daysAgo(3), sessions: [],
+    renders: [{ mediaUrl: "fil_lf02_joined", at: daysAgo(1) }],
+    title: "What Marcus Aurelius actually did all day", agent: "writer", platform: "youtube", account: "@dailystoic",
+    brief:
+      "The Meditations read as aphorisms because the days they came out of were never described. Three minutes is exactly enough to put the book back into the schedule that produced it. Grammar from exemplar C (youtu.be/EX-C): shots 1-4 are its cold open and slow build, shots 5-7 its midpoint gear change, shots 8-10 its close on the object it started with.",
+    styleTemplate: "Paper cutout", model: "bytedance/seedance-2.5",
+    hook: "Nobody writes that at their desk.",
+    rejectedHooks: ["A day in the life of a Roman emperor — a format, not a hook; it promises a list and this is not one."],
+    retention:
+      "The first line claims the book was not written at a desk and refuses to say where until 1:40; the twenty-second mark lands on the war tent rather than another maxim, and the midpoint seam turns from what he did to what the doing cost.",
+    cta: "Book two was written on campaign. Start there.",
+    facts: [
+      { claim: "Book two of the Meditations is headed as written among the Quadi on the river Gran", source: "Meditations 2, closing note" },
+      { claim: "Marcus spent most of the last decade of his reign on the Danube frontier", source: "Cassius Dio, Roman History 72" },
+      { claim: "The Meditations were private notes and carry no title given by their author", source: "Hadot, The Inner Citadel, ch. 1" },
+    ],
+    sound: { music: "Low strings under a single repeated woodwind figure", voice: "Plain, unhurried, no performance", sfx: ["Wind and canvas at 0:40", "Paper under a hand at 2:20"] },
+    referencePattern: "cold open on the object, midpoint gear change, close on the opening image",
+    // Three segments: shot 4 ends at 60s, shot 7 at 120s, shot 10 at 180s. Every seam is a cut.
+    scenes: [
+      { prompt: "Layered paper-craft scroll unrolling on a camp table, warm off-white palette, soft shadows", seconds: 9, beat: "hook", text: "Nobody writes that at their desk.", voiceover: "The most quoted book in self-improvement was not written in a study." },
+      { prompt: "Paper-cut map of the Danube frontier, layered cardstock depth, a single lamp", seconds: 15, beat: "setup", voiceover: "For most of the last decade of his reign, Marcus Aurelius was on campaign in the north." },
+      { prompt: "Cutout tents in rows under a paper sky, cold blue-grey tones", seconds: 18, beat: "setup", voiceover: "Plague in the legions, a frontier that would not hold, and a war that outlasted him." },
+      { prompt: "Close on a layered paper hand holding a stylus over a wax tablet, lamp guttering", seconds: 18, beat: "setup", voiceover: "The notes we call the Meditations were written at the end of days like those, for nobody." },
+      { prompt: "Canvas wall of a tent moving in wind, paper layers lifting, warm interior light", seconds: 20, beat: "turn", voiceover: "That is the fact that changes how the book reads. Every line telling you to get up and do the work was written by a man who had already done it too long." },
+      { prompt: "Paper-cut figures at a distance across a river, flattened perspective, muted palette", seconds: 20, beat: "turn", voiceover: "He is not advising you. He is talking himself into one more morning." },
+      { prompt: "A single cutout page, edges curling, text implied rather than legible", seconds: 20, beat: "payoff", voiceover: "It is why the repetitions are in there — the same three arguments, made again and again, because they kept wearing off." },
+      { prompt: "The camp at dawn in paper layers, light coming up behind the tents", seconds: 18, beat: "payoff", voiceover: "Read as advice, that repetition is padding. Read as a private record, it is the whole evidence." },
+      { prompt: "The scroll again, half rolled, the lamp out, cold morning light", seconds: 22, beat: "payoff", voiceover: "He never named it, never published it, and by every sign never intended anyone to see it." },
+      { prompt: "The camp table empty, one page left on it, paper shadows long", seconds: 20, beat: "cta", voiceover: "Book two carries the note that it was written among the Quadi, on the river Gran. Start there, and read it as what it is." },
+    ],
+    caption: "It was never advice. It was a man talking himself into one more morning. #stoicism #marcusaurelius #meditations",
+  },
+];
