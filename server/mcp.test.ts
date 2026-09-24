@@ -2,10 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authError, handleMcp, scenesPrompt, TOOLS } from "./mcp";
+import { authError, handleMcp, scenesPrompt, segmentRefusal, TOOLS } from "./mcp";
 import { openStore, type Store } from "./store";
 import { ACTIVE, TEMPLATES } from "../templates/index.ts";
-import { lengthPhrase, VIDEO_MODELS } from "../templates/template.ts";
+import { lengthPhrase, MAX_RENDER_SECONDS, packSegments, rendersInSegments, segmentsOf, VIDEO_MODELS } from "../templates/template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 
 const dirs: string[] = [];
@@ -18,6 +18,8 @@ const freshStore = (): Store => {
 };
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  // The Long Form tests compile a second `/mcp` behind `NAIVE_TEMPLATE`; nothing else may see it.
+  vi.unstubAllEnvs();
 });
 
 const rpc = (method: string, params?: unknown, id = 1) => JSON.stringify({ jsonrpc: "2.0", id, method, params });
@@ -695,6 +697,108 @@ describe("mcp tools", () => {
       if (other.length.min === ACTIVE.length.min && other.length.max === ACTIVE.length.max) continue;
       expect(described, other.name).not.toContain(lengthPhrase(other.length));
     }
+  });
+
+  /**
+   * *** THE OTHER HALF OF "CAN THIS BE MADE", AND IT WAS A REQUEST RIGHT UP TO HERE. ***
+   *
+   * A legal sum says the piece is the right LENGTH. On a template that renders in segments it says
+   * nothing about whether the producer can render it: one call takes `MAX_RENDER_SECONDS`, a
+   * segment is cut at a shot change and never inside one, so the scenes' own seconds decide how
+   * many calls the piece is. That constraint lived only in the tool description — which is exactly
+   * where "under fifteen seconds in all" lived before the length check above was written, and a
+   * description is a request.
+   *
+   * These are the three shapes this server accepted on Long Form and the producer could not make.
+   * Each is filed, queued, and found by the producer with the row already claimed: the first two as
+   * a seam through the middle of a shot, the third as a refusal after the early segments are bought
+   * at ~$9 each. A valid plan is asserted beside them, because a check that refuses everything
+   * would pass every one of these assertions.
+   *
+   * `ACTIVE` is read once when `templates/index.ts` is evaluated, so driving this server as a Long
+   * Form install means a fresh module graph behind the publisher's own `NAIVE_TEMPLATE` override —
+   * the same override `build-api.mjs` substitutes at build time. Nothing here asserts against a
+   * literal that a template switch would make a lie: the cap, the ceiling and the window are read
+   * from the template being driven.
+   */
+  it("refuses a Long Form plan its producer could not render, and accepts one it can", async () => {
+    vi.resetModules();
+    vi.stubEnv("NAIVE_TEMPLATE", "longform");
+    const longform = await import("./mcp");
+    const dir = mkdtempSync(join(tmpdir(), "fm-mcp-lf-"));
+    dirs.push(dir);
+    const store = openStore(join(dir, "store.json"), TEMPLATES.longform);
+    const file = async (...seconds: number[]) => {
+      const scenes = seconds.map((one, i) => ({ prompt: `shot ${i}`, seconds: one }));
+      const answer = (await longform.handleMcp(call("create_project", { kind: "generation", title: "t", brief: "b", hook: "h", scenes }), store, null)) as CallResult;
+      return { error: answer.result.isError === true, text: answer.result.content[0]!.text };
+    };
+    const { length } = TEMPLATES.longform;
+    const ceiling = segmentsOf(length);
+    const repeat = (times: number, seconds: number) => Array.from({ length: times }, () => seconds);
+
+    // The three unrenderable shapes and the renderable one, ANSWERED TOGETHER rather than one
+    // assertion at a time: each is a separate way to be unmakeable, and a check that caught only
+    // the first would otherwise look like a pass until someone read the diff.
+    const whole = [length.max];                      // one shot the whole piece
+    const long = repeat(4, 45);                      // each shot longer than one call, summing exactly right
+    const many = repeat(11, 16);                     // each shot well under the cap, eleven segments of it
+    const fine = repeat(18, 10);                     // six segments filled exactly, which is the ceiling
+    // The third shape is the one the sum can never catch: every scene legal, the total inside the
+    // window, and the plan still unrenderable.
+    expect(many.reduce((sum, one) => sum + one, 0)).toBeLessThanOrEqual(length.max);
+    expect(many.every((one) => one <= MAX_RENDER_SECONDS)).toBe(true);
+
+    const filed = {
+      "one shot of the whole piece": (await file(...whole)).error,
+      "four shots past the render cap": (await file(...long)).error,
+      "eleven shots that pack into eleven segments": (await file(...many)).error,
+      "eighteen shots that fill six": (await file(...fine)).error,
+    };
+    expect(filed).toEqual({
+      "one shot of the whole piece": true,
+      "four shots past the render cap": true,
+      "eleven shots that pack into eleven segments": true,
+      // Not "refuse everything": the ceiling is a ceiling, and a plan that reaches it exactly is fine.
+      "eighteen shots that fill six": false,
+    });
+    expect(packSegments(fine)).toHaveLength(ceiling);
+
+    // And the words, because the two failures have opposite fixes and the caller is a model: split
+    // the shot, or re-cut the shots to fill the segments.
+    expect((await file(...whole)).text).toMatch(new RegExp(`scenes\\[0\\] runs ${length.max}s, and one generate_video call takes ${MAX_RENDER_SECONDS}s`));
+    expect((await file(...whole)).text).toMatch(/a seam through the middle of itself\. Split the shot/);
+    expect((await file(...long)).text).toMatch(new RegExp(`scenes\\[0\\] runs 45s, and one generate_video call takes ${MAX_RENDER_SECONDS}s`));
+    expect((await file(...many)).text).toMatch(new RegExp(`these 11 shots pack into 11 segments of up to ${MAX_RENDER_SECONDS}s and this channel renders at most ${ceiling}`));
+    expect((await file(...many)).text).toMatch(/Re-cut the shots to fill the segments rather than dropping the beats/);
+
+    // Twelve of those 16s shots is the same packing failure, but it never reaches the check: 192s is
+    // outside the window, so the LENGTH refusal answers first. The two checks are ordered, not merged.
+    const over = await file(...repeat(12, 16));
+    expect(over.error).toBe(true);
+    expect(over.text).toMatch(/the scenes run 192s in all/);
+  });
+
+  /**
+   * *** AND IT COSTS THE SINGLE-CALL TEMPLATES NOTHING, WHICH IS THE POINT OF THE SEAT CHECK. ***
+   *
+   * `clipping` runs 15–60s, so dividing by the render cap says "two segments" — but that crew cuts
+   * with `clip_video`, holds no `generate_video` and no producer at all, so a segment refusal would
+   * be this server inventing a constraint out of arithmetic against a crew that never renders. The
+   * description and the refusal read the one predicate, so neither can drift onto a template the
+   * other is silent about.
+   */
+  it("says nothing about segments on a template whose piece is one call", () => {
+    for (const template of Object.values(TEMPLATES)) {
+      if (rendersInSegments(template)) continue;
+      const described = JSON.stringify(TOOLS.find((tool) => tool.name === "create_project"));
+      for (const shape of [[template.length.max], [template.length.min, 1], Array.from({ length: 20 }, () => 3)]) {
+        expect(segmentRefusal(shape, template), `${template.name} ${shape.join("+")}`).toBeUndefined();
+      }
+      if (template.name === ACTIVE.name) expect(described).toContain("rendered as ONE video, not joined");
+    }
+    // Long Form is the one that does, so the assertion above is not vacuous.
+    expect(Object.values(TEMPLATES).some((one) => rendersInSegments(one))).toBe(true);
   });
 
   /**

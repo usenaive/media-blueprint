@@ -405,6 +405,43 @@ export const MAX_RENDER_SECONDS = 30;
 export const segmentsOf = (length: Length): number => Math.ceil(length.max / MAX_RENDER_SECONDS);
 
 /**
+ * Whether a piece of this template is RENDERED IN SEGMENTS AND JOINED rather than made in one call.
+ *
+ * It is two facts and not one, which is why it is a function rather than the arithmetic alone.
+ * `segmentsOf` says whether one call can carry the piece; the seat check says whether this crew
+ * HAS the producer that joins what it cannot. `clipping`'s band is 15–60s, so dividing it by the
+ * render cap says "two segments" — but that crew cuts with `clip_video`, holds no `generate_video`
+ * and no producer at all, so a segmented answer would promise it a seat and a join it does not
+ * have. `server/mcp.ts` reads this for both the words it describes a plan with and the refusal it
+ * files one against, so the two cannot drift apart.
+ */
+export const rendersInSegments = (template: MediaTemplate): boolean =>
+  segmentsOf(template.length) > 1 && template.agents.some((one) => one.name === RENDERER.generation);
+
+/**
+ * The segments a plan's scenes pack into — each entry the seconds of one segment, cut ONLY at a
+ * scene boundary.
+ *
+ * Greedy and first-fit, because that is exactly what the producer is told to do with the compiled
+ * prompt: *"cut that prompt along its own shot boundaries — never across a shot — into segments of
+ * `MAX_RENDER_SECONDS` seconds or fewer"*. So this is not an estimate of the render, it is the
+ * render, and a plan that packs into more segments than `segmentsOf` allows is one the producer
+ * cannot make however it cuts.
+ *
+ * A scene LONGER than the cap packs into a segment of its own that is still over it — the one
+ * shape greedy cannot fix — which is how the caller tells the two failures apart.
+ */
+export const packSegments = (seconds: readonly number[]): number[] => {
+  const segments: number[] = [];
+  for (const one of seconds) {
+    const current = segments[segments.length - 1];
+    if (current === undefined || current + one > MAX_RENDER_SECONDS) segments.push(one);
+    else segments[segments.length - 1] = current + one;
+  }
+  return segments;
+};
+
+/**
  * "between 15 and 30 seconds" — the range as every prompt of THAT template says it.
  *
  * It was one module constant interpolated into every brief, cron and card. One phrase across three

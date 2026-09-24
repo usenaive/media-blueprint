@@ -16,7 +16,7 @@ import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
 import { PROJECT_KINDS, PROJECT_STATUSES, SCENE_BEATS, type ClipSource, type Fact, type ProjectKind, type ProjectSession, type ProjectStatus, type Scene, type Sound } from "../seed/projects.ts";
 import { ACTIVE } from "../templates/index.ts";
-import { labelOf, lengthPhrase, MAX_RENDER_SECONDS, RENDERER, segmentsOf, VIDEO_MODELS } from "../templates/template.ts";
+import { labelOf, lengthPhrase, MAX_RENDER_SECONDS, packSegments, RENDERER, rendersInSegments, segmentsOf, VIDEO_MODELS, type MediaTemplate } from "../templates/template.ts";
 
 /**
  * *** THE LENGTH THIS SERVER ENFORCES IS THE RUNNING TEMPLATE'S, NOT THE BLUEPRINT'S. ***
@@ -49,8 +49,8 @@ const LENGTH_PHRASE = lengthPhrase(LENGTH);
  * would promise it a seat and a join it does not have. Hence the seat check, not the arithmetic
  * alone.
  */
-const JOINS_SEGMENTS = ACTIVE.agents.some((one) => one.name === RENDERER.generation);
-const ASSEMBLY = segmentsOf(LENGTH) === 1 || !JOINS_SEGMENTS
+const SEGMENTED = rendersInSegments(ACTIVE);
+const ASSEMBLY = !SEGMENTED
   ? "and the shots are rendered as ONE video, not joined: nothing here cuts between them, so the sum is what generate_video is asked for and each prompt is a shot inside that one generation"
   : `and the piece is rendered in at most ${segmentsOf(LENGTH)} segments of up to ${MAX_RENDER_SECONDS}s — generate_video takes no more in one call — which the producer joins with ffmpeg in its own sandbox, so plan the beats to fall on those seams rather than across them`;
 
@@ -333,6 +333,44 @@ const isHttpUrl = (value: string): boolean => {
 };
 
 /**
+ * Why a plan of these scenes cannot be RENDERED on this template, in the words the caller gets
+ * back, or undefined when it can.
+ *
+ * *** THE SEAM IS THE HALF THE LENGTH CHECK NEVER LOOKED AT, AND IT FAILS THE SAME WAY. *** The
+ * sum being legal says the piece is the right length; it says nothing about whether the producer
+ * can make it. Past `generate_video`'s ceiling a plan is rendered in segments and joined, and the
+ * producer is told to cut them at a shot change and never inside one — so the scenes' own seconds
+ * decide how many calls the piece is. That constraint lived only in `ASSEMBLY`, which is the tool
+ * DESCRIPTION, and a description is a request exactly as the old "under fifteen seconds in all"
+ * was: on Long Form this server accepted a single 180s shot, four 45s shots, and eleven 16s shots
+ * that pack into eleven segments against a ceiling of six. Every one of them is filed, queued, and
+ * discovered by the producer with the row already claimed — either as a seam through the middle of
+ * a shot or as a refusal after the first segments are bought.
+ *
+ * Two failures, told apart because the fixes are opposite. A shot LONGER than one call cannot be
+ * cut anywhere legal and has to be split. Shots that are each short enough but PACK badly are a
+ * plan whose beats have to be re-cut to fill the segments. `packSegments` is the producer's own
+ * greedy cut, so what is checked here is the render rather than an estimate of it.
+ *
+ * It takes the template rather than reading `ACTIVE`, so the numbers a test drives it with are the
+ * ones a Long Form install actually runs — one `/mcp` serves whichever template is installed, and
+ * this module's are whichever this build compiled.
+ */
+export const segmentRefusal = (seconds: readonly number[], template: MediaTemplate): string | undefined => {
+  if (!rendersInSegments(template)) return undefined;
+  const over = seconds.findIndex((one) => one > MAX_RENDER_SECONDS);
+  if (over !== -1) {
+    return `scenes[${over}] runs ${seconds[over]}s, and one generate_video call takes ${MAX_RENDER_SECONDS}s — a segment is cut at a shot change and never inside one, so a shot this long is a seam through the middle of itself. Split the shot rather than stretching the segment.`;
+  }
+  const packed = packSegments(seconds);
+  const ceiling = segmentsOf(template.length);
+  if (packed.length > ceiling) {
+    return `these ${seconds.length} shots pack into ${packed.length} segments of up to ${MAX_RENDER_SECONDS}s and this channel renders at most ${ceiling} — a segment is cut at a shot change, so shots that do not fill one spend a whole call each. Re-cut the shots to fill the segments rather than dropping the beats.`;
+  }
+  return undefined;
+};
+
+/**
  * The scenes a caller sent, each checked, or undefined when none were.
  *
  * *** THE LENGTH IS CHECKED HERE, WHICH IS THE ONE PLACE IT CANNOT BE IGNORED. *** It used to be
@@ -341,6 +379,10 @@ const isHttpUrl = (value: string): boolean => {
  * sum is the number `generate_video` is actually asked for — nothing joins clips, so the shots are
  * one generation — so a plan whose sum is outside the format is not a plan this channel can make,
  * and the refusal arrives while it is still free to fix.
+ *
+ * The same sentence is why `segmentRefusal` runs here too: on a template that renders in segments
+ * the sum is only half of what makes a plan renderable, and the other half was a request in the
+ * tool description. Both are answered on the write, while a refusal is still free.
  */
 const scenesOf = (params: Record<string, unknown>): Scene[] | undefined => {
   if (params.scenes === undefined) return undefined;
@@ -368,6 +410,10 @@ const scenesOf = (params: Record<string, unknown>): Scene[] | undefined => {
       `the scenes run ${total}s in all, and a piece on this channel is ${LENGTH_PHRASE} — their seconds are the piece's length, ${ASSEMBLY}. Re-cut the shots rather than dropping the beats.`,
     );
   }
+  // The length is right; now whether the producer can render it. Undefined on a template that makes
+  // its piece in one call, so this costs `faceless` and `clipping` nothing.
+  const unrenderable = segmentRefusal(scenes.map((scene) => scene.seconds), ACTIVE);
+  if (unrenderable !== undefined) throw new ToolError(unrenderable);
   return scenes;
 };
 
