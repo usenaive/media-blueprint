@@ -29,9 +29,9 @@
  * Standalone clones install `@vetta/blueprints` from npm; inside the monorepo it resolves via the
  * workspace protocol.
  */
-import { defineProject } from "@usenaive-sdk/blueprints";
-import { CLIPPING_SEEDS, FACELESS_SEEDS } from "./seed/posts.ts";
-import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
+import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
+import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post } from "./seed/posts.ts";
+import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES, type TemplateName } from "./templates/index.ts";
 
 /**
  * Every template this repo carries — all of them, not just the running one. The engine takes the
@@ -43,10 +43,37 @@ import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/i
  * demo row may reach the shipped bundle (`src/no-seed.test.ts`); this file is read only by
  * `naive up`, so it is where the rows and the rest of a template meet.
  */
-const templates = [
-  { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
-  { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },
-];
+const seeds: Record<TemplateName, Post[]> = {
+  faceless: FACELESS_SEEDS,
+  clipping: CLIPPING_SEEDS,
+  // `longform` shows Short Form's queue rows, which is the pairing `server/store.ts` makes too and
+  // is deliberate: the demo plans it carries (`LONGFORM_PROJECT_SEEDS`) name no `postId`, so a
+  // queue of its own would be rows no plan points at. The crew and the prompts are what differ.
+  longform: FACELESS_SEEDS,
+};
+
+/**
+ * *** THE ENGINE'S REGISTRY IS THE GATE, AND `longform` IS NOT THROUGH IT YET. ***
+ *
+ * `defineProject` refuses any repo whose template list does not equal `BLUEPRINTS[blueprint]`
+ * exactly — "one repo carries every template of its blueprint, so switching is an edit and never a
+ * re-clone". That registry is a const compiled into the engine, not something this repo can widen:
+ * `@usenaive-sdk/blueprints@0.7.0`, the version that resolves today, says `media` is
+ * `["faceless", "clipping"]`, so naming `longform` here is refused outright and takes the whole
+ * config down with it. `package.json` pins `^0.8.0`, which adds `longform` to that const and is
+ * not published yet.
+ *
+ * So the list is the INTERSECTION of what this repo carries and what the installed engine admits,
+ * read off `BLUEPRINTS` rather than written out. Under 0.7.0 that is the two it already had; the
+ * day 0.8.0 resolves, `longform` joins with no edit to this file and no release to forget. The
+ * cost of the gap is real and worth naming: until then `naive up` provisions two crews, and an
+ * `ACTIVE` of `longform` is refused by name rather than provisioned — which is the loud failure,
+ * not a silent one. `naive.config.test.ts` holds the intersection to exactly that rule.
+ */
+const carried = new Set<string>(BLUEPRINTS.media?.templates ?? Object.keys(TEMPLATES));
+const templates = Object.values(TEMPLATES)
+  .filter((one) => carried.has(one.name))
+  .map((one) => ({ ...one, seed: { posts: seeds[one.name] } }));
 
 /**
  * What `naive up` is handed. Named rather than inlined so `naive.config.test.ts` can read the

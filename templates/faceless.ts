@@ -17,13 +17,30 @@
  * a single generation and `channel.get_project` hands the producer the prompt they compile to
  * (`scenesPrompt`, `server/mcp.ts`) rather than asking it to compose one out of prose.
  *
- * *** THE OPERATOR'S REFERENCE IS THIS CHANNEL'S STANDARD, WHERE THEY GAVE ONE. ***
- * `REFERENCE_QUESTION` is the optional fourth setup question; `reference-study` watches what it
- * names, once, on day one, and files a teardown post; `hook-style` and `look` are blocked on that
- * card so the channel's voice and look are derived from the reference rather than invented from the
- * niche word; and every seat after reads the teardown rather than re-fetching the URL. An install
- * that answered nothing runs exactly as this template did before the question existed — that is
- * what `optional` has to mean here, and every prompt below carries the clause that makes it true.
+ * *** EVERY PLAN IS WRITTEN AGAINST A VIDEO SOMEBODY ON THIS CREW ACTUALLY WATCHED. ***
+ * That is new, and the whole reason the prompts below read as they do. This template used to have
+ * seen exactly one thing, ever: whatever the day-one `reference-study` card could make out from a
+ * page, and only when the operator had named a reference at all. Every piece forever was then
+ * planned against that one frozen post — the scout researched TOPICS as text, the writer researched
+ * CLAIMS as text, and nothing in the pipeline held a shell, so nothing could sample a frame out of
+ * a video. Three changes close that, and they are structural rather than exhortation:
+ *
+ *   · `REFERENCE_QUESTION` is still the optional fourth setup question and `reference-study` is
+ *     still the day-one study, but "none given" no longer means "work from the niche alone". It
+ *     means go and find the two or three videos already doing this format well in this niche and
+ *     study those (`REFERENCE_STUDY_RULE`, `template.ts`). Inventing a reference is still banned; looking
+ *     for one never should have been, and the ban on looking is why most installs planned blind.
+ *   · EVERY BRIEF CARRIES 1–3 EXEMPLARS — real videos doing that specific topic in that specific
+ *     format, found and opened by the trend-scout — and the scriptwriter opens them before it plans
+ *     anything. So a plan is written against something current, not against a post frozen on
+ *     install day, and every scene names the exemplar and the moment its grammar came from.
+ *   · The scriptwriter holds `bash`, and it is the only seat of this template that does. It is what
+ *     turns an exemplar URL into stills; measured at $0.027 of frames against a $9.00 render.
+ *
+ * `hook-style` and `look` are still blocked on the study, so the channel's voice and look are
+ * derived from the teardown rather than from the niche word, and every seat after reads the
+ * teardown rather than re-fetching the URL. What `optional` means now is that an install which
+ * answered nothing gets a teardown of the crew's own finding, marked as such — not no teardown.
  *
  * Every agent runs on crons and owes a card on the company board. A faceless channel whose crew only
  * moves when a human opens a chat window is not a channel, it is a chat window. Read the comment on
@@ -64,13 +81,17 @@ import {
   PLATFORM_QUESTION,
   REFERENCE_QUESTION,
   REFERENCE_RULE,
+  REFERENCE_STUDY_RULE,
   schedule,
+  SHORT_FORM_LENGTH,
   task,
   type MediaTemplate,
 } from "./template.ts";
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",
+  // 15–30 seconds, and the one place this template's window is written; `/mcp` refuses a plan outside it.
+  length: SHORT_FORM_LENGTH,
   description: "Generates original short-form video in one niche, from briefs, in the channel's own look.",
 
   agents: [
@@ -79,7 +100,8 @@ export const FACELESS: MediaTemplate = {
       // The 08:00 sweep is this channel's only review, and what it can honestly review is the
       // plan and the caption: no tool on this platform can watch a video, so a seat claiming to
       // have checked the render would be claiming something it cannot do.
-      " That sweep is also this channel's only review: where there is a reference teardown, read each row's plan against it and flag any drift at the end of the caption, so the operator sees it beside the Approve button. Judge the plan and the caption, never the video — no tool here can watch one.",
+      " That sweep is also this channel's only review: where there is a reference teardown, read each row's plan against it and flag any drift at the end of the caption, so the operator sees it beside the Approve button, and check the one thing that is always checkable — that every scene names the exemplar its grammar came from, because a plan that attributes nothing was invented rather than modelled. Judge the plan and the caption, never the video — no tool here can watch one. Once a week you re-read the reference against what this channel has actually published and file a fresh teardown where the format has moved.",
+      { reference: true, planCheck: "the beats run hook, setup, turn, payoff, cta rather than three shots of the same idea" },
     ),
     agent({
       name: "producer",
@@ -98,7 +120,17 @@ export const FACELESS: MediaTemplate = {
        */
       brief: `You are the producer: yours is the render, not the plan. Take a planned project, one named to you by the operator or a handoff or the next planned (channel.list_projects); claim it before you spend anything: channel.update_project, status rendering and expected_status planned. Refused, another has it: take the next. Read the plan (channel.get_project). It comes back with \`render_prompt\` — its shots already compiled into the one prompt this piece renders as, because nothing here joins clips — and \`render_seconds\`, their sum, which is ${LENGTH_PHRASE}. Call generate_video once with exactly that prompt, seconds \`render_seconds\`, aspect_ratio 9:16, and the plan's model — and where the read carried \`render_reference_images\`, pass the FIRST of them as image_urls — one only, and it becomes the opening frame of the piece, so it is the shot the video starts on rather than a style applied throughout. Do not rewrite the prompt, do not summarise it, and do not drop a shot to make it shorter: the plan was checked when it was filed. Wait for the file. Finish: channel.update_project: status rendered, expected_status rendering, the video as \`media_url\`, your name as \`agent\`, and the plan's reference_pattern in what you say you did. Refused there, it moved on: never render twice. A revision arrives as a message on your session: re-read the plan with channel.get_project, apply the operator's note to the scenes with update_project, then render the \`render_prompt\` a fresh get_project returns and finish with the same write. Never open a second project. One plan per session; nothing planned, nothing rendered. You end the chain. ${REFERENCE_RULE}`,
       tools: ["generate_video", "generate_image"],
-      skills: ["naive/short-video-hooks"],
+      /*
+       * NO SKILLS, AND THE ONE IT USED TO CARRY WAS A CONTRADICTION IN THE SAME DECLARATION.
+       *
+       * This seat loaded `naive/short-video-hooks` — a skill that teaches how to write a hook and
+       * lay a piece out in beats — while the brief three lines above forbids it the whole act:
+       * "yours is the render, not the plan … do not rewrite the prompt, do not summarise it, and do
+       * not drop a shot". A seat handed the standard for work it may not do is a seat invited to
+       * second-guess the plan it was told to render exactly, and the one thing it cannot do is
+       * replay a render it spoiled. The hook standard belongs to the scriptwriter, which holds it.
+       */
+      skills: [],
       schedules: [
         schedule({
           cron: "0 7 * * *", // Daily 07:00, channel time — the next piece, before the manager's 08:00 queue sweep.
@@ -124,16 +156,38 @@ export const FACELESS: MediaTemplate = {
       role: "Trends & briefs",
       description:
         "Finds the formats and topics moving in the channel's niche this week and files each as a brief for the scriptwriter and producer to work from.",
+      /*
+       * *** THE BRIEF NOW CARRIES EXEMPLARS, AND THAT IS THE ONE THING ONLY THIS SEAT CAN DO. ***
+       *
+       * Until now the only video anything on this template had looked at was whatever the day-one
+       * `reference-study` card opened, once, on install. Every piece forever was then planned
+       * against that frozen post: the scout researched TOPICS as text, the writer researched CLAIMS
+       * as text, and no seat ever saw how a piece in this format is actually shot. The scout is the
+       * seat that finds things, so the per-piece exemplar is its filing — 1–3 real videos doing THIS
+       * topic in THIS format, named on the brief, for the writer to open before it plans.
+       *
+       * The browser is what makes "found" mean "looked at": a search result is a title, and a
+       * screenshot is the page. It is granted to every seat (`BROWSER_TOOL`, `template.ts`), so the
+       * instruction costs no grant — only the discipline of opening each candidate before naming it.
+       */
       brief:
-        `You are the trend-scout, the head of the chain. You watch the niche, not the whole internet: read what is moving in it this week (web_search, web_fetch) — formats getting picked up, questions the audience asks, moments worth a short — and brief the best. The teardown tells you what KIND of thing to look for: brief topics that suit the formats the reference actually makes, and name which of them each brief is for. A brief is a pending post with no media, filed with \`stage\` brief: its caption states the topic, the format, why now, the hook direction and the style template to render in; its \`source\` names where you saw it. File only what the cadence calls for; five good briefs beat twenty thin ones. Do not restate a topic already queued or posted (channel.list_posts). When the last brief is filed — and only then — send_to_agent the scriptwriter once, wait false: the exact post ids, the instruction to plan them, a handoff_key naming today's date. Filed nothing, hand on nothing. You never plan or render — the scriptwriter and producer take it from your brief. ${REFERENCE_RULE}`,
+        `You are the trend-scout, the head of the chain. You watch the niche, not the whole internet: read what is moving in it this week (web_search, web_fetch) — formats getting picked up, questions the audience asks, moments worth a short — and brief the best. The teardown tells you what KIND of thing to look for: brief topics that suit the formats the reference actually makes, and name which of them each brief is for. Every brief also carries its own exemplars, and nobody downstream can find them for you: one to three REAL VIDEOS already doing that topic in that format well — the videos themselves, never an article about them — each opened with the browser and screenshotted, so you have actually looked, and each carried on the brief as its URL with one line on what is worth copying and one on what is not. A brief with no exemplar is a brief the writer has to invent from, so file fewer and better. \`naive/video-trend-brief\` is the standard for all of it. A brief is a pending post with no media, filed with \`stage\` brief: its caption states the topic, the format, why now, the hook direction, the style template to render in and those exemplars; its \`source\` names where you saw it. File only what the cadence calls for. Do not restate a topic already queued or posted (channel.list_posts). When the last brief is filed — and only then — send_to_agent the scriptwriter once, wait false: the exact post ids, the instruction to plan them, a handoff_key naming today's date. Filed nothing, hand on nothing. You never plan or render — the scriptwriter and producer take it from your brief. ${REFERENCE_STUDY_RULE} ${REFERENCE_RULE}`,
       tools: ["web_search", "web_fetch"],
-      skills: ["naive/seo-content-brief", "naive/short-video-hooks"],
+      /*
+       * `naive/seo-content-brief` WAS HERE AND IT IS AN AGENCY SKILL. Its procedure ends in
+       * `create_draft_post` — a tool of the agency blueprint, which this seat does not hold and
+       * this dashboard does not serve — and it teaches the brief for an ARTICLE. This seat writes
+       * no articles. The file itself is untouched, because the agency blueprint loads it; it simply
+       * stops being handed to a video seat. `naive/video-trend-brief` is the same job for video,
+       * and it is the one that names the exemplar as part of the deliverable.
+       */
+      skills: ["naive/video-trend-brief", "naive/short-video-hooks"],
       handoffs: ["scriptwriter"],
       schedules: [
         schedule({
           cron: "0 6 * * 1,4", // Monday and Thursday 06:00 — the week's briefs, and a mid-week refill.
           input:
-            "Scout the niche. Read project_context, this channel's reference teardown if it has one (channel.list_posts, source \"reference teardown\") and the queue (channel.list_posts), research what is moving in the niche this week, and file as many new briefs as the cadence needs until the next fire — each a pending post with no media, stage brief, naming topic, format, why now, hook direction, style template, and which of the reference's formats it is for where there is a teardown. Nothing already queued or posted. Then send_to_agent the scriptwriter once, wait false, with the ids you filed, handoff_key briefs-<today's date>; if you filed none, hand on nothing.",
+            "Scout the niche. Read project_context, this channel's reference teardown if it has one (channel.list_posts, source \"reference teardown\") and the queue (channel.list_posts), research what is moving in the niche this week, and file as many new briefs as the cadence needs until the next fire — each a pending post with no media, stage brief, naming topic, format, why now, hook direction, style template, and which of the reference's formats it is for where there is a teardown. Every brief also names one to three exemplars: real videos already doing that topic in that format well, not articles about them, each one opened with the browser and screenshotted so you have actually looked at it, carried on the brief as its URL with one line on what is worth copying and one on what is not. A brief with no exemplar is a brief the scriptwriter has to invent from, so file fewer and better. Nothing already queued or posted. Then send_to_agent the scriptwriter once, wait false, with the ids you filed, handoff_key briefs-<today's date>; if you filed none, hand on nothing.",
           budget_micro_usd: 10_000_000, // $10 — a read of the niche and a handful of filings.
         }),
       ],
@@ -152,13 +206,21 @@ export const FACELESS: MediaTemplate = {
        *
        * The mechanics are unchanged and still here, because they are real: the claim is what stops
        * two sessions planning one row. What changed is that the craft is no longer a field list. It
-       * is an ORDER OF WORK — research, then hooks, then beats, then shots — and each step names
-       * the field it lands in, so there is no step whose output has nowhere to go. The standard
-       * itself lives in `naive/short-video-hooks`, which now teaches the same 15–30s shape this
-       * template renders (it taught 30–60s while these prompts demanded under 15 — a seat told to
-       * load a skill and then forbidden to follow it).
+       * is an ORDER OF WORK — and each step names the field it lands in, so there is no step whose
+       * output has nowhere to go. The standard itself lives in `naive/short-video-hooks`, which now
+       * teaches the same 15–30s shape this template renders (it taught 30–60s while these prompts
+       * demanded under 15 — a seat told to load a skill and then forbidden to follow it).
+       *
+       * *** AND THE ORDER NOW OPENS WITH LOOKING, WHICH IS THE STEP THAT NEVER EXISTED. *** It ran
+       * research → hooks → beats → shots, and every one of those four steps is TEXT: the seat read
+       * about the topic, wrote about the topic, and laid out shots it had no picture of. Nothing
+       * anywhere in this pipeline had ever seen a video. So the exemplars the scout named go first,
+       * opened with the browser and sampled with the shell, before a hook is written — and the
+       * order ends where it now has to end, with every scene naming the exemplar and the moment its
+       * grammar came from. That last clause is what makes the rest checkable: a plan that
+       * attributes nothing was invented, and the manager's sweep can see that without a render.
        */
-      brief: `You are the scriptwriter; what you write is the plan, and the plan is the whole video decided before any money is spent. Briefs reach you named by id in a handoff from the trend-scout, or at \`stage\` brief on your 06:30 fire (channel.list_posts). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row. Then work each claimed row in this order and no other: read the teardown and your own hook style post; research the topic (web_search, web_fetch) until you have two or three claims you can actually source, and drop any you cannot; write three hooks and keep one; lay the piece out in beats; and only then cut those beats into shots. \`naive/short-video-hooks\` is the standard for all of it. File one video project (channel.create_project, kind generation, post_id the row, your name as agent) carrying every field it takes: hook verbatim, rejected_hooks and why the kept one won, retention, the scenes in order each with its beat and its render prompt inside the style template's look (channel.list_style_templates), facts with their sources, sound, cta, a video model, reference_pattern, and the caption (\`naive/caption-writing\`). The scenes' seconds must sum to ${LENGTH_PHRASE}: they render as ONE video, nothing joins clips, so that sum is the piece. Filing it moves the row to \`stage\` scripted. When the last row is planned, send_to_agent the producer once, wait false: the project ids, the instruction to render, the handoff_key you were handed or today's date; claimed nothing, hand on nothing. You neither render nor find topics. ${REFERENCE_RULE}`,
+      brief: `You are the scriptwriter; what you write is the plan, and the plan is the whole video decided before money is spent. Briefs reach you named by id in a handoff from the trend-scout, or at \`stage\` brief on your 06:30 fire. Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; refused means another has it. Then work each claimed row in this order and no other: FIRST open the exemplars the brief names — browser for the page and its stills, bash to pull the video and sample frames, closely through the first three seconds, then publish_file each and open it with view_image; frames cost cents against a render, and nothing else here sees inside a piece. Then the teardown and your own hook style post; research the topic (web_search, web_fetch) until two or three claims are sourceable, dropping any that are not; write three hooks and keep one; lay the piece out in beats; and only then cut those beats into shots. \`naive/short-video-hooks\` is the standard for all of it. File one video project (channel.create_project, kind generation, post_id the row, agent you) with every field: hook verbatim, rejected_hooks and why the kept one won, retention, the scenes in order, each with its beat and prompt in the style template's look (channel.list_style_templates), facts with their sources, sound, cta, a video model, reference_pattern, and the caption (\`naive/caption-writing\`). EVERY SCENE NAMES THE EXEMPLAR AND THE MOMENT ITS GRAMMAR CAME FROM, so the plan is traceable to something real: a scene you cannot attribute is invented, and says so on itself. The scenes' seconds must sum to ${LENGTH_PHRASE}: they render as ONE video, nothing joins clips, so that sum is the piece. Filing it moves the row to \`stage\` scripted. When the last row is planned, send_to_agent the producer once, wait false: the project ids and the handoff_key you were handed or today's date; claimed nothing, hand on nothing. You neither render nor find topics. ${REFERENCE_STUDY_RULE} ${REFERENCE_RULE}`,
       /*
        * `view_image` and `browser` are here for the `reference-study` card and nothing else.
        *
@@ -183,8 +245,38 @@ export const FACELESS: MediaTemplate = {
        * and titles rather than the inside of a video, so the question's help text is still the
        * honest remedy: give stills.
        */
-      tools: ["web_search", "web_fetch", "view_image"],
-      skills: ["naive/short-video-hooks", "naive/caption-writing"],
+      /*
+       * *** `bash` IS THE ONE GRANT THE QUALITY FIX TURNS ON, AND IT IS HERE AND NOWHERE ELSE. ***
+       *
+       * Everything above is prose; this is the capability. No seat of this template held a shell, so
+       * nothing in the pipeline could sample frames out of a video — the day-one card said as much
+       * in its own words ("nothing here samples frames out of one"), and every plan this channel has
+       * ever filed was written from page text, thumbnails and a teardown of the OUTSIDE of a piece.
+       * A shell is what turns an exemplar URL into stills: ffmpeg in the session's own sandbox, cut
+       * across the piece and closely through the first three seconds, which is where the format
+       * lives. Measured last cycle at $0.027 for frames → vision → teardown against a $9.00 render,
+       * and a controlled A/B where the blind run planned the wrong genre outright while the seeing
+       * run matched its reference.
+       *
+       * It costs a provisioned machine per session, which is exactly why `toolset` denies the shell
+       * to every other seat by name: this is the seat that PLANS, and the plan is what the money is
+       * spent against. `templates.test.ts` writes the shell-holding seats out as a set, so the next
+       * one is a decision somebody makes rather than a grant that spreads.
+       *
+       * `view_image` looks BY ID — its argument is `file_ids`, and a URL is refused outright — so it
+       * opens what the org already holds: an operator's upload, a `fil_` still, the id a browser
+       * screenshot from this same session was filed under. `browser` (held by every seat,
+       * `BROWSER_TOOL`) is the other half: it is what turns a URL into a picture at all.
+       */
+      tools: ["web_search", "web_fetch", "view_image", "bash", "publish_file"],
+      /*
+       * `naive/reference-teardown` is the procedure the `reference-study` card used to carry in one
+       * enormous paragraph — which tool opens which kind of reference, how to sample frames, what to
+       * record, and marking an inference apart from an observation. It is a skill because it is now
+       * read three times rather than once: the day-one study, the manager's weekly refresh, and the
+       * per-piece exemplar study this seat does before every plan.
+       */
+      skills: ["naive/short-video-hooks", "naive/caption-writing", "naive/reference-teardown"],
       handoffs: ["producer"],
       schedules: [
         schedule({
@@ -199,7 +291,7 @@ export const FACELESS: MediaTemplate = {
           // be a live claim, and `expected_stage scripting` would not tell the two apart, so a stale
           // one is aged back to `brief` by the manager's 08:00 sweep and picked up here on the next fire.
           cron: "30 6 * * *",
-          input: `Plan what the handoffs missed. Read project_context, this channel's reference teardown if it has one and your own hook style post (channel.list_posts, sources "reference teardown" and "hook style") — they are the standard every plan below is written to, and reading them is not optional just because a timer woke you. Then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused. Then the rows nothing else will ever take: channel.list_posts, stage scripted, keeping only those that carry no projectId — their plan was never written, so no producer can render them; claim each the same way, channel.update_post, stage scripting, expected_stage scripted, and plan it from the caption already on the row rather than inventing a new topic. For each claimed row: research the topic (web_search, web_fetch) until you have claims you can source, write three hooks and keep one, lay the piece out in beats, and only then cut the beats into shots. File it with channel.create_project (kind generation, post_id the row): title, brief, hook, rejected_hooks, retention, the scenes in order with beat, prompt, seconds, voiceover and on-screen text summing to ${LENGTH_PHRASE}, facts with sources, sound, cta, style template, video model, reference_pattern where there is a teardown, and the publishable caption, in the channel's tone, for its audience; filing it puts the row back at stage scripted with the plan on it. Then send_to_agent the producer once, wait false, with the project ids you planned, handoff_key plans-<today's date>. Nothing claimed means nothing to do, and no trigger.`,
+          input: `Plan what the handoffs missed. Read project_context, this channel's reference teardown if it has one and your own hook style post (channel.list_posts, sources "reference teardown" and "hook style") — they are the standard every plan below is written to, and reading them is not optional just because a timer woke you. Then every row still at stage brief (channel.list_posts, stage brief); claim each — channel.update_post, stage scripting, expected_stage brief; skip any refused. Then the rows nothing else will ever take: channel.list_posts, stage scripted, keeping only those that carry no projectId — their plan was never written, so no producer can render them; claim each the same way, channel.update_post, stage scripting, expected_stage scripted, and plan it from the caption already on the row rather than inventing a new topic. For each claimed row, in this order: FIRST open the exemplars the brief names — browser for the page and its stills, bash to pull the video and sample frames across it, close through the first three seconds and sparser after, publishing each with publish_file and opening it with view_image — because a plan written without looking is the plan this channel used to file; then research the topic (web_search, web_fetch) until you have claims you can source, write three hooks and keep one, lay the piece out in beats, and only then cut the beats into shots. A rescued row carries no exemplars, so find one or two yourself the same way rather than planning blind. File it with channel.create_project (kind generation, post_id the row): title, brief, hook, rejected_hooks, retention, the scenes in order with beat, prompt, seconds, voiceover and on-screen text summing to ${LENGTH_PHRASE}, each scene naming the exemplar and the moment its grammar came from — a scene you cannot attribute says on itself that you invented it — facts with sources, sound, cta, style template, video model, reference_pattern where there is a teardown, and the publishable caption, in the channel's tone, for its audience; filing it puts the row back at stage scripted with the plan on it. Then send_to_agent the producer once, wait false, with the project ids you planned, handoff_key plans-<today's date>. Nothing claimed means nothing to do, and no trigger.`,
           budget_micro_usd: 10_000_000, // $10 — a read, the research behind each plan, and a few rewrites.
         }),
       ],
@@ -212,7 +304,14 @@ export const FACELESS: MediaTemplate = {
       brief:
         `You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: per post kind — produced and multi-part — what went out, what it did, which hooks and formats moved and which did not, in plain numbers you actually read. Read the plans behind them too (channel.list_projects, channel.get_project): the hook, the beats and the retention line are what the numbers are a verdict on, so report by hook pattern, and say whether the pieces that followed the reference did better than the ones that drifted — that is the only evidence anyone will have about whether imitating it works. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its \`source\` is the period it covers. Name the two changes you would make next week. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none. ${REFERENCE_RULE}`,
       tools: [],
-      skills: [],
+      /*
+       * IT HAD `skills: []` WHILE BEING THE ONE SEAT THAT WRITES A REPORT. Every other seat of this
+       * template was handed the standard for its craft and the analyst was handed none, so the
+       * shape of the weekly report — what to count, what to do with a metric nobody offers, how to
+       * read a hook pattern against numbers — was re-invented every Monday by a seat starting from
+       * a blank page. `naive/channel-report` is that standard.
+       */
+      skills: ["naive/channel-report"],
       schedules: [
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
@@ -271,7 +370,7 @@ export const FACELESS: MediaTemplate = {
       key: "first-briefs",
       title: "File the channel's first five briefs for its niche",
       assignee: "trend-scout",
-      body: "Read project_context for the niche, the audience and the cadence. Research what is moving in that niche right now and file the channel's first five briefs as pending posts (channel.create_post, no media, stage brief, `source` naming where each came from): topic, format, why now, hook direction, style template. Skip anything already in the queue (channel.list_posts). Five good briefs beat twenty thin ones; file five and stop. Do not script them and do not hand off — the scriptwriter's card is blocked on this one and the board wakes it when you close yours, so send_to_agent here would open a second session on the same work. Put the five post ids in the note. Your Monday and Thursday 06:00 fires refill the queue from here.",
+      body: "Read project_context for the niche, the audience and the cadence. Research what is moving in that niche right now and file the channel's first five briefs as pending posts (channel.create_post, no media, stage brief, `source` naming where each came from): topic, format, why now, hook direction, style template, and one to three exemplars — real videos already doing that topic in that format well, not articles about them, each opened with the browser and screenshotted so you have actually looked at it, carried as its URL with one line on what is worth copying and one on what is not. The scriptwriter's card is blocked on this one and plans from what you name, so a brief with no exemplar is a brief it has to invent from. Skip anything already in the queue (channel.list_posts). Five good briefs beat twenty thin ones; file five and stop. Do not script them and do not hand off — the scriptwriter's card is blocked on this one and the board wakes it when you close yours, so send_to_agent here would open a second session on the same work. Put the five post ids in the note. Your Monday and Thursday 06:00 fires refill the queue from here.",
     }),
     /*
      * *** THE CARD THAT TURNS THE SETUP ANSWER INTO SOMETHING THE CREW CAN WORK FROM. ***
@@ -283,43 +382,48 @@ export const FACELESS: MediaTemplate = {
      * teardown is a post rather than a new row type: every seat already reads posts, the operator
      * can read it too, and nothing in the store or the screens had to change to carry it.
      *
-     * `view_image` is granted for this and only this, and the browser every seat holds does the
-     * other half. WHICH ONE OPENS A REFERENCE IS DECIDED BY WHAT THE OPERATOR PASTED, and the card
-     * below has to say so in as many words, because the two do not overlap: `view_image` takes
-     * `file_ids` and refuses anything else outright — `validation_failed: <value> is not a fil_
-     * id` — so the still URLs the question actually asks for can never go to it. Those are the
-     * browser's: `goto` the URL, `screenshot`, and the picture comes back beside the `fil_` id the
-     * shot was filed under. `view_image` is then for the ids — an upload the operator made, a
-     * still they named as `fil_`, a screenshot this session just took — four at a time.
-     * `web_search` and `web_fetch` are the text half, and the whole job when the reference is a
-     * channel rather than a picture. It costs one browser session per install, once.
+     * *** THE BODY USED TO BE THE PROCEDURE, AND THE PROCEDURE IS NOW A SKILL. *** It ran to one
+     * paragraph of about 640 words carrying the whole teardown: the tool-per-kind split, what to
+     * record, how to mark an inference. All of that is `naive/reference-teardown` now, and it had
+     * to move, because it is read THREE times rather than once — this card, the manager's weekly
+     * refresh, and the per-piece exemplar study the scriptwriter does before every plan. A
+     * procedure written into one card is a procedure the other two readers do not get.
      *
-     * IT BLOCKS NOTHING WHEN THERE IS NO REFERENCE, which is what makes an optional question safe
-     * to build a card on: the card is assigned and unblocked either way, so the seat is woken
-     * either way, and with no answer it closes in a line within the minute. What it must never do
-     * is `ask_operator` for a reference — that parks the session, and `hook-style` and `look` are
-     * blocked on this card, so a question here would stall the install behind a person who may
-     * never open the dashboard. The question was asked in the form; unanswered is an answer.
+     * What stayed is what is day one's and is in no skill: that this is the study done ONCE, with
+     * two cards blocked on it; the `fil_`-versus-URL split, because one of the two values RENDERS
+     * (`generate_video` takes `image_urls`, and a `fil_` id written into `reference_frames` is a
+     * plan that fails validation after it was filed and approved); and the ban on `ask_operator`,
+     * which would park the session with `hook-style` and `look` waiting behind it.
+     *
+     * *** AND THE NO-REFERENCE BRANCH IS THE OTHER HALF OF THE QUALITY FIX. *** It used to read
+     * "file nothing, close this card, the team works from the niche alone". That was the ban on
+     * INVENTING a reference doing a second job it was never meant to do — banning LOOKING for one —
+     * and since the question is optional it is the branch most installs took, which is how a
+     * channel came to plan every piece it ever made against nothing at all. `REFERENCE_STUDY_RULE`
+     * (`template.ts`) now says find real ones — once, and only on the seats that plan; this card is
+     * where that first happens, so an install
+     * that answered nothing still gets a teardown of real videos in its niche, marked as the crew's
+     * own reading rather than the client's example.
      */
     task({
       key: "reference-study",
       title: "Study the reference this channel is modelled on, and file the teardown",
       assignee: "scriptwriter",
-      body: "Read project_context. If it names no reference, file nothing, close this card with a note saying there is no reference and that the team works from the niche alone, and stop — that is a complete answer to this card and the seats behind it open immediately. Otherwise study what it names and file ONE reference teardown. WHAT YOU DO DEPENDS ON WHAT KIND OF THING EACH ONE IS, and you must not treat them as equal, because a different tool opens each and they do not substitute for one another. A still — a URL ending .jpg, .jpeg, .png, .gif or .webp: browser goto that URL and screenshot it. The screenshot comes back as a picture you can actually look at, and the browser is the ONLY way a URL becomes something you can see; view_image does not take URLs, it takes fil_ ids the organization already holds, and it refuses anything else. A fil_ id: that one goes to view_image, up to four at a time — an upload the operator made, a still they named as fil_, or the id your own screenshot was filed under. Stills are the only path that shows you the reference itself, so take them first and lean on them hardest. A handle or a title rather than a link — @someone, a channel's name: web_search it for its page, then treat what you find as the next case. A page or video link: web_fetch it for the titles, the descriptions and the first lines, then browser goto it and screenshot it, so you can see the thumbnails, the framing they favour and how the page presents itself. That is still the OUTSIDE of a video: nothing here samples frames out of one, so a link tells you what a page shows and nothing about what happens inside the piece — if every reference you were given is a link, the first line of the teardown must say that you saw no frames and ask the operator, in that post, to add two or three stills to the reference answer. Do not stop to ask them directly: two cards wait on this one, and a question parks your session. Then write the teardown as a pending post with no media and no stage, `source` \"reference teardown\", specific enough to plan a render from: WHAT IT ACTUALLY IS, in one line, naming the technique you can see — live footage, animation, a composite, a face swap — because getting this wrong is how a channel imitates the wrong genre; the hook patterns and the exact words of two or three; what happens in the first three seconds; how fast it cuts and how many shots a piece runs to; the shot grammar and what the camera does; wardrobe, props and anything branded; the narration and the caption shape; the formats it repeats, named, because the scout briefs against those names; what it never does; and its length. Mark every line you INFERRED rather than saw, and if you saw no frames at all say so in the first line of the post — a teardown that guesses confidently is far worse than one that is short, because everything downstream trusts it. Where you were given still URLs, copy them into the post exactly as the operator wrote them — those PUBLIC URLs are what a plan carries as `reference_frames`, and the producer passes the first as the piece's opening frame, so a URL you retyped is a render that fails. A fil_ still is the other half of that split and stops here: generate_video fetches a URL and refuses a fil_ id, so name one as a reference you looked at and never as a reference frame. Never name your own screenshots there either: a picture of a page is not a frame of the reference. Put the post's id in the note. Do not write hooks, scripts or briefs here: the cards behind this one do that, and they read what you filed.",
+      body: "Read project_context, then read_skill `naive/reference-teardown` and work its procedure — which tool opens which kind of reference and why they do not substitute for one another, how to sample frames with bash, what to record, and marking what you INFERRED apart from what you saw. That procedure is the skill's now, so this card does not restate it; three things are this card's alone. FIRST, WHEN THE CONTEXT NAMES NO REFERENCE YOU DO NOT STOP AND YOU DO NOT ASK. Invent no reference — but go and find the two or three videos already doing this format well in this niche, study those, and file the teardown from them, saying in the first line that they are yours and not the operator's. The reference question was asked at setup; unanswered is an answer, not a question to put back to them, and ask_operator parks your session with two cards waiting behind this one. SECOND, this is the study, done ONCE, on day one: `look` and `hook-style` are blocked on this card and plan the channel's look and voice from what you file, so file ONE pending post, no media, no stage, `source` \"reference teardown\", specific enough to plan a render from, and put its id in the note. THIRD, the split a plan turns on. Where you were given still URLs, copy them into the post exactly as the operator wrote them — those PUBLIC URLs are what a plan carries as `reference_frames`, and the producer passes the first as the piece's opening frame, so a URL you retyped is a render that fails. A fil_ still is the other half of that split and stops here: generate_video fetches a URL and refuses a fil_ id, so name one as a reference you looked at and never as a reference frame. Never name your own screenshots there either: a picture of a page is not a frame of the reference. Do not write hooks, scripts or briefs here: the cards behind this one do that, and they read what you filed.",
     }),
     task({
       key: "look",
       title: "Choose the style templates this channel renders in",
       assignee: "producer",
       blocked_by: ["reference-study"],
-      body: "Day one is set-up, not a render. Read project_context for the niche, the tone and the audience, and the reference teardown the scriptwriter just filed (channel.list_posts, `source` \"reference teardown\" — its note names the post; it may say this channel has no reference, which is a complete answer and means you choose from the niche as before). Then the style templates (channel.list_style_templates). Choose the one or two whose look is closest to the reference's shot grammar where there is one, else whose look fits the tone, and file the choice as a pending post with no media and no stage, `source` \"style choice\", one line on why for each — the scriptwriter names a style template in every plan it writes and is blocked on this card, so the note it reads is what stops it choosing at random. Then look for generate_video in the tools you were offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools: never request a tool you already hold, and never request one for a card you are not on. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing in this session: your card for the first render is a separate one and it waits on a plan.",
+      body: "Day one is set-up, not a render. Read project_context for the niche, the tone and the audience, and the reference teardown the scriptwriter just filed (channel.list_posts, `source` \"reference teardown\" — its note names the post; where the operator named no reference, it is a teardown of real videos the scriptwriter went and found in this niche, and it is the standard either way). Then the style templates (channel.list_style_templates). Choose the one or two whose look is closest to the teardown's shot grammar, and file the choice as a pending post with no media and no stage, `source` \"style choice\", one line on why for each — the scriptwriter names a style template in every plan it writes and is blocked on this card, so the note it reads is what stops it choosing at random. Then look for generate_video in the tools you were offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools: never request a tool you already hold, and never request one for a card you are not on. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing in this session: your card for the first render is a separate one and it waits on a plan.",
     }),
     task({
       key: "hook-style",
       title: "Write the channel's hook style, so the team works to one voice",
       assignee: "scriptwriter",
       blocked_by: ["reference-study"],
-      body: `Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience, and your own reference teardown (channel.list_posts, \`source\` "reference teardown" — the card you just closed; it may say this channel has no reference, in which case write the hook style from the niche and the audience alone and say in the post that it is your reading and not a client's example). Then write the channel's hook style in five lines — the openings this audience stops for, the shape of a ${LENGTH_PHRASE} piece in beats, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, \`source\` "hook style". Where there is a teardown, every line of this is derived from it and says which of its patterns it came from: that is the difference between a house voice and a guess, and every plan this channel ever files is written to this post. Do not read the queue for briefs and do not invent one: the scout's five reach you on your next card, which the board opens once this one and the scout's are closed. Put the post's id in the note.`,
+      body: `Day one is set-up, not scripts. Read project_context for the niche, the tone and the audience, and your own reference teardown (channel.list_posts, \`source\` "reference teardown" — the card you just closed; where the operator named no reference it is a teardown of videos you went and found yourself, so say in the post that the patterns are your reading and not a client's example). Then write the channel's hook style in five lines — the openings this audience stops for, the shape of a ${LENGTH_PHRASE} piece in beats, the voice, the caption shape, what never to say — and file it as a pending post with no media and no stage, \`source\` "hook style". Every line of this is derived from the teardown and says which of its patterns it came from: that is the difference between a house voice and a guess, and every plan this channel ever files is written to this post. Do not read the queue for briefs and do not invent one: the scout's five reach you on your next card, which the board opens once this one and the scout's are closed. Put the post's id in the note.`,
     }),
     task({
       key: "report-frame",
@@ -332,7 +436,7 @@ export const FACELESS: MediaTemplate = {
       key: "first-scripts",
       title: "Turn the first five briefs into video projects",
       assignee: "scriptwriter",
-      body: `The briefs exist now — the scout's card closed, and its note names the five post ids. Read project_context, your own reference teardown and hook style posts and the producer's style choice post (channel.list_posts), then every row at stage brief (channel.list_posts, stage brief). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row, so skip it. Work each claimed row in this order: research the topic (web_search, web_fetch) until you have two or three claims you can source, write three hooks and keep one, lay the piece out in beats — hook, setup, turn, payoff, cta — and only then cut those beats into shots. File it as one video project (channel.create_project, kind generation, post_id the row, your name as agent): title and brief; hook, verbatim; rejected_hooks and why the kept one won; retention, what holds them past 0:03 and past 0:07; the scenes in order, each with its beat, render prompt inside a style template the producer actually chose, seconds, voiceover line and on-screen text, the seconds summing to ${LENGTH_PHRASE} — they render as ONE video, so that sum is its length; facts with their sources; sound; cta; a video model; reference_pattern where there is a teardown; and the hashtagged caption. Filing it moves the row to stage scripted. Do not hand off to the producer: its card is blocked on this one and the board wakes it. Put the project ids in the note.`,
+      body: `The briefs exist now — the scout's card closed, and its note names the five post ids. Read project_context, your own reference teardown and hook style posts and the producer's style choice post (channel.list_posts), then every row at stage brief (channel.list_posts, stage brief). Claim each before you write it — channel.update_post, stage scripting, expected_stage brief; a refusal means another session has that row, so skip it. Work each claimed row in this order: FIRST open the exemplars the brief names — browser for the page and its stills, bash to pull the video and sample frames across it, close through the first three seconds and sparser after (\`naive/reference-teardown\` is the procedure) — then research the topic (web_search, web_fetch) until you have two or three claims you can source, write three hooks and keep one, lay the piece out in beats — hook, setup, turn, payoff, cta — and only then cut those beats into shots. File it as one video project (channel.create_project, kind generation, post_id the row, your name as agent): title and brief; hook, verbatim; rejected_hooks and why the kept one won; retention, what holds them past 0:03 and past 0:07; the scenes in order, each with its beat, render prompt inside a style template the producer actually chose, seconds, voiceover line and on-screen text, the seconds summing to ${LENGTH_PHRASE} — they render as ONE video, so that sum is its length; the exemplar and the moment each scene's grammar came from, and on a scene you cannot attribute, that you invented it; facts with their sources; sound; cta; a video model; reference_pattern; and the hashtagged caption. Filing it moves the row to stage scripted. Do not hand off to the producer: its card is blocked on this one and the board wakes it. Put the project ids in the note.`,
       blocked_by: ["first-briefs", "hook-style", "look"],
     }),
     task({

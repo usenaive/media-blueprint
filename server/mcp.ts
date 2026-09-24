@@ -16,7 +16,43 @@ import type { Store } from "./store.ts";
 import { POST_PLATFORMS, POST_STAGES, postStage, type PostPlatform, type PostStage } from "../seed/posts.ts";
 import { PROJECT_KINDS, PROJECT_STATUSES, SCENE_BEATS, type ClipSource, type Fact, type ProjectKind, type ProjectSession, type ProjectStatus, type Scene, type Sound } from "../seed/projects.ts";
 import { ACTIVE } from "../templates/index.ts";
-import { labelOf, LENGTH_PHRASE, MAX_SECONDS, MIN_SECONDS, RENDERER, VIDEO_MODELS } from "../templates/template.ts";
+import { labelOf, lengthPhrase, MAX_RENDER_SECONDS, packSegments, RENDERER, rendersInSegments, segmentsOf, VIDEO_MODELS, type MediaTemplate } from "../templates/template.ts";
+
+/**
+ * *** THE LENGTH THIS SERVER ENFORCES IS THE RUNNING TEMPLATE'S, NOT THE BLUEPRINT'S. ***
+ *
+ * One `/mcp` serves whichever template `ACTIVE` names, and `scenesOf` below refuses a plan whose
+ * scenes do not sum into this window. While it was a pair of module constants that refusal was
+ * Short Form's 15–30 on every template — so a Long Form crew briefed for 60–180 could not file a
+ * plan of the length its own card asked for, and the refusal it got back quoted a range nobody had
+ * briefed it with. Read from the template, both the check and the words it refuses in are the one
+ * the crew was actually given.
+ */
+const LENGTH = ACTIVE.length;
+const LENGTH_PHRASE = lengthPhrase(LENGTH);
+
+/**
+ * How the scenes of a plan on THIS template become a file, said in one clause wherever the length
+ * is said — because the two answers are different work and a planner has to know which it is
+ * planning for.
+ *
+ * Inside `generate_video`'s own ceiling the scenes are ONE call: the shots are compiled into a
+ * single prompt (`scenesPrompt`) whose `seconds` is their sum, and nothing here joins clips, so a
+ * beat that is a hard cut renders as a drift. Past that ceiling one call cannot carry the piece —
+ * `MAX_RENDER_SECONDS` is what one call takes — so the plan is rendered in segments and joined
+ * with ffmpeg in the producer's own sandbox. Saying "rendered as ONE video" to a long-form planner
+ * would be telling it the seam it has to write for does not exist.
+ *
+ * The join half of that only exists where the crew HAS the seat that joins. `clipping`'s band is
+ * 15–60s, so dividing it by the render cap says "two segments" — but that crew cuts with
+ * `clip_video` and holds no `generate_video` and no producer at all, so the segmented sentence
+ * would promise it a seat and a join it does not have. Hence the seat check, not the arithmetic
+ * alone.
+ */
+const SEGMENTED = rendersInSegments(ACTIVE);
+const ASSEMBLY = !SEGMENTED
+  ? "and the shots are rendered as ONE video, not joined: nothing here cuts between them, so the sum is what generate_video is asked for and each prompt is a shot inside that one generation"
+  : `and the piece is rendered in at most ${segmentsOf(LENGTH)} segments of up to ${MAX_RENDER_SECONDS}s — generate_video takes no more in one call — which the producer joins with ffmpeg in its own sandbox, so plan the beats to fall on those seams rather than across them`;
 
 interface JsonRpcRequest { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }
 
@@ -152,7 +188,7 @@ const PLAN_FIELDS = {
   account: str("The connected account it is for, from list_accounts"),
   style_template: str("generation: the style template the scenes are written in, by name (list_style_templates)"),
   model: str(`generation: the video model the scenes render in, one of ${VIDEO_MODELS.join("|")}. Defaults to the first.`),
-  scenes: arr(`generation: the shots in order — prompt, seconds, beat, voiceover, on-screen text. Required for a generation plan. The seconds must sum to ${LENGTH_PHRASE}, and the shots are rendered as ONE video, not joined: nothing here cuts between them, so the sum is what generate_video is asked for and each prompt is a shot inside that one generation.`, SCENE),
+  scenes: arr(`generation: the shots in order — prompt, seconds, beat, voiceover, on-screen text. Required for a generation plan. The seconds must sum to ${LENGTH_PHRASE}, ${ASSEMBLY}.`, SCENE),
   sources: arr("clipping: the source videos and the moment in each — url, from, to, reason. Required for a clipping plan.", SOURCE),
   caption: str("The publishable caption, hashtags included; it goes on the post when the render lands"),
   hook: str("generation: the first line of the piece, verbatim — what is said and what is on the frame at 0:00. It is the one line that decides whether the rest is watched."),
@@ -192,7 +228,7 @@ export const toolsFor = (channels: readonly PostPlatform[]) => [
     kind: str(`Optional filter: ${PROJECT_KINDS.join("|")}`),
   }, []) },
   { name: "get_project", description: "One video project by id, with its scenes or sources in full.", inputSchema: obj({ id: str("Project id (proj_…)") }, ["id"]) },
-  { name: "create_project", description: `Write the plan a video is made from, before anyone spends on it. A generation plan is the whole piece decided before the money: the hook, the beats as scenes, what holds the viewer, the facts it rests on and where they came from, the sound, the look, the model and the caption. A clipping plan is the source videos, the moments in them and why each one. A generation plan's scenes run ${LENGTH_PHRASE} in total and are rendered as ONE video — nothing joins clips — so plan shots one continuous generation can carry. Name the brief row it was written from as post_id and that row moves to scripted with the plan on it; a plan with no row gets its post when the render lands. Sign it with your name as agent. ${OPERATOR_ONLY}`, inputSchema: obj({
+  { name: "create_project", description: `Write the plan a video is made from, before anyone spends on it. A generation plan is the whole piece decided before the money: the hook, the beats as scenes, what holds the viewer, the facts it rests on and where they came from, the sound, the look, the model and the caption. A clipping plan is the source videos, the moments in them and why each one. A generation plan's scenes run ${LENGTH_PHRASE} in total, ${ASSEMBLY}. Name the brief row it was written from as post_id and that row moves to scripted with the plan on it; a plan with no row gets its post when the render lands. Sign it with your name as agent. ${OPERATOR_ONLY}`, inputSchema: obj({
     kind: str(`${PROJECT_KINDS.join("|")} — rendered from scenes with generate_video, or cut from a source with clip_video`),
     post_id: str("The brief row (post_…) this plan is for, when there is one"),
     agent: str("Your own name, as the roster lists it — who planned this"),
@@ -297,6 +333,44 @@ const isHttpUrl = (value: string): boolean => {
 };
 
 /**
+ * Why a plan of these scenes cannot be RENDERED on this template, in the words the caller gets
+ * back, or undefined when it can.
+ *
+ * *** THE SEAM IS THE HALF THE LENGTH CHECK NEVER LOOKED AT, AND IT FAILS THE SAME WAY. *** The
+ * sum being legal says the piece is the right length; it says nothing about whether the producer
+ * can make it. Past `generate_video`'s ceiling a plan is rendered in segments and joined, and the
+ * producer is told to cut them at a shot change and never inside one — so the scenes' own seconds
+ * decide how many calls the piece is. That constraint lived only in `ASSEMBLY`, which is the tool
+ * DESCRIPTION, and a description is a request exactly as the old "under fifteen seconds in all"
+ * was: on Long Form this server accepted a single 180s shot, four 45s shots, and eleven 16s shots
+ * that pack into eleven segments against a ceiling of six. Every one of them is filed, queued, and
+ * discovered by the producer with the row already claimed — either as a seam through the middle of
+ * a shot or as a refusal after the first segments are bought.
+ *
+ * Two failures, told apart because the fixes are opposite. A shot LONGER than one call cannot be
+ * cut anywhere legal and has to be split. Shots that are each short enough but PACK badly are a
+ * plan whose beats have to be re-cut to fill the segments. `packSegments` is the producer's own
+ * greedy cut, so what is checked here is the render rather than an estimate of it.
+ *
+ * It takes the template rather than reading `ACTIVE`, so the numbers a test drives it with are the
+ * ones a Long Form install actually runs — one `/mcp` serves whichever template is installed, and
+ * this module's are whichever this build compiled.
+ */
+export const segmentRefusal = (seconds: readonly number[], template: MediaTemplate): string | undefined => {
+  if (!rendersInSegments(template)) return undefined;
+  const over = seconds.findIndex((one) => one > MAX_RENDER_SECONDS);
+  if (over !== -1) {
+    return `scenes[${over}] runs ${seconds[over]}s, and one generate_video call takes ${MAX_RENDER_SECONDS}s — a segment is cut at a shot change and never inside one, so a shot this long is a seam through the middle of itself. Split the shot rather than stretching the segment.`;
+  }
+  const packed = packSegments(seconds);
+  const ceiling = segmentsOf(template.length);
+  if (packed.length > ceiling) {
+    return `these ${seconds.length} shots pack into ${packed.length} segments of up to ${MAX_RENDER_SECONDS}s and this channel renders at most ${ceiling} — a segment is cut at a shot change, so shots that do not fill one spend a whole call each. Re-cut the shots to fill the segments rather than dropping the beats.`;
+  }
+  return undefined;
+};
+
+/**
  * The scenes a caller sent, each checked, or undefined when none were.
  *
  * *** THE LENGTH IS CHECKED HERE, WHICH IS THE ONE PLACE IT CANNOT BE IGNORED. *** It used to be
@@ -305,6 +379,10 @@ const isHttpUrl = (value: string): boolean => {
  * sum is the number `generate_video` is actually asked for — nothing joins clips, so the shots are
  * one generation — so a plan whose sum is outside the format is not a plan this channel can make,
  * and the refusal arrives while it is still free to fix.
+ *
+ * The same sentence is why `segmentRefusal` runs here too: on a template that renders in segments
+ * the sum is only half of what makes a plan renderable, and the other half was a request in the
+ * tool description. Both are answered on the write, while a refusal is still free.
  */
 const scenesOf = (params: Record<string, unknown>): Scene[] | undefined => {
   if (params.scenes === undefined) return undefined;
@@ -327,11 +405,15 @@ const scenesOf = (params: Record<string, unknown>): Scene[] | undefined => {
     };
   });
   const total = scenes.reduce((sum, scene) => sum + scene.seconds, 0);
-  if (total < MIN_SECONDS || total > MAX_SECONDS) {
+  if (total < LENGTH.min || total > LENGTH.max) {
     throw new ToolError(
-      `the scenes run ${total}s in all, and a piece on this channel is ${LENGTH_PHRASE} — the shots are rendered as one video, so their seconds are its length. Re-cut the shots rather than dropping the beats.`,
+      `the scenes run ${total}s in all, and a piece on this channel is ${LENGTH_PHRASE} — their seconds are the piece's length, ${ASSEMBLY}. Re-cut the shots rather than dropping the beats.`,
     );
   }
+  // The length is right; now whether the producer can render it. Undefined on a template that makes
+  // its piece in one call, so this costs `faceless` and `clipping` nothing.
+  const unrenderable = segmentRefusal(scenes.map((scene) => scene.seconds), ACTIVE);
+  if (unrenderable !== undefined) throw new ToolError(unrenderable);
   return scenes;
 };
 

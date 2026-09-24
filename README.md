@@ -1,6 +1,6 @@
 # 🎬 Media Blueprint
 
-**An autonomous short-form video channel in one repository — clone it, run `naive up`, and the
+**An autonomous video channel in one repository — clone it, run `naive up`, and the
 Naive platform provisions the dashboard, the crew and the crons into your own organization.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -9,26 +9,32 @@ Naive platform provisions the dashboard, the crew and the crons into your own or
 [![node](https://img.shields.io/node/v/@usenaive-sdk/blueprints?label=node)](https://nodejs.org)
 [![React](https://img.shields.io/badge/react-19-149eca.svg)](https://react.dev)
 
-It ships a management dashboard and a small agent team that plans, makes and queues vertical
-video, and publishes only what you have approved.
+It ships a management dashboard and a small agent team that plans, makes and queues video, and
+publishes only what you have approved.
 
 The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the approval flow
-— and it carries **two templates**, which are data:
+— and it carries **three templates**, which are data:
 
-| Template | The channel it runs | Its crew | What it files |
-|---|---|---|---|
-| `faceless` | Generates original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | produced, multi-part |
-| `clipping` | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | clips |
+| Template | Shown as | The channel it runs | Its crew | Piece length |
+|---|---|---|---|---|
+| `faceless` | Naive Short Form v1 | Generates original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | 15–30s |
+| `longform` | Naive Long Form v1 | Generates one long piece per fire, rendered in segments and joined | `channel-manager`, `researcher`, `writer`, `producer`, `analyst` | 60–180s |
+| `clipping` | Naive Clipping v1 | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | 15–60s |
+
+**The id in the first column is the wire, and the second is only a screen.** `install.template`
+is a stored string on every provisioned organization, so `faceless` and `clipping` keep the names
+they shipped under — renaming one would orphan every real install that carries it.
 
 A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **four questions** (what the channel is about, **where it posts** — one network or
-several — how often, and, optionally, a channel or video to model it on), every agent reads the
+studio asks **four questions** (what the channel is about — or, on `clipping`, what to cut from —
+**where it posts**, one network or several, how often, and, on the two generating templates,
+optionally a channel or video to model it on), every agent reads the
 answers back through the platform's
 `project_context` tool, and each opens a **day-one** session that turns those answers into the
 channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
 
-One repo carries both, so switching is an edit and a `naive up` — never a re-clone and never a
-new app. See [Switching template](#-switching-template).
+One repo carries all three, so switching is an edit and a `naive up` — never a re-clone and never
+a new app. See [Switching template](#-switching-template).
 
 The engine is [`@usenaive-sdk/blueprints`](https://www.npmjs.com/package/@usenaive-sdk/blueprints),
 installed from the public npm registry like any other dependency. Nothing here resolves out of
@@ -161,22 +167,50 @@ gate. Between them is the seat's own brief, 120–400 words. Every agent also ho
 dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, the managed `browser`
 (its screenshot comes back as a picture, which is how any seat reads a page it has to actually
 see), and the two doors to you (`ask_operator`, `request_tools`, both `ask`); the **Tools**
-column lists what is granted on top of that. Every seat carries the same ceilings — **$20 a task
-and $60 a day, per agent** — sized so one render of the length the producer is briefed for fits
-inside a single task
+column lists what is granted on top of that. Almost every seat carries the same ceilings — **$20 a
+task and $60 a day, per agent** — sized so one render of the length the producer is briefed for
+fits inside a single task
 (`ONE_RENDER_MICRO_USD` in [`templates/template.ts`](templates/template.ts)); each timer and each
 day one below carries its own budget inside them. Money is integer micro-USD in the declarations;
 it is printed in dollars here.
+
+**The one exception is Long Form's `producer`, at $75 a task and $150 a day**, and the reason is
+arithmetic rather than generosity: one `generate_video` call takes at most `MAX_RENDER_SECONDS`
+— 30, measured against the model rather than read off the schema's 60 — so a 60–180s piece is
+`ceil(seconds / 30)` separate renders that the producer joins itself. Six renders plus the join
+do not fit inside one $20 task, and a seat that runs out of ceiling mid-assembly leaves a half-made
+file behind.
 
 ### `faceless`
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | `naive/short-video-hooks` | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
-| `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/seo-content-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `view_image` (the reference study only), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
-| `analyst` | Performance | — | — | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
+| `producer` | Video production | `generate_video` (models pinned), `generate_image` | — | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
+| `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/video-trend-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
+| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing`, `naive/reference-teardown` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
+| `analyst` | Performance | — | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
+
+### `longform`
+
+Three fires a week rather than one a day, because a piece here is minutes of render rather than
+seconds. The split between `writer` and `producer` is the whole design: the writer decides the
+arc and the seams, the producer renders each segment and joins them, and neither does the other's
+job.
+
+| Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
+|---|---|---|---|---|---|
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
+| `researcher` | Topics & sourcing | `web_search`, `web_fetch`, hands off to `writer` | `naive/video-trend-brief` | Mon/Wed/Fri 05:00 topics ($10) | `first-topic` — researches the niche and files the channel's **first topic brief**, with the exemplars to plan against |
+| `writer` | Arc & script | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), `publish_file`, hands off to `producer` | `naive/long-form-arc`, `naive/caption-writing` | Mon/Wed/Fri 05:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `arc-style` — writes the channel's arc, from that teardown · `first-script` — turns the first topic into a video project |
+| `producer` | Render & assembly | `generate_video` (models pinned), `bash` (joins the segments with ffmpeg), `publish_file` | `naive/video-assembly` | Mon/Wed/Fri 06:00 render ($70) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-assembly` — renders each segment and joins them into the first piece |
+| `analyst` | Performance | — | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
+
+**There is no stitching tool on the platform, and that is why `producer` holds `bash`.**
+`clip_video` cuts and never joins, so assembly is ffmpeg inside the seat's own sandbox, followed
+by `publish_file`. A segment boundary that lands mid-shot is a visible cut in the finished file,
+which is why the writer is required to end a shot on each 30-second mark and the producer is
+required to check that it did.
 
 ### `clipping`
 
@@ -185,8 +219,8 @@ it is printed in dollars here.
 | `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you who the clips are for, then files the plan: slots per week, days, kinds, accounts |
 | `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | `source-check` — confirms it can reach every named reference · `first-cuts` — cuts the first two clips from the scout's plans |
 | `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | `first-moments` — goes through the named references and plans the **first five moments** worth cutting |
-| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing`, `naive/short-video-hooks` | daily 07:30 captions ($10) | `caption-style` — writes the channel's voice · `first-captions` — titles and captions the first clips |
-| `analyst` | Performance | — | — | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report by source and clip, against the manager's plan |
+| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing` | daily 07:30 captions ($10) | `caption-style` — writes the channel's voice · `first-captions` — titles and captions the first clips |
+| `analyst` | Performance | — | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report by source and clip, against the manager's plan |
 
 Only the `channel-manager` is `required` — it is the seat the dashboard's Chat talks to. Every
 other seat can be left unticked when the template is installed, and its crons are then never armed
@@ -202,9 +236,10 @@ place the answers live.
 | Template | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|
 | `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **A channel or video to model this on** — text, **optional** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `longform` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **A channel or video to model this on** — text, **optional** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 | `clipping` | **Reference channels for inspiration** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | — | **Posting cadence** — `daily`, `3× a week`, `weekly` |
 
-The middle one is the same question on both templates, and it is the one this channel cannot run
+The middle one is the same question on every template, and it is the one this channel cannot run
 without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
 (checkboxes in the studio), because the same vertical video usually goes out on more than one
 network: every network you tick is a target the crew files for, and a post that names no network
@@ -218,16 +253,29 @@ now asks for it with `ask_operator` in its day-one session, which is exactly whe
 refusal says a further question belongs. Nothing was dropped — it moved from the form to the
 conversation.
 
-**The fourth question is `faceless`'s, and it is the only one you may leave blank.** *A channel or
-video to model this on* — paste a link, a handle, or the URLs of a few stills, one per line.
+**The fourth question belongs to the two generating templates, and it is the only one you may
+leave blank.** *A channel or video to model this on* — paste a link, a handle, or the URLs of a few
+stills, one per line.
 Stills are worth the most: they are the only thing the crew can actually look at. Give one and
 the crew studies it once, on day one, and files a **reference teardown** post: the hook
 patterns, the first three
 seconds, how fast it cuts, the voice, the caption shape, the formats it repeats. Every brief, script,
 render and queue sweep afterwards is measured against that teardown, and each plan records which of
-its patterns it was executing. Leave it blank and nothing changes — the study card closes in a line
-and the team works from your niche, exactly as it did before the question existed. That is why the
-engine now allows a fourth at all: it may only be a question whose absence costs nothing.
+its patterns it was executing.
+
+**Leave it blank and the crew goes and finds one.** It used to close the study card in a line and
+work from the niche word alone; now *"none given"* means *find two or three real videos in this
+niche that already do this format well, study them, and file a teardown from what you actually
+saw*. Inventing a reference is still forbidden — looking for one never was, and the old rule
+banned both by accident. That is why the engine allows a fourth question at all: it may only be
+one whose absence costs nothing, and an install that leaves it blank now gets a teardown too.
+
+**And the teardown is no longer frozen on install day.** A reference is a living channel, so the
+manager's Monday 09:00 plan fire re-reads it against what this channel has actually published
+since and files a fresh teardown when the format has moved — a new hook shape, a different cut
+rhythm, a format it has stopped making. Where nothing moved it says so in the plan in one line and
+files nothing, because a second teardown that only repeats the first is a post every seat then has
+to disambiguate.
 
 The answers are the install's project context. Each agent reads them through the platform's
 read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
@@ -280,23 +328,25 @@ open one `intake` session, all of them in the same minute, with no way to say wh
 the scriptwriter read an empty queue and filed *"the trend-scout hasn't filed any briefs yet"* as its
 finding while the scout was filing five. A card names what it waits on (`blocked_by`), and a card
 with an open blocker is not due, so its seat is not started and not billed until the work it needs
-exists. Eight cards on `faceless` and seven on `clipping`; the ones that wait on nothing open together:
+exists. Eight cards on `faceless`, seven on `clipping`, eight on `longform`; the ones that wait on
+nothing open together:
 
-| | `faceless` | `clipping` | waits on |
-|---|---|---|---|
-| **opens the install** | `channel-plan` *(manager)* | `channel-plan` *(manager)* | — |
-| | `first-briefs` *(scout)* | `first-moments` *(scout)* | — |
-| | `reference-study` *(writer)* | `source-check` *(clipper)* | — |
-| | `look` *(producer)* | `caption-style` *(editor)* | the teardown, so the look is chosen from the reference rather than the niche |
-| | `hook-style` *(writer)* | — | the teardown, so the channel's voice is derived rather than invented |
-| **then** | `report-frame` *(analyst)* | `report-frame` *(analyst)* | the channel plan, whose slot count is the week it measures against |
-| | `first-scripts` *(writer)* | `first-cuts` *(clipper)* | the briefs/moments, and the seat's own set-up card |
-| **last** | `first-render` *(producer)* | `first-captions` *(editor)* | the plan it renders / the clip it captions |
+| | `faceless` | `longform` | `clipping` | waits on |
+|---|---|---|---|---|
+| **opens the install** | `channel-plan` *(manager)* | `channel-plan` *(manager)* | `channel-plan` *(manager)* | — |
+| | `first-briefs` *(scout)* | `first-topic` *(researcher)* | `first-moments` *(scout)* | — |
+| | `reference-study` *(writer)* | `reference-study` *(writer)* | `source-check` *(clipper)* | — |
+| | `look` *(producer)* | `look` *(producer)* | `caption-style` *(editor)* | the teardown, so the look is chosen from the reference rather than the niche |
+| | `hook-style` *(writer)* | `arc-style` *(writer)* | — | the teardown, so the channel's voice is derived rather than invented |
+| **then** | `report-frame` *(analyst)* | `report-frame` *(analyst)* | `report-frame` *(analyst)* | the channel plan, whose slot count is the week it measures against |
+| | `first-scripts` *(writer)* | `first-script` *(writer)* | `first-cuts` *(clipper)* | the briefs/topic/moments, and the seat's own set-up card |
+| **last** | `first-render` *(producer)* | `first-assembly` *(producer)* | `first-captions` *(editor)* | the plan it renders / the clip it captions |
 
-On `faceless` the study is what the reference question buys: it runs once, before the two cards that
-decide how this channel sounds and looks, so both are read off the reference instead of guessed from
-the niche word. With no reference answered it closes in a line within the minute and those two open a
-card's delay later, exactly as they used to.
+On the two generating templates the study is what the reference question buys: it runs once, before
+the two cards that decide how this channel sounds and looks, so both are read off the reference
+instead of guessed from the niche word. With no reference answered it no longer closes in a line —
+the crew goes and finds two or three real pieces in the niche and studies those, because inventing a
+reference is forbidden and looking for one never was.
 
 Each card's body is the brief the seat reads when it wakes, and it ends with the same paragraph
 (`CARD_ORDER` in [`templates/template.ts`](templates/template.ts)): read the card, claim it, file the
@@ -307,27 +357,39 @@ are still the standing work — and no card restates one: nobody's card writes a
 the queue or answers comments, because Monday 07:30, daily 08:00 and daily 18:00 already do.
 
 **What it costs to start.** A card carries no budget of its own — the tick starts an ordinary
-session on the assignee's own ceiling — so a fresh install can spend at most one **$20 task** per
-card, eight cards on `faceless` and seven on `clipping` ($160 on `faceless`, $140 on `clipping`), and
-only one of those sessions renders anything (~$9.00, see [What it costs](#-what-it-costs)). It is a
+session on the assignee's own ceiling — so a fresh install can spend at most one task ceiling per
+card: eight cards on `faceless`, seven on `clipping`, eight on `longform`
+($160 on `faceless`, $140 on `clipping`, $270 on `longform`), and
+only one of those sessions renders anything (~$9.00 a segment, see
+[What it costs](#-what-it-costs)). `longform` is the higher number for the reason its table gives —
+two of its cards land on the $75 producer, which renders the piece in segments rather than one call. It is a
 ceiling and not a bill: the set-up cards are reads and one filing each, and the reference study
-adds one browser session on an install that named a reference and nothing at all on one that did
-not. The five intakes it replaced were capped lower ($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
+adds one browser session — on an install that named a reference, and on one that did not, where it
+now goes and finds two or three of its own. The five intakes it replaced were capped lower ($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
 mattered. Nothing day one makes is published: everything lands in the queue as pending, for you to
 approve. The Home screen lists the cards the apply seeded; the board itself is where their progress
 lives.
 
 ### The skills
 
-Four of the platform's `naive/*` catalogue skills are referenced, read at session start with
-`read_skill`: `naive/short-video-hooks` (the first three seconds), `naive/clip-selection`
-(which moment to cut and where), `naive/caption-writing` (the caption in the channel's voice)
-and `naive/seo-content-brief` (a brief the writer can work from). An agent with no skill is not
-granted `read_skill`.
+Eight of the platform's `naive/*` catalogue skills are referenced, read at session start with
+`read_skill`: `naive/short-video-hooks` (the first three seconds), `naive/long-form-arc` (an arc
+that holds for minutes rather than seconds), `naive/video-assembly` (rendering in segments and
+joining them), `naive/clip-selection` (which moment to cut and where), `naive/caption-writing`
+(the caption in the channel's voice), `naive/video-trend-brief` (a brief for a video, not an
+article), `naive/reference-teardown` (how to take a reference apart) and `naive/channel-report`
+(the weekly numbers). An agent with no skill is not granted `read_skill`.
+
+**A seat is handed the standard for the work it actually does, and none for work it is forbidden.**
+Short Form's `producer` used to load `naive/short-video-hooks` while its own brief told it *"yours
+is the render, not the plan"*; `naive/seo-content-brief` used to reach the trend-scout, which
+writes no articles and could not make the `create_draft_post` call that skill's procedure ends in.
+Both are gone from these seats. The `seo-content-brief` file itself is untouched — the agency
+blueprint loads it — it is simply no longer a ref a video seat may name.
 
 ## ⏰ The cadence
 
-Both templates provision seven fires, all of them in the channel's own timezone
+Every template provisions seven fires, all of them in the channel's own timezone
 (`CHANNEL_TIMEZONE` in [`templates/template.ts`](templates/template.ts) — one line, one edit)
 and all of them running as the `channel` identity, so a scheduled run reaches the same
 connected accounts a chat turn does. Each fire carries its own `budget_micro_usd`, inside the
@@ -336,13 +398,16 @@ agent's per-task ceiling.
 | When | Who | What it does |
 |---|---|---|
 | Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named reference channels as clipping projects |
+| Mon/Wed/Fri 05:00 | `researcher` (`longform`) | Files the next topic brief, with the exemplar videos the writer will plan against |
+| Mon/Wed/Fri 05:30 | `writer` (`longform`) | Opens the exemplars, then writes the whole piece — arc, scenes, seams on the 30-second marks — and hands the project ids to the producer |
 | Daily 06:30 | `scriptwriter` (`faceless`) | Writes a video project (scenes, model, look, caption) for every brief still at `stage: brief`, then hands the project ids to the producer |
+| Mon/Wed/Fri 06:00 | `producer` (`longform`) | Renders each segment of the next planned piece, joins them with ffmpeg and publishes the file as a pending post |
 | Daily 07:00 | `producer` / `clipper` | Claims the next planned project and makes it — one produced video, or the next batch of clips — which lands as a pending post |
 | Daily 07:30 | `caption-editor` (`clipping`) | Titles and captions the morning's cuts |
 | Monday 07:30 | `analyst` | Last week's numbers, before the plan |
 | Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve; frees plans a dead session left claimed |
 | Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
-| Monday 09:00 | `channel-manager` | Plans the week at the cadence you chose, one brief per slot |
+| Monday 09:00 | `channel-manager` | Plans the week at the cadence you chose, one brief per slot — and refreshes the reference teardown where the reference has moved |
 
 Nothing a cron does escapes the queue: the fires file and tidy pending posts, and every publish
 and every reply still stops at your approval, exactly as it does when you brief an agent in
@@ -542,9 +607,9 @@ export const ACTIVE: MediaTemplate = TEMPLATES.clipping;   // was TEMPLATES.face
 Then `pnpm build && naive up`. The switch **widens and never narrows**:
 
 - agents the new template declares are **created**;
-- an agent only the old template declared is **reported and left running** — `naive.config.ts`
-  hands `naive up` both templates, so the other crew is kept, and nothing is deleted by dropping
-  a declaration. Retire one deliberately by adding its name to `removed`;
+- an agent only another template declared is **reported and left running** — `naive.config.ts`
+  hands `naive up` every template this repo carries, so the other crews are kept, and nothing is
+  deleted by dropping a declaration. Retire one deliberately by adding its name to `removed`;
 - your own rows are untouched: the posts, the accounts, the install's answers, the app, its URL,
   its database and its MCP token.
 
@@ -558,9 +623,16 @@ opening a real billable session against its own budget and filing into the same 
 crew. Switching `clipping` → `faceless` leaves the clipper (daily 07:00), the scout (daily 06:00)
 and the caption-editor (daily 07:30) armed — up to **$30 a day** of ceiling for a crew you
 replaced. `faceless` → `clipping` leaves the producer (daily 07:00) and the scriptwriter (daily
-06:30), plus the trend-scout on Mondays and Thursdays — up to **$20 a day and $20 a week**. The
-`channel-manager` and the `analyst` are declared by both templates, so they are never kept: they
-are patched into the new crew.
+06:30), plus the trend-scout on Mondays and Thursdays — up to **$20 a day and $20 a week**.
+
+**With three templates this compounds, and `longform` is the expensive one to leave behind.** Its
+`researcher` and `writer` fire Mon/Wed/Fri at $10 each and its `producer` at **$70** — so a switch
+away from it strands up to **$90 a firing day, three days a week**, more than the other two crews
+put together. Agents are reconciled **by name**, so `producer` — declared by Short Form and Long
+Form both — is patched into the new crew rather than stranded when you switch between them; the
+seats left armed are `researcher` and `writer`, which are Long Form's alone. The `channel-manager`
+and the `analyst` are declared by every template, so they are never kept either: they are patched
+the same way.
 
 Nothing in this repository can disarm them. Only the chosen template's agents are reconciled;
 `kept` carries names and no schedules; and the platform's one lever is `removed`, which deletes
@@ -613,19 +685,24 @@ for every screen URL.
 ## 📦 The `naive.config.ts` shape
 
 ```ts
-import { defineProject } from "@usenaive-sdk/blueprints";
+import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { CLIPPING_SEEDS, FACELESS_SEEDS } from "./seed/posts.ts";
 import { ACTIVE, CHANNEL_IDENTITY, TEMPLATES } from "./templates/index.ts";
+
+// What this repo carries, intersected with what the installed engine admits.
+const carried = new Set(BLUEPRINTS.media.templates);
+const templates = Object.values(TEMPLATES)
+  .filter((one) => carried.has(one.name))
+  .map((one) => ({ ...one, seed: { posts: seeds[one.name] } }));
 
 export default defineProject({
   name: "media",
   blueprint: "media",
   template: ACTIVE.name,                 // chosen in templates/index.ts
   questions: ACTIVE.questions,           // what the studio asks: subject, network, reference, cadence
-  templates: [                           // every template this repo carries
-    { ...TEMPLATES.faceless, seed: { posts: FACELESS_SEEDS } },
-    { ...TEMPLATES.clipping, seed: { posts: CLIPPING_SEEDS } },
-  ],
+  // Every template this repo carries AND the installed engine admits — the engine refuses any
+  // other list, and its `BLUEPRINTS` const is what says which those are. See the note below.
+  templates,
   identities: [{ name: CHANNEL_IDENTITY, description: "The channel itself — …" }],
   apps: [
     {
@@ -643,6 +720,21 @@ export default defineProject({
   ],
 });
 ```
+
+**Why `templates` is computed rather than written out.** `defineProject` refuses any repo whose
+template list does not equal the engine's own registry for that blueprint — *"one repo carries
+every template of its blueprint, so switching is an edit and never a re-clone"* — and that
+registry is a const compiled into the engine, which this repo cannot widen. The version that
+resolves today, `@usenaive-sdk/blueprints@0.7.0`, has `media: ["faceless", "clipping"]`, so naming
+`longform` in the list is refused outright and takes the whole config down with it. `package.json`
+pins `^0.8.0`, which adds `longform` to that const and is not published yet.
+
+So the list is the **intersection** of what this repo carries and what the installed engine
+admits, read off `BLUEPRINTS`. Until 0.8.0 lands, `naive up` provisions two crews and an `ACTIVE`
+of `longform` is refused **by name** rather than provisioned — a loud failure rather than a silent
+one. The day 0.8.0 resolves, `longform` joins with no edit to this file and no release to forget;
+`naive.config.test.ts` holds the intersection to exactly that rule, and fails if a template the
+engine knows is one this repo does not carry.
 
 The app is named `channel`, not `dashboard`: app names are unique per organization, so two
 blueprints sharing a generic name would mean the second `naive up` adopts and overwrites the
