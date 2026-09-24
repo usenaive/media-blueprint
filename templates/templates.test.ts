@@ -84,8 +84,17 @@ describe("the crews", () => {
    * shortest. (Both have since been rewritten for reasons of their own — the analyst carries the
    * report's shape, the caption-editor the network norms — and now measure 163 and 189, so nothing
    * in this repo sits under 150 today. The floor stays where the argument put it, not where the
-   * current shortest brief happens to fall.) The ceiling did not move: 400 is what a person will
-   * actually read, and it is what the briefs are held to.
+   * current shortest brief happens to fall.)
+   *
+   * *** THE CEILING IS 360, AND IT MOVED FOR THE REASON THE FLOOR DID: AT 400 IT BOUND NOTHING. ***
+   * 400 is the README's number and it was measured against `system`, two thirds of which the author
+   * did not write. Measured against the author's own prose the longest brief in this repo is the
+   * scriptwriter's at 330, so a ceiling of 400 left 70 words nobody was ever going to use and
+   * caught a runaway brief only long after a person had stopped reading it. 360 is 30 words over
+   * the longest — about two sentences of this file's prose, the smallest addition an author could
+   * make without noticing — so it still fits every brief written today and catches the next one
+   * that grows. The README's 400 stays the documented rule; this is the stricter test of it, the
+   * same way the floor is.
    *
    * *** THE REFERENCE RULES ARE STRIPPED FOR THE SAME REASON THE PREAMBLE AND THE GATE ARE. ***
    * They are shared constants appended to a seat's brief by the template, not words its author
@@ -108,7 +117,7 @@ describe("the crews", () => {
         // The seat's OWN words: the appended reference rules are the template's, like the two ends above.
         const own = brief.replace(REFERENCE_STUDY_RULE, "").replace(REFERENCE_RULE, "");
         expect(words(own), `${template.name}/${agent.name}`).toBeGreaterThanOrEqual(120);
-        expect(words(own), `${template.name}/${agent.name}`).toBeLessThanOrEqual(400);
+        expect(words(own), `${template.name}/${agent.name}`).toBeLessThanOrEqual(360);
         for (const skill of agent.skills ?? []) expect(CATALOGUE).toContain(skill);
         // A skill named is a skill it can read.
         if ((agent.skills ?? []).length > 0) expect(toolsOf(template, agent.name)).toContain("read_skill");
