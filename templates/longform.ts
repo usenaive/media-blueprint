@@ -1,12 +1,13 @@
 /**
- * *** NAIVE LONG FORM v1 — ONE TO THREE MINUTES, WHICH IS THREE RENDERS AND A JOIN. ***
+ * *** NAIVE LONG FORM v1 — ONE TO THREE MINUTES, WHICH IS SIX RENDERS AND A JOIN. ***
  *
  * The third template on this blueprint, and the only one whose flagship action is not a single
  * tool call. Everything below follows from that one fact, so it is worth stating before the crew:
  *
  *   · **A piece is `segmentsOf(LONG_FORM_LENGTH)` renders, not one.** `generate_video` bounds
- *     `seconds` at `.int().min(1).max(60)` (`packages/core/src/schema/media.ts`), so 180 seconds
- *     is not a length this platform can be ASKED for, whatever a prompt says. The producer renders
+ *     `seconds` at `.int().min(1).max(60)` in the schema — and the MODEL refuses anything over
+ *     `MAX_RENDER_SECONDS`, measured at 30 (`template.ts`) — so 180 seconds is not a length this
+ *     platform can be ASKED for, whatever a prompt says. The producer renders
  *     each segment separately and joins them with ffmpeg in its own sandbox. There is no concat,
  *     stitch or compose tool here — `clip_video` CUTS and never joins — so the join is the
  *     producer's shell or the channel ships fragments. That is one of the two seats on this
@@ -66,7 +67,7 @@ import {
 
 /** "between 60 and 180 seconds" — this template's own phrase, derived from its own window. */
 const LENGTH_PHRASE = lengthPhrase(LONG_FORM_LENGTH);
-/** At most three: `ceil(180 / 60)`, because `generate_video` takes no more than 60 seconds in one call. */
+/** At most six: `ceil(180 / MAX_RENDER_SECONDS)`, because one `generate_video` call takes no more than that. */
 const SEGMENTS = segmentsOf(LONG_FORM_LENGTH);
 /** ~$53.97 — every segment of the longest piece, as the ledger bills it, inside one session. */
 const WHOLE_RENDER = `$${(renderMicroUsd(LONG_FORM_LENGTH) / 1_000_000).toFixed(2)}`;
@@ -74,7 +75,7 @@ const WHOLE_RENDER = `$${(renderMicroUsd(LONG_FORM_LENGTH) / 1_000_000).toFixed(
 /**
  * The producer's ceilings, and the only ones on this blueprint that are not the shared pair.
  *
- * A session here renders up to three segments and then joins them, so the per-task ceiling has to
+ * A session here renders up to six segments and then joins them, so the per-task ceiling has to
  * clear `renderMicroUsd(LONG_FORM_LENGTH)` (~$53.97) plus the turns that read the plan, run ffmpeg
  * and file the row. 75 million µUSD is that with room to spare; the daily cap is sized so a fire
  * that failed halfway and is re-run by hand fits inside the same day, because a retried day is a
@@ -170,9 +171,9 @@ export const LONGFORM: MediaTemplate = {
       budget: PRODUCER_BUDGET,
       /*
        * *** RESUMABILITY IS THE EXPENSIVE PART OF THIS BRIEF, NOT THE ffmpeg. *** A half-rendered
-       * plan is the NORMAL case here: three segments is three chances to time out, and a session
+       * plan is the NORMAL case here: six segments is six chances to time out, and a session
        * that answers a failure by starting again buys the segments it already has a second time —
-       * ~$18 each. Nothing on the platform remembers a partial render for it, so the brief names
+       * ~$9 each. Nothing on the platform remembers a partial render for it, so the brief names
        * the one thing that does persist across sessions: the org's file library, which every seat
        * reads with `find_files`. Naming each segment after its project and index is what turns that
        * library into a resume point, and it is why the naming is stated as an instruction rather
@@ -186,7 +187,7 @@ export const LONGFORM: MediaTemplate = {
        * three: `bash` without `fetch_file` is a producer that installs ffmpeg perfectly well and
        * then has nothing to join.
        */
-      brief: `You are the producer: yours is the render, not the plan — and here one piece is up to ${SEGMENTS} renders and a join, about ${WHOLE_RENDER} of video. Take the next planned project — a handoff's, else the oldest at status planned, kind generation (channel.list_projects) — and claim it before you spend: channel.update_project, status rendering, expected_status planned; refused means another session has it. Read it (channel.get_project) for \`render_prompt\` and \`render_seconds\`, their sum. Cut that prompt along its own shot boundaries — never across a shot — into segments of ${MAX_RENDER_SECONDS} seconds or fewer. START WITH WHAT YOU ALREADY HAVE: a half-rendered plan is the normal case here, so find_files for this project's segments before you render anything, and file every segment you do render under the project's id and its index. Render only what is missing, with generate_video at aspect_ratio 9:16 and the plan's model. When one segment fails, render THAT ONE alone: starting again from the top to fix the third buys the first two twice, and each is real money. Never drop or rewrite a shot: the plan was checked when it was filed. Then join, in this order. A render hands back a \`fil_\` id and no copy on disk, so fetch_file the segment ids into the sandbox — nothing else reaches those bytes. ffprobe each against the plan BEFORE joining anything: a short segment is a failed render wearing a success message. Concatenate them with ffmpeg's concat demuxer under -c copy, and probe the result — its duration must match \`render_seconds\`. A file that does not probe is not published. If ffmpeg is missing and cannot be installed, say so and stop with the segments filed: a fragment published as the piece is worse than none. Then publish_file the joined file and finish: channel.update_project, status rendered, expected_status rendering, that file as \`media_url\`, your name as \`agent\`, and each segment's cost from session_spend. Refused there means it moved on: never render a paid plan twice. ${REFERENCE_RULE}`,
+      brief: `You are the producer: yours is the render, not the plan — and here one piece is up to ${SEGMENTS} renders and a join, about ${WHOLE_RENDER} of video. Take the next planned project — a handoff's, else the oldest at status planned, kind generation (channel.list_projects) — and claim it before you spend: channel.update_project, status rendering, expected_status planned; refused means another session has it. Read it (channel.get_project) for \`render_prompt\` and \`render_seconds\`. Cut that prompt along its own shot boundaries — never across a shot — into segments of ${MAX_RENDER_SECONDS} seconds or fewer. That cap is measured: a length refusal is a STOP, not a hint — never retry shorter to find what the model takes, because every attempt is charged. START WITH WHAT YOU ALREADY HAVE: a half-rendered plan is the normal case here, so find_files for this project's segments before you render anything, and file every segment you do render under the project's id and its index. Render only what is missing, with generate_video at aspect_ratio 9:16 and the plan's model. When one segment fails, render THAT ONE alone: starting again from the top to fix the third buys the first two twice. A render hands back a \`fil_\` id and no copy on disk, so fetch_file the segment ids into the sandbox. ffprobe each against the plan BEFORE joining anything: a short segment is a failed render wearing a success message. Concatenate them with ffmpeg's concat demuxer under -c copy, and probe the result — its duration must match \`render_seconds\`. A file that does not probe is not published. If ffmpeg is missing and cannot be installed, say so and stop with the segments filed: a fragment published as the piece is worse than none. Then publish_file the joined file and finish: channel.update_project, status rendered, expected_status rendering, that file as \`media_url\`, your name as \`agent\`, and each segment's cost from session_spend. Refused there means it moved on: never render a paid plan twice. ${REFERENCE_RULE}`,
       tools: ["generate_video", "bash", "fetch_file", "publish_file"],
       skills: ["naive/video-assembly"],
       schedules: [
@@ -196,7 +197,7 @@ export const LONGFORM: MediaTemplate = {
           // ~$1,619 a month of render spend and a subject nobody had time to research.
           cron: "0 6 * * 1,3,5",
           input: `Make the next piece. Read the niche and tone (project_context) and the planned generation projects (channel.list_projects, status planned, kind generation); claim the next — channel.update_project, status rendering, expected_status planned; refused means it is not yours, take the next, and a rendered plan is one the channel has paid for, so never render it again. Read it in full (channel.get_project) for \`render_prompt\` and \`render_seconds\`. Before rendering anything, find_files for segments already filed under this project's id: this fire resumes a half-rendered plan rather than buying it twice. Cut the compiled prompt along its shot boundaries into segments of no more than ${MAX_RENDER_SECONDS} seconds, render the missing ones with generate_video at aspect_ratio 9:16 and the plan's model, file each under the project's id and index, and re-render a failed segment alone. Then fetch_file every segment id into the sandbox — the ones you just rendered and the ones find_files turned up, because a render leaves no copy on disk and nothing else brings the bytes to ffmpeg — ffprobe each against the plan, join them in order with ffmpeg's concat demuxer over bash, probe the joined file against \`render_seconds\`, publish_file it, and finish with channel.update_project: status rendered, expected_status rendering, the joined file as media_url, your name as agent, and each segment's cost from session_spend. If generate_video is not among your tools, render nothing and request exactly it with request_tools — the tool, the permission, the video models in config.models — once, then wait. ONE piece a fire, not three.`,
-          // $70 — three segments of video (~$53.97 as the ledger bills them) plus the turns that
+          // $70 — a full piece of video (~$53.97 as the ledger bills them) plus the turns that
           // read the plan, run the join and file the row. Derived from `renderMicroUsd`, and inside
           // the seat's own $75 per-task ceiling with the margin a ceiling check needs.
           budget_micro_usd: 70_000_000,
@@ -360,6 +361,6 @@ export const LONGFORM: MediaTemplate = {
     queueSubtitle: "Every long-form piece the producer rendered and joined, on its way to your accounts.",
     queueEmpty: "Brief the crew in Chat and each finished piece lands here, joined into one file, for review.",
     plansSubtitle: "Every piece the writer planned — hook, acts and shots, with the segment seams they were cut for — and what the producer has rendered of it.",
-    plansEmpty: "The writer plans each subject here in full — the hook, the acts, the facts and their sources — against exemplars it actually watched, before the producer spends three renders on it.",
+    plansEmpty: "The writer plans each subject here in full — the hook, the acts, the facts and their sources — against exemplars it actually watched, before the producer spends a whole piece of render on it.",
   },
 };

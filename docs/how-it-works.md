@@ -53,7 +53,7 @@ on `reference` — a channel or video to model the piece on, the one question th
 Every template shares `channel-manager` (the `required` seat, and the one Chat talks to —
 `routes.ts` looks it up by name) and `analyst`. Every agent runs `anthropic/claude-sonnet-5` with a
 budget of $60/day and $20/task (`templates/template.ts`, sized around one ~$9.00 render) — except
-Long Form's `producer` at **$150/day and $75/task**, which renders `ceil(seconds / 60)` segments
+Long Form's `producer` at **$150/day and $75/task**, which renders `ceil(seconds / 30)` segments
 and joins them in one session.
 
 ### faceless
@@ -92,15 +92,17 @@ to sample frames across the video) and files the video project, where **every sc
 exemplar and the moment its grammar came from** → producer renders and assembles.
 
 **Assembly is the part with no tool behind it.** `generate_video` bounds `seconds` at
-`.int().min(1).max(60)` (`packages/core/src/schema/media.ts:102`), so a 60–180s piece is
-`segmentsOf(length)` = `ceil(max / 60)` = **3** separate renders. Nothing on the platform joins
+`.int().min(1).max(60)` in the schema (`packages/core/src/schema/media.ts:102`), but the model
+behind it refuses anything over **30** — 60s and 59s come back HTTP 400, everything measured at 30
+and below rendered — so `MAX_RENDER_SECONDS` is 30 and a 60–180s piece is
+`segmentsOf(length)` = `ceil(max / 30)` = **6** separate renders. Nothing on the platform joins
 video — `clip_video` cuts and never joins — so the producer joins its own segments with **ffmpeg
 in its sandbox** and then calls `publish_file`. That is the entire reason this seat holds `bash`
 and a $75 ceiling.
 
 Because segments are generated independently they never match mid-shot: a seam inside a continuous
 shot is a visible cut in the finished file. So the writer must end a shot exactly on each
-60-second mark, and the producer must check that it did before rendering. The demo plans in
+30-second mark, and the producer must check that it did before rendering. The demo plans in
 `seed/projects.ts` (`LONGFORM_PROJECT_SEEDS`) are written that way on purpose, seams called out in
 a comment beside the scenes.
 
@@ -206,8 +208,8 @@ constant, that check was Short Form's 15–30 on every template: a Long Form cre
 plan of the length its own card asked for, and the refusal named a range nobody had given it.
 
 The same read decides how the tool describes assembly. At one segment the scenes are *"rendered as
-ONE video, not joined"*; past `generate_video`'s 60s ceiling the description instead tells the
-planner the piece is rendered in segments the producer joins with ffmpeg, and to put the beats on
+ONE video, not joined"*; past `MAX_RENDER_SECONDS`, on a template whose crew actually has the
+producer that joins, the description instead tells the planner the piece is rendered in segments, and to put the beats on
 those seams rather than across them.
 
 ## 7. Storage — what "the DB" actually is

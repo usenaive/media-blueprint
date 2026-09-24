@@ -18,7 +18,7 @@ import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/inde
  * `longform` shows the Short Form POST rows — it files the same two post kinds, and a demo row is
  * a screen filler rather than a claim about a crew. Its PLANS are its own, because a long-form
  * plan is the one thing here that does not look like a short one: its scenes run to two or three
- * minutes and their shot boundaries land on the 60-second segment seams the producer renders
+ * minutes and their shot boundaries land on the `MAX_RENDER_SECONDS` segment seams the producer renders
  * against, so Short Form's plans on that template's Projects screen would be a worked example of
  * the mistake its writer brief exists to prevent.
  */

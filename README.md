@@ -175,8 +175,9 @@ day one below carries its own budget inside them. Money is integer micro-USD in 
 it is printed in dollars here.
 
 **The one exception is Long Form's `producer`, at $75 a task and $150 a day**, and the reason is
-arithmetic rather than generosity: `generate_video` bounds `seconds` at 60, so a 60–180s piece is
-`ceil(seconds / 60)` separate renders that the producer joins itself. Three renders plus the join
+arithmetic rather than generosity: one `generate_video` call takes at most `MAX_RENDER_SECONDS`
+— 30, measured against the model rather than read off the schema's 60 — so a 60–180s piece is
+`ceil(seconds / 30)` separate renders that the producer joins itself. Six renders plus the join
 do not fit inside one $20 task, and a seat that runs out of ceiling mid-assembly leaves a half-made
 file behind.
 
@@ -208,7 +209,7 @@ job.
 **There is no stitching tool on the platform, and that is why `producer` holds `bash`.**
 `clip_video` cuts and never joins, so assembly is ffmpeg inside the seat's own sandbox, followed
 by `publish_file`. A segment boundary that lands mid-shot is a visible cut in the finished file,
-which is why the writer is required to end a shot on each 60-second mark and the producer is
+which is why the writer is required to end a shot on each 30-second mark and the producer is
 required to check that it did.
 
 ### `clipping`
@@ -361,7 +362,7 @@ card: eight cards on `faceless`, seven on `clipping`, eight on `longform`
 ($160 on `faceless`, $140 on `clipping`, $270 on `longform`), and
 only one of those sessions renders anything (~$9.00 a segment, see
 [What it costs](#-what-it-costs)). `longform` is the higher number for the reason its table gives —
-two of its cards land on the $75 producer, which renders three segments rather than one. It is a
+two of its cards land on the $75 producer, which renders the piece in segments rather than one call. It is a
 ceiling and not a bill: the set-up cards are reads and one filing each, and the reference study
 adds one browser session — on an install that named a reference, and on one that did not, where it
 now goes and finds two or three of its own. The five intakes it replaced were capped lower ($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
@@ -398,7 +399,7 @@ agent's per-task ceiling.
 |---|---|---|
 | Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named reference channels as clipping projects |
 | Mon/Wed/Fri 05:00 | `researcher` (`longform`) | Files the next topic brief, with the exemplar videos the writer will plan against |
-| Mon/Wed/Fri 05:30 | `writer` (`longform`) | Opens the exemplars, then writes the whole piece — arc, scenes, seams on the 60-second marks — and hands the project ids to the producer |
+| Mon/Wed/Fri 05:30 | `writer` (`longform`) | Opens the exemplars, then writes the whole piece — arc, scenes, seams on the 30-second marks — and hands the project ids to the producer |
 | Daily 06:30 | `scriptwriter` (`faceless`) | Writes a video project (scenes, model, look, caption) for every brief still at `stage: brief`, then hands the project ids to the producer |
 | Mon/Wed/Fri 06:00 | `producer` (`longform`) | Renders each segment of the next planned piece, joins them with ffmpeg and publishes the file as a pending post |
 | Daily 07:00 | `producer` / `clipper` | Claims the next planned project and makes it — one produced video, or the next batch of clips — which lands as a pending post |

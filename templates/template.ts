@@ -364,27 +364,42 @@ export const SHORT_FORM_LENGTH: Length = { min: 15, max: 30 };
 export const CLIPPING_LENGTH: Length = { min: 15, max: 60 };
 
 /**
- * *** LONG FORM: 60–180 SECONDS, WHICH IS UP TO THREE RENDERS AND A JOIN, NOT ONE CALL. ***
+ * *** LONG FORM: 60–180 SECONDS, WHICH IS UP TO SIX RENDERS AND A JOIN, NOT ONE CALL. ***
  *
  * `generate_video` takes `seconds` bounded `.int().min(1).max(60)`, so 180 seconds is not a length
  * this platform can be asked for in one call, whatever a prompt says. A Long Form piece is
- * therefore `ceil(seconds / 60)` SEGMENTS — at most three — each its own `generate_video` call,
+ * therefore `ceil(seconds / MAX_RENDER_SECONDS)` SEGMENTS — at most six — each its own call,
  * joined with ffmpeg in the producer's own sandbox and filed with `publish_file`. There is no
  * concat, stitch or compose tool on this platform: `clip_video` CUTS and never joins, so the join
  * is the producer's shell or it does not happen, and a plan's beats have to survive that seam.
  *
  * The consequence that sizes the money is `renderMicroUsd` below: a Long Form producer renders up
- * to three segments in ONE session, so its ceiling has to clear three renders and the turns around
- * them, not one.
+ * to six segments in ONE session, so its ceiling has to clear the whole piece's worth of render
+ * and the turns around them, not one call's.
  */
 export const LONG_FORM_LENGTH: Length = { min: 60, max: 180 };
 
-/** The longest one `generate_video` call may be asked for — `seconds` is `.int().min(1).max(60)` on the wire. */
-export const MAX_RENDER_SECONDS = 60;
+/**
+ * The longest one `generate_video` call may be asked for.
+ *
+ * *** THIS IS 30, NOT THE WIRE'S 60, AND THE DIFFERENCE IS MEASURED RATHER THAN READ. ***
+ * `seconds` is `.int().min(1).max(60)` in the platform's schema, so 60 is what the API accepts —
+ * but the MODEL behind it does not. Measured against `bytedance/seedance-2.5` on 2026-09-24:
+ * 60s and 59s both come back **HTTP 400**, while every request at 30s or below succeeded (30, 29,
+ * 28, 25, 20, 15, 12, 10 all rendered). 31-58 is untested, so 30 is the largest value we have
+ * actually seen work rather than the largest we hope might.
+ *
+ * Taking the wire's 60 was not a harmless over-estimate: `segmentsOf` divides by this number, so a
+ * 180-second plan was cut into three 60-second segments and ALL THREE would have been refused —
+ * Long Form would have produced nothing at all, for every customer. It was found only because a
+ * producer discovered the real limit by paying for eight probe renders. Re-measure this through
+ * the PLATFORM when the default model changes, the way `MICRO_USD_PER_SECOND` is re-measured.
+ */
+export const MAX_RENDER_SECONDS = 30;
 
 /**
  * How many `generate_video` calls a piece of this length is, at worst: one for anything inside the
- * tool's own ceiling, `ceil(max / 60)` — and a join — for anything past it. It is what sizes the
+ * tool's own ceiling, `ceil(max / MAX_RENDER_SECONDS)` — and a join — past it. It is what sizes the
  * producer's ceiling, so it is derived rather than typed into a budget.
  */
 export const segmentsOf = (length: Length): number => Math.ceil(length.max / MAX_RENDER_SECONDS);

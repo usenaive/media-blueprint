@@ -1320,14 +1320,22 @@ describe("the length each template makes, and the money that follows from it", (
 
   /**
    * *** THE SEGMENT COUNT IS THE WHOLE DIFFERENCE BETWEEN THE TWO GENERATING TEMPLATES. ***
-   * `generate_video` bounds `seconds` at 60, so a piece longer than that is several calls joined
-   * afterwards — and nothing on this platform joins video, so the join is ffmpeg in a sandbox.
+   * A piece longer than one render call is several calls joined afterwards — and nothing on this
+   * platform joins video, so the join is ffmpeg in a sandbox. The cap is `MAX_RENDER_SECONDS`, and
+   * it is 30 rather than the schema's 60 because the MODEL refuses 60 and 59 with HTTP 400 while
+   * everything measured at 30 and below rendered (`template.ts`). This number is pinned here
+   * because taking the schema's 60 cut a 180-second plan into segments every one of which would
+   * have been refused — Long Form rendering nothing at all, for every customer.
    */
   it("counts a piece in generate_video calls, and gives a shell only to the seat that must join them", () => {
-    expect(MAX_RENDER_SECONDS).toBe(60);
+    expect(MAX_RENDER_SECONDS).toBe(30);
     expect(segmentsOf(TEMPLATES.faceless.length)).toBe(1);
-    expect(segmentsOf(TEMPLATES.clipping.length)).toBe(1);
-    expect(segmentsOf(TEMPLATES.longform.length)).toBe(3);
+    expect(segmentsOf(TEMPLATES.longform.length)).toBe(6);
+    // `clipping` is deliberately not in that list. Its band is 15–60s, so `segmentsOf` of it says
+    // "two" — and the number is meaningless there, because that crew never calls `generate_video`
+    // at all: `clip_video` CUTS a piece out of a source video, and the render cap bounds what may
+    // be generated, not what may be cut. The invariant that does hold for it is the grant.
+    for (const agent of TEMPLATES.clipping.agents) expect(toolsOf(TEMPLATES.clipping, agent.name), agent.name).not.toContain("generate_video");
     // The seat that renders a multi-segment piece is told to join it, and holds the tool to do so.
     const producer = TEMPLATES.longform.agents.find((one) => one.name === "producer")!;
     expect(producer.system).toMatch(/ffmpeg/);
@@ -1520,8 +1528,8 @@ describe("the long-form crew", () => {
       expect(text, where).toMatch(/generated independently|rendered independently/);
       expect(text, where).toMatch(/visible seam/);
     }
-    // The segment count is derived from the window and never typed: three, because `ceil(180 / 60)`.
-    expect(segmentsOf(LF.length)).toBe(3);
+    // The segment count is derived from the window and never typed: six, because `ceil(180 / 30)`.
+    expect(segmentsOf(LF.length)).toBe(6);
     expect(briefOf("writer")).toContain(`at most ${segmentsOf(LF.length)} segments`);
   });
 
@@ -1676,8 +1684,8 @@ describe("the long-form crew", () => {
  *
  * A seed is a screen filler — `pnpm serve` only, never anyone's work — but a long-form seed is also
  * a WORKED EXAMPLE of the rule the writer's brief states twice, and an operator reading the Projects
- * screen learns the shape from it. A seed whose scenes ran across a 60-second seam would be this
- * repo demonstrating the one mistake it spends a brief, a card and two tests preventing.
+ * screen learns the shape from it. A seed whose scenes ran across a `MAX_RENDER_SECONDS` seam would
+ * be this repo demonstrating the one mistake it spends a brief, a card and two tests preventing.
  */
 describe("the long-form demo plans", () => {
   it("plans every seed to the template's own window, with a shot ending on every segment seam", () => {

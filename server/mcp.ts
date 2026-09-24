@@ -39,11 +39,18 @@ const LENGTH_PHRASE = lengthPhrase(LENGTH);
  * Inside `generate_video`'s own ceiling the scenes are ONE call: the shots are compiled into a
  * single prompt (`scenesPrompt`) whose `seconds` is their sum, and nothing here joins clips, so a
  * beat that is a hard cut renders as a drift. Past that ceiling one call cannot carry the piece —
- * `seconds` is bounded at 60 on the wire — so the plan is rendered in segments and joined with
- * ffmpeg in the producer's own sandbox. Saying "rendered as ONE video" to a long-form planner would
- * be telling it the seam it has to write for does not exist.
+ * `MAX_RENDER_SECONDS` is what one call takes — so the plan is rendered in segments and joined
+ * with ffmpeg in the producer's own sandbox. Saying "rendered as ONE video" to a long-form planner
+ * would be telling it the seam it has to write for does not exist.
+ *
+ * The join half of that only exists where the crew HAS the seat that joins. `clipping`'s band is
+ * 15–60s, so dividing it by the render cap says "two segments" — but that crew cuts with
+ * `clip_video` and holds no `generate_video` and no producer at all, so the segmented sentence
+ * would promise it a seat and a join it does not have. Hence the seat check, not the arithmetic
+ * alone.
  */
-const ASSEMBLY = segmentsOf(LENGTH) === 1
+const JOINS_SEGMENTS = ACTIVE.agents.some((one) => one.name === RENDERER.generation);
+const ASSEMBLY = segmentsOf(LENGTH) === 1 || !JOINS_SEGMENTS
   ? "and the shots are rendered as ONE video, not joined: nothing here cuts between them, so the sum is what generate_video is asked for and each prompt is a shot inside that one generation"
   : `and the piece is rendered in at most ${segmentsOf(LENGTH)} segments of up to ${MAX_RENDER_SECONDS}s — generate_video takes no more in one call — which the producer joins with ffmpeg in its own sandbox, so plan the beats to fall on those seams rather than across them`;
 
