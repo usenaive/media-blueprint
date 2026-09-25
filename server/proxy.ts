@@ -16,6 +16,11 @@ export interface Upstream {
   raw?: boolean;
   /** The browser's `Range` header, forwarded so a player's first-frame read is a 206, not the clip. */
   range?: string;
+  /**
+   * `Idempotency-Key` for a write that must happen once. The platform claims the key before its
+   * handler runs, replays a recorded success and releases it on a failure (`canonical-spec §9`).
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -160,6 +165,7 @@ export async function proxyFetch(
       authorization: `Bearer ${config.apiKey}`,
       ...(body === null ? {} : { "content-type": "application/json" }),
       ...(upstream.range === undefined ? {} : { range: upstream.range }),
+      ...(upstream.idempotencyKey === undefined ? {} : { "idempotency-key": upstream.idempotencyKey }),
     },
     ...(body === null ? {} : { body }),
   });

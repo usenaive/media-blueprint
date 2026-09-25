@@ -617,9 +617,13 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
   if (config === null || upstream === null) {
     return fail(503, "publishing is not configured on this deployment — nothing was published");
   }
+  // ONE POST, ONE PUBLISH. The row only becomes `posted` after the platform answers, so a reply
+  // lost after the platform accepted (a timeout), or a second press while the first is in flight,
+  // found the row still `approved` and published the video again. Keyed on the post, the platform
+  // replays the first success and refuses a concurrent second; a failure releases the key.
   const published = await proxyFetch(
     config,
-    upstream,
+    { ...upstream, idempotencyKey: `post-now:${post.id}` },
     JSON.stringify({
       content: post.caption,
       // A blank title is refused upstream (`title` is optional there, but not empty), and one can

@@ -362,6 +362,18 @@ describe("post now", () => {
     });
   });
 
+  it("publishes under one Idempotency-Key per post, so a retry after a lost reply is not a second post", async () => {
+    const state = demoState();
+    state.posts.find((p) => p.id === "post_4a6f")!.mediaUrl = "https://cdn.test/amor-fati.mp4";
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctxOver(state, CONFIG));
+
+    const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>;
+    expect(headers["idempotency-key"]).toBe("post-now:post_4a6f");
+  });
+
   describe("publish as", () => {
     const approvedOn = (platform: "youtube" | "tiktok" | "instagram") => {
       const state = demoState();
