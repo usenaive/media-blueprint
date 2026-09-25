@@ -1,784 +1,238 @@
 # 🎬 Media Blueprint
 
-**An autonomous video channel in one repository — clone it, run `naive up`, and the
-Naive platform provisions the dashboard, the crew and the crons into your own organization.**
+**An autonomous video channel as data. Clone it, run `naive up`, and the Naive platform provisions
+the crew, its timers and its first day of work into your organization.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![engine: @usenaive-sdk/blueprints](https://img.shields.io/npm/v/@usenaive-sdk/blueprints?label=engine%3A%20%40usenaive-sdk%2Fblueprints&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/blueprints)
 [![CLI: @usenaive-sdk/vetta-cli](https://img.shields.io/npm/v/@usenaive-sdk/vetta-cli?label=cli%3A%20naive&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/vetta-cli)
-[![node](https://img.shields.io/node/v/@usenaive-sdk/blueprints?label=node)](https://nodejs.org)
-[![React](https://img.shields.io/badge/react-19-149eca.svg)](https://react.dev)
 
-It ships a management dashboard and a small agent team that plans, makes and queues video, and
-publishes only what you have approved.
+There is no app. The crew runs on the platform's own screens:
 
-The blueprint is the machine — the dashboard, `/api/*`, `/mcp`, the store, the approval flow
-— and it carries **three templates**, which are data:
+- **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
+- **The Media gallery.** Every render and every cut lands there on its own.
+- **The approval card.** One seat publishes. Every post waits for your **Allow**.
+- **Chat.** Talk to the channel manager like any agent.
+
+The repo carries **three templates**. A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
 |---|---|---|---|---|
-| `faceless` | Naive Short Form v1 | Generates original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | 15–30s |
-| `longform` | Naive Long Form v1 | Generates one long piece per fire, rendered in segments and joined | `channel-manager`, `researcher`, `writer`, `producer`, `analyst` | 60–180s |
-| `clipping` | Naive Clipping v1 | Repurposes existing video in one niche | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | 15–60s |
+| `faceless` | Naive Short Form v1 | Original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | 15–30s |
+| `longform` | Naive Long Form v1 | One researched subject at a time, rendered in segments and joined | `channel-manager`, `researcher`, `writer`, `producer`, `analyst` | 60–180s |
+| `clipping` | Naive Clipping v1 | The best moments of the channels you name, cut and captioned | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | 15–60s |
 
-**The id in the first column is the wire, and the second is only a screen.** `install.template`
-is a stored string on every provisioned organization, so `faceless` and `clipping` keep the names
-they shipped under — renaming one would orphan every real install that carries it.
-
-A template is a crew you choose, not a count of resources: before anything is provisioned the
-studio asks **four questions** (what the channel is about — or, on `clipping`, what to cut from —
-**where it posts**, one network or several, how often, and, on the two generating templates,
-optionally a channel or video to model it on), every agent reads the
-answers back through the platform's
-`project_context` tool, and each opens a **day-one** session that turns those answers into the
-channel's first briefs, scripts, clips, report and plan. See [The crew](#-the-crew).
-
-One repo carries all three, so switching is an edit and a `naive up` — never a re-clone and never
-a new app. See [Switching template](#-switching-template).
-
-The engine is [`@usenaive-sdk/blueprints`](https://www.npmjs.com/package/@usenaive-sdk/blueprints),
-installed from the public npm registry like any other dependency. Nothing here resolves out of
-a private workspace: a clone plus `pnpm install` is the whole toolchain.
-
-## 🗺 What `naive up` provisions
-
-```mermaid
-flowchart LR
-  repo["this repo<br/>naive.config.ts + templates/"]
-  repo -->|naive up| plat["Naive platform"]
-  plat --> app["channel app<br/>fullstack: /api/* and /mcp"]
-  plat --> ctx["install context<br/>niche · audience · cadence"]
-  plat --> spec["four specialists<br/>daily 06:00–07:30, Mon 07:30"]
-  plat --> mgr["channel-manager<br/>daily 08:00, 09:05 and 18:00, Mon 09:00"]
-  plat --> idn["channel identity<br/>holds the connected accounts"]
-```
-
-- **The dashboard app** (`channel`, fullstack) — this repo's built UI, hosted under your org,
-  backed by a thin server that talks to the platform on your behalf.
-- **The template's crew of five** — each with a role, a system prompt that opens by reading the
-  install's context, a deny-by-default tool allow-list, the catalogue skills it works from, a
-  daily budget, its own crons and the day-one cards it owes on the company board. The roster is in
-  [The crew](#-the-crew).
-- **Nine starter style templates** (reference image + prompt) covering the current
-  high-performing short-form aesthetics — the blueprint's shipped catalogue, present from the
-  first turn.
-- **The channel's crons** — the seven fires below, so the channel works whether or not anyone
-  opens the dashboard.
-- **The channel identity** (`channel`) — the persona every agent and every schedule acts as,
-  and the reason a connected account is reachable from a turn at all.
-
-A freshly provisioned channel has **no posts**, and every screen shows its empty state until
-you or an agent files something. That is the truth about a new deployment: the dashboard never
-ships rows that pretend to be work someone did — the first rows are the ones the day-one
-sessions file from your setup answers.
+The id in the first column is stored on every install. It never changes.
 
 ## 🚀 Get started
 
-You need Node 22 or newer (Vite's floor is `^20.19 || >=22.12`, and `pnpm serve` runs the
-server through Node's own TypeScript stripping), [pnpm](https://pnpm.io), and a platform API
-key.
-
 ```sh
-npm install -g @usenaive-sdk/vetta-cli          # installs the `naive` command
-git clone https://github.com/usenaive/media-blueprint.git my-channel
-cd my-channel
+git clone https://github.com/usenaive/media-blueprint && cd media-blueprint
 pnpm install
-
-export NAIVE_API_KEY=sk_...                     # your platform API key
-naive claim                                     # bind this clone to your organization
-pnpm build                                      # UI + dist/api/app.js + dist/vercel.json
-naive up                                        # provision everything in naive.config.ts
+export NAIVE_API_KEY=…        # your organization key; never commit it
+pnpm test && naive up
 ```
 
-`naive up` reads [`naive.config.ts`](naive.config.ts) and reconciles your organization against
-it, reporting each resource as `created | updated | unchanged | deleted | refused`. It is
-idempotent — every resource is keyed by its name, so re-running it is always safe — and it
-ships the dashboard only when `dist/` actually changed, which is why `pnpm build` comes first.
+`naive up` creates the crew, the `channel` persona, the crons and the day-one cards. Running it
+again changes only what changed. Pick the template in [`templates/index.ts`](templates/index.ts)
+(`ACTIVE`).
 
-`NAIVE_API_KEY` is declared on the app as `{ from_env }`, so it is read from your shell at
-apply time and never written into this repository. An unset variable refuses the apply by name,
-naming the variable and never a value.
+### ⚠️ Known limits of a data-only blueprint
 
-| Script | What it does |
-|---|---|
-| `pnpm install` | installs the toolchain, including the blueprint engine and the `naive` CLI |
-| `pnpm build` | builds the UI to `dist/`, then `dist/api/app.js` and `dist/vercel.json` |
-| `pnpm test` | the whole vitest suite — routes, MCP, templates, screens, config |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm dev` | the hot-reloading UI, proxying `/api` and `/mcp` to `:8788` |
-| `pnpm serve` | the dashboard server on `:8788`, over a JSON file store |
+- **The studio's catalog cannot publish it yet.** The platform's artifact publisher refuses a
+  declaration with no built app (`scripts/publish-artifacts.mjs`, and `trees: .min(1)` in
+  `packages/core/src/schema/blueprint.ts`). So today this installs with `naive up` from a clone.
+- **`project_context` answers only on a catalog install.** A `naive up` from a clone has no setup
+  answers, so each seat asks you for what it needs, once. See
+  [docs/how-it-works.md](docs/how-it-works.md#9-what-the-platform-cannot-express-yet).
 
-### 🔐 Getting into the deployed dashboard
+Both are platform changes, not changes to this repo.
 
-Every `/api/*` route on the deployment — the post queue, "Post now", the agent roster, opening
-a session, and deciding a held tool call — is behind the app's `DASHBOARD_TOKEN`. You never
-have to invent that value and you never see it: `naive.config.ts` declares it
-`{ generate: true }`, the platform makes one on the apply that creates the app, and no route
-anywhere returns it.
+## 🧭 How a piece is made
 
-There are two ways in, and both end in the same place:
+Every piece is a chain of cards on the company board. A seat does its step, then creates the next
+card for the next seat, blocked on its own. When it closes its card, the board wakes the next seat.
 
-- **From the studio.** Open the dashboard from the studio that installed it. That mints a
-  short-lived entry ticket, the browser posts it to `POST /api/enter`, and the server trades it
-  for an `HttpOnly` session cookie the browser then attaches to every call by itself — the
-  credential never passes through the DOM, a URL or storage.
-- **With your dashboard password.** `naive.config.ts` also declares `DASHBOARD_PASSWORD`
-  `{ generate: true }`: the platform generates a password-shaped value and shows it to you in the
-  studio, on the app's **Access** panel (where it can also be rotated). Type it into the gate's
-  form and `POST /api/enter` compares it in constant time and sets the very same cookie. A
-  deployment with no password set refuses every password.
+```
+faceless   trend-scout ─Plan→ scriptwriter ─Render→ producer ─Publish→ channel-manager → approval card
+longform   researcher  ─Plan→ writer       ─Render→ producer ─Publish→ channel-manager → approval card
+clipping   scout       ─Cut→  clipper      ─Caption→ caption-editor ─Publish→ channel-manager → approval card
+```
 
-A browser that reaches the URL without a session sees **one gate screen** and nothing of the app:
-the SPA asks `GET /api/session` first (`{ authenticated, studio_url, password_enabled }`, never a
-secret) and fetches nothing else until that says it is signed in. On the first arrival in a tab it
-sends the browser to the studio's `/open` for this app automatically, once; a tab that comes back
-still signed out is shown the **Open with Naive Studio** link and, when a password exists, the
-password form. A refused password returns to `/?entry=denied` — the reason travels in the address
-and nowhere else, and the form is offered again. A deployment that somehow has no token answers
-`503 not configured` to every API route rather than serving your channel to anyone who finds the
-URL.
+Step by step, on `faceless`:
 
-The dashboard also works inside the studio's own `<iframe>`. Framed, the gate never redirects
-anywhere on its own — it shows the form at once, and its **Open in the Studio** link opens the
-top window. For the frame to be signed in at all, the deployed cookie is `Secure; SameSite=None;
-Partitioned` (CHIPS): the browser keys it by the top-level site, so the framed dashboard and a
-tab of its own each sign in once and neither can read the other's. Because such a cookie travels
-on cross-site requests, a cookie-authenticated **write** (`POST`/`PUT`/`PATCH`/`DELETE`) to a
-gated route is honoured only from the dashboard's own origin — `Sec-Fetch-Site: same-origin` or
-`none`, or failing that an `Origin` naming this host — and answers `403 cross-site request
-refused` otherwise. Reads, bearer-authenticated calls and `/api/enter` itself (the studio's ticket
-form is cross-site by design) are not subject to that check. `pnpm serve` on the laptop keeps a
-plain `SameSite=Lax` cookie: `Partitioned` requires `Secure`, and the loopback is `http`.
+1. **The trend-scout** fires Monday and Thursday. For each slot the cadence needs, it finds a topic
+   and one to three real videos doing it well. It creates a **Plan** card for the scriptwriter.
+   The card's body is the brief.
+2. **The scriptwriter** is woken on the Plan card. It looks inside the exemplars, researches, and
+   writes the whole plan: hook, shots with prompts and seconds, sources, caption, networks. It
+   creates a **Render** card for the producer. The card's body is the plan.
+3. **The producer** is woken on the Render card. It renders the plan with `generate_video`. The
+   video lands in the Media gallery. It creates a **Publish** card for the channel manager with
+   the file id, the caption and the networks.
+4. **The channel manager** is woken on the Publish card. It checks the caption and calls
+   `social.post`. The post waits on the approval card.
+5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
 
-A browser that signed in before the cookie was partitioned still holds the old `SameSite=Lax`
-cookie under the same name and sends both. Every `dashboard_session` value on a request is
-checked, so the old one cannot shadow a live session; when none matches, the `401` carries a
-`Set-Cookie` that expires the old unpartitioned cookie, and a fresh sign-in off the laptop sends
-that same expiring header alongside the new cookie.
+Each card's note records what that seat made. The board is the channel's memory.
 
-`/mcp` is untouched by all of this: the organization's agents authenticate there with their own
-credentials.
+## 📮 Publishing
+
+Only `channel-manager` publishes. It holds `social.post` at **ask**, so every post stops on the
+platform's approval card. Every other seat is denied `social.post` by name.
+
+- **The file.** The post carries the render's `fil_` id (`file_ids`).
+- **The caption.** Its first line is the YouTube title.
+- **Where.** Only the networks you picked at setup.
+- **Visibility.** YouTube goes on its own call, `unlisted` unless you answered otherwise. Only
+  YouTube takes a visibility; the platform refuses one for any other network.
+- **When.** `scheduled_at` is the next free slot for your cadence, at 17:00 channel time
+  (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and Friday; weekly is
+  Friday.
+- **Declined.** Don't allow, with a reason, and the manager re-files a corrected post. It never
+  re-files an identical one. With no reason, it asks you once what to change.
+
+One post waits for you at a time. While it waits, the manager is busy on that card.
+
+## 📊 Analytics
+
+The analyst records every post's numbers each morning at 09:05 (`social.post_metrics`). On a
+Monday at 07:30 it writes the weekly report: what went out, what it did, what to make more of and
+less of. It files the report as a **Weekly report** card for the channel manager. The manager
+applies what is its own — captions and posting times. The head of each chain reads the same card
+before it starts the next pieces.
 
 ## 👥 The crew
 
-Every agent's `system` opens with the same paragraph — *read `project_context` before anything
-else; the answers there are the client's, not yours to invent* — and closes with the approval
-gate. Between them is the seat's own brief, 120–400 words. Every agent also holds the
-dashboard's `channel.*` tools, `social.accounts` (never `social.post`), the managed `browser`
-(its screenshot comes back as a picture, which is how any seat reads a page it has to actually
-see), and the two doors to you (`ask_operator`, `request_tools`, both `ask`); the **Tools**
-column lists what is granted on top of that. Almost every seat carries the same ceilings — **$20 a
-task and $60 a day, per agent** — sized so one render of the length the producer is briefed for
-fits inside a single task
-(`ONE_RENDER_MICRO_USD` in [`templates/template.ts`](templates/template.ts)); each timer and each
-day one below carries its own budget inside them. Money is integer micro-USD in the declarations;
-it is printed in dollars here.
-
-**The one exception is Long Form's `producer`, at $75 a task and $150 a day**, and the reason is
-arithmetic rather than generosity: one `generate_video` call takes at most `MAX_RENDER_SECONDS`
-— 30, measured against the model rather than read off the schema's 60 — so a 60–180s piece is
-`ceil(seconds / 30)` separate renders that the producer joins itself. Six renders plus the join
-do not fit inside one $20 task, and a seat that runs out of ceiling mid-assembly leaves a half-made
-file behind.
+Every seat reads `project_context` first, acts as the `channel` persona, and works on the board.
+The org's CEO owns the board and is told when a card closes or blocks. A seat with no timer is
+woken by its cards.
 
 ### `faceless`
 
-| Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
-|---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `social.post_metrics`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) · daily 09:05 metrics ($2) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
-| `producer` | Video production | `generate_video` (models pinned), `generate_image` | — | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
-| `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/video-trend-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
-| `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing`, `naive/reference-teardown` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
-| `analyst` | Performance | `social.post_metrics` | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
+| Seat | Role | Timers | Day one | What it does |
+|---|---|---|---|---|
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `producer` | Video production | — | `look` | Renders the plan as one vertical video; creates the Publish card |
+| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-piece` | Starts each piece as a Plan card, with exemplars it opened |
+| `scriptwriter` | Hooks & scripts | — | `reference-study`, `hook-style` | Looks inside the exemplars, writes the plan, creates the Render card |
+| `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
 ### `longform`
 
-Three fires a week rather than one a day, because a piece here is minutes of render rather than
-seconds. The split between `writer` and `producer` is the whole design: the writer decides the
-arc and the seams, the producer renders each segment and joins them, and neither does the other's
-job.
-
-| Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
-|---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `social.post_metrics`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) · daily 09:05 metrics ($2) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
-| `researcher` | Topics & sourcing | `web_search`, `web_fetch`, hands off to `writer` | `naive/video-trend-brief` | Mon/Wed/Fri 05:00 topics ($10) | `first-topic` — researches the niche and files the channel's **first topic brief**, with the exemplars to plan against |
-| `writer` | Arc & script | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), `publish_file`, hands off to `producer` | `naive/long-form-arc`, `naive/caption-writing` | Mon/Wed/Fri 05:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `arc-style` — writes the channel's arc, from that teardown · `first-script` — turns the first topic into a video project |
-| `producer` | Render & assembly | `generate_video` (models pinned), `bash` (joins the segments with ffmpeg), `publish_file` | `naive/video-assembly` | Mon/Wed/Fri 06:00 render ($70) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-assembly` — renders each segment and joins them into the first piece |
-| `analyst` | Performance | `social.post_metrics` | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
-
-**There is no stitching tool on the platform, and that is why `producer` holds `bash`.**
-`clip_video` cuts and never joins, so assembly is ffmpeg inside the seat's own sandbox, followed
-by `publish_file`. A segment boundary that lands mid-shot is a visible cut in the finished file,
-which is why the writer is required to end a shot on each 30-second mark and the producer is
-required to check that it did.
+| Seat | Role | Timers | Day one | What it does |
+|---|---|---|---|---|
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-piece` | Starts one sourced subject a fire, with exemplars of this length |
+| `writer` | Structure & scripts | — | `reference-study`, `arc-style` | Samples exemplar frames at chapter boundaries; plans every seam on a shot change |
+| `producer` | Render & assembly | — | `look` | Renders up to six segments, joins them with ffmpeg, probes the file |
+| `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports where the audience left each piece |
 
 ### `clipping`
 
-| Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
-|---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `social.post_metrics`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) · daily 09:05 metrics ($2) | `channel-plan` — asks you who the clips are for, then files the plan: slots per week, days, kinds, accounts |
-| `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | `source-check` — confirms it can reach every named reference · `first-cuts` — cuts the first two clips from the scout's plans |
-| `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | `first-moments` — goes through the named references and plans the **first five moments** worth cutting |
-| `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing` | daily 07:30 captions ($10) | `caption-style` — writes the channel's voice · `first-captions` — titles and captions the first clips |
-| `analyst` | Performance | `social.post_metrics` | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report by source and clip, against the manager's plan |
-
-Only the `channel-manager` is `required` — it is the seat the dashboard's Chat talks to. Every
-other seat can be left unticked when the template is installed, and its crons are then never armed
-and its cards never seeded — `up` refuses a card whose assignee this run did not provision. The `channel` app is `required` too: it is the crew's queue and MCP endpoint.
-
-### The setup questions
-
-The studio asks these before anything exists, and the engine refuses a template with a fifth — in
-its own words, *"a template asks at most 4 before anything is provisioned — a fifth belongs to the
-crew's first conversation"*. There is no onboarding screen in the dashboard: one place to ask, one
-place the answers live.
-
-| Template | 1 | 2 | 3 | 4 |
+| Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `faceless` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **A channel or video to model this on** — text, **optional** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `longform` | **Niche** — a choice of six, or your own | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | **A channel or video to model this on** — text, **optional** | **Posting cadence** — `daily`, `3× a week`, `weekly` |
-| `clipping` | **Reference channels for inspiration** — text | **Where should this channel post?** — YouTube Shorts, TikTok, Instagram Reels; **pick one or several** | — | **Posting cadence** — `daily`, `3× a week`, `weekly` |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the cadence; reads the weekly report |
+| `clipper` | Clip production | — | `source-check` | Cuts the moment with `clip_video`; creates the Caption card |
+| `scout` | Source watch | daily 06:00 ($10) | `first-piece` | Starts each moment from the named channels as a Cut card |
+| `caption-editor` | Captions & titles | — | `caption-style` | Writes the caption and credits the creator; creates the Publish card |
+| `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports by source and by clip |
 
-The middle one is the same question on every template, and it is the one this channel cannot run
-without: **it decides the networks every post the crew files is aimed at**. It is a multi-select
-(checkboxes in the studio), because the same vertical video usually goes out on more than one
-network: every network you tick is a target the crew files for, and a post that names no network
-goes to the **first** one you ticked. It used to be a constant in the code — a line an operator was
-expected to edit and re-deploy — so every install of this blueprint filed for the same network
-whoever installed it and whatever they had connected.
+The skills are the platform's `naive/*` catalogue, read with `read_skill`:
+`naive/short-video-hooks`, `naive/long-form-arc`, `naive/video-assembly`, `naive/clip-selection`,
+`naive/caption-writing`, `naive/video-trend-brief`, `naive/reference-teardown` and
+`naive/channel-report`.
 
-Three required questions is a budget, so asking that one meant not asking another. The slot came
-from *"tone and audience"* on `faceless` and *"niche / audience"* on `clipping`; the channel manager
-now asks for it with `ask_operator` in its day-one session, which is exactly where the engine's
-refusal says a further question belongs. Nothing was dropped — it moved from the form to the
-conversation.
+## 📝 The setup questions
 
-**The fourth question belongs to the two generating templates, and it is the only one you may
-leave blank.** *A channel or video to model this on* — paste a link, a handle, or the URLs of a few
-stills, one per line.
-Stills are worth the most: they are the only thing the crew can actually look at. Give one and
-the crew studies it once, on day one, and files a **reference teardown** post: the hook
-patterns, the first three
-seconds, how fast it cuts, the voice, the caption shape, the formats it repeats. Every brief, script,
-render and queue sweep afterwards is measured against that teardown, and each plan records which of
-its patterns it was executing.
+The studio asks at most four before anything is provisioned. The engine refuses a fifth.
 
-**Leave it blank and the crew goes and finds one.** It used to close the study card in a line and
-work from the niche word alone; now *"none given"* means *find two or three real videos in this
-niche that already do this format well, study them, and file a teardown from what you actually
-saw*. Inventing a reference is still forbidden — looking for one never was, and the old rule
-banned both by accident. That is why the engine allows a fourth question at all: it may only be
-one whose absence costs nothing, and an install that leaves it blank now gets a teardown too.
-
-**And the teardown is no longer frozen on install day.** A reference is a living channel, so the
-manager's Monday 09:00 plan fire re-reads it against what this channel has actually published
-since and files a fresh teardown when the format has moved — a new hook shape, a different cut
-rhythm, a format it has stopped making. Where nothing moved it says so in the plan in one line and
-files nothing, because a second teardown that only repeats the first is a post every seat then has
-to disambiguate.
-
-The answers are the install's project context. Each agent reads them through the platform's
-read-only `project_context` tool; you edit them in the studio, and the dashboard's Home screen
-shows them as they are.
-
-### …and the one thing the questions cannot do for you
-
-**Picking a network is not connecting an account.** The setup answer tells the crew where to file;
-publishing needs an account connected to the channel's identity, and that is one click on the
-**Accounts** screen (it opens the platform's own hosted connect portal — the dashboard builds no
-OAuth flow of its own). Until it is done, the queue fills and nothing in it can go out.
-
-So the dashboard says so, on **Home** and on **Posts**, above everything else:
-
-> This channel posts to YouTube Shorts, and no YouTube Shorts account is connected yet — nothing
-> here can publish until you connect one on Accounts.
-
-With several networks ticked the one line covers each of them, saying which are connected and
-which are not:
-
-> This channel posts to YouTube Shorts, TikTok and Instagram Reels, and no YouTube Shorts or
-> Instagram Reels account is connected yet — nothing here can publish there until you connect them
-> on Accounts. Connected: TikTok as @channel.
-
-It reads the networks from your own answer and the accounts from the platform, and it distinguishes
-*"no account connected"* from *"we could not check"* — being told to reconnect an account that is
-already fine is how a warning gets ignored. Once the right account is connected on every network the
-line goes quiet and names the handles.
-
-**The crew keeps filing while nothing is connected, on purpose.** A queue is a review surface, not
-a publish action: refusing to file would throw away a render that has already been paid for (~$9.00
-each, see [What it costs](#-what-it-costs)), and every day-one session opens minutes after the
-install, before anyone has had a chance to connect anything — so refusing would mean an empty first
-day and seven day-one cards spent on nothing. What is not acceptable is filing *silently*, which is
-what the line above fixes. Publishing still refuses honestly at the button, and the channel
-manager's first plan opens by saying whether an account is connected.
-
-### Day one
-
-**The apply seeds the crew's first work as cards on your company board, and the platform's tick
-wakes the seat each card is assigned to** (`canonical-spec §31.11`, §28.18). The apply ensures your
-organization's standing orchestrator — the `CEO` seat, created if you have none — puts this crew on
-its roster, turns its board on, opens the board and writes one card per task, keyed so re-running
-`naive up` answers the same card instead of filing a second. Nothing here starts a session: a card
-that is `todo`, assigned, and waiting on nothing is *due*, and the next tick starts one ordinary
-session of its assignee with the card as the brief.
-
-**The cards are ordered, and that is the whole reason they replaced the intakes.** Each seat used to
-open one `intake` session, all of them in the same minute, with no way to say which came first — so
-the scriptwriter read an empty queue and filed *"the trend-scout hasn't filed any briefs yet"* as its
-finding while the scout was filing five. A card names what it waits on (`blocked_by`), and a card
-with an open blocker is not due, so its seat is not started and not billed until the work it needs
-exists. Eight cards on `faceless`, seven on `clipping`, eight on `longform`; the ones that wait on
-nothing open together:
-
-| | `faceless` | `longform` | `clipping` | waits on |
-|---|---|---|---|---|
-| **opens the install** | `channel-plan` *(manager)* | `channel-plan` *(manager)* | `channel-plan` *(manager)* | — |
-| | `first-briefs` *(scout)* | `first-topic` *(researcher)* | `first-moments` *(scout)* | — |
-| | `reference-study` *(writer)* | `reference-study` *(writer)* | `source-check` *(clipper)* | — |
-| | `look` *(producer)* | `look` *(producer)* | `caption-style` *(editor)* | the teardown, so the look is chosen from the reference rather than the niche |
-| | `hook-style` *(writer)* | `arc-style` *(writer)* | — | the teardown, so the channel's voice is derived rather than invented |
-| **then** | `report-frame` *(analyst)* | `report-frame` *(analyst)* | `report-frame` *(analyst)* | the channel plan, whose slot count is the week it measures against |
-| | `first-scripts` *(writer)* | `first-script` *(writer)* | `first-cuts` *(clipper)* | the briefs/topic/moments, and the seat's own set-up card |
-| **last** | `first-render` *(producer)* | `first-assembly` *(producer)* | `first-captions` *(editor)* | the plan it renders / the clip it captions |
-
-On the two generating templates the study is what the reference question buys: it runs once, before
-the two cards that decide how this channel sounds and looks, so both are read off the reference
-instead of guessed from the niche word. With no reference answered it no longer closes in a line —
-the crew goes and finds two or three real pieces in the niche and studies those, because inventing a
-reference is forbidden and looking for one never was.
-
-Each card's body is the brief the seat reads when it wakes, and it ends with the same paragraph
-(`CARD_ORDER` in [`templates/template.ts`](templates/template.ts)): read the card, claim it, file the
-work, and **close it with a note** — closing is what wakes the next seat, and a card left open when
-its session ends is parked for the CEO to look at rather than retried forever. No card hands off
-with `send_to_agent`; the board does that now. The `handoffs` on each seat are for the crons, which
-are still the standing work — and no card restates one: nobody's card writes a weekly report, sweeps
-the queue or answers comments, because Monday 07:30, daily 08:00 and daily 18:00 already do.
-
-**What it costs to start.** A card carries no budget of its own — the tick starts an ordinary
-session on the assignee's own ceiling — so a fresh install can spend at most one task ceiling per
-card: eight cards on `faceless`, seven on `clipping`, eight on `longform`
-($160 on `faceless`, $140 on `clipping`, $270 on `longform`), and
-only one of those sessions renders anything (~$9.00 a segment, see
-[What it costs](#-what-it-costs)). `longform` is the higher number for the reason its table gives —
-two of its cards land on the $75 producer, which renders the piece in segments rather than one call. It is a
-ceiling and not a bill: the set-up cards are reads and one filing each, and the reference study
-adds one browser session — on an install that named a reference, and on one that did not, where it
-now goes and finds two or three of its own. The five intakes it replaced were capped lower ($76 and $88) and bought less — an unordered day one that produced nothing on the seats that
-mattered. Nothing day one makes is published: everything lands in the queue as pending, for you to
-approve. The Home screen lists the cards the apply seeded; the board itself is where their progress
-lives.
-
-### The skills
-
-Eight of the platform's `naive/*` catalogue skills are referenced, read at session start with
-`read_skill`: `naive/short-video-hooks` (the first three seconds), `naive/long-form-arc` (an arc
-that holds for minutes rather than seconds), `naive/video-assembly` (rendering in segments and
-joining them), `naive/clip-selection` (which moment to cut and where), `naive/caption-writing`
-(the caption in the channel's voice), `naive/video-trend-brief` (a brief for a video, not an
-article), `naive/reference-teardown` (how to take a reference apart) and `naive/channel-report`
-(the weekly numbers). An agent with no skill is not granted `read_skill`.
-
-**A seat is handed the standard for the work it actually does, and none for work it is forbidden.**
-Short Form's `producer` used to load `naive/short-video-hooks` while its own brief told it *"yours
-is the render, not the plan"*; `naive/seo-content-brief` used to reach the trend-scout, which
-writes no articles and could not make the `create_draft_post` call that skill's procedure ends in.
-Both are gone from these seats. The `seo-content-brief` file itself is untouched — the agency
-blueprint loads it — it is simply no longer a ref a video seat may name.
-
-## ⏰ The cadence
-
-Every template provisions seven fires, all of them in the channel's own timezone
-(`CHANNEL_TIMEZONE` in [`templates/template.ts`](templates/template.ts) — one line, one edit)
-and all of them running as the `channel` identity, so a scheduled run reaches the same
-connected accounts a chat turn does. Each fire carries its own `budget_micro_usd`, inside the
-agent's per-task ceiling.
-
-| When | Who | What it does |
-|---|---|---|
-| Mon & Thu 06:00 / daily 06:00 | `trend-scout` / `scout` | Files the next briefs for the niche, or the next moments in the named reference channels as clipping projects |
-| Mon/Wed/Fri 05:00 | `researcher` (`longform`) | Files the next topic brief, with the exemplar videos the writer will plan against |
-| Mon/Wed/Fri 05:30 | `writer` (`longform`) | Opens the exemplars, then writes the whole piece — arc, scenes, seams on the 30-second marks — and hands the project ids to the producer |
-| Daily 06:30 | `scriptwriter` (`faceless`) | Writes a video project (scenes, model, look, caption) for every brief still at `stage: brief`, then hands the project ids to the producer |
-| Mon/Wed/Fri 06:00 | `producer` (`longform`) | Renders each segment of the next planned piece, joins them with ffmpeg and publishes the file as a pending post |
-| Daily 07:00 | `producer` / `clipper` | Claims the next planned project and makes it — one produced video, or the next batch of clips — which lands as a pending post |
-| Daily 07:30 | `caption-editor` (`clipping`) | Titles and captions the morning's cuts |
-| Monday 07:30 | `analyst` | Last week's numbers, before the plan |
-| Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve; frees plans a dead session left claimed |
-| Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
-| Daily 09:05 | `channel-manager` | Records the last two weeks' post numbers (`social.post_metrics`, read-only) and notes on each outlier's card what likely drove it |
-| Monday 09:00 | `channel-manager` | Plans the week at the cadence you chose, one brief per slot — and refreshes the reference teardown where the reference has moved |
-
-Nothing a cron does escapes the queue: the fires file and tidy pending posts, and every publish
-and every reply still stops at your approval, exactly as it does when you brief an agent in
-Chat.
-
-## 🎨 The style library
-
-Nine starter style templates ship with the blueprint — a name, a prompt with `[bracketed]`
-per-brief slots, a trend note, and the reference image `generate_video` and `generate_image`
-condition on. `channel.list_style_templates` is how the producer reads them, and Channel
-settings is where you see them. They live in
-[`seed/style-templates.ts`](seed/style-templates.ts) with their images in
-[`src/assets/styles/`](src/assets/styles).
-
-| Marble & ink | Ghibli dusk | Claymation |
-|---|---|---|
-| <img src="src/assets/styles/marble-ink.jpg" alt="Marble and ink reference image" width="260"> | <img src="src/assets/styles/ghibli-dusk.jpg" alt="Ghibli dusk reference image" width="260"> | <img src="src/assets/styles/claymation.jpg" alt="Claymation reference image" width="260"> |
-| stoic / motivation staple | top saves on Reels | nostalgia, high shares |
-
-The other six: Photoreal cinematic, Lo-fi loop, Ambient ASMR, Pixar-style 3D, Paper cutout and
-Brainrot absurdist.
-
-## 📮 Where a post can go
-
-A post names one of the three networks that take a vertical video — **instagram, tiktok,
-youtube** — and nothing else is offered anywhere in the dashboard or in `create_post`. The list
-lives in one place, [`seed/posts.ts`](seed/posts.ts).
-
-It is a deliberate subset of what the platform's social API accepts, and it is the honest one for
-this blueprint: **every post this crew files is a video.** The producer renders 1080x1920 and the
-clipper cuts one; there is no link, thread or article anywhere in this repo. A text network takes
-the caption and drops the render, so a "published" post there ships a line of text and leaves the
-work behind. The list this replaced admitted six of those and excluded `youtube` and `instagram` —
-two of the three that take the work.
-
-**Where *this* channel posts is yours**, answered in setup (see [The setup
-questions](#the-setup-questions)) — **one network or several** — and read back by everything that
-stamps a target: the store's default, the `create_post` tool description the crew reads before
-filing, and the line on Home and Posts. The answer is read as a list (`platformsFromAnswers`): every
-recognised pick in your order, each once, anything unrecognised dropped. With several picked, the
-`create_post` description names all of them as this channel's targets and tells the crew to file
-one post per network; a post that names no network still goes to one, and it is the **first you
-picked** (`platformFromAnswers`). `platform` on the template is now only the fallback for an install
-with no usable answer, and it is the question's own first option so the two cannot disagree. An
-agent can still name a different network per post, and the channel manager can retarget a row
-before you approve it.
-
-All three publish video and refuse text, so an approved row with no video attached is refused here,
-by name, rather than at the button — a brief is exactly that row. And a row targeting a network no
-longer on the list (a document written before it was narrowed) is refused with *"retarget the post
-first"*, which `channel.update_post` can do.
-
-## 🖥 Operating the channel
-
-| Screen | What it does |
+| Template | Questions |
 |---|---|
-| Home | Whether this channel can publish at all (its network and whether an account is connected), the project context (your setup answers, from the latest applied install — "not configured" without a platform key), the day-one cards the apply seeded, approvals due, the crew with each agent's next fire, and the queue by status |
-| Sessions | The rail lists your chats with the channel manager, newest first; **New session** opens one — brief it, ask for clips or productions, adjust the plan — and any earlier session reopens where it left off |
-| Posts | The post queue: Pending → Ready → Approved → Posted / Rejected, each row playing the video the agent filed; "Post now" publishes the caption and that video immediately, and only from **Approved** |
-| Projects | The video projects: Planned → In progress → Rendered / Dropped, each plan opening to the piece it decides — hook, the hooks it did not keep, what holds them, the close, the reference pattern, and the reference stills with the one the render opens on marked — then to its scenes (prompt, seconds, voiceover, on-screen text, model) or its sources (URL, timestamps, why); drop a plan that should not be made, or put a dropped one back |
-| Studio | One video and the session that made it: `GET /api/studio/:id` (a project or post id) answers the plan, its post and the latest of the plan's sessions read live; **Revise** (`POST /api/studio/:id/revise {message}`) sends your note to that session — queued, never interrupting a paid render — or opens a new renderer session on the same plan. It is the one way a rendered plan renders again, and it refuses an approved or posted video: reject it first |
-| Approvals | Every agent that has stopped to ask you something: the held call, the arguments it proposes (media played), and Approve / Reject with an optional reason |
-| Analytics | Views and likes, summed from the posts this channel actually published |
-| Accounts | Connect and reconnect social accounts through the hosted portal |
-| Channel settings | Which template is running, the live agent roster and briefs, and the style template library |
+| `faceless`, `longform` | Niche · Where should this channel post? · A channel or video to model this on (optional) · Posting cadence |
+| `clipping` | Reference channels to cut from · Where should this channel post? · Who sees a new YouTube video? (optional) · Posting cadence |
 
-Nothing goes out without your approval. Agents file posts as *pending* and cannot move them:
-the dashboard's MCP server has no approve, reject or publish tool, and the platform's own
-`social.post` is denied to every agent. What an agent can still do outward is act on a connected
-account (a comment reply, say), and every such call is at permission `ask`: the call pauses the
-session (`stop_reason: awaiting_approval`, the session itself `idle`) and waits, listed in the
-session's pending actions, until you approve or reject it.
+"Where should this channel post?" takes several networks. The `channel` persona maps each answer
+to its network, so the studio's **Add connections** step asks you to connect exactly those
+accounts. `faceless` and `longform` have no room for the visibility question, so they post YouTube
+unlisted; tell the manager otherwise when you decline a post.
 
-**The Approvals screen is where you answer that.** It lists every session of this channel
-holding a pending call, names the agent and the tool, renders the arguments the agent proposes
-— playing any video or image among them, because a publish you cannot watch is not one you can
-honestly approve — and sends your decision, with an optional reason, to the platform. The same
-decision is still available from the CLI, which is where it used to be the *only* place:
+The tone and who the channel is for is not on the form. The manager asks it once, after its
+day-one card closes.
 
-```sh
-naive session get <session-id>                                # pending_actions lists the held call
-naive session confirm <session-id> --tool-call <id> --allow   # or --deny --reason "..."
+## 🌅 Day one
+
+The cards are seeded on the company board. A card waiting on another is not woken, and costs
+nothing, until that card closes.
+
+```
+channel-plan ──→ report-frame
+reference-study ──→ look ─────┐
+                └─→ hook-style ┴→ first-piece → the piece's own chain
 ```
 
-So a post reaches an account by exactly one route: you press Post now on an approved row on the
-Posts screen. It publishes as the channel's **Publish as** (Channel settings; unlisted unless
-you change it) on YouTube, and marks the row posted.
+(`longform` has `arc-style` for `hook-style`; `clipping` has `source-check` and `caption-style`
+open at once, with no reference study.)
 
-**An agent can also ask you for something.** Every agent holds two doors to you (both at `ask`,
-like everything outward), and its system prompt tells it that the tools offered in a turn are the
-complete list of what it can do. When a fire needs a *tool or model* it was not given — no
-`generate_video` this turn, no video model pinned, no `clip_video` — it calls `request_tools`,
-naming the exact tool, permission and (for video) the model in `config.models`, instead of
-narrating a video it never rendered. That is an ordinary tool card on Approvals: approving it
-mints a new version of the agent and re-pins the running session, so the tool is offered when the
-session resumes and the piece gets made; refusing it ends the request. The next `naive up` writes
-the template's toolset back, so a model you want kept belongs in `VIDEO_MODELS` too. When a fire
-needs a *fact* only you have — which account, which source video — it calls `ask_operator`: the
-session parks at `awaiting_answer`, the question lands on the same screen as a card with fields,
-and your answer goes back through `POST /v1/sessions/:id/answers`. Neither door connects an
-account: a platform's tools reach a turn only once you have connected it to the `channel` identity.
+Day one sets up the plan, the reference, the look and the voice, then starts **one** piece. That
+piece runs its full chain to your approval card. The timers start the rest.
 
-## 🛠 Building on top of it
+A card carries no budget of its own: a woken seat runs on its per-task ceiling. So day one is
+bounded by one ceiling per seeded card, plus one per card of the first piece's chain
+($180 on `faceless`, $290 on `longform`, $160 on `clipping`).
 
-This is why the repository is open. The machine is the code in `src/` and `server/`; everything
-a channel actually *is* — its crew, their briefs, what they may call, what they file, when they
-fire and what the screens call things — is data in [`templates/`](templates), and changing it is
-an edit plus a re-apply.
+## 💰 Money
 
-| To change… | Edit | Then |
-|---|---|---|
-| which template runs | `ACTIVE` in [`templates/index.ts`](templates/index.ts) | `pnpm build && naive up` |
-| an agent's brief or its platform tools | the `agent({ … })` call in [`templates/faceless.ts`](templates/faceless.ts) or [`templates/clipping.ts`](templates/clipping.ts) | `naive up` |
-| add an agent to the crew | the `agents` array of that template, built with the shared `agent()` helper | `naive up` |
-| the model, budget or approval gate every agent shares | [`templates/template.ts`](templates/template.ts) | `naive up` |
-| when a cron fires, or what it is told to do | `CHANNEL_MANAGER_SCHEDULES` and the specialist's `schedule({ … })` | `naive up` |
-| the timezone all of them fire in | `CHANNEL_TIMEZONE` — one line | `naive up` |
-| the post kinds, the setup questions, the words the queue prints | `kinds`, `questions` and `words` on the template | `pnpm build && naive up` |
-| where the channel posts | **you answer it in the studio** — no edit, no deploy | nothing |
-| a seat's role or skills | `role`, `skills` in its `agent({ … })` call | `naive up` |
-| what a seat is asked for on day one, and what it waits on | its `task({ … })` in the template's `tasks` | `naive up` |
-| the style library | [`seed/style-templates.ts`](seed/style-templates.ts) | `pnpm build && naive up` |
-| the dashboard's screens | [`src/screens/`](src/screens) | `pnpm build && naive up` |
-| a new MCP tool for agents to call | [`server/mcp.ts`](server/mcp.ts) and [`server/routes.ts`](server/routes.ts) | `pnpm build && naive up` |
+- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second render (~$9.00 as the ledger
+  bills it) and the turns around it.
+- The `longform` producer: **$75 per task, $150 per day.** One piece is up to six segments,
+  ~$53.97 of video, in one session.
+- Each fire has its own budget, inside its seat's ceiling.
+- `generate_video` is pinned to `bytedance/seedance-2.5` first (with `google/veo-3.1` allowed).
+  `generate_image` is left unpinned, so it takes the cheapest priced model.
 
-Three rules worth knowing before your first edit:
+## 🔐 Tool permissions
 
-- **An agent needs a persona.** The `agent()` helper names `CHANNEL_IDENTITY` for you, and
-  `schedule()` does the same for every fire. Without it a turn's connection tools resolve to
-  nothing, silently, and a cron runs as nobody.
-- **The toolset denies by name and asks by default.** Every built-in an agent was not granted
-  is written `deny` — the sandbox tools included — and the *default* is `ask`, which is what
-  reaches the connection tools no config can enumerate ahead of time. A connection tool is
-  therefore always offered and never runs unattended.
-- **Never grant `social.post`.** `toolset` writes it `deny` on every seat, last, over any grant.
-  An agent's publish skips the queue: the row is never marked posted, so Post now could publish
-  the same video again. `naive.config.test.ts` and `templates/templates.test.ts` hold the line.
-
-Adding a template is the same shape: a module beside `faceless.ts` and `clipping.ts` exporting
-a `MediaTemplate`, its name in the `TemplateName` union, its demo rows in `seed/posts.ts`, and
-its entry in `TEMPLATES`. The template tests will tell you what you missed.
-
-## 🔌 Agents and the dashboard
-
-The dashboard is also an MCP server (`POST /mcp`, [`server/mcp.ts`](server/mcp.ts)), and
-`naive.config.ts` declares it (`mcp: "/mcp"` on the `channel` app). On every turn, each agent in
-the project is offered the dashboard's tools as `channel.<tool>` — no per-agent wiring: the
-platform mints the bearer token, injects it into the app as the `VETTA_MCP_TOKEN` secret, and
-sends it with every call. Without that token the endpoint answers `401`.
-
-| Tool | What it does |
-|---|---|
-| `list_posts {status?}`, `get_post {id}` | Inspect the queue |
-| `create_post {caption, media_url?, platform?, agent?, account?, source?, status?}` | File a finished piece as *pending* (or *ready*), signed: who filed it, which account it is for, what it was made from |
-| `update_post {id, title?, caption?, media_url?, platform?}` | Fix or retarget a pending or ready post; approved and posted ones are yours |
-| `list_projects {status?, kind?}`, `get_project {id}` | Inspect the video projects — the plan each video is made from |
-| `create_project {kind, title, brief, post_id?, scenes? \| sources?, model?, style_template?, caption?, …}` | File a plan: `generation` carries the scenes in order (prompt, seconds, voiceover, on-screen text, model) and the look; `clipping` carries the source URLs, the timestamps and the reason each moment was picked. Filed on a brief, it moves that brief to `scripted` |
-| `update_project {id, status?, expected_status?, media_url?, agent?, …}` | Claim a plan (`rendering`, `expected_status: planned` — a second session is refused before it spends) and finish it (`rendered` with the video as `media_url`); finishing puts the video on the plan's post, or files the post when the plan has none. Rendered is final to every agent — only the operator's **Revise** in the Studio reopens it, and the same finishing write then lands the new video, with the previous one kept on the plan's `renders[]` |
-| `list_style_templates`, `list_accounts` | The style library, the connected accounts |
-
-A write that names its seat (`agent`) is bound to the session that made it: `create_project`
-and the claim/finish moves of `update_project` record the seat's one running session on the
-plan's `sessions[]` — exactly one, or nothing is recorded — and the **Render** button records the
-session it opens. That is what the Studio talks to.
-
-The setup answers are not a tool of this server: the platform offers every agent of the crew its
-own read-only `project_context`, so there is one copy of them.
-
-This server publishes nothing: there is no approve, reject or post tool in it, and every tool
-description says so. Each `channel.*` tool is allowed by name.
-
-**Connected accounts.** Every agent acts as the `channel` persona, which is what makes the
-accounts you connect reachable from a turn: the platform resolves a session's connection tools
-along `session → agent → identity → connected accounts`. Those tools register as
-`<connector>.<operation>`, and which operations exist depends on the account you connected, so
-no config here can name them — which is why the toolsets grant every tool they *can* name
-(`allow`, or `deny` for a built-in this crew has no use for, sandbox included) and leave the
-default at `ask`. A connection tool is therefore always offered and never runs unattended: it
-stops on the Approvals screen with its arguments in front of you.
-
-The platform's own `social.post` is not part of this server, and the shared toolset in
-[`templates/template.ts`](templates/template.ts) denies it to every agent. Publishing is Post
-now. The permission is decided there, by the blueprint, and not by whichever template happens to
-list the tool.
+- The default is **deny**. A connected account's own tools are not a second way out.
+- Every seat holds the board (`board_read`, `board_write`), `project_context`, `find_files`,
+  `session_spend` and `browser`.
+- `ask_operator` and `request_tools` are always `ask`.
+- `social.post`: `ask` on `channel-manager`, `deny` everywhere else.
+- `social.post_metrics`: `allow` on `analyst` only.
+- Every other publish, pay or file tool (email, legal, wallet, card) is denied by name.
+- Nobody messages another seat. The board wakes the next one.
+- `bash` only where a shell is the job: the Short Form scriptwriter and the Long Form writer
+  sample frames; the Long Form producer joins segments.
 
 ## 🔁 Switching template
 
-A template is data ([`templates/`](templates)): the crew and its prompts, the tool allow-lists,
-the post kinds it files, the setup questions the studio asks and the words the queue prints. Nothing
-about the machine changes with it — same screens, same routes, same `/mcp`, same app.
+Edit `ACTIVE` in [`templates/index.ts`](templates/index.ts) and run `naive up`. The switch widens:
+the new crew is created, and a seat only the old template had is **kept and still firing**. Its
+crons keep billing. Retire it by adding its name to `removed` in `naive.config.ts` and running
+`naive up` again.
 
-```ts
-// templates/index.ts
-export const ACTIVE: MediaTemplate = TEMPLATES.clipping;   // was TEMPLATES.faceless
-```
+Schedules are the one place where omission deletes. An agent's `schedules` are owned as a whole
+set and matched by exact cron text: `"0 8 * * 1"` and `"0 08 * * 1"` are a delete plus a create.
+A seat woken only by its cards declares `schedules: []`, which removes any cron an older version
+of this repo gave it.
 
-Then `pnpm build && naive up`. The switch **widens and never narrows**:
+## 🧪 Tests
 
-- agents the new template declares are **created**;
-- an agent only another template declared is **reported and left running** — `naive.config.ts`
-  hands `naive up` every template this repo carries, so the other crews are kept, and nothing is
-  deleted by dropping a declaration. Retire one deliberately by adding its name to `removed`;
-- your own rows are untouched: the posts, the accounts, the install's answers, the app, its URL,
-  its database and its MCP token.
+`pnpm typecheck && pnpm test`. The suite reads the declarations and the engine itself:
 
-The dashboard's Channel settings screen names the template that is running.
-
-**"Left running" means still firing, and still billing.** `naive up` owns an agent's `schedules`
-only through the template that declares it, and a kept agent is declared by neither — `up` reports
-it `unchanged` and touches nothing on it, its deployments included. So the crew you switched away
-from keeps its timers: every morning, on the channel's clock, as the `channel` identity, each fire
-opening a real billable session against its own budget and filing into the same queue as the new
-crew. Switching `clipping` → `faceless` leaves the clipper (daily 07:00), the scout (daily 06:00)
-and the caption-editor (daily 07:30) armed — up to **$30 a day** of ceiling for a crew you
-replaced. `faceless` → `clipping` leaves the producer (daily 07:00) and the scriptwriter (daily
-06:30), plus the trend-scout on Mondays and Thursdays — up to **$20 a day and $20 a week**.
-
-**With three templates this compounds, and `longform` is the expensive one to leave behind.** Its
-`researcher` and `writer` fire Mon/Wed/Fri at $10 each and its `producer` at **$70** — so a switch
-away from it strands up to **$90 a firing day, three days a week**, more than the other two crews
-put together. Agents are reconciled **by name**, so `producer` — declared by Short Form and Long
-Form both — is patched into the new crew rather than stranded when you switch between them; the
-seats left armed are `researcher` and `writer`, which are Long Form's alone. The `channel-manager`
-and the `analyst` are declared by every template, so they are never kept either: they are patched
-the same way.
-
-Nothing in this repository can disarm them. Only the chosen template's agents are reconciled;
-`kept` carries names and no schedules; and the platform's one lever is `removed`, which deletes
-the agent outright rather than parking it. **So decide about the old crew in the same sitting as
-the switch:** add each stranded name to `removed` in `naive.config.ts` and `naive up` again — which
-deletes those agents and their crons — or keep them on purpose, knowing what they cost. A third
-option (a kept agent's schedules disabled rather than left armed, so a switch stops paying for the
-crew it replaced without destroying its history) would be a change to the platform's blueprint
-engine, not to this repo.
-
-**Editing a cron has one sharp edge.** Schedules are the only place in `naive up` where dropping
-a declaration deletes: an agent's `schedules` are owned as a complete set and matched to live
-rows **by exact cron string**, so `"0 8 * * 1"` and `"0 08 * * 1"` are a delete plus a create
-rather than a patch. Change a fire's time deliberately; never re-spell one that is not changing.
-(An agent with no `schedules` key at all owns nothing and deletes nothing — it is a *partial*
-set that is destructive.)
-
-## 💻 Running it locally
-
-- **Demo mode** — `pnpm serve` in one shell and `pnpm dev` in another. The dev server proxies
-  `/api` and `/mcp` to `:8788`, so the screens read the seeded **file** store over the real
-  routes — seeded with the running template's own demo queue. No sample row is compiled into the
-  bundle; `src/no-seed.test.ts` enforces that, which is why the demo rows live in
-  [`seed/posts.ts`](seed/posts.ts) and not in `templates/` (the screens import a template).
-- **Configured mode** — `pnpm build`, set `NAIVE_API_KEY` (and optionally `NAIVE_API_URL`,
-  `NAIVE_IDENTITY_ID` for the channel persona's social routes), then `pnpm serve`. The server
-  serves the built UI and fronts the platform behind `/api/*`; the key lives only in that server
-  process and never reaches the browser. A screen whose backing route or key is absent says so —
-  503 `not configured — set NAIVE_API_KEY` reaches the header slot rather than being swallowed.
-  Set `VETTA_MCP_TOKEN` to open `/mcp` locally (the platform sets it in the deployed app);
-  without it every MCP request is refused. `/api/*` skips the `DASHBOARD_TOKEN` gate **only** for
-  a request that arrives on the loopback interface — your own browser against `pnpm serve`, which
-  `GET /api/session` reports as signed in, so the gate screen never shows locally. Anything
-  reaching this server over a real network (bound to `0.0.0.0`, a tunnel, a LAN peer) is gated
-  exactly as the deployment is; set `DASHBOARD_TOKEN` and, if you want the password form there,
-  `DASHBOARD_PASSWORD` (plus `NAIVE_STUDIO_URL` and `NAIVE_APP_ID` for the studio link). None of
-  the four is needed for local development.
-
-One route table serves both: [`server/routes.ts`](server/routes.ts) holds every path, `/mcp`
-included, and `server/index.ts` (node `http`) and `server/api-entry.ts` (the deployed function)
-are thin adapters over it. Locally the store is a JSON file under `data/`, seeded on first run
-from `seed/`; on the deployment it is one document in the app database the platform provisions,
-created **empty**. The browser and the agents therefore read and write the same rows: a post
-filed over MCP is on the Posts screen after a reload.
-
-`pnpm build` emits `dist/api/app.js` — one function for the whole surface — plus
-`dist/vercel.json`, whose rewrites send `/mcp` and `/api/*` to it and fall back to `index.html`
-for every screen URL.
-
-## 📦 The `naive.config.ts` shape
-
-```ts
-import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
-import { CLIPPING_SEEDS, FACELESS_SEEDS } from "./seed/posts.ts";
-import { ACTIVE, CHANNEL_IDENTITY, TEMPLATES } from "./templates/index.ts";
-
-// What this repo carries, intersected with what the installed engine admits.
-const carried = new Set(BLUEPRINTS.media.templates);
-const templates = Object.values(TEMPLATES)
-  .filter((one) => carried.has(one.name))
-  .map((one) => ({ ...one, seed: { posts: seeds[one.name] } }));
-
-export default defineProject({
-  name: "media",
-  blueprint: "media",
-  template: ACTIVE.name,                 // chosen in templates/index.ts
-  questions: ACTIVE.questions,           // what the studio asks: subject, network, reference, cadence
-  // Every template this repo carries AND the installed engine admits — the engine refuses any
-  // other list, and its `BLUEPRINTS` const is what says which those are. See the note below.
-  templates,
-  identities: [{ name: CHANNEL_IDENTITY, description: "The channel itself — …" }],
-  apps: [
-    {
-      name: "channel",
-      type: "fullstack",
-      required: true,                    // the crew's queue and MCP endpoint
-      deploy_dir: "dist",
-      mcp: "/mcp",
-      env: {
-        NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-        DASHBOARD_TOKEN: { generate: true },     // the operator bearer; never shown
-        DASHBOARD_PASSWORD: { generate: true },  // the operator's dashboard password; shown in the studio
-      },
-    },
-  ],
-});
-```
-
-**Why `templates` is computed rather than written out.** `defineProject` refuses any repo whose
-template list does not equal the engine's own registry for that blueprint — *"one repo carries
-every template of its blueprint, so switching is an edit and never a re-clone"* — and that
-registry is a const compiled into the engine, which this repo cannot widen. The version that
-resolves today, `@usenaive-sdk/blueprints@0.7.0`, has `media: ["faceless", "clipping"]`, so naming
-`longform` in the list is refused outright and takes the whole config down with it. `package.json`
-pins `^0.8.0`, which adds `longform` to that const and is not published yet.
-
-So the list is the **intersection** of what this repo carries and what the installed engine
-admits, read off `BLUEPRINTS`. Until 0.8.0 lands, `naive up` provisions two crews and an `ACTIVE`
-of `longform` is refused **by name** rather than provisioned — a loud failure rather than a silent
-one. The day 0.8.0 resolves, `longform` joins with no edit to this file and no release to forget;
-`naive.config.test.ts` holds the intersection to exactly that rule, and fails if a template the
-engine knows is one this repo does not carry.
-
-The app is named `channel`, not `dashboard`: app names are unique per organization, so two
-blueprints sharing a generic name would mean the second `naive up` adopts and overwrites the
-first's app — its deployment, its database and its MCP token — and reports it as a routine
-update.
-
-The deployment is declared, not clicked together. To change agents, budgets, tool policies, or
-the app itself, edit the config (and/or the UI code), rebuild, and run `naive up` again. To
-delete a resource, move its name into the config's `removed` block (e.g.
-`removed: { agents: ["producer"] }`); nothing is deleted just by dropping a declaration — which
-is exactly what makes switching template safe.
-
-The config can declare more than this template uses:
-
-| Key | What it provisions |
-|---|---|
-| `apps[]` | `name`, `type`, `description`, `deploy_dir`, `mcp` (the path of the app's own MCP endpoint; fullstack only), and `env` — literals, `{ from_env }` or `{ generate: true }`, written as the app's secrets |
-| `questions[]` | the setup questions (`text` or `choice`), each `optional` or not; at most four when a `template` is set. Needs `@usenaive-sdk/blueprints@^0.7.0` — 0.6.0 caps them at three and refuses `faceless`'s fourth outright |
-| `agents[]` | `role`, `required`, `model`, `budget`, `system`, `tools`, `skills` (`naive/<slug>` for the catalogue), `mcp_servers`, `allowed_apps`, `identity`, `schedules` |
-| `tasks[]` | the crew's first work as cards on the organization's board: `key` (idempotent as `media:<key>`), `title`, `body`, `assignee` (an agent **name**) and `blocked_by` (sibling keys). Needs `@usenaive-sdk/blueprints@^0.6.0` — 0.5.0 strips the field without saying so |
-| `agents[].schedules[]` | cron deployments, owned as a complete set per agent and matched by `cron` |
-| `skills[]` | markdown files pushed by slug, versioned by content |
-| `identities[]` | personas agents and schedules act as |
-| `vaults[]` | credential vaults; values are `{ from_env }` only and reconciled by presence |
-| `removed` | `apps`, `agents`, `skills`, `identities`, `vaults` to delete by name |
-
-See the `naive` CLI reference in the platform docs for the reconciliation rules behind each key.
+- [`templates/templates.test.ts`](templates/templates.test.ts) — every seat's tools, the card
+  chains, publishing, analytics, and that no prompt names a surface that is gone.
+- [`naive.config.test.ts`](naive.config.test.ts) — what `naive up` is handed, after the engine
+  parses it.
+- [`onboarding.test.ts`](onboarding.test.ts) — the setup questions, and the engine's refusal of a
+  fifth.
+- [`docs.test.ts`](docs.test.ts) — this README's tables and figures against the code.
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome — this repository is meant to be forked, cut about and
-argued with.
-
-- Fork, branch, and keep the change to one thing.
-- `pnpm install && pnpm typecheck && pnpm test && pnpm build` must be green before you open a
-  PR. The suite is fast and it is the review's floor, not its ceiling.
-- Prefer adding a **template** over widening the machine: if your change is a channel's opinion
-  rather than a channel's plumbing, it belongs in `templates/`.
-- Nothing may weaken the approval gate. `naive.config.test.ts`, `templates/templates.test.ts`
-  and `src/no-seed.test.ts` exist to catch exactly that — a publish path around the queue, or a
-  demo row shipped as somebody's real data.
-- Write the *why* in the commit message. The prose in this repository is part of the product.
+Keep a change to one thing. Nothing may add a second way to publish: the tests above exist to
+catch exactly that. Write the why in the commit message.
 
 ## 📄 License
 
-[MIT](LICENSE) © Naive. Clone it, change it, run your channel on it.
+[MIT](LICENSE) © Naive.

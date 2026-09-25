@@ -13,5 +13,5 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["seed", "templates", "naive.config.ts", "naive.config.test.ts", "onboarding.test.ts"]
+  "include": ["seed", "templates", "naive.config.ts", "naive.config.test.ts", "onboarding.test.ts", "docs.test.ts"]
 }

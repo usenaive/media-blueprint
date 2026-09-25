@@ -1,515 +1,188 @@
 # How the media blueprint works
 
-A trace of what `naive up` provisions, what each agent is told, which tools it can call, and where
-a post lives. Everything below is read off the code; file paths are given so it can be checked.
+This repo is data. It declares a crew, its tools, its timers, its setup questions and its first
+day of cards. The platform runs all of it. There is no app of our own.
 
-## 1. Blueprint vs. template
+## 1. What a template is
 
-- **Blueprint** = the machine, shared by every template: the React dashboard (`src/`), the
-  `/api/*` routes (`server/routes.ts`), the `/mcp` endpoint (`server/mcp.ts`), the store
-  (`server/store.ts`, `server/api-entry.ts`) and the approval flow.
-- **Template** = data: the crew, its prompts, tool allow-lists, post kinds, the setup questions,
-  and the words the queue prints (`templates/faceless.ts`, `templates/longform.ts`,
-  `templates/clipping.ts`).
-- There are **three**: `faceless` (shown as Naive Short Form v1, 15–30s), `longform` (Naive Long
-  Form v1, 60–180s) and `clipping` (Naive Clipping v1, 15–60s). The wire ids do not change —
-  `install.template` is a stored string on every provisioned org, so renaming one orphans every
-  real install that carries it. Only the display names are new.
-- `templates/index.ts` — `ACTIVE` picks the running template (`faceless` by default,
-  `NAIVE_TEMPLATE` overrides). Switching is an edit of that line plus `naive up`.
-- `naive.config.ts` hands `naive up` **every** template it can plus their demo seeds, so switching
-  only ever widens: an agent only another template declares is kept running (its crons keep firing
-  and billing — the README's "Switching template" covers the `removed` remedy).
-- **`longform` is not provisionable yet.** `defineProject` refuses any template list that is not
-  the engine's own registry for the blueprint, and `@usenaive-sdk/blueprints@0.7.0` has
-  `media: ["faceless", "clipping"]`. `naive.config.ts` therefore declares the intersection of what
-  this repo carries and what the installed engine admits, read off the exported `BLUEPRINTS`; the
-  `^0.8.0` pin in `package.json` is the version that adds `longform`, and the day it resolves the
-  declaration widens on its own with no edit to that file.
+A template is one crew: five seats, their prompts, their tool lists, their crons, their setup
+questions and their day-one cards. The three live in `templates/`. `ACTIVE` in
+`templates/index.ts` picks the one that runs. `templates/template.ts` holds what they share: the
+channel manager, the analyst's crons, the tool rules, the crew rules every prompt ends with.
 
 ## 2. What `naive up` provisions
 
-From `naive.config.ts`:
-
-| Resource | What |
-| --- | --- |
-| Project `media` | template `ACTIVE.name`, the running template's setup questions (`ACTIVE.questions`) — 4 on `faceless` and `longform`, 3 on `clipping` |
-| Identity `channel` | the one persona every agent, cron and social route acts as |
-| App `channel` (fullstack, required) | `deploy_dir: dist`, `mcp: "/mcp"`, env `NAIVE_API_KEY` (from env), `DASHBOARD_TOKEN` + `DASHBOARD_PASSWORD` (platform-generated); platform also injects `VETTA_MCP_TOKEN`, `NAIVE_API_URL`, `NAIVE_IDENTITY_ID`, `DATABASE_URL` |
-| Agents | the template's crew (5 seats each) |
-| Schedules | every agent's crons, owned as a complete set (omission deletes; matched by exact cron string) |
-| Board cards | one per `tasks[]` entry on the org orchestrator's board (§31.11), keyed `media:<key>`; the API's tick wakes each assignee whose card is `todo` and unblocked. Replaces the intakes — a template that seeds `tasks` declares none |
-
-Setup questions are capped at four by the SDK (`parseProject`, `@usenaive-sdk/blueprints@0.7.0`;
-0.6.0 capped them at three). Every template spends one on `platform` (multi-select of YouTube
-Shorts / TikTok / Instagram Reels) and one on `cadence`; `faceless` and `longform` ask `niche`,
-`clipping` asks `sources` (reference channel URLs). The two generating templates spend the fourth
-on `reference` — a channel or video to model the piece on, the one question that may be left blank
-(ADR-0757). The displaced question (tone/audience) is asked by the channel manager on day one via
-`ask_operator`.
-
-## 3. The crews
-
-Every template shares `channel-manager` (the `required` seat, and the one Chat talks to —
-`routes.ts` looks it up by name) and `analyst`. Every agent runs `anthropic/claude-sonnet-5` with a
-budget of $60/day and $20/task (`templates/template.ts`, sized around one ~$9.00 render) — except
-Long Form's `producer` at **$150/day and $75/task**, which renders `ceil(seconds / 30)` segments
-and joins them in one session.
-
-### faceless
-
-| Agent | Role | Extra tools | Skills | Hands off to | Crons (America/New_York) |
-| --- | --- | --- | --- | --- | --- |
-| channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | Mon 09:00 plan (+ teardown refresh) · daily 08:00 queue sweep · daily 18:00 comments |
-| trend-scout | Trends & briefs | web_search, web_fetch | video-trend-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
-| scriptwriter | Hooks & scripts | web_search, web_fetch, view_image, **bash** (samples frames out of the exemplars) | short-video-hooks, caption-writing, reference-teardown | producer | daily 06:30 |
-| producer | Video production | generate_video (models pinned: veo-3.1, seedance-2.5), generate_image | — | — | daily 07:00 |
-| analyst | Performance | social.post_metrics | channel-report | — | Mon 07:30 |
-
-Pipeline: scout files briefs at `stage: brief` → `send_to_agent(scriptwriter, wait:false)` with
-the ids → scriptwriter claims the brief (`scripting`, `expected_stage: brief`) and writes the
-**video project** for it (`channel.create_project`, `kind: generation`, `post_id` the brief:
-scenes with prompt/seconds/voiceover/on-screen text, model, style template, caption) — that write
-moves the brief to `scripted` — and hands the project ids to the producer → producer claims the
-plan (`channel.update_project`, `status: rendering`, `expected_status: planned`), renders the
-scenes with `generate_video`, and finishes it (`status: rendered`, `expected_status: rendering`,
-`media_url`) — that write puts the video and caption on the brief's row at `stage: rendered`.
-Crons are the fallback that picks up whatever a handoff missed.
-
-### longform
-
-| Agent | Role | Extra tools | Skills | Hands off to | Crons (America/New_York) |
-| --- | --- | --- | --- | --- | --- |
-| channel-manager | Channel lead | web_search, web_fetch | caption-writing | — | as above |
-| researcher | Topics & sourcing | web_search, web_fetch | video-trend-brief | writer | Mon/Wed/Fri 05:00 |
-| writer | Arc & script | web_search, web_fetch, view_image, **bash**, publish_file | long-form-arc, caption-writing | producer | Mon/Wed/Fri 05:30 |
-| producer | Render & assembly | generate_video (models pinned), **bash**, publish_file | video-assembly | — | Mon/Wed/Fri 06:00 ($70) |
-| analyst | Performance | social.post_metrics | channel-report | — | Mon 07:30 |
-
-Pipeline: researcher files a topic brief carrying **1–3 exemplar video URLs** for that topic and
-format → writer opens the exemplars *before* planning (browser for the page and its stills, bash
-to sample frames across the video) and files the video project, where **every scene names the
-exemplar and the moment its grammar came from** → producer renders and assembles.
-
-**Assembly is the part with no tool behind it.** `generate_video` bounds `seconds` at
-`.int().min(1).max(60)` in the schema (`packages/core/src/schema/media.ts:102`), but the model
-behind it refuses anything over **30** — 60s and 59s come back HTTP 400, everything measured at 30
-and below rendered — so `MAX_RENDER_SECONDS` is 30 and a 60–180s piece is
-`segmentsOf(length)` = `ceil(max / 30)` = **6** separate renders. Nothing on the platform joins
-video — `clip_video` cuts and never joins — so the producer joins its own segments with **ffmpeg
-in its sandbox** and then calls `publish_file`. That is the entire reason this seat holds `bash`
-and a $75 ceiling.
-
-Because segments are generated independently they never match mid-shot: a seam inside a continuous
-shot is a visible cut in the finished file. So the writer must end a shot exactly on each
-30-second mark, and the producer must check that it did before rendering. The demo plans in
-`seed/projects.ts` (`LONGFORM_PROJECT_SEEDS`) are written that way on purpose, seams called out in
-a comment beside the scenes.
-
-### clipping
-
-| Agent | Role | Extra tools | Skills | Crons |
-| --- | --- | --- | --- | --- |
-| channel-manager | Channel lead | web_search, web_fetch | caption-writing | as above |
-| scout | Source watch | web_search, web_fetch | clip-selection | daily 06:00 |
-| clipper | Clip production | clip_video | clip-selection | daily 07:00 |
-| caption-editor | Captions & titles | web_search | caption-writing | daily 07:30 |
-| analyst | Performance | social.post_metrics | channel-report | Mon 07:30 |
-
-No handoffs here; the chain is ordered purely by cron time (plans → cuts → captions). The scout
-files each moment as a **clipping project** (`channel.create_project`, `kind: clipping`: the
-source URL, `from`/`to`, and the *reason* the moment travels); the clipper claims it
-(`status: rendering`, `expected_status: planned`), cuts with `clip_video`, and finishes it
-(`status: rendered`, `media_url`) — since a clipping plan has no brief row, that write **creates**
-the pending post; the caption-editor then reads the plan (`channel.get_project`) for the source
-and reasoning before rewriting the post's caption. The one rule every seat repeats: cut only from
-reference channels the context names.
-
-## 4. What the prompts say
-
-Every `system` is composed by `agent()` in `templates/template.ts` as
-**preamble → seat brief → approval gate**:
-
-- `CONTEXT_PREAMBLE` — read `project_context` first; the answers are the client's, never invent a
-  missing one, ask the operator instead.
-- The seat's own `brief` (quoted in full in each template file).
-- `approvalGate` — file every finished piece as a *pending* post via `channel.create_post`, never
-  publish yourself; sign it (`agent`, `account`, `media_url`, `source`, `platform`); a brief is a
-  pending post with no media, a video project is the plan a video is made from — another seat
-  renders or cuts it, and that files the post; `session_spend` is what the session was charged,
-  per media job — quote it, never estimate; the tools offered this turn are the complete list;
-  request a missing one once with `request_tools`; ask the operator once with `ask_operator`;
-  never describe a video you did not render.
-
-Every card body gets `CARD_ORDER` appended: read the card with `board_read`, claim it, file the
-work, and close it to `done` with a note — closing is what releases the cards blocked on it. An
-empty queue on day one is not a finding; a card that waits on nothing is waiting on nothing. Day-one work per seat is set-up, filed as notes into the queue (`source` = "channel
-plan", "style choice", "hook style", "report skeleton", "clipper check", "caption style"); the
-trend-scout is the exception and files five real briefs, as the clipping scout files five real
-clipping projects.
-
-## 5. Tool permissions
-
-`toolset()` in `templates/template.ts` builds each agent's grant:
-
-- `default_config.permission = "ask"` — this is how connected-account tools
-  (`<connector>.<operation>`, not enumerable ahead of time) become reachable, and every such call
-  parks at the Approvals screen.
-- Every `BUILTIN_TOOLS` entry the seat was not granted is `deny` by name — including the sandbox
-  tools (read/write/edit/ls/find/…), so no session provisions a machine.
-- **`bash` is the one sandbox tool a seat may hold on purpose, and three do:** Short Form's
-  `scriptwriter` and Long Form's `writer` sample frames out of the exemplars they plan against,
-  and Long Form's `producer` joins its segments with ffmpeg. It is written by name either way —
-  `{enabled: true, permission: "allow"}` on those three, `{enabled: false, permission: "deny"}` on
-  everyone else — never left to the default; `naive.config.test.ts` asserts exactly that shape on
-  every agent. The reason it was granted at all: nothing in this pipeline had ever seen a video.
-  `view_image` takes `fil_` ids and refuses URLs, and `browser` screenshots a page rather than a
-  frame, so without a shell no seat could look inside the piece it was modelling. Measured cost of
-  frames → vision → teardown was **$0.027** against a ~$9.00 render.
-- Granted `allow`: `project_context`, `read_skill` (if the seat has skills), the seat's own tools,
-  `social.accounts`, and the ten dashboard tools `channel.list_posts / get_post / create_post /
-  update_post / list_projects / get_project / create_project / update_project /
-  list_style_templates / list_accounts`. Planner and executor are separated by the *other* tools,
-  not these: the scriptwriter and scout have no `generate_video` / `clip_video`, so they can only
-  write the plan; the producer and clipper have them, and are told the plan is not theirs to write.
-- Granted `ask`: `ask_operator`, `request_tools`.
-- **Denied: `social.post`, on every seat.** Publishing is the operator's Post now alone. It is
-  written `deny` by name and last (`PUBLISH_TOOL`), because it is not a built-in: left out, it
-  would fall to the `ask` default.
-- Seats with `handoffs` also get `send_to_agent` and `list_agents` at `allow`.
-
-The dashboard surfaces both parked states: `GET /api/sessions` lists them, `POST
-/api/sessions/:id/tool_confirmations` approves/denies a parked tool call,
-`POST /api/sessions/:id/answers` answers an `ask_operator` question (`server/proxy.ts`).
-
-## 6. The dashboard's MCP tools (`server/mcp.ts`)
-
-Hand-rolled JSON-RPC (`initialize`, `tools/list`, `tools/call`), bearer = `VETTA_MCP_TOKEN`.
-Nothing here approves, rejects or publishes.
-
-| Tool | Behaviour |
-| --- | --- |
-| `list_posts {status?, stage?}` | filters the queue; stage read via `postStage()` |
-| `get_post {id}` | one row |
-| `create_post {caption, media_url?, platform?, agent?, account?, source?, stage?, status?}` | lands `pending` (or `ready`); `platform` refused if not in `POST_PLATFORMS`, defaults to the customer's first setup pick (`server/channel.ts`) |
-| `update_post {id, title?, caption?, media_url?, platform?, stage?, expected_stage?}` | only `pending`/`ready` rows; `expected_stage` mismatch → refused (atomic claim under the store lock); a row with media cannot move to a stage before `rendered`; `rendered` requires media |
-| `list_projects {status?, kind?}` | the plans, filtered |
-| `get_project {id}` | one plan |
-| `create_project {kind, title, brief, post_id?, agent?, platform?, account?, style_template?, model?, scenes?, sources?, caption?}` | lands `planned`; `generation` requires `scenes[]` (`prompt`, `seconds > 0`, `voiceover?`, `text?`, `model?`), `clipping` requires `sources[]` (`url` http(s), `reason`, `from?`, `to?`); `model` must be one of `VIDEO_MODELS` (defaults to the first for generation); a `post_id` must be a post with no plan and no media yet, and the post moves to `stage: scripted` |
-| `update_project {id, status?, expected_status?, media_url?, agent?, …plan fields}` | `expected_status` mismatch → refused (the claim); `rendered` requires `media_url` and is final — never back to `planned`/`dropped`, never rendered again (a second `media_url` is refused; only the words can still change); `dropped` can only return to `planned`; a plan whose post was rejected cannot be claimed or finished; finishing writes media, caption and `stage: rendered` onto the linked post, or creates a pending post when the plan has none |
-| `list_style_templates` | the channel's style library |
-| `list_accounts` | platform's connected accounts, or the accounts the queue names when social isn't activated; a 401/403/500 is an error, never an empty list |
-
-The `create_post.platform` description is generated per request from the customer's setup answer
-(`toolsFor(channels)`), so two installs read two different sentences.
-
-**The length a plan is held to is the running template's, not the blueprint's.** `server/mcp.ts`
-reads `ACTIVE.length` rather than a module constant, so `create_project` refuses a generation plan
-whose scenes do not sum into *this* template's window — 15–30s on `faceless`, 60–180s on
-`longform`, and the refusal quotes the same range the crew was briefed with. While it was a
-constant, that check was Short Form's 15–30 on every template: a Long Form crew could not file a
-plan of the length its own card asked for, and the refusal named a range nobody had given it.
-
-The same read decides how the tool describes assembly. At one segment the scenes are *"rendered as
-ONE video, not joined"*; past `MAX_RENDER_SECONDS`, on a template whose crew actually has the
-producer that joins, the description instead tells the planner the piece is rendered in segments, and to put the beats on
-those seams rather than across them.
-
-## 7. Storage — what "the DB" actually is
-
-There is **no relational schema for posts**. The whole store is one JSON document:
-
-```ts
-interface StoreState { posts: Post[]; projects: VideoProject[]; templates: StyleTemplateSeed[]; settings?: { publishAs?: "private" | "unlisted" | "public" } }
-```
-
-- **Local (`pnpm serve`)** — `server/store.ts` persists it as one JSON file under `data/`, seeded
-  with the template's demo rows.
-- **Deployed** — `server/api-entry.ts` keeps the same document in the platform app database
-  (Postgres via `DATABASE_URL`) as a single row:
-
-  ```sql
-  create table if not exists channel_store (id text primary key, state jsonb not null);
-  -- one row, id = 'singleton'
-  ```
-
-  Every request does `begin` → `select … for update` → run the handler over the in-memory state →
-  `update … set state` (if dirty) → `commit`. The row lock is what serialises concurrent
-  `create_post` calls and makes an `expected_status` claim on a project atomic. A fresh
-  deployment starts empty (no demo rows reach the bundle — `src/no-seed.test.ts`); a document
-  written before projects existed is read with `projects ??= []`.
-
-Style templates (`seed/style-templates.ts`: `{name, prompt, trend, image}`) live in the same
-document. Connected accounts, agents, sessions and deployments are **not** stored here — they are
-read live from the platform through `server/proxy.ts`.
-
-### The `Post` row (`seed/posts.ts`)
-
-```ts
-interface Post {
-  id: string;                 // post_…
-  title: string;              // cut from the caption if not given
-  caption: string;            // brief text before scripting, publishable caption after
-  mediaUrl?: string;          // URL or fil_… id; the receipt that a render was paid for
-  platform: "instagram" | "tiktok" | "youtube";
-  account?: string;           // connected handle, when named
-  status: "pending" | "ready" | "approved" | "posted" | "rejected";
-  agent?: string;             // who filed it
-  source?: string;            // brief / source video / style template / note kind
-  kind: "clip" | "produced" | "multi";
-  stage?: "brief" | "scripting" | "scripted" | "rendering" | "rendered";
-  stageAt?: string;           // ISO; lets the 08:00 sweep age out dead claims
-  duration?: string;
-  scheduledFor?: string;
-  postedAt?: string;          // ISO, stamped by the store when status → posted
-  rejectedReason?: string;
-  views?: number;
-  likes?: number;
-  projectId?: string;         // the plan this row was made from, when there is one
-}
-```
-
-`postStage()` derives `rendered` for a stageless row carrying `mediaUrl` or `duration`; a row with
-neither stage nor media is a *note* (plan, report, style choice) and belongs to no pipeline. The
-UI's `rowKind()` (`src/data.ts`) maps rows to `piece | production | note` from the same fields.
-
-### The `VideoProject` row (`seed/projects.ts`)
-
-The plan a video is made from — one per piece, written before anything is rendered or cut, and
-the only thing an execution seat reads before it spends.
-
-```ts
-interface VideoProject {
-  id: string;                 // the brief's id when written on one, else proj_… — and the post its render files takes that same id
-  kind: "generation" | "clipping";
-  status: "planned" | "rendering" | "rendered" | "dropped";
-  statusAt: string;           // ISO; lets the 08:00 sweep age out a dead claim
-  createdAt: string;
-  title: string;
-  brief: string;              // the reasoning: why this piece, for whom
-  platform: "instagram" | "tiktok" | "youtube";
-  account?: string;
-  agent?: string;             // who planned it
-  postId?: string;            // the brief it was written on, or the post its render created
-  styleTemplate?: string;     // generation: the look, from channel.list_style_templates
-  model?: string;             // generation: one of VIDEO_MODELS; a scene may override
-  scenes?: Scene[];           // generation: the shots, in order
-  sources?: ClipSource[];     // clipping: the videos to cut from, and why
-  caption?: string;           // the publishable caption, copied to the post when the render lands
-  hook?: string;              // generation: the first line, verbatim — what is said and what is on the frame at 0:00
-  rejectedHooks?: string[];   // the hooks written and not kept, and why the kept one beat them
-  retention?: string;         // what holds the viewer past 0:03, and past 0:07
-  cta?: string;               // the one action the close asks for
-  facts?: Fact[];             // the claims the script rests on, each with its source
-  sound?: Sound;              // music, voice and sound design
-  referencePattern?: string;  // which pattern of the teardown this piece is an instance of
-  referenceFrames?: string[]; // public image URLs; the producer passes the FIRST as the render's opening frame
-  sessions: ProjectSession[]; // the sessions that touched it — the one the Studio talks to is the last
-  renders?: Render[];         // the videos a revision replaced, oldest first
-  backfilledAt?: string;      // a legacy plan whose sessions were looked for and not found — looked for once
-  revision?: {                // the operator's open revision, while it renders
-    openedAt: string;
-    sessionId: string | null; // null until the fresh renderer session it opened is recorded
-    note: string;
-    replaces?: Render;        // the video it re-renders, captured when the revision opened
-  };
-}
-interface Scene      { prompt: string; seconds: number; beat?: SceneBeat; voiceover?: string; text?: string; model?: string }
-interface Fact       { claim: string; source: string }
-interface Sound      { music?: string; voice?: string; sfx?: string[] }
-interface ClipSource { url: string; from?: string; to?: string; reason: string }
-interface ProjectSession { id: string; role: "planned" | "rendered" | "revised"; at: string }
-interface Render         { mediaUrl: string; at: string; sessionId?: string }
-```
-
-`sessions` is migrated on read (`project.sessions ??= []`), the way `state.projects ??= []` is.
-
-Characters and narrators are not modelled yet — a scene carries the narration as text
-(`voiceover`) and the look as a style template plus model, which is what `generate_video` can
-take today. When the platform grows named voices or characters they belong on `Scene`.
-
-**One id from brief to plan to post.** A plan written on a brief (`post_id`) takes the brief's id;
-a standalone plan gets `proj_…` and the pending post its finishing write creates takes that id.
-Either way the operator follows a single id across Posts and Projects, and a renderer told to
-render `X` claims exactly `X`.
-
-Status is mirrored onto the linked post's `stage`: `rendering` ↔ `rendering`, `planned` ↔
-`scripted`, `rendered` (with media) ↔ `rendered`. The operator's moves on a plan, from the
-Projects screen: **Render** — `POST /api/projects/:id/render` opens one session with the plan's
-renderer (`RENDERER` in `templates/template.ts`: `producer` for generation, `clipper` for
-clipping) carrying the id, the guarded claim/finish moves on that id, and the plan as JSON; the
-row stays `planned` until the renderer's own `expected_status: planned` claim lands, so a session
-that never starts leaves nothing to free — and `PATCH /api/projects/:id {status: dropped | planned}`
-for `planned → dropped` and `dropped → planned` only. Never `rendered`, which only the finishing `update_project` (with
-its `media_url`) can write; a rendered plan is refused there with a 409, and so is a `rendering`
-one, which its executor holds until the render lands or the manager's sweep frees it. Rejecting a
-post from the Posts screen drops the unrendered plan written on it, and `create_project` refuses
-a `post_id` that is not pending or ready, so a rejected brief is never rendered. Retargeting a
-plan (`platform`/`account`) retargets its pending or ready post with it.
-
-### The lifecycle, with the revision loop
-
-```
-planned → rendering → rendered ⟲ revise
-                ↑          |
-                └──────────┘  POST /api/studio/:id/revise (the operator, from the Studio)
-```
-
-`rendered` is final to every agent: the media on the row is the receipt for a paid render, and
-`update_project` refuses to move a rendered plan anywhere or to take a second `media_url`. The one
-way back through that guard is the operator's, by name: `POST /api/studio/:id/revise` opens a
-revision (`openRevision` in `server/store.ts`, under the same lock as the claim) — `revision =
-{openedAt, sessionId, note, replaces}`, `rendered → rendering`, the post's `stage` back to
-`rendering` and a `ready` or `rejected` post back to `pending` (its `rejectedReason` cleared).
-`replaces` is the video being re-rendered, taken at that moment — `{mediaUrl, at: when that
-render landed, sessionId: the session that made it}` — so no later session (the revision's own,
-once recorded) can be mistaken for it. The claim comes BEFORE the note is sent upstream: a second
-revise meanwhile is refused (409) without asking the renderer for anything, and a send the
-platform refuses gives the claim back (`closeRevision`: `rendered` again, the landing time
-restored). The renderer then finishes exactly as it did the first time (`status: rendered`,
-`expected_status: rendering`, `media_url`); because a revision is open, the store pushes
-`replaces` onto `renders[]`, clears the revision, puts the new file on the post at
-`stage: rendered` — and leaves the post `pending`. Approval is the operator's, every time. While
-the revision is open the plan goes forward only: `update_project` refuses to move it anywhere
-but `rendered`, so the manager's sweep cannot take the operator's paid claim for a dead one, and
-the store holds the status either way. With one exception, because the finishing write is
-otherwise a revision's only exit and a renderer dies for routine reasons (a blown per-task
-ceiling): a revision more than a day old is a dead claim like any other, and the sweep's
-`status: planned` frees it — to `rendered` on the cut the plan already has (`closeRevision`),
-never to `planned`, which would buy that cut a second time. A plan
-still on its first render (`rendering`, no revision open) is one claim already: a note opens
-nothing and is queued on the session making it, framed for THAT render — fold the note into the
-video before it is filed, finish once with the write the renderer already owes (`midRenderFrame`; it opens "Revision of …" like every framed turn, so the Studio folds it).
-When that session is over there is nobody to hear it, and the note is refused rather than a second
-renderer opened on the same claim — "revise when it lands".
-
-## 7b. The Studio
-
-The Studio is where the operator opens one video and talks to THE SESSION THAT MADE IT. Nothing
-about that is inferred at read time; it is bound when the write happens:
-
-| Who writes | What is recorded on `project.sessions` |
-|---|---|
-| **Render** (`POST /api/projects/:id/render`) | the session it opened, `{role: "rendered"}`; the create carries `metadata: {project_id}` so the platform's row names the plan too |
-| `create_project` over MCP | the calling session as `{role: "planned"}` |
-| `update_project` moving to `rendering` or `rendered` over MCP | the calling session as `{role: "rendered"}`; a claim that names no `agent` is the plan's renderer's (`RENDERER[kind]`) |
-| **Revise** when the last session is over | the fresh renderer session as `{role: "revised"}` |
-
-An MCP call carries no session id, and an agent cannot see its own; the write names its seat
-(`agent`). So the server asks the platform for that seat's running sessions
-(`GET /v1/sessions?agent_id=&status=running&limit=2`) and records the one it finds when there is
-exactly one — zero or several, and it records nothing rather than guess. The lookup is best-effort:
-it can fail, and the write still lands, because the write is the point and the binding is a
-convenience.
-
-`GET /api/studio/:id` (a project id or a post id — a post's `projectId` resolves its plan) answers
-`{project, post, session}`, with `session` the LATEST of `project.sessions` read live from
-`GET /v1/sessions/:id` as `{id, status, stop_reason, created_at}`. A terminal one (`completed`,
-`failed`, `cancelled`) is still returned — the screen shows what happened, and the next send opens
-a new session. With no platform configured, `session` is `null` and the rows are still 200. A plan
-made before plans remembered their sessions is backfilled once: the twenty newest sessions of the
-seat that last worked it — the planner's (`project.agent`) while it is `planned`, the renderer's
-once claimed — every page of each one's events (`after_seq`, a hundred at a time — a render's
-finishing write lands after many spans), for a `tool.started` `channel.update_project` whose
-`args.id` is this plan, or a `tool.completed` `channel.create_project` whose `output` (the plan, as
-JSON) has this id — a brief's plan takes the brief's id, so the call itself names only `post_id`.
-The first hit is recorded (`planned` or `rendered`). The scan runs with the document released —
-it is dozens of platform reads, and the store is one row every write in the channel waits on —
-and records under a fresh lock only if the plan still has no session by then. A miss that read
-every candidate whole is remembered too (`backfilledAt`), so the Studio's poll does not repeat
-twenty-odd upstream reads every four seconds; a scan the platform cut short is tried again next
-time.
-
-`POST /api/studio/:id/revise {message}` → `202 {session, acceptedSeq, opened}`. It refuses (409):
-
-- a post that is `approved` or `posted` — "reject it first — an approved video is the operator's
-  word": an approval is a decision already given, and a revision under it would publish something
-  the operator never saw;
-- a plan whose revision is already open — the note it carries lands as the next render; a second
-  one would pile a second render on the first.
-- a plan whose first render is still out and whose session can no longer hear — see above.
-
-Otherwise the note goes to the session that made the video when it is not terminal — the last one
-recorded `rendered` or `revised`, by the `role` on the record and never simply the last recorded,
-because a plan remembers its planner too and binding is best-effort — queued (`queue: true`), never
-interrupting, because a running render is paid for — or a new renderer session is opened on the plan
-(`metadata: {project_id}`, recorded `revised`, `opened: true`). A
-`rendered` plan is reopened as above; a `rendering` one changes no state — the note is queued on
-the session making the render; a `planned` one sends the note to its planning session and asks for no
-render; a post with no plan at all goes to the channel-manager, carrying the post's title, caption
-and id, and nothing is recorded. The renderer's note is framed so it stays on the same plan:
-"Revision of video project `<id>`. Read it with channel.get_project … finish with
-channel.update_project id `<id>`, status rendered, expected_status rendering … Do not create a
-second project, do not approve or post anything." The producer's and clipper's briefs say the same
-(`templates/`), and the manager's says a revision is the operator's move, never its own.
-
-A note on a `rendered` plan is the one message on this screen that spends: it renders the plan
-again, at `ONE_RENDER_MICRO_USD` (~$9.00, measured per second). So the composer says so under itself before a
-word is typed, and Enter arms the spend rather than making it — the press that sends it is a button
-naming the price. Every other note here (a plan's words, a render already out) costs nothing and
-leaves on Enter as it always did.
-
-In the Studio's transcript that frame is the server's, not the operator's: a user turn that
-carries it shows the operator's note as the bubble and the frame behind a labelled fold, and the
-echo of a sent note is matched on its `Operator:` tail. While the plan renders the pane keeps the
-relay open past `session.idle` — reopening every five seconds for as long as the document is
-visible, with no cap, since a render takes minutes and the woken session's finishing write must
-stream in. On the Post tab the operator has the queue's moves: Approve and Reject on a `pending`
-or `ready` post (Reject writes `rejectedReason: "Rejected by you"`, as the queue does), and Reject
-alone on an `approved` one — the way to revise an approved video is to take the approval back
-first. While a revision is open neither is offered, and `PATCH /api/posts/:id` refuses a verdict
-(409) on the post: the row still carries the cut being replaced, so an approval would land on the
-new cut unseen and a rejection would drop the plan under it. The finishing write lands the new cut
-`pending`. Nothing publishes from the Studio.
-
-## 8. Post lifecycle end to end
-
-1. Agent files → `channel.create_post` → `status: pending` (agents can also send `ready`). A
-   faceless piece starts as a brief (`stage: brief`, no media); a clip starts as a plan alone.
-2. A planner writes the video project (`channel.create_project`) — on the brief for generation,
-   standalone for clipping. An executor claims it (`update_project`, `expected_status: planned`),
-   renders or cuts, and finishes it with `media_url`; that write puts the video on the post (or
-   creates the post) at `stage: rendered`. The manager's 08:00 sweep tidies captions/kind/day,
-   returns stale `-ing` claims (>1 day) on posts and plans to the prior state — but never a row
-   with media or a rendered plan.
-3. Operator, on Posts: `PATCH /api/posts/:id` moves between `pending / ready / approved /
-   rejected` (`posted` is refused there with a 409), or edits the copy (`{title?, caption?}`).
-   Each approve, reject and edit is also sent best-effort to the platform as a review
-   (`POST /v1/reviews`: `decision`, the typed `reason` or null — never the "Rejected by you"
-   placeholder — `file_ids`, `subject.app_post_id`, `before`/`after` copy); capped at 2s and never
-   fails the move (`routes.ts` `sendReview`).
-4. Operator presses Post now → `POST /api/posts/:id/post-now` (`routes.ts` `postNow`): requires
-   `approved`, a publishable platform, and media; then `POST /v1/identities/:idn/social/posts`
-   with `{content, title?, platforms:[…], visibility?, media_urls | file_ids}` — `visibility` is the
-   channel's "Publish as" (Channel settings, `GET/PATCH /api/settings`, default `unlisted`), sent
-   only to a network that takes one (YouTube; the platform refuses it on TikTok and Instagram);
-   on success the store stamps
-   `status: posted`, `postedAt: <ISO now>`, `views/likes ??= 0`.
-5. Analytics reads only `posted` rows and derives totals and the daily series from `postedAt`,
-   `views` and `likes` — there is no separate metrics table; views/likes are whatever is on the
-   row (the analyst agent reads real metrics only via connected-account tools where offered).
-
-No agent can call `social.post` (§5). It used to be `ask` on every seat, and an approved call
-published through the platform without touching the store, so the row stayed `approved` and the
-same video could go out a second time on Post now.
-
-## 9. Chat
-
-`POST /api/chat {message}` → resolves the `channel-manager` agent id → `POST /v1/sessions
-{agent_id, message}`; the UI then streams `GET /api/chat/:ses/stream` (SSE proxy). The manager
-answers from the queue and routes work to the seat it belongs to; it does not publish.
-
-The rail lists the manager's sessions from `GET /api/chat` (`GET /v1/sessions?agent_id=`, newest
-first, twenty at most), each titled by the first line of its first user message — read once from
-the session's events and held in a module-level map, since a first message never changes. Opening
-`/chat/:ses` reduces `GET /api/chat/:ses/events` (`message.completed`, both roles) into the
-transcript, then streams from the last `seq`; a follow-up goes through `POST /api/chat/:ses/messages`
-→ `POST /v1/sessions/:ses/messages {message, queue: true}`, so a running session holds it instead
-of answering `session_running`.
-
-## 10. Observed vs. inferred
-
-Everything above is read from the repository. Two things are not verifiable here: how the platform
-composes `agents[].handoffs` / `tasks` on the wire (only the SDK's declaration shape is visible),
-and what the analyst's connected-account metrics tools return — no code in this repo reads views
-or likes from a network, so today those numbers on a row are whatever was filed or seeded.
+- **The crew** of the running template — five agents, each acting as the `channel` persona.
+- **The `channel` identity**, with `connections.social` mapping each network answer to its
+  platform id, for the studio's Add connections step.
+- **The crons**: one on the head of the chain, two on the analyst. Every other seat declares
+  `schedules: []`.
+- **The day-one cards** on the company board, keyed `media:<key>`. A re-apply answers the card it
+  already wrote.
+- **The setup questions**, which the studio asks before anything is provisioned.
+
+No app, no database, no deploy, no secret beyond your own `NAIVE_API_KEY`.
+
+## 3. The board is the pipeline
+
+Every piece is a chain of cards. Each card is assigned to one seat. Its body is that seat's brief.
+
+- A seat is woken when its card is **due**: `todo`, assigned, no open blocker, and the seat holds
+  no other `doing` card (canonical-spec §28.18). The platform's tick starts the session.
+- The seat reads the card (`board_read`) and claims it (`board_write update`, `doing`).
+- It does its step. Then it hands on: `board_write create` — the next card, assigned to the next
+  seat, `blocked_by` its own card, with its output as the new card's body.
+- It closes its own card `done`, with a note naming what it made and the new card's id. Closing is
+  what wakes the next seat.
+- A card it cannot finish goes to `blocked` with a comment. The org's CEO owns the board and is
+  told when a card closes or blocks.
+
+The cards per piece:
+
+| Template | Head starts | Then | Then | Ends at |
+|---|---|---|---|---|
+| `faceless` | **Plan** (scriptwriter) — body: the brief | **Render** (producer) — body: the plan | **Publish** (channel-manager) — body: file id, caption, networks | approval card |
+| `longform` | **Plan** (writer) — body: the brief | **Render** (producer) — body: the plan, cut into segments | **Publish** (channel-manager) | approval card |
+| `clipping` | **Cut** (clipper) — body: source URL, start, end, why | **Caption** (caption-editor) — body: file id, source, creator | **Publish** (channel-manager) | approval card |
+
+Two platform rules keep this safe:
+
+- A card's body cannot be edited after it is created (`board_write update` moves status and writes
+  a note). That is why each seat writes its output into the **next** card, not its own.
+- A session that ended its turn to wait for a render is not parked; the render's completion wakes
+  it (`packages/db/src/queries/board.ts`, ADR-0809). So a producer can wait for its `fil_` id.
+
+A card is woken at most three times. After that it is parked for the CEO.
+
+## 4. The crews
+
+### `faceless` — Naive Short Form v1, 15–30 seconds
+
+- **trend-scout** (Mon & Thu 06:00): reads the teardown and the newest weekly report. For each slot
+  the cadence needs, picks a topic, opens one to three real videos doing it well, and creates a
+  Plan card whose body is the brief.
+- **scriptwriter**: opens the exemplars first — the browser for the page, `bash` to sample frames
+  through the first three seconds, `view_image` to look. Then research, three hooks, beats, shots.
+  Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
+  15–30, model, facts with sources, caption, networks.
+- **producer**: one `generate_video` call — the shots in order as one take, 9:16, the plan's model.
+  Creates the Publish card with the `fil_` id.
+- **channel-manager**: publishes (section 5).
+- **analyst**: the numbers daily, the report weekly (section 6).
+
+### `longform` — Naive Long Form v1, 60–180 seconds
+
+`generate_video` renders at most 30 seconds a call (measured: the model refuses 59 and 60). So a
+piece is up to six segments, rendered separately and joined with ffmpeg.
+
+- **researcher** (Mon, Wed & Fri 05:00): one subject a fire, four or five sourced claims, one or two
+  exemplars of this length — never shorts — with where each opens and turns.
+- **writer**: samples exemplar frames at their chapter boundaries, then plans acts and shots. No
+  segment runs over 30 seconds; every segment boundary lands on a shot change, because two
+  independently rendered segments never match mid-shot.
+- **producer** ($75/task): `find_files` for segments already filed under the Render card's id,
+  renders only what is missing, `fetch_file`s each into its sandbox, probes, joins with ffmpeg,
+  probes the join, `publish_file`s it, and creates the Publish card.
+- **analyst**: leads with retention — where the audience left, against the plan's acts.
+
+### `clipping` — Naive Clipping v1, 15–60 seconds
+
+- **scout** (daily 06:00): watches only the named reference channels, screenshots each episode it
+  picks from, and creates a Cut card per moment.
+- **clipper**: `clip_video` on the whole source URL, vertical; picks the clip that is the card's
+  moment; creates the Caption card with the `fil_` id.
+- **caption-editor**: title, caption, hashtags, and a credit to the original creator on every clip;
+  creates the Publish card.
+- **analyst**: by source and by clip.
+
+### Day one
+
+Each template seeds five or six cards. Set-up first — the channel plan, the reference study, the
+look, the voice, the report skeleton — then one `first-piece` card for the head of the chain. That
+piece runs its full chain to the approval card. The reference study never asks the operator: a
+blank reference answer means go and find two or three real videos in the niche.
+
+## 5. Publishing
+
+`channel-manager` is the one seat that publishes. It is on every template, it owns the calendar,
+and it spends nothing on renders — so the seat that bought a video never decides it ships.
+
+Woken on a Publish card, it:
+
+1. reads the plan behind it and fixes the caption where it drifts;
+2. reads the card's comments — a post id already there is never posted again;
+3. calls `social.post` with `file_ids`, the caption as `content` (first line is the YouTube title),
+   and only networks the setup answers list;
+4. posts YouTube on its own call with `visibility` — the setup answer, else `unlisted` — and the
+   other networks on a second call without one (the platform refuses a visibility on them);
+5. sets `scheduled_at` to the next free slot: daily is every day, 3× a week is Monday, Wednesday
+   and Friday, weekly is Friday — 17:00 `America/New_York`, with that date's UTC offset;
+6. comments each post id on the card the moment it is approved, then closes the card.
+
+`social.post` is `ask` for this seat, so each call stops on the platform's approval card: the
+video, the caption, the time it goes out, the visibility, and **Allow** / **Don't allow**. There is
+no "Ask for changes" button. A Don't allow reaches the seat as *"The person DENIED this call: …
+Do not issue it again unchanged."* The prompt says: re-file a corrected post from what they said,
+never an identical one; with no reason given, ask once what to change.
+
+While a post waits for approval, the manager holds that card `doing`, so its next Publish card
+waits too. One post waits for you at a time.
+
+## 6. Analytics
+
+- **Daily 09:05**: `social.post_metrics` with `since_days 14`. The platform stores each reading, so
+  every post gets a history. Outliers get a one-line comment on their Publish card.
+- **Monday 07:30**: the weekly report, created as a **Weekly report** card for the channel manager.
+  It ends with two things to make more of and one to make less of.
+- The manager is woken on it and applies what is its own — captions and posting times. The head of
+  the chain reads the newest report before it starts the next pieces.
+
+`post_to_channel` is not used: the platform offers it only to a session seated in a chat room, and
+a cron fire is not.
+
+## 7. Tool permissions
+
+`toolset` in `templates/template.ts` builds every seat's list:
+
+- default `deny`;
+- every built-in, every `social.*` tool and every platform publish-or-pay tool
+  (`ASK_BY_DEFAULT_TOOLS`: email, legal, wallet, card) the seat is not granted is written `deny`
+  by name — unnamed, the platform would default those to `ask`;
+- every seat: `board_read`, `board_write`, `project_context`, `find_files`, `session_spend`,
+  `browser` at `allow`; `ask_operator`, `request_tools` at `ask`;
+- `channel-manager`: `social.accounts` `allow`, `social.post` `ask`;
+- `analyst`: `social.post_metrics` `allow`;
+- `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
+- `generate_video` carries `config.models`, Seedance 2.5 first.
+
+## 8. Setup questions and `project_context`
+
+The studio asks up to four questions; the answers land on the install; every seat reads them with
+`project_context`. The engine prepends its own "read the project context first" preamble to every
+template agent, and our `CONTEXT_PREAMBLE` adds what the answers are on a media channel.
+
+## 9. What the platform cannot express yet
+
+Found while building this, with where it lives in the platform repo:
+
+- **A catalog artifact needs a built app.** `scripts/publish-artifacts.mjs:171-176` throws "an
+  artifact addresses at least one built tree"; `packages/core/src/schema/blueprint.ts:188` is
+  `trees: z.array(BlueprintTreeSchema).min(1)`; migration `0040_blueprint_artifact_trees.sql`
+  checks `jsonb_array_length(trees) > 0`. A data-only blueprint installs with `naive up`, not from
+  the studio.
+- **No setup answers without a catalog install.** `projectContextOf`
+  (`apps/api/src/routes/sessions.ts:135-146`) needs an install with a published artifact;
+  canonical-spec §31.8 says an apply from a working tree has no context.
+- **A template must still carry an app's screen fields.** The engine's `Template` type requires `kinds`,
+  `seed` and `words` (`packages/blueprints/src/template.ts:36-40`) and never reads them; we pass
+  them empty.
+- **Four questions per template.** `define.ts:388-390`. `faceless` and `longform` already ask four,
+  so the visibility question fits only on `clipping`. A choice question has no `default` field.
+- **A card has no attachments, and its body cannot change.** `board_write` offers
+  create / update / comment / assign (`apps/runtime-do/src/board-tools.ts:136-153`); `update`
+  refuses a title or `blocked_by` change (`apps/runtime-do/src/board.ts:189`). File ids travel in
+  bodies, notes and comments.
+- **The approval card has no "Ask for changes".** `apps/web/app/components/chat/Gate.tsx:157-163`
+  renders Allow and Don't allow; a reason is accepted on the wire but has no field on the card.
+- **No room for a cron.** `post_to_channel` is offered only to a session seated in a room
+  (`apps/runtime-do/src/team-tools.ts:399`), so the weekly report is a board card, not a team-channel post.
