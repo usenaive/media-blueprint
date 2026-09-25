@@ -18,6 +18,7 @@ import {
   lengthPhrase,
   PLATFORM_QUESTION,
   schedule,
+  VISIBILITY_QUESTION,
   task,
   type MediaTemplate,
 } from "./template.ts";
@@ -108,7 +109,10 @@ export const CLIPPING: MediaTemplate = {
     }),
   ],
 
-  /** The sources come first: they are the one answer no seat may work without and none may infer. */
+  /**
+   * The sources come first: they are the one answer no seat may work without and none may infer.
+   * Three are required, so the form has room for the optional visibility question.
+   */
   questions: [
     {
       key: "sources",
@@ -117,6 +121,7 @@ export const CLIPPING: MediaTemplate = {
       placeholder: "Channel or playlist URLs, one per line — the crew cuts from these and nowhere else",
     },
     PLATFORM_QUESTION,
+    VISIBILITY_QUESTION,
     CADENCE_QUESTION,
   ],
 };

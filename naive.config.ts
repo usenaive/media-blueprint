@@ -7,7 +7,7 @@
  * Re-running `naive up` is idempotent — every resource is keyed by name.
  */
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
-import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, PLATFORM_ANSWER_KEY, PLATFORM_CHOICES, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
 
 /**
  * Every template this repo carries that the installed engine admits. The engine refuses a repo
@@ -47,11 +47,21 @@ export const declaration = {
   /**
    * The channel persona. Every seat and every cron acts as it, and connected accounts hang off it:
    * the platform resolves `session → agent → identity → connected accounts`.
+   *
+   * `connections.social` maps each answer of the network question to the platform's id for it. The
+   * studio's Add connections step reads it, so after setup the operator is asked to connect exactly
+   * the accounts they picked — on the platform's own screen.
    */
   identities: [
     {
       name: CHANNEL_IDENTITY,
       description: "The channel itself — the persona its agents post, read and connect accounts as.",
+      connections: {
+        social: {
+          from: PLATFORM_ANSWER_KEY,
+          map: Object.fromEntries(PLATFORM_CHOICES.map((choice) => [choice.option, choice.platform])),
+        },
+      },
     },
   ],
 };

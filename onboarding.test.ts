@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { declaration } from "./naive.config.ts";
 import { TEMPLATES } from "./templates/index.ts";
-import { PLATFORM_ANSWER_KEY, PLATFORM_CHOICES, PLATFORM_QUESTION, REFERENCE_ANSWER_KEY, REFERENCE_QUESTION } from "./templates/template.ts";
+import { PLATFORM_ANSWER_KEY, PLATFORM_CHOICES, PLATFORM_QUESTION, REFERENCE_ANSWER_KEY, REFERENCE_QUESTION, VISIBILITY_QUESTION } from "./templates/template.ts";
 
 const all = Object.values(TEMPLATES);
 
@@ -72,5 +72,44 @@ describe("the question that asks what to model the channel on", () => {
   /** Third, so the form reads as what the channel is, where it goes, what it is like, how often. */
   it("is asked after the network and before the cadence", () => {
     expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", PLATFORM_ANSWER_KEY, REFERENCE_ANSWER_KEY, "cadence"]);
+  });
+});
+
+/**
+ * WHO SEES A NEW YOUTUBE VIDEO. The publisher posts YouTube `unlisted` unless the setup answer says
+ * otherwise. The engine takes four questions per template, so the question fits only where the
+ * form has room: `clipping` asks three, the two generating templates already ask four.
+ */
+describe("the question that asks who sees a new YouTube video", () => {
+  it("is optional, offers only what YouTube takes, and puts the safe default first", () => {
+    expect(VISIBILITY_QUESTION.optional).toBe(true);
+    expect(VISIBILITY_QUESTION.type).toBe("choice");
+    if (VISIBILITY_QUESTION.type !== "choice") return;
+    expect(VISIBILITY_QUESTION.options).toEqual(["Unlisted", "Public", "Private"]);
+    expect(VISIBILITY_QUESTION.other).toBe(false);
+    expect(VISIBILITY_QUESTION.help ?? "").toMatch(/YouTube only/);
+  });
+
+  it("is asked where the form has room, and the engine refuses it where it has none", async () => {
+    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", PLATFORM_ANSWER_KEY, "visibility", "cadence"]);
+    expect(TEMPLATES.faceless.questions).not.toContain(VISIBILITY_QUESTION);
+    expect(TEMPLATES.longform.questions).not.toContain(VISIBILITY_QUESTION);
+    const { defineProject } = await import("@usenaive-sdk/blueprints");
+    const fifth = { ...declaration, template: "faceless", questions: [...TEMPLATES.faceless.questions, VISIBILITY_QUESTION] };
+    expect(() => defineProject(fifth)).toThrow(/asks 5 questions, but a template asks at most 4/);
+  });
+});
+
+/**
+ * PICKING A NETWORK, THEN CONNECTING IT, ON THE PLATFORM'S OWN SCREEN. The identity maps each answer
+ * of the network question to the platform's id, which is what the studio's Add connections step
+ * reads to ask for exactly the accounts the customer picked.
+ */
+describe("connecting the accounts the customer picked", () => {
+  it("maps every network option to the account the studio asks the customer to connect", async () => {
+    const { default: project } = await import("./naive.config.ts");
+    const [identity] = project.identities;
+    expect(identity?.connections?.social?.from).toBe(PLATFORM_ANSWER_KEY);
+    expect(identity?.connections?.social?.map).toEqual(Object.fromEntries(PLATFORM_CHOICES.map((choice) => [choice.option, choice.platform])));
   });
 });

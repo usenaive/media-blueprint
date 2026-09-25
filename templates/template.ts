@@ -82,6 +82,21 @@ export const PLATFORM_QUESTION: SetupQuestion = {
   help: "Pick the apps your videos go out on — one or several. Picking them is not the same as connecting them: after setup, connect the account you post from on each one, or the team will make videos that cannot publish.",
 };
 
+/**
+ * Who sees a new YouTube video. Optional, and unanswered means unlisted: reachable by link, so the
+ * operator can check a video live before anyone finds it. Only YouTube (and Mastodon) take a
+ * visibility at all. Asked only where the form has room — the engine caps a template at four.
+ */
+export const VISIBILITY_QUESTION: SetupQuestion = {
+  key: "visibility",
+  label: "Who sees a new YouTube video?",
+  type: "choice",
+  options: ["Unlisted", "Public", "Private"],
+  other: false,
+  optional: true,
+  help: "YouTube only — the other apps have no such setting. Left blank, videos go up unlisted: reachable by link, so you can check one live before anyone finds it. You still approve every post.",
+};
+
 /** The key the platform stores the reference answer under. */
 export const REFERENCE_ANSWER_KEY = "reference";
 
@@ -376,7 +391,7 @@ export const channelManager = (): AgentDecl =>
     required: true,
     description:
       "Runs the channel: publishes each finished piece on the cadence you chose — every post waits for your approval — and reads the weekly report.",
-    brief: `You are the channel manager: the operator's lead on this channel and the only seat that publishes. A Publish card wakes you: its body names the video (a fil_ id), the caption, the networks and the card it came from. Read the plan behind it with board_read, and fix the caption where it drifts from the plan or the channel's voice (\`naive/caption-writing\`); the account list is social.accounts. Before you post, read the card's comments: a post id already there is a post already made, never to be made again. Then call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the networks the card names, only ones project_context lists. YouTube goes on its own call with visibility — the context's answer where it gives one, else unlisted — because every other network refuses a visibility; the rest go together on a second call without one. scheduled_at is the next free slot for the cadence answer (${SLOTS}), written with that date's UTC offset, at least two hours from now and not a slot another Publish card's note already took. Each call waits for the operator's approval on the platform. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once with ask_operator what to change. Close the card done with each post id and when it goes out. The weekly report card wakes you too: apply what it says to captions and posting times, and close it with a note saying what you changed. When the operator asks in chat, answer from the board, never from memory, and route new work by creating a card for the seat it belongs to.`,
+    brief: `You are the channel manager: the operator's lead on this channel and the only seat that publishes. A Publish card wakes you: its body names the video (a fil_ id), the caption, the networks and the card it came from. Read the plan behind it with board_read, and fix the caption where it drifts from the plan or the channel's voice (\`naive/caption-writing\`); the account list is social.accounts. Before you post, read the card's comments: a post id already there is a post already made, never to be made again. Then call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the networks the card names, only ones project_context lists. YouTube goes on its own call with visibility — the context's visibility answer where it gives one, else unlisted — because every other network refuses a visibility; the rest go together on a second call without one. scheduled_at is the next free slot for the cadence answer (${SLOTS}), written with that date's UTC offset, at least two hours from now and not a slot another Publish card's note already took. Each call waits for the operator's approval on the platform. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once with ask_operator what to change. Close the card done with each post id and when it goes out. The weekly report card wakes you too: apply what it says to captions and posting times, and close it with a note saying what you changed. When the operator asks in chat, answer from the board, never from memory, and route new work by creating a card for the seat it belongs to.`,
     tools: ["social.accounts"],
     ask: ["social.post"],
     skills: ["naive/caption-writing"],
