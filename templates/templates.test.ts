@@ -766,7 +766,10 @@ describe("the crews", () => {
         const allowed = Object.entries(agent.tools?.configs ?? {})
           .filter(([, config]) => config.permission === "allow")
           .map(([name]) => name);
-        expect(allowed.filter((name) => name.startsWith("social."))).toEqual(["social.accounts"]);
+        // The manager's metrics read is the one other social grant, and it only reads.
+        expect(allowed.filter((name) => name.startsWith("social."))).toEqual(
+          agent.name === "channel-manager" ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
+        );
       }
     }
   });
@@ -935,12 +938,12 @@ describe("the channel's clock", () => {
   );
 
   /**
-   * Every fire this repo declares, per template: one on each of the four specialists and three on
-   * the manager — seven, on every template this repo carries.
+   * Every fire this repo declares, per template: one on each of the four specialists and four on
+   * the manager — eight, on every template this repo carries.
    * Called by the tests below that assert a property of each schedule, because a `for` loop over a
    * template that declares none passes — which is exactly the state this whole block exists to keep out.
    */
-  const everyFireCounted = () => expect(everySchedule).toHaveLength(both.length * 7);
+  const everyFireCounted = () => expect(everySchedule).toHaveLength(both.length * 8);
 
   const fields = (cron: string) => cron.split(" ");
   const hourOf = (cron: string) => Number(fields(cron)[1]);
@@ -1002,14 +1005,17 @@ describe("the channel's clock", () => {
   it("plans the week weekly, and runs the queue and the comments daily, on the channel manager", () => {
     for (const template of both) {
       const manager = schedulesOf(template, "channel-manager");
-      expect(manager).toHaveLength(3);
+      expect(manager).toHaveLength(4);
       expect(manager.filter((one) => isWeekly(one.cron))).toHaveLength(1);
-      expect(manager.filter((one) => isDaily(one.cron))).toHaveLength(2);
+      expect(manager.filter((one) => isDaily(one.cron))).toHaveLength(3);
       // The weekly one is the plan; the daily pair is the queue and the comments.
       expect(manager.find((one) => isWeekly(one.cron))?.input).toMatch(/plan/i);
       const daily = manager.filter((one) => isDaily(one.cron)).map((one) => one.input);
       expect(daily.filter((input) => /queue/i.test(input))).toHaveLength(1);
       expect(daily.filter((input) => /comment/i.test(input))).toHaveLength(1);
+      // The metrics read: exact cron text, since `up` matches a live timer by it.
+      const metrics = manager.find((one) => one.cron === "5 9 * * *");
+      expect(metrics?.input).toMatch(/^Daily performance check\. Call social\.post_metrics with since_days 14.*Do not edit, delete or repost anything\./s);
     }
   });
 

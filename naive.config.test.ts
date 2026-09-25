@@ -67,9 +67,9 @@ describe("naive.config", () => {
         expect(declaration.identities.map((identity) => identity.name)).toContain(one.identity);
       }
     }
-    // The cadence the landing copy promises, on the crew that is actually running: three fires on
+    // The cadence the landing copy promises, on the crew that is actually running: four fires on
     // the manager and one on each of the four specialists.
-    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(7);
+    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(8);
   });
 
   /**
@@ -204,7 +204,9 @@ describe("naive.config", () => {
         .filter(([, config]) => config.permission === "allow")
         .map(([name]) => name);
       expect(allowed).not.toContain("social.post");
-      expect(allowed.filter((name) => name.startsWith("social."))).toEqual(["social.accounts"]);
+      expect(allowed.filter((name) => name.startsWith("social."))).toEqual(
+        agent.name === "channel-manager" ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
+      );
     }
   });
 });
