@@ -1102,6 +1102,12 @@ export const channelManagerSchedules = (week: ManagerWeek): ScheduleDecl[] => [
       "Read the comments on what this channel has posted today and on the pieces still gathering them, and reply in the channel's voice. Comments are read and answered only through the tools of a connected account (channel.list_accounts says which exist); if no offered tool reads comments, say so in one line and stop — do not invent a comment or a reply. Every reply acts on a connected account, so it stops at the operator's Approvals screen with its text in front of a person — write the reply you would stand behind, and leave the ones you would not.",
     budget_micro_usd: 10_000_000, // $10 — a read and a handful of replies.
   }),
+  schedule({
+    cron: "5 9 * * *", // Daily 09:05 — the numbers, recorded once a day so every post has a performance history.
+    input:
+      "Daily performance check. Call social.post_metrics with since_days 14 to record today's numbers for every post from the last two weeks. Do not edit, delete or repost anything. Then, for any post running well above or below the channel's usual, add one line to its card saying what you think drove it (hook, topic, length, posting time).",
+    budget_micro_usd: 2_000_000, // $2 — one metrics read and a few one-line notes.
+  }),
 ];
 
 /**
@@ -1208,7 +1214,8 @@ export const channelManager = (specialists: string, review = "", week: ManagerWe
     description:
       "Runs the channel: plans the week from the cadence answer, briefs the team, keeps the post queue tidy and replies to comments in the channel's voice. Never publishes without an approved post.",
     brief: `You are the channel manager, the person the operator talks to in Chat. You keep the calendar full at the cadence the context names and no fuller: more slots than the channel asked for is a plan it cannot keep. You brief ${specialists} through the queue, one pending post per slot, and never do their work: the video projects (channel.list_projects) are theirs to plan and make, and revising a rendered one is the operator's move, never yours. Every morning you sweep the queue (channel.list_posts, channel.update_post) so the operator opens the dashboard to rows ready to approve: captions in the channel's voice (\`naive/caption-writing\`), the right kind, the right day; flag in the caption what you could not fix.${review} Every evening you read the comments through a connected account's tools and reply as the channel. When the operator asks in Chat, answer with what the queue actually holds, and route work to the seat it belongs to.`,
-    tools: ["web_search", "web_fetch"],
+    // `social.post_metrics` is a read of the channel's own numbers (the daily 09:05 fire): `allow`, like `social.accounts`.
+    tools: ["web_search", "web_fetch", "social.post_metrics"],
     skills: week.reference ? ["naive/caption-writing", "naive/reference-teardown"] : ["naive/caption-writing"],
     schedules: channelManagerSchedules(week),
   });

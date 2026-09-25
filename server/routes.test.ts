@@ -81,6 +81,73 @@ describe("the store routes", () => {
     expect(moved.body).toMatchObject({ id: "post_9f2a", status: "approved" });
   });
 
+  it("records the operator's verdicts and edits with the platform, best-effort", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "rev_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = ctxOver(demoState(), CONFIG);
+    const sent = () => fetchMock.mock.calls.filter(([url]) => String(url) === "https://api.test/v1/reviews").map(([, init]) => JSON.parse((init as RequestInit).body as string));
+
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"rejected","rejectedReason":"Rejected by you"}'), ctx);
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"pending"}'), ctx);
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"rejected","rejectedReason":"hook is too slow"}'), ctx);
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"approved"}'), ctx);
+    const edited = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"caption":"New caption"}'), ctx);
+    expect(edited.body).toMatchObject({ caption: "New caption", status: "approved" });
+
+    const subject = { app_post_id: "post_9f2a" };
+    expect(sent()).toEqual([
+      { decision: "reject", reason: null, file_ids: [], subject, before: null, after: null },
+      { decision: "reject", reason: "hook is too slow", file_ids: [], subject, before: null, after: null },
+      { decision: "approve", reason: null, file_ids: [], subject, before: null, after: null },
+      {
+        decision: "edit",
+        reason: null,
+        file_ids: [],
+        subject,
+        before: { caption: "Rule two will sting. #stoicism #discipline", title: "3 stoic rules nobody follows" },
+        after: { caption: "New caption", title: "3 stoic rules nobody follows" },
+      },
+    ]);
+  });
+
+  it("links only a canonical fil_ id to a review; the demo's fil_9f2a_v2 would 400 the whole review", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: "rev_1" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    const state = demoState();
+    const ctx = ctxOver(state, CONFIG);
+    const sent = () => fetchMock.mock.calls.filter(([url]) => String(url) === "https://api.test/v1/reviews").map(([, init]) => JSON.parse((init as RequestInit).body as string));
+    expect(state.posts.find((p) => p.id === "post_9f2a")?.mediaUrl).toBe("fil_9f2a_v2");
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"rejected"}'), ctx);
+    expect(sent()[0]).toMatchObject({ decision: "reject", file_ids: [] });
+    state.posts.find((p) => p.id === "post_9f2a")!.mediaUrl = "fil_4pb4vmt1m862sf0r42tx0anjc9";
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"pending"}'), ctx);
+    await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"approved"}'), ctx);
+    expect(sent().at(-1)).toMatchObject({ decision: "approve", file_ids: ["fil_4pb4vmt1m862sf0r42tx0anjc9"] });
+  });
+
+  it("never lets a failing review call fail the operator's move", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("platform down")));
+    const ctx = ctxOver(demoState(), CONFIG);
+    const moved = await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"approved"}'), ctx);
+    expect(moved).toMatchObject({ status: 200, body: { id: "post_9f2a", status: "approved" } });
+    expect(await handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"title":""}'), ctx)).toEqual({
+      status: 400,
+      body: { error: "title must be a non-empty string" },
+    });
+  });
+
+  it("lets the document go before it waits on the platform for a review", async () => {
+    const log: string[] = [];
+    const answers: ((value: Response) => void)[] = [];
+    vi.stubGlobal("fetch", vi.fn(() => { log.push("fetch"); return new Promise<Response>((resolve) => answers.push(resolve)); }));
+    const ctx = { ...ctxOver(demoState(), CONFIG), release: () => { log.push("release"); return Promise.resolve(); } };
+    const moved = handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"approved","caption":"Edited"}'), ctx);
+    await vi.waitFor(() => expect(log).toContain("release"));
+    expect(log.filter((one) => one === "fetch")).toHaveLength(2);
+    for (const answer of answers) answer(json({ id: "rev_1" }, 201));
+    expect(await moved).toMatchObject({ status: 200, body: { status: "approved", caption: "Edited" } });
+  });
+
   it("refuses a status no screen would ever send", async () => {
     // This persisted: `{"status":"garbage"}` wrote a post into a state no tab lists and no agent
     // understands.

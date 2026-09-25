@@ -470,7 +470,11 @@ new cut unseen and a rejection would drop the plan under it. The finishing write
    returns stale `-ing` claims (>1 day) on posts and plans to the prior state — but never a row
    with media or a rendered plan.
 3. Operator, on Posts: `PATCH /api/posts/:id` moves between `pending / ready / approved /
-   rejected` (`posted` is refused there with a 409).
+   rejected` (`posted` is refused there with a 409), or edits the copy (`{title?, caption?}`).
+   Each approve, reject and edit is also sent best-effort to the platform as a review
+   (`POST /v1/reviews`: `decision`, the typed `reason` or null — never the "Rejected by you"
+   placeholder — `file_ids`, `subject.app_post_id`, `before`/`after` copy); capped at 2s and never
+   fails the move (`routes.ts` `sendReview`).
 4. Operator presses Post now → `POST /api/posts/:id/post-now` (`routes.ts` `postNow`): requires
    `approved`, a publishable platform, and media; then `POST /v1/identities/:idn/social/posts`
    with `{content, title?, platforms:[…], media_urls | file_ids}`; on success the store stamps

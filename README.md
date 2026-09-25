@@ -49,7 +49,7 @@ flowchart LR
   plat --> app["channel app<br/>fullstack: /api/* and /mcp"]
   plat --> ctx["install context<br/>niche · audience · cadence"]
   plat --> spec["four specialists<br/>daily 06:00–07:30, Mon 07:30"]
-  plat --> mgr["channel-manager<br/>daily 08:00 and 18:00, Mon 09:00"]
+  plat --> mgr["channel-manager<br/>daily 08:00, 09:05 and 18:00, Mon 09:00"]
   plat --> idn["channel identity<br/>holds the connected accounts"]
 ```
 
@@ -185,7 +185,7 @@ file behind.
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `social.post_metrics`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) · daily 09:05 metrics ($2) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
 | `producer` | Video production | `generate_video` (models pinned), `generate_image` | — | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
 | `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/video-trend-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
 | `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing`, `naive/reference-teardown` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
@@ -200,7 +200,7 @@ job.
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `social.post_metrics`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) · daily 09:05 metrics ($2) | `channel-plan` — asks you for the channel's tone and audience, then files the plan: slots per week, days, kinds, accounts |
 | `researcher` | Topics & sourcing | `web_search`, `web_fetch`, hands off to `writer` | `naive/video-trend-brief` | Mon/Wed/Fri 05:00 topics ($10) | `first-topic` — researches the niche and files the channel's **first topic brief**, with the exemplars to plan against |
 | `writer` | Arc & script | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), `publish_file`, hands off to `producer` | `naive/long-form-arc`, `naive/caption-writing` | Mon/Wed/Fri 05:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `arc-style` — writes the channel's arc, from that teardown · `first-script` — turns the first topic into a video project |
 | `producer` | Render & assembly | `generate_video` (models pinned), `bash` (joins the segments with ffmpeg), `publish_file` | `naive/video-assembly` | Mon/Wed/Fri 06:00 render ($70) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-assembly` — renders each segment and joins them into the first piece |
@@ -216,7 +216,7 @@ required to check that it did.
 
 | Agent | Role | Tools | Skills | Timers (channel time) | Day one (cards on the board) |
 |---|---|---|---|---|---|
-| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) | `channel-plan` — asks you who the clips are for, then files the plan: slots per week, days, kinds, accounts |
+| `channel-manager` *(required)* | Channel lead | `web_search`, `web_fetch`, `social.post_metrics`, `send_to_agent`, `list_agents` | `naive/caption-writing` | Mon 09:00 plan ($10) · daily 08:00 queue sweep ($10) · daily 18:00 comments ($10) · daily 09:05 metrics ($2) | `channel-plan` — asks you who the clips are for, then files the plan: slots per week, days, kinds, accounts |
 | `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | `source-check` — confirms it can reach every named reference · `first-cuts` — cuts the first two clips from the scout's plans |
 | `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | `first-moments` — goes through the named references and plans the **first five moments** worth cutting |
 | `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing` | daily 07:30 captions ($10) | `caption-style` — writes the channel's voice · `first-captions` — titles and captions the first clips |
@@ -407,6 +407,7 @@ agent's per-task ceiling.
 | Monday 07:30 | `analyst` | Last week's numbers, before the plan |
 | Daily 08:00 | `channel-manager` | Sweeps the queue: captions, kinds and scheduled days, so you open the dashboard to rows that are ready to approve; frees plans a dead session left claimed |
 | Daily 18:00 | `channel-manager` | Reads the comments and drafts replies in the channel's voice |
+| Daily 09:05 | `channel-manager` | Records the last two weeks' post numbers (`social.post_metrics`, read-only) and notes on each outlier's card what likely drove it |
 | Monday 09:00 | `channel-manager` | Plans the week at the cadence you chose, one brief per slot — and refreshes the reference teardown where the reference has moved |
 
 Nothing a cron does escapes the queue: the fires file and tidy pending posts, and every publish

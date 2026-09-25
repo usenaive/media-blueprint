@@ -10,7 +10,7 @@
  * `ctx.store()`, and only by the routes that actually touch it.
  */
 import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches, type WhoIsRunning } from "./mcp.ts";
-import { SESSION_CREATE, collect, notActivated, proxyFetch, sessionEvents, sessionList, sessionMessages, upstreamFor, type ProxyConfig } from "./proxy.ts";
+import { REVIEWS, SESSION_CREATE, collect, notActivated, proxyFetch, sessionEvents, sessionList, sessionMessages, upstreamFor, type ProxyConfig } from "./proxy.ts";
 import type { Store } from "./store.ts";
 import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type Post, type PostStatus } from "../seed/posts.ts";
 import type { ProjectSession, VideoProject } from "../seed/projects.ts";
@@ -735,6 +735,45 @@ async function projectContext(config: ProxyConfig): Promise<ApiReply> {
   return json(200, reply);
 }
 
+/** The placeholder a rejection carries when the operator typed nothing (`moveBody`, the store). */
+const DEFAULT_REJECTION = "Rejected by you";
+
+type Copy = { caption: string; title: string };
+
+/**
+ * Records the operator's verdict or edit on a post with the platform (`POST /v1/reviews`) — the
+ * human preference behind the crew's work. Best-effort by contract: it is capped at two seconds and
+ * never throws, so a platform that is down, slow or refusing can not hold up or undo the move.
+ */
+export async function sendReview(
+  config: ProxyConfig | null,
+  post: Post,
+  decision: "approve" | "reject" | "edit",
+  reason: string | null,
+  before: Copy | null,
+  after: Copy | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (config === null) return;
+  const body = {
+    decision,
+    reason,
+    // Only the platform's real id shape (core `isId`): one malformed id 400s the whole review.
+    file_ids: post.mediaUrl && /^fil_[0-9a-z]{26}$/.test(post.mediaUrl) ? [post.mediaUrl] : [],
+    subject: { app_post_id: post.id },
+    before,
+    after,
+  };
+  try {
+    await Promise.race([
+      proxyFetch(config, REVIEWS, JSON.stringify(body), fetchImpl).then((res) => res.body?.cancel()),
+      new Promise((resolve) => setTimeout(resolve, 2000).unref?.()),
+    ]);
+  } catch {
+    // Capture is never the operator's problem.
+  }
+}
+
 /** The store-backed routes: the post queue and the style templates. */
 async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply | null> {
   const { method, path } = req;
@@ -743,8 +782,17 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
   const patch = /^\/api\/posts\/([\w-]+)$/.exec(path);
   if (patch) {
     if (method !== "PATCH") return fail(405, "method not allowed");
-    const body = parse(req.body) as { status?: PostStatus; rejectedReason?: string };
-    if (!body.status) return fail(400, "status is required");
+    const body = parse(req.body) as { status?: PostStatus; rejectedReason?: string; title?: unknown; caption?: unknown };
+    // The operator's own edit of the copy: a title or caption with no verdict attached.
+    const edit: { title?: string; caption?: string } = {};
+    for (const field of ["title", "caption"] as const) {
+      const value = body[field];
+      if (value === undefined) continue;
+      if (typeof value !== "string" || value.trim() === "") return fail(400, `${field} must be a non-empty string`);
+      edit[field] = value;
+    }
+    const editing = Object.keys(edit).length > 0;
+    if (!body.status && !editing) return fail(400, "status is required");
     // `posted` is not one of them, and this is the whole of defect #4. `postNow` below refuses to
     // publish anything that is not `approved` and writes the word only after the platform accepted
     // the post — and this route wrote the same word on any row, in one hop, with nothing published
@@ -755,7 +803,7 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
     }
     // Any string persisted before this: a post could be PATCHed into a state no tab lists, no
     // agent understands and no screen can move it out of.
-    if (!(PATCHABLE as readonly string[]).includes(body.status)) {
+    if (body.status && !(PATCHABLE as readonly string[]).includes(body.status)) {
       return fail(400, `status must be one of ${PATCHABLE.join(", ")}`);
     }
     const store = await ctx.store();
@@ -765,11 +813,31 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
     if (revising !== undefined) {
       return fail(409, `a revision of ${revising.id} is being made — the new cut lands pending, so the verdict waits for it`);
     }
+    const before = store.read().posts.find((p) => p.id === patch[1]);
+    const copy = before && { caption: before.caption, title: before.title };
     const updated = store.updatePost(patch[1]!, {
-      status: body.status,
+      ...edit,
+      ...(body.status ? { status: body.status } : {}),
       ...(body.rejectedReason === undefined ? {} : { rejectedReason: body.rejectedReason }),
     });
-    return updated ? json(200, updated) : fail(404, "no such post");
+    if (!updated) return fail(404, "no such post");
+    const reviews: Promise<void>[] = [];
+    if (editing) {
+      reviews.push(sendReview(ctx.config, updated, "edit", null, copy ?? null, { caption: updated.caption, title: updated.title }));
+    }
+    if (body.status === "approved" || body.status === "rejected") {
+      // The dashboard's default word is not the operator's reason; only what they typed is.
+      const typed = body.rejectedReason?.trim();
+      const reason = body.status === "rejected" && typed && typed !== DEFAULT_REJECTION ? typed : null;
+      reviews.push(sendReview(ctx.config, updated, body.status === "approved" ? "approve" : "reject", reason, null, null));
+    }
+    if (reviews.length > 0 && ctx.config !== null) {
+      // The move is committed first: the document is the row every write in the channel waits on,
+      // and the platform call must not hold it. Both reviews share the one two-second cap.
+      await ctx.release();
+      await Promise.all(reviews);
+    }
+    return json(200, updated);
   }
   const now = /^\/api\/posts\/([\w-]+)\/post-now$/.exec(path);
   if (now) {
