@@ -121,6 +121,18 @@ describe("the store routes", () => {
     });
   });
 
+  it("lets the document go before it waits on the platform for a review", async () => {
+    const log: string[] = [];
+    const answers: ((value: Response) => void)[] = [];
+    vi.stubGlobal("fetch", vi.fn(() => { log.push("fetch"); return new Promise<Response>((resolve) => answers.push(resolve)); }));
+    const ctx = { ...ctxOver(demoState(), CONFIG), release: () => { log.push("release"); return Promise.resolve(); } };
+    const moved = handleRequest(req("PATCH", "/api/posts/post_9f2a", '{"status":"approved","caption":"Edited"}'), ctx);
+    await vi.waitFor(() => expect(log).toContain("release"));
+    expect(log.filter((one) => one === "fetch")).toHaveLength(2);
+    for (const answer of answers) answer(json({ id: "rev_1" }, 201));
+    expect(await moved).toMatchObject({ status: 200, body: { status: "approved", caption: "Edited" } });
+  });
+
   it("refuses a status no screen would ever send", async () => {
     // This persisted: `{"status":"garbage"}` wrote a post into a state no tab lists and no agent
     // understands.

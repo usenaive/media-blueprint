@@ -820,14 +820,21 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
       ...(body.rejectedReason === undefined ? {} : { rejectedReason: body.rejectedReason }),
     });
     if (!updated) return fail(404, "no such post");
+    const reviews: Promise<void>[] = [];
     if (editing) {
-      await sendReview(ctx.config, updated, "edit", null, copy ?? null, { caption: updated.caption, title: updated.title });
+      reviews.push(sendReview(ctx.config, updated, "edit", null, copy ?? null, { caption: updated.caption, title: updated.title }));
     }
     if (body.status === "approved" || body.status === "rejected") {
       // The dashboard's default word is not the operator's reason; only what they typed is.
       const typed = body.rejectedReason?.trim();
       const reason = body.status === "rejected" && typed && typed !== DEFAULT_REJECTION ? typed : null;
-      await sendReview(ctx.config, updated, body.status === "approved" ? "approve" : "reject", reason, null, null);
+      reviews.push(sendReview(ctx.config, updated, body.status === "approved" ? "approve" : "reject", reason, null, null));
+    }
+    if (reviews.length > 0 && ctx.config !== null) {
+      // The move is committed first: the document is the row every write in the channel waits on,
+      // and the platform call must not hold it. Both reviews share the one two-second cap.
+      await ctx.release();
+      await Promise.all(reviews);
     }
     return json(200, updated);
   }
