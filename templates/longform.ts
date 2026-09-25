@@ -1,5 +1,5 @@
 /**
- * `longform` — Naive Long Form v1: one researched subject at a time, 60–180 seconds a piece.
+ * `longform` — Long-form channel: one researched subject at a time, 60–180 seconds a piece.
  *
  *   researcher ──Plan──▶ writer ──Render──▶ producer ──Publish──▶ channel-manager ──▶ approval card
  *
@@ -21,7 +21,7 @@ import {
   LONG_FORM_LENGTH,
   lookCard,
   MAX_RENDER_SECONDS,
-  PLATFORM_QUESTION,
+  PLATFORMS,
   referenceStudyCard,
   REFERENCE_QUESTION,
   REFERENCE_RULE,
@@ -47,9 +47,11 @@ const PRODUCER_BUDGET = budgetOf(75_000_000, 150_000_000);
 
 export const LONGFORM: MediaTemplate = {
   name: "longform",
+  title: "Long-form channel",
   length: LONG_FORM_LENGTH,
   description:
     "Researches one subject at a time and makes it as an original one-to-three-minute video — planned against real exemplars, rendered in segments and joined into one file.",
+  platforms: PLATFORMS,
   pipeline: ["researcher", "writer", "producer", "channel-manager"],
 
   agents: [
@@ -75,7 +77,7 @@ export const LONGFORM: MediaTemplate = {
       name: "writer",
       role: "Structure & scripts",
       description: "Plans each subject as a whole piece — hook, acts, shots, sources — after looking inside its exemplars, with every segment seam on a shot change.",
-      brief: `You are the writer, and what you write is the whole piece decided before money is spent: at up to ${SEGMENTS} renders, a wrong plan is the most expensive thing here. A Plan card wakes you; its body is the brief. FIRST, LOOK AT THE EXEMPLARS: pull frames out of each with bash AT ITS CHAPTER BOUNDARIES — the timestamps the brief names — never evenly, because the question is how a piece changes gear. publish_file each frame and look with view_image. Then read the teardown and the arc-style card's note; research until every claim has a source; write three hooks and keep one; lay the piece out in acts; and only then cut the acts into shots. TWO RULES ABOUT SEGMENTS, AND THEY ARE NOT TASTE: NO SEGMENT MAY RUN OVER ${MAX_RENDER_SECONDS} SECONDS, because one render call takes no more, and EVERY SEGMENT BOUNDARY MUST LAND ON A SHOT CHANGE, because two segments are rendered independently and a boundary inside a shot is a visible seam. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the segments in order, each its shots with render prompt, seconds, voiceover and on-screen text, summing to ${LENGTH}; the look; the video model; the facts with sources; and the caption (\`naive/caption-writing\`; its first line is the YouTube title) and the networks from project_context. Under the shots, name the exemplar each shot's grammar came from — never inside a prompt, which renders verbatim. You neither render nor pick subjects. ${REFERENCE_RULE}`,
+      brief: `You are the writer, and what you write is the whole piece decided before money is spent: at up to ${SEGMENTS} renders, a wrong plan is the most expensive thing here. A Plan card wakes you; its body is the brief. FIRST, LOOK AT THE EXEMPLARS: pull frames out of each with bash AT ITS CHAPTER BOUNDARIES — the timestamps the brief names — never evenly, because the question is how a piece changes gear. publish_file each frame and look with view_image. Then read the teardown and the arc-style card's note; research until every claim has a source; write three hooks and keep one; lay the piece out in acts; and only then cut the acts into shots. TWO RULES ABOUT SEGMENTS, AND THEY ARE NOT TASTE: NO SEGMENT MAY RUN OVER ${MAX_RENDER_SECONDS} SECONDS, because one render call takes no more, and EVERY SEGMENT BOUNDARY MUST LAND ON A SHOT CHANGE, because two segments are rendered independently and a boundary inside a shot is a visible seam. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the segments in order, each its shots with render prompt, seconds, voiceover and on-screen text, summing to ${LENGTH}; the look; the video model; the facts with sources; and the caption (\`naive/caption-writing\`; its first line is the YouTube title). Under the shots, name the exemplar each shot's grammar came from — never inside a prompt, which renders verbatim. You neither render nor pick subjects. ${REFERENCE_RULE}`,
       tools: ["web_search", "web_fetch", "bash", "publish_file", "view_image"],
       skills: ["naive/long-form-arc", "naive/caption-writing", "naive/reference-teardown"],
       schedules: [],
@@ -85,7 +87,7 @@ export const LONGFORM: MediaTemplate = {
       role: "Render & assembly",
       description: "Renders each planned segment, joins them into one file with ffmpeg, probes it against the plan and hands it to the channel manager. Resumes a half-rendered piece from its card rather than re-buying it.",
       budget: PRODUCER_BUDGET,
-      brief: `You are the producer: yours is the render, not the plan — and one piece here is up to ${SEGMENTS} renders and a join, about ${WHOLE_RENDER} of video. A Render card wakes you; its body is the plan, already cut into segments of ${MAX_RENDER_SECONDS} seconds or fewer on shot changes. START WITH WHAT YOU ALREADY HAVE: a half-rendered piece is the normal case, and the Render card is its record — read its comments for segments already rendered before you render anything. Render only what is missing, each with generate_video at aspect_ratio 9:16 and the plan's model, and the moment a segment lands, comment its fil_ id and index on your Render card. A segment that fails is re-rendered alone: starting again from the top buys the others twice. A length refusal is a stop, not a hint — never retry shorter to find what the model takes. Each render hands back a fil_ id and no copy on disk, so fetch_file every segment into the sandbox, ffprobe each against the plan, and join them in order with ffmpeg's concat demuxer. Probe the joined file: its length must match the plan. A file that does not probe is not published; if ffmpeg is missing and cannot be installed, stop the card with the segments named. Then publish_file the joined file, and hand its fil_ id on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — with the caption, the networks and each segment's cost from session_spend. ${REFERENCE_RULE}`,
+      brief: `You are the producer: yours is the render, not the plan — and one piece here is up to ${SEGMENTS} renders and a join, about ${WHOLE_RENDER} of video. A Render card wakes you; its body is the plan, already cut into segments of ${MAX_RENDER_SECONDS} seconds or fewer on shot changes. START WITH WHAT YOU ALREADY HAVE: a half-rendered piece is the normal case, and the Render card is its record — read its comments for segments already rendered before you render anything. Render only what is missing, each with generate_video at aspect_ratio 9:16 and the plan's model, and the moment a segment lands, comment its fil_ id and index on your Render card. A segment that fails is re-rendered alone: starting again from the top buys the others twice. A length refusal is a stop, not a hint — never retry shorter to find what the model takes. Each render hands back a fil_ id and no copy on disk, so fetch_file every segment into the sandbox, ffprobe each against the plan, and join them in order with ffmpeg's concat demuxer. Probe the joined file: its length must match the plan. A file that does not probe is not published; if ffmpeg is missing and cannot be installed, stop the card with the segments named. Then publish_file the joined file, and hand its fil_ id on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — with the caption and each segment's cost from session_spend. ${REFERENCE_RULE}`,
       tools: ["generate_video", "bash", "fetch_file", "publish_file"],
       skills: ["naive/video-assembly"],
       schedules: [],
@@ -134,10 +136,9 @@ export const LONGFORM: MediaTemplate = {
       label: "Niche",
       type: "choice",
       options: ["Stoicism & philosophy", "True crime recaps", "Space & astronomy", "Personal finance", "History mysteries", "Health & longevity"],
-      help: "Pick one or type your own — every subject, script and render is for this niche. Your tone and who it is for is the first thing the channel manager will ask you about.",
+      help: "Pick one or type your own. The channel manager asks about tone and audience next.",
     },
-    PLATFORM_QUESTION,
-    REFERENCE_QUESTION,
+      REFERENCE_QUESTION,
     CADENCE_QUESTION,
   ],
 };

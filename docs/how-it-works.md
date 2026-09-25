@@ -13,8 +13,7 @@ channel manager, the analyst's crons, the tool rules, the crew rules every promp
 ## 2. What `naive up` provisions
 
 - **The crew** of the running template — five agents, each acting as the `channel` persona.
-- **The `channel` identity**, with `connections.social` mapping each network answer to its
-  platform id, for the studio's Add connections step.
+- **The `channel` identity**. The accounts connected to it are where the channel posts.
 - **The crons**: one on the head of the chain, two on the analyst. Every other seat declares
   `schedules: []`.
 - **The day-one cards** on the company board, keyed `media:<key>`. A re-apply answers the card it
@@ -46,7 +45,7 @@ The cards per piece:
 
 | Template | Head starts | Then | Then | Ends at |
 |---|---|---|---|---|
-| `faceless` | **Plan** (scriptwriter) — body: the brief | **Render** (producer) — body: the plan | **Publish** (channel-manager) — body: file id, caption, networks | approval card |
+| `faceless` | **Plan** (scriptwriter) — body: the brief | **Render** (producer) — body: the plan | **Publish** (channel-manager) — body: file id, caption | approval card |
 | `longform` | **Plan** (writer) — body: the brief | **Render** (producer) — body: the plan, cut into segments | **Publish** (channel-manager) | approval card |
 | `clipping` | **Cut** (clipper) — body: source URL, start, end, why | **Caption** (caption-editor) — body: file id, source, creator | **Publish** (channel-manager) | approval card |
 
@@ -61,7 +60,7 @@ A card is woken at most three times. After that it is parked for the CEO.
 
 ## 4. The crews
 
-### `faceless` — Naive Short Form v1, 15–30 seconds
+### `faceless` — Faceless channel, 15–30 seconds
 
 - **trend-scout** (Mon & Thu 06:00): reads the teardown and the newest weekly report. For each slot
   the cadence needs, picks a topic, opens one to three real videos doing it well, and creates a
@@ -69,13 +68,13 @@ A card is woken at most three times. After that it is parked for the CEO.
 - **scriptwriter**: opens the exemplars first — the browser for the page, `bash` to sample frames
   through the first three seconds, `view_image` to look. Then research, three hooks, beats, shots.
   Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
-  15–30, model, facts with sources, caption, networks.
+  15–30, model, facts with sources, caption.
 - **producer**: one `generate_video` call — the shots in order as one take, 9:16, the plan's model.
   Creates the Publish card with the `fil_` id.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
 
-### `longform` — Naive Long Form v1, 60–180 seconds
+### `longform` — Long-form channel, 60–180 seconds
 
 `generate_video` renders at most 30 seconds a call (measured: the model refuses 59 and 60). So a
 piece is up to six segments, rendered separately and joined with ffmpeg.
@@ -91,7 +90,7 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
   with ffmpeg, probes the join, `publish_file`s it, and creates the Publish card.
 - **analyst**: leads with retention — where the audience left, against the plan's acts.
 
-### `clipping` — Naive Clipping v1, 15–60 seconds
+### `clipping` — Clipping channel, 15–60 seconds
 
 - **scout** (daily 06:00): watches only the named reference channels, screenshots each episode it
   picks from, and creates a Cut card per moment.
@@ -117,10 +116,10 @@ Woken on a Publish card, it:
 
 1. reads the plan behind it and fixes the caption where it drifts;
 2. reads the card's comments — a post id already there is never posted again;
-3. with no `social.post` offered (no account connected yet), asks the operator once to connect
-   one, and waits;
+3. reads the connected accounts with `social.accounts` — they are where it posts; with none (or no
+   `social.post` offered), asks the operator once to connect one, and waits;
 4. calls `social.post` with `file_ids`, the caption as `content` (first line is the YouTube title),
-   and only networks the setup answers list, as ids — the answer "YouTube Shorts" is `youtube`;
+   and the connected accounts' platform ids;
 5. posts YouTube on its own call with `visibility` — the setup answer, else `unlisted` — and the
    other networks on a second call without one (the platform refuses a visibility on them);
 6. sets `scheduled_at` to the next free slot at least a day out: daily is every day, 3× a week is
@@ -167,7 +166,7 @@ a cron fire is not.
 
 ## 8. Setup questions and `project_context`
 
-The studio asks up to four questions; the answers land on the install; every seat reads them with
+The studio asks three questions, never where to post; the answers land on the install; every seat reads them with
 `project_context`. The engine prepends its own "read the project context first" preamble to every
 template agent, and our `CONTEXT_PREAMBLE` adds what the answers are on a media channel.
 
@@ -186,8 +185,7 @@ Found while building this, with where it lives in the platform repo:
 - **A template must still carry an app's screen fields.** The engine's `Template` type requires `kinds`,
   `seed` and `words` (`packages/blueprints/src/template.ts:36-40`) and never reads them; we pass
   them empty.
-- **Four questions per template.** `define.ts:388-390`. `faceless` and `longform` already ask four,
-  so the visibility question fits only on `clipping`. A choice question has no `default` field.
+- **Four questions per template.** `define.ts:388-390`. A choice question has no `default` field.
 - **A card has no attachments, and its body cannot change.** `board_write` offers
   create / update / comment / assign (`apps/runtime-do/src/board-tools.ts:136-153`); `update`
   refuses a title or `blocked_by` change (`apps/runtime-do/src/board.ts:189`). File ids travel in

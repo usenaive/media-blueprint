@@ -18,11 +18,12 @@ The repo carries **three templates**. A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
 |---|---|---|---|---|
-| `faceless` | Naive Short Form v1 | Original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | 15–30s |
-| `longform` | Naive Long Form v1 | One researched subject at a time, rendered in segments and joined | `channel-manager`, `researcher`, `writer`, `producer`, `analyst` | 60–180s |
-| `clipping` | Naive Clipping v1 | The best moments of the channels you name, cut and captioned | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | 15–60s |
+| `faceless` | Faceless channel | Original short-form video in one niche | `channel-manager`, `producer`, `trend-scout`, `scriptwriter`, `analyst` | 15–30s |
+| `longform` | Long-form channel | One researched subject at a time, rendered in segments and joined | `channel-manager`, `researcher`, `writer`, `producer`, `analyst` | 60–180s |
+| `clipping` | Clipping channel | The best moments of the channels you name, cut and captioned | `channel-manager`, `clipper`, `scout`, `caption-editor`, `analyst` | 15–60s |
 
-The id in the first column is stored on every install. It never changes.
+The id in the first column is stored on every install. It never changes. The studio shows the
+title, the one-line description, and the networks each template is made for (`PLATFORMS`) as icons.
 
 ## 🚀 Get started
 
@@ -65,11 +66,11 @@ Step by step, on `faceless`:
    and one to three real videos doing it well. It creates a **Plan** card for the scriptwriter.
    The card's body is the brief.
 2. **The scriptwriter** is woken on the Plan card. It looks inside the exemplars, researches, and
-   writes the whole plan: hook, shots with prompts and seconds, sources, caption, networks. It
+   writes the whole plan: hook, shots with prompts and seconds, sources, caption. It
    creates a **Render** card for the producer. The card's body is the plan.
 3. **The producer** is woken on the Render card. It renders the plan with `generate_video`. The
    video lands in the Media gallery. It creates a **Publish** card for the channel manager with
-   the file id, the caption and the networks.
+   the file id and the caption.
 4. **The channel manager** is woken on the Publish card. It checks the caption and calls
    `social.post`. The post waits on the approval card.
 5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
@@ -84,7 +85,8 @@ platform's approval card. Every other seat is denied `social.post` by name.
 
 - **The file.** The post carries the render's `fil_` id (`file_ids`).
 - **The caption.** Its first line is the YouTube title.
-- **Where.** Only the networks you picked at setup.
+- **Where.** Every account connected to the channel. With none connected, it asks you to connect
+  one and waits.
 - **Visibility.** YouTube goes on its own call, `unlisted` unless you answered otherwise. Only
   YouTube takes a visibility; the platform refuses one for any other network.
 - **When.** `scheduled_at` is the next free slot for your cadence at least a day out, at 17:00
@@ -146,17 +148,17 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks at most four before anything is provisioned. The engine refuses a fifth.
+The studio asks three before anything is provisioned. The engine refuses a fifth.
 
 | Template | Questions |
 |---|---|
-| `faceless`, `longform` | Niche · Where should this channel post? · A channel or video to model this on (optional) · Posting cadence |
-| `clipping` | Reference channels to cut from · Where should this channel post? · Who sees a new YouTube video? (optional) · Posting cadence |
+| `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
+| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
 
-"Where should this channel post?" takes several networks. The `channel` persona maps each answer
-to its network, so the studio's **Add connections** step asks you to connect exactly those
-accounts. `faceless` and `longform` have no room for the visibility question, so they post YouTube
-unlisted; tell the manager otherwise when you decline a post.
+No question asks where the channel posts. It posts to the accounts you connect to it; the channel
+manager asks you for one when none is connected. `faceless` and `longform` do not ask the
+visibility question, so they post YouTube unlisted; tell the manager otherwise when you decline a
+post.
 
 The tone and who the channel is for is not on the form. The manager asks it once, after its
 day-one card closes.

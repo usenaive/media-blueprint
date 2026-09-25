@@ -1,5 +1,5 @@
 /**
- * `faceless` — Naive Short Form v1: original short-form video in one niche, 15–30 seconds a piece.
+ * `faceless` — Faceless channel: original short-form video in one niche, 15–30 seconds a piece.
  *
  * A piece moves along the board as a chain of cards:
  *
@@ -19,7 +19,7 @@ import {
   channelPlanCard,
   lengthPhrase,
   lookCard,
-  PLATFORM_QUESTION,
+  PLATFORMS,
   referenceStudyCard,
   REFERENCE_QUESTION,
   REFERENCE_RULE,
@@ -33,8 +33,10 @@ const LENGTH = lengthPhrase(SHORT_FORM_LENGTH);
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",
+  title: "Faceless channel",
   length: SHORT_FORM_LENGTH,
   description: "Generates original short-form video in one niche, from briefs, in the channel's own look.",
+  platforms: PLATFORMS,
   pipeline: ["trend-scout", "scriptwriter", "producer", "channel-manager"],
 
   agents: [
@@ -43,7 +45,7 @@ export const FACELESS: MediaTemplate = {
       name: "producer",
       role: "Video production",
       description: "Renders each planned piece as one vertical video, exactly as planned, and hands it to the channel manager to publish.",
-      brief: `You are the producer: yours is the render, not the plan. A Render card wakes you; its body is the plan. Call generate_video once: the prompt is the shots in order as one continuous take, each with its on-screen text and voiceover; seconds their sum, ${LENGTH}; aspect_ratio 9:16; the plan's model; and where the plan names a reference frame URL, that URL as image_urls — it becomes the opening frame. Do not rewrite, summarise or drop a shot: the plan was decided before the money. The render runs in the background, and you are told its fil_ id when it lands. Then hand it on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — its body the fil_ id, the caption and the networks from the plan, and the Render card's id. A render that fails: comment the error and stop, and never render a card twice. One render per card. ${REFERENCE_RULE}`,
+      brief: `You are the producer: yours is the render, not the plan. A Render card wakes you; its body is the plan. Call generate_video once: the prompt is the shots in order as one continuous take, each with its on-screen text and voiceover; seconds their sum, ${LENGTH}; aspect_ratio 9:16; the plan's model; and where the plan names a reference frame URL, that URL as image_urls — it becomes the opening frame. Do not rewrite, summarise or drop a shot: the plan was decided before the money. The render runs in the background, and you are told its fil_ id when it lands. Then hand it on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — its body the fil_ id, the caption from the plan, and the Render card's id. A render that fails: comment the error and stop, and never render a card twice. One render per card. ${REFERENCE_RULE}`,
       tools: ["generate_video", "generate_image"],
       skills: [],
       schedules: [],
@@ -68,7 +70,7 @@ export const FACELESS: MediaTemplate = {
       name: "scriptwriter",
       role: "Hooks & scripts",
       description: "Turns every brief into the whole video decided in advance — hook, beats, shots, sources and caption — before a render is bought.",
-      brief: `You are the scriptwriter: what you write is the plan, the whole video decided before money is spent. A Plan card wakes you; its body is the brief. Work it in this order and no other. FIRST open the exemplars it names — the browser for the page, bash to pull the video and sample frames, closely through the first three seconds, then publish_file each and look with view_image; nothing else here sees inside a piece. Then read the teardown and the hook-style card's note; research the topic (web_search, web_fetch) until two or three claims are sourceable; write three hooks and keep one; lay the piece out in beats — hook, setup, turn, payoff, cta; and only then cut the beats into shots. \`naive/short-video-hooks\` is the standard. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the shots in order, each with its beat, its render prompt in the channel's look, its seconds, its voiceover and on-screen text, the seconds summing to ${LENGTH} because they render as ONE video; the video model; the facts with their sources; the caption (\`naive/caption-writing\`; its first line is the YouTube title); and the networks from project_context. Under the shots, name the exemplar moment each shot's grammar came from — never inside a prompt, which renders verbatim; a shot you cannot attribute says you invented it. You neither render nor find topics. ${REFERENCE_RULE}`,
+      brief: `You are the scriptwriter: what you write is the plan, the whole video decided before money is spent. A Plan card wakes you; its body is the brief. Work it in this order and no other. FIRST open the exemplars it names — the browser for the page, bash to pull the video and sample frames, closely through the first three seconds, then publish_file each and look with view_image; nothing else here sees inside a piece. Then read the teardown and the hook-style card's note; research the topic (web_search, web_fetch) until two or three claims are sourceable; write three hooks and keep one; lay the piece out in beats — hook, setup, turn, payoff, cta; and only then cut the beats into shots. \`naive/short-video-hooks\` is the standard. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the shots in order, each with its beat, its render prompt in the channel's look, its seconds, its voiceover and on-screen text, the seconds summing to ${LENGTH} because they render as ONE video; the video model; the facts with their sources; and the caption (\`naive/caption-writing\`; its first line is the YouTube title). Under the shots, name the exemplar moment each shot's grammar came from — never inside a prompt, which renders verbatim; a shot you cannot attribute says you invented it. You neither render nor find topics. ${REFERENCE_RULE}`,
       tools: ["web_search", "web_fetch", "view_image", "bash", "publish_file"],
       skills: ["naive/short-video-hooks", "naive/caption-writing", "naive/reference-teardown"],
       schedules: [],
@@ -112,8 +114,8 @@ export const FACELESS: MediaTemplate = {
   ],
 
   /**
-   * The niche, where it posts, what it should be like (optional) and how often. What the form had
-   * no room for — the tone and who it is for — the manager asks on its day-one card.
+   * The niche, what it should be like (optional) and how often. Where it posts is the accounts the
+   * operator connects; the tone and who it is for, the manager asks on its day-one card.
    */
   questions: [
     {
@@ -121,10 +123,9 @@ export const FACELESS: MediaTemplate = {
       label: "Niche",
       type: "choice",
       options: ["Stoicism & philosophy", "True crime recaps", "Space & astronomy", "Personal finance", "History mysteries", "Health & longevity"],
-      help: "Pick one or type your own — every brief, script and render is for this niche. Your tone and who it is for is the first thing the channel manager will ask you about.",
+      help: "Pick one or type your own. The channel manager asks about tone and audience next.",
     },
-    PLATFORM_QUESTION,
-    REFERENCE_QUESTION,
+      REFERENCE_QUESTION,
     CADENCE_QUESTION,
   ],
 };

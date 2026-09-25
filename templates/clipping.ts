@@ -1,5 +1,5 @@
 /**
- * `clipping` — Naive Clipping v1: the best moments out of the reference channels the operator
+ * `clipping` — Clipping channel: the best moments out of the reference channels the operator
  * names, cut vertical and captioned, 15–60 seconds a clip.
  *
  *   scout ──Cut──▶ clipper ──Caption──▶ caption-editor ──Publish──▶ channel-manager ──▶ approval card
@@ -16,7 +16,7 @@ import {
   channelManager,
   channelPlanCard,
   lengthPhrase,
-  PLATFORM_QUESTION,
+  PLATFORMS,
   schedule,
   VISIBILITY_QUESTION,
   task,
@@ -28,8 +28,10 @@ const LENGTH = lengthPhrase(CLIPPING_LENGTH);
 
 export const CLIPPING: MediaTemplate = {
   name: "clipping",
+  title: "Clipping channel",
   length: CLIPPING_LENGTH,
   description: "Repurposes existing video in one niche: cuts the best moments out of the reference channels and captions them.",
+  platforms: PLATFORMS,
   pipeline: ["scout", "clipper", "caption-editor", "channel-manager"],
 
   agents: [
@@ -63,7 +65,7 @@ export const CLIPPING: MediaTemplate = {
       name: "caption-editor",
       role: "Captions & titles",
       description: "Writes the title, caption and hashtags on every clip, credits the original creator, and hands it to the channel manager to publish.",
-      brief: `You are the caption editor. A Caption card wakes you; its body is a cut clip — its fil_ id, its source and its creator, and why the scout picked it. Write it a publishable caption (\`naive/caption-writing\`): a first line that says the one idea — it becomes the YouTube title — a caption in the tone the context asks for that gives the moment a reason to be watched, and hashtags this audience actually follows. Credit the original creator on every clip: these are reference channels, not the operator's footage, and a clip posted without the credit costs the channel rather than a view. Write for each network the context names; the skill carries each one's norms. Use your caption-style card's note as the voice. Hand it on as the Publish card for the channel manager — title "Publish: <the moment>", assignee channel-manager, blocked_by your Caption card — whose body is the fil_ id, the caption, the networks and the source. You neither pick moments nor cut.`,
+      brief: `You are the caption editor. A Caption card wakes you; its body is a cut clip — its fil_ id, its source and its creator, and why the scout picked it. Write it a publishable caption (\`naive/caption-writing\`): a first line that says the one idea — it becomes the YouTube title — a caption in the tone the context asks for that gives the moment a reason to be watched, and hashtags this audience actually follows. Credit the original creator on every clip: these are reference channels, not the operator's footage, and a clip posted without the credit costs the channel rather than a view. Write it to work on YouTube, TikTok and Instagram alike; the skill carries each one's norms. Use your caption-style card's note as the voice. Hand it on as the Publish card for the channel manager — title "Publish: <the moment>", assignee channel-manager, blocked_by your Caption card — whose body is the fil_ id, the caption and the source. You neither pick moments nor cut.`,
       tools: ["web_search"],
       skills: ["naive/caption-writing"],
       schedules: [],
@@ -111,17 +113,17 @@ export const CLIPPING: MediaTemplate = {
 
   /**
    * The sources come first: they are the one answer no seat may work without and none may infer.
-   * Three are required, so the form has room for the optional visibility question.
+   * Where it posts is the accounts the operator connects, so no question asks it.
    */
   questions: [
     {
       key: "sources",
-      label: "Reference channels to cut from",
+      label: "Channels to cut from",
       type: "text",
-      placeholder: "Channel or playlist URLs, one per line — the crew cuts from these and nowhere else",
+      placeholder: "Channel or playlist URLs, one per line",
+      help: "The crew cuts from these and nowhere else.",
     },
-    PLATFORM_QUESTION,
-    VISIBILITY_QUESTION,
+      VISIBILITY_QUESTION,
     CADENCE_QUESTION,
   ],
 };

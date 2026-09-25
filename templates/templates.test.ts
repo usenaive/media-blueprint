@@ -16,7 +16,6 @@ import {
   CONTEXT_PREAMBLE,
   CREW_RULES,
   lengthPhrase,
-  PLATFORM_CHOICES,
   MAX_RENDER_SECONDS,
   ONE_RENDER_MICRO_USD,
   POST_TIME,
@@ -377,14 +376,18 @@ describe("publishing", () => {
     expect(brief()).toContain(`${POST_TIME} channel time (${CHANNEL_TIMEZONE})`);
   });
 
-  /** The setup answer is the label the customer saw; `social.post` takes the platform's id. */
-  it("turns the network answer into the id social.post takes", () => {
-    for (const choice of PLATFORM_CHOICES) expect(brief()).toContain(`${choice.option} is ${choice.platform}`);
+  /** No question asks where it posts: the accounts connected to the channel are the answer. */
+  it("posts to every connected account, by the ids social.accounts gives", () => {
+    expect(brief()).toMatch(/posts to every account connected to it, and nowhere else: read them with social\.accounts/);
+    expect(brief()).toMatch(/platforms the connected accounts' platforms, by the ids social\.accounts gives/);
+    for (const template of all) {
+      for (const agent of template.agents) expect(agent.system, `${template.name}/${agent.name}`).not.toMatch(/the networks/);
+    }
   });
 
   /** No connected account means no social tools at all; asking for the tool changes nothing. */
   it("asks the operator to connect an account rather than requesting a social tool", () => {
-    expect(brief()).toMatch(/If social\.post is not offered, no account is connected yet/);
+    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected, ask the operator once with ask_operator to connect one/);
     expect(brief()).toMatch(/never request_tools for a social tool/);
     for (const template of all) {
       expect(seat(template, "analyst").schedules![1]!.input, template.name).toMatch(/If social\.post_metrics is not offered, no account is connected yet/);
@@ -491,10 +494,10 @@ describe("the channel's clock", () => {
 });
 
 describe("the setup questions", () => {
-  it("asks three per template, and a fourth only if it is optional", () => {
+  it("asks two per template, and a third that is optional", () => {
     for (const template of all) {
-      expect(template.questions.filter((q) => q.optional !== true), template.name).toHaveLength(3);
-      expect(template.questions.length, template.name).toBeLessThanOrEqual(4);
+      expect(template.questions.filter((q) => q.optional !== true), template.name).toHaveLength(2);
+      expect(template.questions.length, template.name).toBe(3);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
     }
     // The cadence is one question, spelled once.

@@ -26,6 +26,22 @@ describe("naive.config", () => {
     for (const name of admits) expect(Object.keys(TEMPLATES)).toContain(name);
   });
 
+  /**
+   * canonical-spec §31.5 (ADR-0921): the studio names the template in words and draws the networks
+   * it is made for. Read off `declaration`: the pinned engine 0.8.0 strips what it does not know, and
+   * the platform's artifact publisher builds with the engine that does.
+   */
+  it("names the running template for the studio, with the networks it is made for", () => {
+    expect(declaration.title).toBe(ACTIVE.title);
+    expect(declaration.description).toBe(ACTIVE.description);
+    expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
+    expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual(["Clipping channel", "Faceless channel", "Long-form channel"]);
+    for (const one of Object.values(TEMPLATES)) {
+      expect(one.title.length, one.name).toBeLessThanOrEqual(80);
+      expect(one.description.length, one.name).toBeLessThanOrEqual(280);
+    }
+  });
+
   it("declares no app: the crew runs on the platform's own board, media gallery and approval card", () => {
     expect(project.apps).toEqual([]);
     expect(declaration).not.toHaveProperty("apps");
@@ -72,9 +88,9 @@ describe("naive.config", () => {
    */
   it("hands `up` the crew's roles, skills, cards and the running template's setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
-    // Three required, plus the optional fourth where the running template spends it (ADR-0757).
+    // Two required — no question asks where the channel posts — plus the optional one (ADR-0757).
     expect(project.questions.length).toBe(ACTIVE.questions.length);
-    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(3);
+    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(2);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.
