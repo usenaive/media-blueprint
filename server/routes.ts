@@ -758,7 +758,8 @@ export async function sendReview(
   const body = {
     decision,
     reason,
-    file_ids: post.mediaUrl && /^fil_\w+$/.test(post.mediaUrl) ? [post.mediaUrl] : [],
+    // Only the platform's real id shape (core `isId`): one malformed id 400s the whole review.
+    file_ids: post.mediaUrl && /^fil_[0-9a-z]{26}$/.test(post.mediaUrl) ? [post.mediaUrl] : [],
     subject: { app_post_id: post.id },
     before,
     after,
