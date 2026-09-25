@@ -111,6 +111,9 @@ export const sessionEvents = (id: string, afterSeq?: number): Upstream => ({
   path: `/v1/sessions/${id}/events?limit=100${afterSeq === undefined ? "" : `&after_seq=${afterSeq}`}`,
 });
 
+/** `POST /v1/reviews` — the operator's verdict or edit on a post, recorded as a human preference. */
+export const REVIEWS: Upstream = { method: "POST", path: "/v1/reviews" };
+
 /** `POST /v1/sessions/:id/messages` — a follow-up; the body says whether it queues behind the turn. */
 export const sessionMessages = (id: string): Upstream => ({ method: "POST", path: `/v1/sessions/${id}/messages` });
 
