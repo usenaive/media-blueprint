@@ -922,8 +922,8 @@ const SPEND_TOOL = "session_spend";
  * competitor captions. Before the image crossing a screenshot was worth nothing to the agent that
  * took it, which is most of why denying this looked free.
  *
- * `allow`, not `ask`: the operator's gate is the approval queue on the way OUT (`social.post`,
- * every connection tool), and a seat that has to ask permission to read a web page is a seat that
+ * `allow`, not `ask`: the operator's gate is the approval queue on the way OUT (Post now, every
+ * connection tool), and a seat that has to ask permission to read a web page is a seat that
  * stops dead on a 06:00 cron with nobody awake to answer. Reading is not the act this channel
  * gates. What it costs is a hosted browser session per use, which is real and is the honest reason
  * to keep the crons pointed at `web_search`/`web_fetch` for bulk reading and the browser for the
@@ -932,11 +932,22 @@ const SPEND_TOOL = "session_spend";
 const BROWSER_TOOL = "browser";
 
 /**
- * Held by every agent of every template, so the publish rule is the blueprint's and not a
- * template's to drop: `social.accounts` to know where a post is for, `social.post` behind `ask` so
- * the one outward act always stops at the Approvals screen (see `toolset`).
+ * Held by every agent of every template: `social.accounts`, to know where a post is for. Publishing
+ * is not here — see `PUBLISH_TOOL`.
  */
-const SOCIAL: readonly string[] = ["social.accounts", "social.post"];
+const SOCIAL: readonly string[] = ["social.accounts"];
+
+/**
+ * *** NO SEAT MAY PUBLISH. *** The one publish path is the operator's Post now on an approved row
+ * (`server/routes.ts` `postNow`), which marks the row `posted` when the platform accepts it.
+ *
+ * Every seat used to hold `social.post` at `ask` while its prompt said never to publish. An
+ * approved call published through the platform without touching the store, so the row stayed
+ * `approved` and the same video could go out again on Post now. The rule is code now: `toolset`
+ * writes this name `deny` last, over any grant a template names, and over the `ask` default it
+ * would otherwise fall to — it is not a built-in, so leaving it out would not deny it.
+ */
+const PUBLISH_TOOL = "social.post";
 
 /**
  * THE TWO TOOLS A SEEDED CARD CANNOT BE WORKED WITHOUT, and the reason they are named here rather
@@ -977,11 +988,8 @@ const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
  * The named tools, allowed; every built-in they do not name, denied by name; and everything left —
  * which can only be a tool from an account this channel connected — behind the operator.
  *
- * `social.post` is granted as `ask` (canonical-spec §6): the turn parks with the call in
- * `session.pending_actions` until the operator decides on the Approvals screen. Granting it `allow`
- * (as this config once did) was a publish path straight around the queue the dashboard and the
- * system prompts promise, so the permission is decided here, by the blueprint, and not by whichever
- * template lists the tool.
+ * `social.post` is denied to every seat (`PUBLISH_TOOL`): publishing is the operator's Post now,
+ * decided here by the blueprint and not by whichever template lists the tool.
  *
  * THE DEFAULT IS `ask`, AND THAT IS THE CONNECTIONS GRANT. A connected account contributes its
  * tools to the turn as `<connector>.<operation>` (`apps/runtime-do/src/connection-tools.ts`), and
@@ -1014,7 +1022,7 @@ export const toolset = (names: readonly string[], handoffs: readonly string[] = 
         name,
         {
           enabled: true,
-          permission: name === "social.post" || ALWAYS.includes(name) ? ("ask" as const) : ("allow" as const),
+          permission: ALWAYS.includes(name) ? ("ask" as const) : ("allow" as const),
           // The one tool with no derivable default; see `VIDEO_MODELS`.
           ...(name === "generate_video" ? { config: { models: VIDEO_MODELS } } : {}),
         },
@@ -1025,6 +1033,8 @@ export const toolset = (names: readonly string[], handoffs: readonly string[] = 
     ...(handoffs.length > 0
       ? { send_to_agent: { enabled: true, permission: "allow" as const }, list_agents: { enabled: true, permission: "allow" as const } }
       : {}),
+    // Last, so no grant above can undo it.
+    [PUBLISH_TOOL]: { enabled: false, permission: "deny" as const },
   },
 });
 

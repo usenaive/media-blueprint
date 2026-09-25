@@ -172,7 +172,10 @@ clipping projects.
   list_style_templates / list_accounts`. Planner and executor are separated by the *other* tools,
   not these: the scriptwriter and scout have no `generate_video` / `clip_video`, so they can only
   write the plan; the producer and clipper have them, and are told the plan is not theirs to write.
-- Granted `ask`: `social.post` (the one outward act), `ask_operator`, `request_tools`.
+- Granted `ask`: `ask_operator`, `request_tools`.
+- **Denied: `social.post`, on every seat.** Publishing is the operator's Post now alone. It is
+  written `deny` by name and last (`PUBLISH_TOOL`), because it is not a built-in: left out, it
+  would fall to the `ask` default.
 - Seats with `handoffs` also get `send_to_agent` and `list_agents` at `allow`.
 
 The dashboard surfaces both parked states: `GET /api/sessions` lists them, `POST
@@ -486,9 +489,9 @@ new cut unseen and a rejection would drop the plan under it. The finishing write
    `views` and `likes` — there is no separate metrics table; views/likes are whatever is on the
    row (the analyst agent reads real metrics only via connected-account tools where offered).
 
-An agent's direct `social.post` call takes a different path: it parks at Approvals
-(`tool_confirmations`) and, if approved, publishes through the platform without touching the
-store — so a post published that way is not a `posted` row unless someone also files/moves it.
+No agent can call `social.post` (§5). It used to be `ask` on every seat, and an approved call
+published through the platform without touching the store, so the row stayed `approved` and the
+same video could go out a second time on Post now.
 
 ## 9. Chat
 

@@ -6,9 +6,9 @@ import { Avatar, Card, Clamp, MediaPreview, PageHeader, SectionHead, ago } from 
 /**
  * THE SCREEN THE AGENTS HAVE BEEN WAITING ON.
  *
- * `social.post` is granted `ask` to every agent of every template, which is the whole promise of
- * this blueprint: an agent may compose a publish, and only a person may let it happen. The platform
- * implements that promise exactly — the turn parks, `stop_reason` becomes `awaiting_approval`, and
+ * Every tool that acts on a connected account is `ask` for every agent of every template (publishing
+ * itself is denied to every seat — it is the operator's Post now): an agent may compose the act, and
+ * only a person may let it happen. The platform implements that promise exactly — the turn parks, `stop_reason` becomes `awaiting_approval`, and
  * the blocked call sits in `session.pending_actions` as `{ tool_call_id, name, args }` until
  * `POST /v1/sessions/{id}/tool_confirmations` decides it.
  *

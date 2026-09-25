@@ -194,12 +194,12 @@ describe("naive.config", () => {
     }
   });
 
-  it("grants social.post only through the approval queue, and nothing else outward", () => {
+  it("lets no seat publish — the one publish path is the operator's Post now", () => {
     for (const agent of project.agents) {
-      // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
-      // `pending_actions`; `allow` would publish straight past the operator.
-      expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
-      // The only other tool that acts outward. Nothing else granted may run unattended by accident.
+      // Denied by name: it is not a built-in, so an omitted `social.post` would fall to the `ask`
+      // default, and an approved call published without marking the queue row posted.
+      expect(agent.tools?.configs["social.post"], agent.name).toEqual({ enabled: false, permission: "deny" });
+      // Nothing else granted may act outward unattended.
       const allowed = Object.entries(agent.tools?.configs ?? {})
         .filter(([, config]) => config.permission === "allow")
         .map(([name]) => name);

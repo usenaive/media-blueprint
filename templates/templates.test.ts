@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, lengthPhrase, MAX_RENDER_SECONDS, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, REFERENCE_RULE, REFERENCE_STUDY_RULE, referenceKindOf, RENDERER, renderMicroUsd, segmentsOf, words } from "./template.ts";
+import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, lengthPhrase, MAX_RENDER_SECONDS, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, REFERENCE_RULE, REFERENCE_STUDY_RULE, referenceKindOf, RENDERER, renderMicroUsd, segmentsOf, toolset, words } from "./template.ts";
 import { POST_PLATFORMS } from "../seed/posts.ts";
 import { LONGFORM_PROJECT_SEEDS } from "../seed/projects.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
@@ -757,12 +757,16 @@ describe("the crews", () => {
     }
   });
 
-  it("grants no agent of either template a publish path that skips the operator", () => {
+  it("denies social.post even to a seat whose template names it", () => {
+    expect(toolset(["social.post"]).configs["social.post"]).toEqual({ enabled: false, permission: "deny" });
+  });
+
+  it("lets no seat of any template publish — the one publish path is the operator's Post now", () => {
     for (const template of both) {
       for (const agent of template.agents) {
-        // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
-        // `pending_actions`; `allow` would publish straight past the operator.
-        expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
+        // Denied by name: it is not a built-in, so an omitted `social.post` would fall to the `ask`
+        // default, and an approved call published without marking the queue row posted.
+        expect(agent.tools?.configs["social.post"], `${template.name}/${agent.name}`).toEqual({ enabled: false, permission: "deny" });
         const allowed = Object.entries(agent.tools?.configs ?? {})
           .filter(([, config]) => config.permission === "allow")
           .map(([name]) => name);

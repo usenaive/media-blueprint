@@ -164,7 +164,7 @@ credentials.
 Every agent's `system` opens with the same paragraph — *read `project_context` before anything
 else; the answers there are the client's, not yours to invent* — and closes with the approval
 gate. Between them is the seat's own brief, 120–400 words. Every agent also holds the
-dashboard's `channel.*` tools, `social.accounts`, `social.post` at `ask`, the managed `browser`
+dashboard's `channel.*` tools, `social.accounts` (never `social.post`), the managed `browser`
 (its screenshot comes back as a picture, which is how any seat reads a page it has to actually
 see), and the two doors to you (`ask_operator`, `request_tools`, both `ask`); the **Tools**
 column lists what is granted on top of that. Almost every seat carries the same ceilings — **$20 a
@@ -476,10 +476,10 @@ first"*, which `channel.update_post` can do.
 | Channel settings | Which template is running, the live agent roster and briefs, and the style template library |
 
 Nothing goes out without your approval. Agents file posts as *pending* and cannot move them:
-the dashboard's MCP server has no approve, reject or publish tool. The platform's own
-`social.post` tool *is* granted to every agent — publishing an approved post is their job — but
-at permission `ask`, so an agent never runs it unattended: the call pauses the session
-(`stop_reason: awaiting_approval`, the session itself `idle`) and waits, listed in the
+the dashboard's MCP server has no approve, reject or publish tool, and the platform's own
+`social.post` is denied to every agent. What an agent can still do outward is act on a connected
+account (a comment reply, say), and every such call is at permission `ask`: the call pauses the
+session (`stop_reason: awaiting_approval`, the session itself `idle`) and waits, listed in the
 session's pending actions, until you approve or reject it.
 
 **The Approvals screen is where you answer that.** It lists every session of this channel
@@ -493,8 +493,9 @@ naive session get <session-id>                                # pending_actions 
 naive session confirm <session-id> --tool-call <id> --allow   # or --deny --reason "..."
 ```
 
-So a post reaches an account by exactly two routes: you publish it yourself from the Posts
-screen, or you approve an agent's held `social.post` call.
+So a post reaches an account by exactly one route: you press Post now on an approved row on the
+Posts screen. It publishes as the channel's **Publish as** (Channel settings; unlisted unless
+you change it) on YouTube, and marks the row posted.
 
 **An agent can also ask you for something.** Every agent holds two doors to you (both at `ask`,
 like everything outward), and its system prompt tells it that the tools offered in a turn are the
@@ -542,9 +543,9 @@ Three rules worth knowing before your first edit:
   is written `deny` — the sandbox tools included — and the *default* is `ask`, which is what
   reaches the connection tools no config can enumerate ahead of time. A connection tool is
   therefore always offered and never runs unattended.
-- **Never grant `social.post` at `allow`.** That is a publish path straight around the queue
-  the dashboard and the system prompts promise. `naive.config.test.ts` and
-  `templates/templates.test.ts` exist to stop it happening by accident.
+- **Never grant `social.post`.** `toolset` writes it `deny` on every seat, last, over any grant.
+  An agent's publish skips the queue: the row is never marked posted, so Post now could publish
+  the same video again. `naive.config.test.ts` and `templates/templates.test.ts` hold the line.
 
 Adding a template is the same shape: a module beside `faceless.ts` and `clipping.ts` exporting
 a `MediaTemplate`, its name in the `TemplateName` union, its demo rows in `seed/posts.ts`, and
@@ -586,13 +587,12 @@ along `session → agent → identity → connected accounts`. Those tools regis
 no config here can name them — which is why the toolsets grant every tool they *can* name
 (`allow`, or `deny` for a built-in this crew has no use for, sandbox included) and leave the
 default at `ask`. A connection tool is therefore always offered and never runs unattended: it
-stops on the Approvals screen with its arguments in front of you, exactly like `social.post`.
+stops on the Approvals screen with its arguments in front of you.
 
-The one tool that can reach an account is the platform's own `social.post`, which is not part of
-this server. The shared toolset in [`templates/template.ts`](templates/template.ts) grants it to
-every agent at permission `ask`, so a call to it never runs unattended — it holds the session at
-`awaiting_approval` for your decision (above). The permission is decided there, by the
-blueprint, and not by whichever template happens to list the tool.
+The platform's own `social.post` is not part of this server, and the shared toolset in
+[`templates/template.ts`](templates/template.ts) denies it to every agent. Publishing is Post
+now. The permission is decided there, by the blueprint, and not by whichever template happens to
+list the tool.
 
 ## 🔁 Switching template
 
