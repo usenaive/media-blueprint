@@ -1863,3 +1863,35 @@ describe("the long-form demo plans", () => {
     }
   });
 });
+
+/**
+ * `BUILTIN_TOOLS` is a copy: a blueprint imports no workspace package, and the published SDK does
+ * not export the platform's list (the copy `@usenaive-sdk/vetta` inlines is older still). A name
+ * the copy lacks is a tool no seat can be granted or denied, so it is held to a pinned copy of the
+ * platform's own list here, and the two are re-copied together.
+ */
+describe("the built-in tool list", () => {
+  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at 385eb4bd (2026-09-25). */
+  const CORE_BUILTIN_TOOLS = [
+    "bash", "read", "write", "edit", "ls", "find",
+    "browser", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video", "apps",
+    "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
+    "ask_operator", "request_tools", "project_context",
+    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+  ];
+  /** Core's `PLATFORM_TOOLS`, not built-ins: listed here so every seat denies them by name. */
+  const DENIED_PLATFORM_TOOLS = ["email.inboxes", "email.read", "email.send"];
+
+  it("matches the platform's list, name for name", () => {
+    const ours = BUILTIN_TOOLS.filter((name) => !DENIED_PLATFORM_TOOLS.includes(name));
+    const missing = CORE_BUILTIN_TOOLS.filter((name) => !(ours as readonly string[]).includes(name));
+    const extra = ours.filter((name) => !CORE_BUILTIN_TOOLS.includes(name));
+    expect(
+      { missing, extra },
+      "templates/template.ts BUILTIN_TOOLS has drifted from vetta core's BUILTIN_TOOLS " +
+        "(packages/core/src/schema/agent.ts). `missing` are platform tools no seat can be granted or denied; " +
+        "`extra` are names the platform does not publish. Re-copy the list from core into both " +
+        "template.ts and CORE_BUILTIN_TOOLS here, and update the commit pin.",
+    ).toEqual({ missing: [], extra: [] });
+  });
+});

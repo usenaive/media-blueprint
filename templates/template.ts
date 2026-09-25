@@ -819,6 +819,9 @@ export const APPROVAL_GATE =
  * name is neither allowed nor denied — it simply never reaches the agent. That is how `fetch_file`
  * arrived: Long Form's producer is told to pull its rendered segments onto disk before ffmpeg can
  * see them, and until the name was in this literal there was no way to hand it the tool that does.
+ *
+ * `templates.test.ts` ("the built-in tool list") holds it to a pinned copy of the platform's
+ * `BUILTIN_TOOLS`; the `email.*` names are platform tools listed so every seat denies them.
  */
 export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
