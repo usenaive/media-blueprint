@@ -1,10 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
@@ -12,7 +11,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["vite/client", "node"]
+    "types": ["node"]
   },
-  "include": ["src", "seed", "server", "templates", "naive.config.ts", "vite.config.ts"]
+  "include": ["seed", "templates", "naive.config.ts", "naive.config.test.ts", "onboarding.test.ts", "docs.test.ts"]
 }

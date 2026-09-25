@@ -17,14 +17,7 @@ node_modules/
 .pnpm-store/
 
 # build output
-dist/
-build/
-.vercel/
-.wrangler/
 *.tsbuildinfo
-
-# Runtime state of the local JSON store (server/store.ts) — never committed.
-data/
 
 # misc
 .DS_Store
