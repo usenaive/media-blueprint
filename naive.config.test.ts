@@ -43,19 +43,19 @@ describe("naive.config", () => {
    */
   it("hands `up` the running crew's crons, each with the timezone and the persona it fires as", () => {
     for (const agent of project.agents) {
-      const schedules = agent.schedules ?? [];
-      expect(schedules.length).toBeGreaterThan(0);
-      for (const one of schedules) {
+      for (const one of agent.schedules ?? []) {
         expect(one.timezone).toBe(CHANNEL_TIMEZONE);
         expect(one.identity).toBe(CHANNEL_IDENTITY);
-        // `up` refuses a schedule naming an identity this project never declares, so the persona
-        // on every fire has to be one of the declared ones.
+        // `up` refuses a schedule naming an identity this project never declares.
         expect(declaration.identities.map((identity) => identity.name)).toContain(one.identity);
       }
     }
-    // The cadence the landing copy promises, on the crew that is actually running: four fires on
-    // the manager and one on each of the four specialists.
-    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(8);
+    // Three fires: the head of the chain once, the analyst twice. Every other seat is woken by the
+    // board, and its EMPTY set survives the parse — `[]` is what deletes an older version's crons.
+    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(3);
+    expect(project.agents.filter((agent) => agent.schedules?.length === 0).map((agent) => agent.name)).toEqual(
+      ACTIVE.agents.filter((agent) => agent.schedules?.length === 0).map((agent) => agent.name),
+    );
   });
 
   /**
@@ -125,22 +125,20 @@ describe("naive.config", () => {
     expect(project.kept.agents).not.toContain("channel-manager");
   });
 
-  it("lets no seat publish — the one publish path is the operator's Post now", () => {
+  /** Read off the parsed project, so an engine that dropped a permission would go red here. */
+  it("publishes through one seat, only with the operator's yes, and denies it to every other", () => {
     for (const agent of project.agents) {
-      // Denied by name: it is not a built-in, so an omitted `social.post` would fall to the `ask`
-      // default, and an approved call published without marking the queue row posted.
-      expect(agent.tools?.configs["social.post"], agent.name).toEqual({ enabled: false, permission: "deny" });
+      expect(agent.tools?.default_config.permission, agent.name).toBe("deny");
+      expect(agent.tools?.configs["social.post"], agent.name).toEqual(
+        agent.name === "channel-manager" ? { enabled: true, permission: "ask" } : { enabled: false, permission: "deny" },
+      );
     }
   });
 
-  it("allows only the read-only social tools, and the metrics read only where a cron calls it", () => {
+  it("allows the metrics read on the analyst alone", () => {
     for (const agent of project.agents) {
-      const allowed = Object.entries(agent.tools?.configs ?? {})
-        .filter(([, config]) => config.permission === "allow")
-        .map(([name]) => name);
-      expect(allowed).not.toContain("social.post");
-      expect(allowed.filter((name) => name.startsWith("social."))).toEqual(
-        ["channel-manager", "analyst"].includes(agent.name) ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
+      expect(agent.tools?.configs["social.post_metrics"], agent.name).toEqual(
+        agent.name === "analyst" ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
       );
     }
   });
