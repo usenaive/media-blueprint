@@ -34,8 +34,13 @@ Every piece is a chain of cards. Each card is assigned to one seat. Its body is 
   seat, `blocked_by` its own card, with its output as the new card's body.
 - It closes its own card `done`, with a note naming what it made and the new card's id. Closing is
   what wakes the next seat.
-- A card it cannot finish goes to `blocked` with a comment. The org's CEO owns the board and is
-  told when a card closes or blocks.
+- Work it cannot finish: it comments what is missing and closes its card `done` with a note that
+  starts `STOPPED:`, handing nothing on. A seat woken behind a STOPPED card stops the same way.
+  It never moves a chain card to `blocked`: the platform's healer re-opens any `blocked` card whose
+  blockers are all done and wakes the seat again (`packages/db/src/queries/board.ts:282-291`).
+- The head of a chain starts its cards with no `blocked_by`. A cron fire works a standing
+  "Recurring" card that every fire reopens, so it is never a blocker.
+- The org's CEO owns the board and is told when a card closes or blocks.
 
 The cards per piece:
 
@@ -80,9 +85,10 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
 - **writer**: samples exemplar frames at their chapter boundaries, then plans acts and shots. No
   segment runs over 30 seconds; every segment boundary lands on a shot change, because two
   independently rendered segments never match mid-shot.
-- **producer** ($75/task): `find_files` for segments already filed under the Render card's id,
-  renders only what is missing, `fetch_file`s each into its sandbox, probes, joins with ffmpeg,
-  probes the join, `publish_file`s it, and creates the Publish card.
+- **producer** ($75/task): comments each segment's `fil_` id on the Render card the moment it
+  lands, so a re-woken session renders only what is missing. `generate_video` takes no file name,
+  so the card is the resume point. It `fetch_file`s each segment into its sandbox, probes, joins
+  with ffmpeg, probes the join, `publish_file`s it, and creates the Publish card.
 - **analyst**: leads with retention — where the audience left, against the plan's acts.
 
 ### `clipping` — Naive Clipping v1, 15–60 seconds
@@ -111,13 +117,17 @@ Woken on a Publish card, it:
 
 1. reads the plan behind it and fixes the caption where it drifts;
 2. reads the card's comments — a post id already there is never posted again;
-3. calls `social.post` with `file_ids`, the caption as `content` (first line is the YouTube title),
-   and only networks the setup answers list;
-4. posts YouTube on its own call with `visibility` — the setup answer, else `unlisted` — and the
+3. with no `social.post` offered (no account connected yet), asks the operator once to connect
+   one, and waits;
+4. calls `social.post` with `file_ids`, the caption as `content` (first line is the YouTube title),
+   and only networks the setup answers list, as ids — the answer "YouTube Shorts" is `youtube`;
+5. posts YouTube on its own call with `visibility` — the setup answer, else `unlisted` — and the
    other networks on a second call without one (the platform refuses a visibility on them);
-5. sets `scheduled_at` to the next free slot: daily is every day, 3× a week is Monday, Wednesday
-   and Friday, weekly is Friday — 17:00 `America/New_York`, with that date's UTC offset;
-6. comments each post id on the card the moment it is approved, then closes the card.
+6. sets `scheduled_at` to the next free slot at least a day out: daily is every day, 3× a week is
+   Monday, Wednesday and Friday, weekly is Friday — 17:00 `America/New_York`, with that date's
+   UTC offset. An approved call goes out exactly as it was filed, so a slot chosen too close could
+   pass while it waits;
+7. comments each post id on the card the moment it is approved, then closes the card.
 
 `social.post` is `ask` for this seat, so each call stops on the platform's approval card: the
 video, the caption, the time it goes out, the visibility, and **Allow** / **Don't allow**. There is
@@ -184,5 +194,15 @@ Found while building this, with where it lives in the platform repo:
   bodies, notes and comments.
 - **The approval card has no "Ask for changes".** `apps/web/app/components/chat/Gate.tsx:157-163`
   renders Allow and Don't allow; a reason is accepted on the wire but has no field on the card.
-- **No room for a cron.** `post_to_channel` is offered only to a session seated in a room
+- **`clip_video` does not hold a woken card.** The parking sweep exempts a session waiting on a
+  `media_job` (`packages/db/src/queries/board.ts:494-496`) but not on a `clip_job`, so a Cut card
+  can be parked while its clip is still being cut. The platform fix is one more `not exists`.
+- **A blocked chain card is re-opened.** The healer promotes any `blocked` card whose blockers
+  are all done (`board.ts:282-291`). That is why a seat stops a piece with a STOPPED note.
+- **`board_read` lists oldest first, at most 100.** There is no paging
+  (`packages/db/src/queries/board.ts:251`, `apps/runtime-do/src/board-tools.ts:110`), so after a
+  few busy weeks the newest cards fall out of an unfiltered read.
+- **`create` does not check the assignee.** Only `assign` does (`apps/runtime-do/src/board.ts:218-227`).
+  A misspelled seat name leaves a card nobody is woken for; the prompts spell each name exactly.
+- **No room for a cron. `post_to_channel` is offered only to a session seated in a room
   (`apps/runtime-do/src/team-tools.ts:399`), so the weekly report is a board card, not a team-channel post.

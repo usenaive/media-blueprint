@@ -16,6 +16,7 @@ import {
   CONTEXT_PREAMBLE,
   CREW_RULES,
   lengthPhrase,
+  PLATFORM_CHOICES,
   MAX_RENDER_SECONDS,
   ONE_RENDER_MICRO_USD,
   POST_TIME,
@@ -321,6 +322,30 @@ describe("the board", () => {
     }
   });
 
+  /**
+   * A chain card moved to `blocked` is re-opened by the board: the healer promotes any `blocked`
+   * card whose blockers are all done (platform `packages/db/src/queries/board.ts:282-291`) and wakes
+   * the seat again. So a seat that cannot finish closes its card with a STOPPED note and hands
+   * nothing on, and a seat woken behind a STOPPED card stops the same way.
+   */
+  it("stops a piece by closing its card STOPPED, never by moving it to blocked", () => {
+    for (const rules of [CREW_RULES, CARD_ORDER]) {
+      expect(rules).toMatch(/done, with a note that starts STOPPED:/);
+      expect(rules).toMatch(/hand nothing on/);
+      expect(rules).not.toMatch(/goes to blocked/);
+    }
+    expect(CREW_RULES).toMatch(/a card you waited on closed STOPPED/);
+    for (const { agent, id } of everySeat) expect(agent.system, id).not.toMatch(/move (your|the) card to blocked/);
+  });
+
+  /** A cron fire's standing card is reopened every fire, so the head's cards wait on nothing. */
+  it("starts each piece's first card with no blocker", () => {
+    expect(CREW_RULES).toMatch(/A Recurring timer card is never a blocker/);
+    for (const template of all) {
+      expect(seat(template, template.pipeline[0]!).system, template.name).toMatch(/with no blocked_by/);
+    }
+  });
+
   it("tells the crew where a file lands and who publishes", () => {
     expect(CREW_RULES).toMatch(/fil_/);
     expect(CREW_RULES).toMatch(/Media gallery/);
@@ -352,6 +377,25 @@ describe("publishing", () => {
     expect(brief()).toContain(`${POST_TIME} channel time (${CHANNEL_TIMEZONE})`);
   });
 
+  /** The setup answer is the label the customer saw; `social.post` takes the platform's id. */
+  it("turns the network answer into the id social.post takes", () => {
+    for (const choice of PLATFORM_CHOICES) expect(brief()).toContain(`${choice.option} is ${choice.platform}`);
+  });
+
+  /** No connected account means no social tools at all; asking for the tool changes nothing. */
+  it("asks the operator to connect an account rather than requesting a social tool", () => {
+    expect(brief()).toMatch(/If social\.post is not offered, no account is connected yet/);
+    expect(brief()).toMatch(/never request_tools for a social tool/);
+    for (const template of all) {
+      expect(seat(template, "analyst").schedules![1]!.input, template.name).toMatch(/If social\.post_metrics is not offered, no account is connected yet/);
+    }
+  });
+
+  /** An approved call replays byte-identical, so a slot chosen too close has passed by approval. */
+  it("schedules at least a day out, so a slow approval does not land in the past", () => {
+    expect(brief()).toMatch(/at least a day from now/);
+  });
+
   /** The approval card has Allow and Don't allow; a decline comes back to the seat as words. */
   it("re-files a corrected post when the operator declines, never an identical one", () => {
     expect(brief()).toMatch(/waits for the operator's approval/);
@@ -369,7 +413,7 @@ describe("analytics", () => {
       const [weekly, daily] = analyst.schedules!;
       expect(weekly!.input, template.name).toMatch(/social\.post_metrics/);
       expect(weekly!.input, template.name).toMatch(/assignee channel-manager/);
-      expect(daily!.input, template.name).toMatch(/^Daily performance check\. Call social\.post_metrics/);
+      expect(daily!.input, template.name).toMatch(/^Daily performance check\..*social\.post_metrics with since_days 14/s);
       expect(analyst.system, template.name).toMatch(/Weekly report: /);
       expect(analyst.system, template.name).toMatch(/more of.*less of/s);
       expect(seat(template, PUBLISHER).system, template.name).toMatch(/weekly report card wakes you/i);
@@ -543,10 +587,14 @@ describe("the long-form crew", () => {
     expect(briefOf("writer")).toMatch(/EVERY SEGMENT BOUNDARY MUST LAND ON A SHOT CHANGE/);
   });
 
-  /** A half-rendered plan is the normal case: find what is filed, render what is missing, join, probe. */
+  /**
+   * A half-rendered piece is the normal case. `generate_video` takes no file name, so the resume
+   * point is the Render card itself: each segment's fil_ id is commented on it as it lands.
+   */
   it("renders resumably, joins with ffmpeg and publishes one probed file", () => {
     const brief = briefOf("producer");
-    expect(brief).toMatch(/find_files/);
+    expect(brief).toMatch(/comment its fil_ id and index on your Render card/);
+    expect(brief).not.toMatch(/name every segment/);
     expect(brief).toMatch(/Render only what is missing/);
     expect(brief).toMatch(/fetch_file/);
     expect(brief).toMatch(/ffmpeg/);

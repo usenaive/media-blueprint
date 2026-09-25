@@ -74,7 +74,8 @@ Step by step, on `faceless`:
    `social.post`. The post waits on the approval card.
 5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
 
-Each card's note records what that seat made. The board is the channel's memory.
+Each card's note records what that seat made. The board is the channel's memory. A seat that
+cannot finish closes its card with a note starting `STOPPED:`, and the piece stops there.
 
 ## 📮 Publishing
 
@@ -86,9 +87,9 @@ platform's approval card. Every other seat is denied `social.post` by name.
 - **Where.** Only the networks you picked at setup.
 - **Visibility.** YouTube goes on its own call, `unlisted` unless you answered otherwise. Only
   YouTube takes a visibility; the platform refuses one for any other network.
-- **When.** `scheduled_at` is the next free slot for your cadence, at 17:00 channel time
-  (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and Friday; weekly is
-  Friday.
+- **When.** `scheduled_at` is the next free slot for your cadence at least a day out, at 17:00
+  channel time (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and
+  Friday; weekly is Friday. An approved post goes out exactly as it was filed.
 - **Declined.** Don't allow, with a reason, and the manager re-files a corrected post. It never
   re-files an identical one. With no reason, it asks you once what to change.
 
