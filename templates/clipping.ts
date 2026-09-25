@@ -33,7 +33,6 @@ import {
   channelManager,
   channelPlanCard,
   lengthPhrase,
-  PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   schedule,
   task,
@@ -237,13 +236,6 @@ export const CLIPPING: MediaTemplate = {
     }),
   ],
 
-  // The FALLBACK target only: `PLATFORM_QUESTION` below asks the customer where this channel
-  // posts, and a filed post takes their answer. This is what an install with no usable answer
-  // falls back to, and it is the question's own first option so the two never disagree.
-  platform: PLATFORM_CHOICES[0]!.platform,
-
-  kinds: [{ id: "clip", label: "Clip" }],
-
   /**
    * Three, where the engine now allows four (ADR-0757) — clipping simply has no fourth worth asking.
    * `faceless` spends its fourth on the reference question; this template's sources arrive as a list, so
@@ -263,10 +255,4 @@ export const CLIPPING: MediaTemplate = {
     CADENCE_QUESTION,
   ],
 
-  words: {
-    plansSubtitle: "Every moment the scout picked — source, timestamps and why — and what the clipper has cut from it.",
-    plansEmpty: "The scout plans each cut here — the video, the moment and the reasoning — before the clipper spends a cut on it.",
-    queueSubtitle: "Every clip the clipper cut from your reference channels, on its way to your accounts.",
-    queueEmpty: "Point the scout at a reference video in Chat and each cut lands here for review.",
-  },
 };

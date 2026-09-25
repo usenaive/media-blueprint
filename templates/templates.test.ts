@@ -9,9 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
-import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, lengthPhrase, MAX_RENDER_SECONDS, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, PLATFORM_CHOICES, REFERENCE_RULE, REFERENCE_STUDY_RULE, referenceKindOf, RENDERER, renderMicroUsd, segmentsOf, toolset, words } from "./template.ts";
-import { POST_PLATFORMS } from "../seed/posts.ts";
-import { LONGFORM_PROJECT_SEEDS } from "../seed/projects.ts";
+import { APPROVAL_GATE, BUILTIN_TOOLS, CARD_ORDER, CONTEXT_PREAMBLE, lengthPhrase, MAX_RENDER_SECONDS, MAX_SECONDS, MIN_SECONDS, ONE_RENDER_MICRO_USD, REFERENCE_RULE, REFERENCE_STUDY_RULE, renderMicroUsd, segmentsOf, toolset, words } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 /**
@@ -176,11 +174,6 @@ describe("the crews", () => {
    */
   it("hands the teardown procedure to the skill, and keeps day one's own rules on the card", () => {
     const body = TEMPLATES.faceless.tasks.find((task) => task.key === "reference-study")!.body!;
-    // The three answers the classifier can return; the skill owes a branch to each.
-    expect(referenceKindOf("https://cdn.example/still.jpg")).toBe("image");
-    expect(referenceKindOf("fil_9f2a")).toBe("file");
-    expect(referenceKindOf("https://youtube.com/@dailystoic")).toBe("link");
-
     // The card loads the procedure rather than restating it, and the seat may actually read it.
     expect(body).toMatch(/read_skill `naive\/reference-teardown`/);
     expect(TEMPLATES.faceless.agents.find((one) => one.name === "scriptwriter")?.skills).toContain("naive/reference-teardown");
@@ -574,21 +567,6 @@ describe("the crews", () => {
     expect(CARD_ORDER).toMatch(/timers/i);
   });
 
-  /**
-   * #5 — where this channel posts is the channel OWNER'S, and it was a constant in `server/mcp.ts`,
-   * then a constant here. It is now `PLATFORM_QUESTION`, asked in the studio before anything is
-   * provisioned; what is left on the template is the FALLBACK an install with no usable answer
-   * files against, and it is the question's own first option so the two can never disagree.
-   */
-  it("declares a fallback network its crew can file for, and it is the question's own default", () => {
-    for (const template of both) {
-      expect(POST_PLATFORMS as readonly string[], template.name).toContain(template.platform);
-      expect(template.platform, template.name).toBe(PLATFORM_CHOICES[0]!.platform);
-    }
-    expect(TEMPLATES.faceless.platform).toBe("youtube");
-    expect(TEMPLATES.clipping.platform).toBe("youtube");
-  });
-
   it("gives the producer generation tools and the clipper a cutting one, and neither the other's", () => {
     expect(toolsOf(TEMPLATES.faceless, "producer")).toEqual(
       expect.arrayContaining(["generate_video", "generate_image"]),
@@ -707,18 +685,6 @@ describe("the crews", () => {
     expect(TEMPLATES.clipping.tasks.find((one) => one.key === "first-moments")?.body).toMatch(/do not cut from one the context does not name/);
   });
 
-  it("names, per kind of plan, the seat the dashboard's Render button opens a session with — and each crew has it", () => {
-    // `POST /api/projects/:id/render` looks the renderer up by this name in the live roster, so a
-    // rename here without one in the template would send every press to nobody.
-    expect(TEMPLATES.faceless.agents.map((a) => a.name)).toContain(RENDERER.generation);
-    expect(TEMPLATES.clipping.agents.map((a) => a.name)).toContain(RENDERER.clipping);
-    const producer = TEMPLATES.faceless.agents.find((a) => a.name === RENDERER.generation);
-    const clipper = TEMPLATES.clipping.agents.find((a) => a.name === RENDERER.clipping);
-    // Both are briefed to take a plan named to them, which is what the button's message does.
-    expect(producer?.system).toMatch(/one named to you/);
-    expect(clipper?.system).toMatch(/named to you/);
-  });
-
   /**
    * The Studio's revision (`POST /api/studio/:id/revise`, `server/routes.ts`) is a message on the
    * session that made the video, so each renderer is told what one is: the same plan, re-read, and
@@ -733,7 +699,7 @@ describe("the crews", () => {
     // composes nothing, still finishes in the one write. What both must still say is the part this
     // test is for: the same plan, re-read, and never a second project.
     const REVISION = /A revision arrives as a message on your session: re-read the plan with channel\.get_project, apply the operator's note.*Never open a second project\./s;
-    for (const [template, seat] of [[TEMPLATES.faceless, RENDERER.generation], [TEMPLATES.clipping, RENDERER.clipping]] as const) {
+    for (const [template, seat] of [[TEMPLATES.faceless, "producer"], [TEMPLATES.clipping, "clipper"]] as const) {
       const renderer = template.agents.find((a) => a.name === seat);
       expect(renderer?.system, seat).toMatch(REVISION);
       // The revision is finished by the same guarded write, not a new one, and still never published.
@@ -1167,11 +1133,6 @@ describe("the channel's clock", () => {
 });
 
 describe("the data the screens read", () => {
-  it("files what its crew actually makes", () => {
-    expect(TEMPLATES.faceless.kinds.map((kind) => kind.id)).toEqual(["produced", "multi"]);
-    expect(TEMPLATES.clipping.kinds.map((kind) => kind.id)).toEqual(["clip"]);
-  });
-
   /**
    * Three or four questions per template, asked by the studio before anything is provisioned — the
    * engine refuses a fifth, and `onboarding.test.ts` holds it to that by asking the engine itself.
@@ -1210,14 +1171,6 @@ describe("the data the screens read", () => {
     expect(TEMPLATES.faceless.questions[1]).toBe(TEMPLATES.clipping.questions[1]);
     expect(TEMPLATES.faceless.questions.at(-1)).toBe(TEMPLATES.clipping.questions.at(-1));
     expect(TEMPLATES.faceless.questions.at(-1)).toMatchObject({ type: "choice", options: ["daily", "3× a week", "weekly"] });
-  });
-
-  it("prints its own words on every screen that has any", () => {
-    const words = both.map((template) => Object.values(template.words));
-    for (const set of words) expect(set.every((word) => word.trim() !== "")).toBe(true);
-    // The two templates never print the same sentence: a screen that read the same either way
-    // would be a screen that is not following the template at all.
-    expect(new Set(words.flat()).size).toBe(words.flat().length);
   });
 
   it("is keyed by the name `defineProject({ template })` uses, and one of them is running", () => {
@@ -1818,49 +1771,6 @@ describe("the long-form crew", () => {
     expect(card("reference-study")?.body).toMatch(/"none given" is not "work from the niche alone", it is "go and look"/);
     // And it is the card that goes INSIDE a video, which is what nothing in this pipeline used to do.
     expect(card("reference-study")?.body).toMatch(/pull frames with bash at the points the piece changes chapter/);
-  });
-});
-
-/**
- * The demo plans this template ships, and the one property of them that is not decoration.
- *
- * A seed is a screen filler — `pnpm serve` only, never anyone's work — but a long-form seed is also
- * a WORKED EXAMPLE of the rule the writer's brief states twice, and an operator reading the Projects
- * screen learns the shape from it. A seed whose scenes ran across a `MAX_RENDER_SECONDS` seam would
- * be this repo demonstrating the one mistake it spends a brief, a card and two tests preventing.
- */
-describe("the long-form demo plans", () => {
-  it("plans every seed to the template's own window, with a shot ending on every segment seam", () => {
-    expect(LONGFORM_PROJECT_SEEDS.length).toBeGreaterThan(0);
-    for (const plan of LONGFORM_PROJECT_SEEDS) {
-      expect(plan.kind, plan.id).toBe("generation");
-      const scenes = plan.scenes ?? [];
-      expect(scenes.length, plan.id).toBeGreaterThan(0);
-      const total = scenes.reduce((sum, scene) => sum + scene.seconds, 0);
-      // The window `/mcp` would refuse a filed plan outside of (`scenesOf`, `server/mcp.ts`).
-      expect(total, plan.id).toBeGreaterThanOrEqual(TEMPLATES.longform.length.min);
-      expect(total, plan.id).toBeLessThanOrEqual(TEMPLATES.longform.length.max);
-      // Every seam is a shot change: the running total reaches each multiple of MAX_RENDER_SECONDS
-      // exactly, so no segment is cut mid-shot and no segment runs past what one call may take.
-      const boundaries = new Set<number>();
-      let running = 0;
-      for (const scene of scenes) {
-        expect(scene.seconds, `${plan.id} shot longer than one render`).toBeLessThanOrEqual(MAX_RENDER_SECONDS);
-        running += scene.seconds;
-        boundaries.add(running);
-      }
-      for (let seam = MAX_RENDER_SECONDS; seam < total; seam += MAX_RENDER_SECONDS) {
-        expect(boundaries, `${plan.id} has no shot ending at ${seam}s`).toContain(seam);
-      }
-      // A plan is the whole piece decided before the money, so the fields that make it one are here.
-      expect(plan.hook, plan.id).toMatch(/\S/);
-      expect(plan.retention, plan.id).toMatch(/\S/);
-      expect((plan.facts ?? []).length, plan.id).toBeGreaterThan(0);
-      for (const fact of plan.facts ?? []) expect(fact.source, plan.id).toMatch(/\S/);
-      // And the exemplar attribution lives in `brief`, never in a shot the renderer is handed verbatim.
-      expect(plan.brief, plan.id).toMatch(/exemplar/i);
-      for (const scene of scenes) expect(scene.prompt, plan.id).not.toMatch(/exemplar/i);
-    }
   });
 });
 

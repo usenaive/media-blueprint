@@ -54,7 +54,6 @@ import {
   lengthPhrase,
   LONG_FORM_LENGTH,
   MAX_RENDER_SECONDS,
-  PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   REFERENCE_QUESTION,
   REFERENCE_RULE,
@@ -321,16 +320,6 @@ export const LONGFORM: MediaTemplate = {
     }),
   ],
 
-  // The FALLBACK target only: `PLATFORM_QUESTION` below asks the customer where this channel posts
-  // and a filed post takes their answer. This is the question's own first option, so the fallback
-  // and the default a customer sees pre-selected are the same network.
-  platform: PLATFORM_CHOICES[0]!.platform,
-
-  kinds: [
-    { id: "produced", label: "Long-form" },
-    { id: "multi", label: "Series part" },
-  ],
-
   /**
    * THE SAME FOUR QUESTIONS AS THE OTHER TEMPLATES, AND THAT IS A CONSTRAINT RATHER THAN A CHOICE.
    * The engine refuses a fifth on a project that names a template, `PLATFORM_QUESTION` takes one
@@ -359,10 +348,4 @@ export const LONGFORM: MediaTemplate = {
     CADENCE_QUESTION,
   ],
 
-  words: {
-    queueSubtitle: "Every long-form piece the producer rendered and joined, on its way to your accounts.",
-    queueEmpty: "Brief the crew in Chat and each finished piece lands here, joined into one file, for review.",
-    plansSubtitle: "Every piece the writer planned — hook, acts and shots, with the segment seams they were cut for — and what the producer has rendered of it.",
-    plansEmpty: "The writer plans each subject here in full — the hook, the acts, the facts and their sources — against exemplars it actually watched, before the producer spends a whole piece of render on it.",
-  },
 };

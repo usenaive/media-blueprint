@@ -1,4 +1,4 @@
-/** The blueprint as `naive up` would read it: it parses, it names its template, and every agent carries the approval gate. */
+/** The blueprint as `naive up` would read it: it parses, it names its template, and it declares no app. */
 import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
@@ -26,24 +26,10 @@ describe("naive.config", () => {
     for (const name of admits) expect(Object.keys(TEMPLATES)).toContain(name);
   });
 
-  it("declares the dashboard and the running template's agents, each gated on operator approval", () => {
-    // `channel`, not `dashboard`: app names are org-unique, and a generic one lets a second
-    // blueprint adopt and overwrite this app on its own `naive up`.
-    expect(project.apps.map((app) => app.name)).toEqual(["channel"]);
+  it("declares no app: the crew runs on the platform's own board, media gallery and approval card", () => {
+    expect(project.apps).toEqual([]);
+    expect(declaration).not.toHaveProperty("apps");
     expect(project.agents.map((agent) => agent.name)).toEqual(ACTIVE.agents.map((agent) => agent.name));
-    for (const agent of project.agents) {
-      expect(agent.system).toMatch(/never publish it yourself/);
-      // Nothing enumerable is left to the default: every built-in this crew was not granted is
-      // written `deny` by name, so the default governs only the tools a connected account
-      // contributes — whose names come from the org's live connections and cannot be written here.
-      expect(agent.tools?.default_config.permission).toBe("ask");
-      // The shell is the one built-in a seat may be granted on purpose — Short Form's scriptwriter
-      // samples frames out of the exemplars it plans against, Long Form's producer joins its
-      // segments with ffmpeg — so what is asserted here is that it is written by name either way,
-      // never left to the default. Which seats hold one is `templates/templates.test.ts`'s list.
-      const bash = agent.tools?.configs["bash"];
-      expect(bash, agent.name).toEqual(bash?.enabled === true ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" });
-    }
   });
 
   /**
@@ -98,8 +84,6 @@ describe("naive.config", () => {
     expect(project.tasks).toEqual(ACTIVE.tasks);
     expect(project.tasks).toHaveLength(ACTIVE.tasks.length);
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
-    // The dashboard is the crew's queue and MCP endpoint: an install cannot untick it.
-    expect(project.apps[0]?.required).toBe(true);
     // The chain survives `defineProject` (engine 0.5.0 validates it), so `up` compiles the grants.
     expect(project.agents.map((agent) => [agent.name, agent.handoffs])).toEqual(
       ACTIVE.agents.map((agent) => [agent.name, agent.handoffs]),
@@ -139,59 +123,6 @@ describe("naive.config", () => {
     }
     // The shared agent is the running crew's, not a kept name.
     expect(project.kept.agents).not.toContain("channel-manager");
-  });
-
-  it("gives the deployed dashboard the org key, without putting a secret in this file", () => {
-    // Declared nowhere before, so the deployed process had no key at all: the chat relay and every
-    // platform-backed route could only ever answer 503. `{from_env}` also refuses the apply by name
-    // when the variable is unset, instead of deploying a dashboard that cannot reach the platform.
-    expect(project.apps[0]?.env?.["NAIVE_API_KEY"]).toEqual({ from_env: "NAIVE_API_KEY" });
-    expect(JSON.stringify(project.apps[0]?.env)).not.toMatch(/sk_|secret/i);
-  });
-
-  it("declares the operator token every /api/* route is gated on, and has the platform invent it", () => {
-    // Declared nowhere before, so the deployed dashboard had no token to compare against and its
-    // whole API — the queue, publishing, the roster, opening a billable session — answered anyone
-    // who found the URL. It is `{generate: true}` (`canonical-spec §29.7`) rather than `{from_env}`
-    // because the value is "any long random string": a person inventing entropy is not a setup
-    // question, and a hosted install has no shell to read one out of. The platform makes it once,
-    // on the apply that creates the app, and a later apply leaves it exactly where it is.
-    expect(project.apps[0]?.env?.["DASHBOARD_TOKEN"]).toEqual({ generate: true });
-  });
-
-  it("declares a generated dashboard password beside the token: the operator's own way through the gate", () => {
-    // The token is never shown to anyone; the password exists to be shown — in the studio's Access
-    // panel — and typed into the gate by a browser that arrived without the studio's handoff. Same
-    // `{generate: true}`: the platform shapes the value, and a later apply leaves it where it is.
-    expect(project.apps[0]?.env?.["DASHBOARD_PASSWORD"]).toEqual({ generate: true });
-  });
-
-  /**
-   * The platform's own two values are the platform's to write (`canonical-spec §29.7`).
-   *
-   * They used to be `process.env` reads in `naive.config.ts`, which is two bugs in one line. At
-   * publish time the PUBLISHER'S shell was baked into the declaration every customer then installs;
-   * on a hosted apply there is no shell at all, so both simply vanished and the dashboard fell back
-   * to the production base URL with no persona — `/api/social/*` answering 503 for every connected
-   * account. Declaring them is not the fix either: a laptop apply would then refuse for want of two
-   * variables nobody has. The platform knows both and writes them itself.
-   */
-  it("declares neither the API base URL nor the identity id, because the platform provides both", () => {
-    expect(project.apps[0]?.env).toEqual({
-      NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-      DASHBOARD_TOKEN: { generate: true },
-      DASHBOARD_PASSWORD: { generate: true },
-    });
-  });
-
-  it("serves its MCP endpoint from the dashboard and lets every agent file work through it", () => {
-    expect(project.apps[0]).toMatchObject({ type: "fullstack", mcp: "/mcp" });
-    for (const agent of project.agents) {
-      expect(agent.system).toMatch(/channel\.create_post/);
-      // The toolsets deny by default, so the dashboard's MCP tools must be allowed by name.
-      expect(agent.tools?.configs["channel.create_post"]).toEqual({ enabled: true, permission: "allow" });
-      expect(Object.keys(agent.tools?.configs ?? {}).some((name) => /^channel\.(approve|reject|post)/.test(name))).toBe(false);
-    }
   });
 
   it("lets no seat publish — the one publish path is the operator's Post now", () => {

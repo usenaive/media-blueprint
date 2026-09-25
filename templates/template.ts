@@ -15,8 +15,6 @@
  * could restate them could quietly drop the gate.
  */
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
-import type { PostKind, PostPlatform } from "../seed/posts.ts";
-import type { ProjectKind } from "../seed/projects.ts";
 
 export type TemplateName = "faceless" | "clipping" | "longform";
 
@@ -79,7 +77,10 @@ export const PLATFORM_ANSWER_KEY = "platform";
  * into a target is this table. First is the default an install falls back to when it has no
  * answer at all.
  */
-export const PLATFORM_CHOICES: readonly { option: string; platform: PostPlatform }[] = [
+/** The networks that take vertical video — the platform's `SOCIAL_MEDIA_PLATFORMS`. */
+export type Network = "youtube" | "tiktok" | "instagram";
+
+export const PLATFORM_CHOICES: readonly { option: string; platform: Network }[] = [
   { option: "YouTube Shorts", platform: "youtube" },
   { option: "TikTok", platform: "tiktok" },
   { option: "Instagram Reels", platform: "instagram" },
@@ -137,68 +138,6 @@ export const PLATFORM_QUESTION: SetupQuestion = {
   help: "Pick the apps your videos go out on — one or several. Picking them is not the same as connecting them — after setup, open Accounts and connect the account you post from on each one, or the team will fill a queue that cannot publish.",
 };
 
-/** What a customer saw this network called; the raw id for anything not on the list. */
-export const labelOf = (platform: PostPlatform): string =>
-  PLATFORM_CHOICES.find((choice) => choice.platform === platform)?.option ?? platform;
-
-/**
- * One answer, turned into a target — or null when it is not one of ours.
- *
- * Both spellings are accepted, because both occur: the studio hands back the option string it
- * showed ("YouTube Shorts"), and an answer edited by hand or seeded by a script is as likely to
- * be the bare id ("youtube"). Case and surrounding space are the customer's, not the wire's.
- */
-export const platformOf = (answer: unknown): PostPlatform | null => {
-  if (typeof answer !== "string") return null;
-  const said = answer.trim().toLowerCase();
-  if (said === "") return null;
-  const choice = PLATFORM_CHOICES.find(
-    (one) => one.option.toLowerCase() === said || one.platform === said,
-  );
-  return choice?.platform ?? null;
-};
-
-/**
- * The channel's networks as the customer answered them, or `[fallback]` when they did not.
- *
- * Takes either the whole `project_context` body (`{ template, answers, updated_at }`) or the bare
- * answers array, because the server reads the first and the browser is handed the same object.
- * The list is the customer's: every recognised pick in the order they ticked them, each network
- * once, and nothing this blueprint cannot publish to. It NEVER guesses: an answer naming something
- * unpublishable is not "close enough", it is no answer, and when nothing usable is left the
- * caller's own default is more honest than a network nobody chose. This is the one place the
- * answer is interpreted, so the store, `/mcp` and the screens cannot disagree about where the
- * channel posts.
- */
-export const platformsFromAnswers = (context: unknown, fallback: PostPlatform): PostPlatform[] => {
-  const answers = Array.isArray(context)
-    ? context
-    : ((context as { answers?: unknown } | null | undefined)?.answers ?? []);
-  if (!Array.isArray(answers)) return [fallback];
-  const answer = (answers as { key?: unknown; value?: unknown }[]).find((row) => row?.key === PLATFORM_ANSWER_KEY);
-  const values = Array.isArray(answer?.value) ? answer.value : [answer?.value];
-  const chosen: PostPlatform[] = [];
-  for (const value of values) {
-    const platform = platformOf(value);
-    if (platform !== null && !chosen.includes(platform)) chosen.push(platform);
-  }
-  return chosen.length > 0 ? chosen : [fallback];
-};
-
-/**
- * The FIRST network the customer picked — where a post that names none is filed — or `fallback`.
- * The first of `platformsFromAnswers`, so the two can never disagree about which that is.
- */
-export const platformFromAnswers = (context: unknown, fallback: PostPlatform): PostPlatform =>
-  platformsFromAnswers(context, fallback)[0]!;
-
-/** "YouTube Shorts, TikTok and Instagram Reels" — the networks as the customer saw them named, in one phrase. */
-export const labelsOf = (platforms: readonly PostPlatform[]): string => {
-  const names = platforms.map(labelOf);
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-};
-
 /** The key the platform stores the reference answer under, and the one name every reader of it uses. */
 export const REFERENCE_ANSWER_KEY = "reference";
 
@@ -236,82 +175,6 @@ export const REFERENCE_QUESTION: SetupQuestion = {
   placeholder: "A link, or image URLs — one per line",
   help: "Optional, and the most useful thing you can give the team. Paste a channel or video link, and/or the URLs of a few stills from it — stills are worth far more than a link, because the team can actually look at those. It is studied once, up front: the shot grammar, the hooks, the pacing, the caption shape. Every brief, script, render and review is then measured against it. Leave it blank and the team works from your niche alone.",
 };
-
-/**
- * The references the customer named, in their order — or `[]` when they named none.
- *
- * Takes either the whole `project_context` body (`{ template, answers, updated_at }`) or the bare
- * answers array, exactly as `platformsFromAnswers` does and for the same reason: the server reads
- * the first and the browser is handed the same object. One reference per line, trimmed, blanks
- * dropped, each kept once.
- *
- * It does NOT validate that a line is a URL. A customer may write `@mrballen` or `Veritasium`, and
- * a seat with `web_search` can find either — refusing them here would turn the most useful kind of
- * answer into no answer at all. What it does refuse is emptiness dressed as an answer: a field of
- * whitespace is `[]`, the same as an unanswered question, because the two mean the same thing to
- * every seat that reads this.
- */
-export type ReferenceKind = "image" | "file" | "link";
-
-/** One thing the customer pointed at, and what the crew can actually do with it. */
-export interface Reference {
-  kind: ReferenceKind;
-  value: string;
-}
-
-/** Extensions a provider will render as a picture; anything else is a link, not a still. */
-const IMAGE_SUFFIX = /\.(png|jpe?g|gif|webp)(\?|#|$)/i;
-
-/**
- * *** WHAT KIND OF THING THE CUSTOMER GAVE US, WHICH DECIDES WHAT THE STUDY CAN DO. ***
- *
- * The three answers are not equal and the crew must not pretend they are.
- *
- *   · `image` — a URL ending in a picture. The best answer, and the BROWSER's: `goto` it and the
- *     screenshot comes back as a picture, so the study is written from what is actually on screen.
- *   · `file`  — a `fil_` id already in the org's library, from an upload, a screenshot the session
- *     just took, or an earlier session. The same study, and the only kind `view_image` will take:
- *     its argument is `file_ids`, and a URL is refused as `validation_failed` before a byte is
- *     read (§16.2). That refusal is why these two are classified apart rather than merged into
- *     "a picture" — they are the same value to a reader and different tools to a seat.
- *   · `link`  — a channel or video page. The crew can read its text and screenshot the PAGE, but
- *     nothing here samples FRAMES out of a video (`clip_video` returns transcript-derived text and
- *     the session has no ffmpeg). A video link alone is therefore the WEAKEST answer, and the
- *     study card is written to say so rather than to guess from a caption — which is exactly how
- *     a crew ends up planning the wrong genre with confidence (ADR-0758).
- */
-export const referenceKindOf = (value: string): ReferenceKind => {
-  if (/^fil_[0-9a-z]+$/i.test(value)) return "file";
-  return IMAGE_SUFFIX.test(value) ? "image" : "link";
-};
-
-/** The references classified, in the customer's order — what `reference-study` branches on. */
-export const referencesOf = (context: unknown): Reference[] =>
-  referencesFromAnswers(context).map((value) => ({ kind: referenceKindOf(value), value }));
-
-export const referencesFromAnswers = (context: unknown): string[] => {
-  const answers = Array.isArray(context)
-    ? context
-    : ((context as { answers?: unknown } | null | undefined)?.answers ?? []);
-  if (!Array.isArray(answers)) return [];
-  const answer = (answers as { key?: unknown; value?: unknown }[]).find((row) => row?.key === REFERENCE_ANSWER_KEY);
-  const values = Array.isArray(answer?.value) ? answer.value : [answer?.value];
-  const named: string[] = [];
-  for (const value of values) {
-    if (typeof value !== "string") continue;
-    for (const line of value.split("\n")) {
-      const one = line.trim();
-      if (one !== "" && !named.includes(one)) named.push(one);
-    }
-  }
-  return named;
-};
-
-/** One kind of post a template's crew files. `id` is what a row carries; the label is what a screen prints. */
-export interface PostKindDecl {
-  id: PostKind;
-  label: string;
-}
 
 /**
  * One card the apply seeds on the organization's board (`canonical-spec §31.11`), in the engine's
@@ -427,43 +290,6 @@ export const MAX_RENDER_SECONDS = 30;
 export const segmentsOf = (length: Length): number => Math.ceil(length.max / MAX_RENDER_SECONDS);
 
 /**
- * Whether a piece of this template is RENDERED IN SEGMENTS AND JOINED rather than made in one call.
- *
- * It is two facts and not one, which is why it is a function rather than the arithmetic alone.
- * `segmentsOf` says whether one call can carry the piece; the seat check says whether this crew
- * HAS the producer that joins what it cannot. `clipping`'s band is 15–60s, so dividing it by the
- * render cap says "two segments" — but that crew cuts with `clip_video`, holds no `generate_video`
- * and no producer at all, so a segmented answer would promise it a seat and a join it does not
- * have. `server/mcp.ts` reads this for both the words it describes a plan with and the refusal it
- * files one against, so the two cannot drift apart.
- */
-export const rendersInSegments = (template: MediaTemplate): boolean =>
-  segmentsOf(template.length) > 1 && template.agents.some((one) => one.name === RENDERER.generation);
-
-/**
- * The segments a plan's scenes pack into — each entry the seconds of one segment, cut ONLY at a
- * scene boundary.
- *
- * Greedy and first-fit, because that is exactly what the producer is told to do with the compiled
- * prompt: *"cut that prompt along its own shot boundaries — never across a shot — into segments of
- * `MAX_RENDER_SECONDS` seconds or fewer"*. So this is not an estimate of the render, it is the
- * render, and a plan that packs into more segments than `segmentsOf` allows is one the producer
- * cannot make however it cuts.
- *
- * A scene LONGER than the cap packs into a segment of its own that is still over it — the one
- * shape greedy cannot fix — which is how the caller tells the two failures apart.
- */
-export const packSegments = (seconds: readonly number[]): number[] => {
-  const segments: number[] = [];
-  for (const one of seconds) {
-    const current = segments[segments.length - 1];
-    if (current === undefined || current + one > MAX_RENDER_SECONDS) segments.push(one);
-    else segments[segments.length - 1] = current + one;
-  }
-  return segments;
-};
-
-/**
  * "between 15 and 30 seconds" — the range as every prompt of THAT template says it.
  *
  * It was one module constant interpolated into every brief, cron and card. One phrase across three
@@ -476,36 +302,14 @@ export interface MediaTemplate {
   /** Spelled exactly as `defineProject({ template })` names it. */
   name: TemplateName;
   /**
-   * How long a piece of this template runs: the window `scenesOf` (`server/mcp.ts`) refuses a plan
-   * outside of, and the numbers `lengthPhrase` puts into this template's own prompts. See `Length`.
+   * How long a piece of this template runs: the numbers `lengthPhrase` puts into this template's
+   * own prompts. See `Length`.
    */
   length: Length;
   /** One line for the operator: what this crew does. */
   description: string;
   /** The crew, declared as `naive.config.ts` declares any agent. */
   agents: AgentDecl[];
-  /** What this crew files; the first is what a post filed over MCP with no kind stated becomes. */
-  kinds: [PostKindDecl, ...PostKindDecl[]];
-  /**
-   * THE FALLBACK TARGET — and it is a fallback now, which is the whole point.
-   *
-   * This line used to decide where a channel posts. `channel.create_post` takes a `platform`, and
-   * in production not one of the nine rows the crew filed carried one: every filing fell through
-   * to a constant, so a channel of vertical video queued nine posts at a network nobody had
-   * chosen or connected. Moving the constant from `server/mcp.ts` to here made it the template's
-   * constant instead of the machine's; it was still a constant, and the remedy this comment used
-   * to offer — "edit this one line and run `naive up`" — is a patch, not an onboarding flow.
-   *
-   * `PLATFORM_QUESTION` now asks the customer — one network or several — and the first they
-   * picked (`platformFromAnswers`) is what an untargeted post is filed for. This value is what an
-   * install that has no answer falls back to: a fresh clone before the
-   * studio has asked anything, an install whose context cannot be read right now, an answer naming
-   * a network this blueprint cannot publish to. It is the first option of the question, so the
-   * fallback and the default a customer sees pre-selected are the same network.
-   *
-   * An agent may still name a different `POST_PLATFORMS` entry per post.
-   */
-  platform: PostPlatform;
   /**
    * The questions the studio asks once, before anything exists — three or four, because the engine
    * refuses a fifth on a project that names a template (the refusal is quoted on `SetupQuestion`
@@ -526,14 +330,6 @@ export interface MediaTemplate {
    * never created.
    */
   tasks: Task[];
-  /** Every word a screen prints that changes with the template. */
-  words: {
-    queueSubtitle: string;
-    queueEmpty: string;
-    /** The Projects screen: what a plan is on this channel, and who writes it. */
-    plansSubtitle: string;
-    plansEmpty: string;
-  };
 }
 
 /**
@@ -869,13 +665,6 @@ export const BUILTIN_TOOLS = [
  * piece genuinely needs a hard cut.
  */
 export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
-
-/**
- * Who renders a plan of each kind — the agent the dashboard's Render button opens a session with
- * (`POST /api/projects/:id/render`), and the one the planners hand off to. A generation plan is
- * the faceless crew's producer; a clipping plan is the clipping crew's clipper.
- */
-export const RENDERER: Record<ProjectKind, string> = { generation: "producer", clipping: "clipper" };
 
 /** The persona every agent of this channel acts as, and the one connected accounts hang off. */
 export const CHANNEL_IDENTITY = "channel";

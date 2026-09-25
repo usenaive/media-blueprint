@@ -77,7 +77,6 @@ import {
   channelPlanCard,
   LENGTH_PHRASE,
   ONE_RENDER_MICRO_USD,
-  PLATFORM_CHOICES,
   PLATFORM_QUESTION,
   REFERENCE_QUESTION,
   REFERENCE_RULE,
@@ -449,16 +448,6 @@ export const FACELESS: MediaTemplate = {
     }),
   ],
 
-  // The FALLBACK target only: `PLATFORM_QUESTION` below asks the customer where this channel
-  // posts, and a filed post takes their answer. This is what an install with no usable answer
-  // falls back to, and it is the question's own first option so the two never disagree.
-  platform: PLATFORM_CHOICES[0]!.platform,
-
-  kinds: [
-    { id: "produced", label: "Produced" },
-    { id: "multi", label: "Multi-part" },
-  ],
-
   /**
    * Four, and the fourth is the optional one — the engine refuses a fifth, and refuses a fourth
    * that is not optional in spirit (`templates/template.ts`, `SetupQuestion`; ADR-0757).
@@ -496,10 +485,4 @@ export const FACELESS: MediaTemplate = {
     CADENCE_QUESTION,
   ],
 
-  words: {
-    queueSubtitle: "Everything the producer made, on its way to your accounts.",
-    queueEmpty: "Brief the producer in Chat and each finished video lands here for review.",
-    plansSubtitle: "Every video the scriptwriter planned — hook, beats and shots — and what the producer has made of it.",
-    plansEmpty: "The scriptwriter plans each brief here in full — the hook, the beats, the facts and their sources, the sound and the look — before the producer spends a render on it.",
-  },
 };
