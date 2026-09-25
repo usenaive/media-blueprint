@@ -303,7 +303,8 @@ export const FACELESS: MediaTemplate = {
         "Reports weekly on what the channel posted, by post kind and by hook, and tells the team what to make more and less of.",
       brief:
         `You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: per post kind — produced and multi-part — what went out, what it did, which hooks and formats moved and which did not, in plain numbers you actually read. Read the plans behind them too (channel.list_projects, channel.get_project): the hook, the beats and the retention line are what the numbers are a verdict on, so report by hook pattern, and say whether the pieces that followed the reference did better than the ones that drifted — that is the only evidence anyone will have about whether imitating it works. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its \`source\` is the period it covers. Name the two changes you would make next week. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none. ${REFERENCE_RULE}`,
-      tools: [],
+      // Read-only numbers for the Monday fire; unlisted, it falls to `ask` and the cron stalls on an approval nobody sees.
+      tools: ["social.post_metrics"],
       /*
        * IT HAD `skills: []` WHILE BEING THE ONE SEAT THAT WRITES A REPORT. Every other seat of this
        * template was handed the standard for its craft and the analyst was handed none, so the
@@ -316,7 +317,7 @@ export const FACELESS: MediaTemplate = {
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
           input:
-            "Write the weekly report. Read project_context, what posted in the last seven days (channel.list_posts, plus the connected account's metrics where offered) and the plans behind those posts (channel.list_projects, channel.get_project); per post kind and per hook pattern, say what went out and what it did, and where this channel has a reference teardown, whether the pieces that followed the reference did better than the ones that drifted. Name the two changes for next week. File it as a pending post with no media.",
+            "Write the weekly report. Read project_context, what posted in the last seven days (channel.list_posts, and their numbers from social.post_metrics with since_days 7) and the plans behind those posts (channel.list_projects, channel.get_project); per post kind and per hook pattern, say what went out and what it did, and where this channel has a reference teardown, whether the pieces that followed the reference did better than the ones that drifted. Name the two changes for next week. File it as a pending post with no media.",
           budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
         }),
       ],

@@ -64,7 +64,7 @@ and joins them in one session.
 | trend-scout | Trends & briefs | web_search, web_fetch | video-trend-brief, short-video-hooks | scriptwriter | Mon/Thu 06:00 |
 | scriptwriter | Hooks & scripts | web_search, web_fetch, view_image, **bash** (samples frames out of the exemplars) | short-video-hooks, caption-writing, reference-teardown | producer | daily 06:30 |
 | producer | Video production | generate_video (models pinned: veo-3.1, seedance-2.5), generate_image | — | — | daily 07:00 |
-| analyst | Performance | — | channel-report | — | Mon 07:30 |
+| analyst | Performance | social.post_metrics | channel-report | — | Mon 07:30 |
 
 Pipeline: scout files briefs at `stage: brief` → `send_to_agent(scriptwriter, wait:false)` with
 the ids → scriptwriter claims the brief (`scripting`, `expected_stage: brief`) and writes the
@@ -84,7 +84,7 @@ Crons are the fallback that picks up whatever a handoff missed.
 | researcher | Topics & sourcing | web_search, web_fetch | video-trend-brief | writer | Mon/Wed/Fri 05:00 |
 | writer | Arc & script | web_search, web_fetch, view_image, **bash**, publish_file | long-form-arc, caption-writing | producer | Mon/Wed/Fri 05:30 |
 | producer | Render & assembly | generate_video (models pinned), **bash**, publish_file | video-assembly | — | Mon/Wed/Fri 06:00 ($70) |
-| analyst | Performance | — | channel-report | — | Mon 07:30 |
+| analyst | Performance | social.post_metrics | channel-report | — | Mon 07:30 |
 
 Pipeline: researcher files a topic brief carrying **1–3 exemplar video URLs** for that topic and
 format → writer opens the exemplars *before* planning (browser for the page and its stills, bash
@@ -114,7 +114,7 @@ a comment beside the scenes.
 | scout | Source watch | web_search, web_fetch | clip-selection | daily 06:00 |
 | clipper | Clip production | clip_video | clip-selection | daily 07:00 |
 | caption-editor | Captions & titles | web_search | caption-writing | daily 07:30 |
-| analyst | Performance | — | channel-report | Mon 07:30 |
+| analyst | Performance | social.post_metrics | channel-report | Mon 07:30 |
 
 No handoffs here; the chain is ordered purely by cron time (plans → cuts → captions). The scout
 files each moment as a **clipping project** (`channel.create_project`, `kind: clipping`: the

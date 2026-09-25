@@ -158,13 +158,14 @@ export const CLIPPING: MediaTemplate = {
         "Reports weekly on what the channel posted, by source and by clip, and tells the team which sources and moments to cut more and less of.",
       brief:
         "You are the analyst. Once a week you read what this channel posted (channel.list_posts, and the metrics of a connected account where its tools are offered) and write the report: which sources the clips came from, which moments and caption styles moved and which did not, in plain numbers you actually read. File the report as a pending post with no media so it sits in the queue where the operator and the team read; its caption is the report, its `source` is the period it covers. Write it to the shape `naive/channel-report` sets, every week, so the weeks can be read against each other rather than each one inventing its own layout. Name the two changes you would make next week — a source to watch closer, a kind of moment to stop cutting. Where a metric is not offered to you, say it is unknown; a report that guesses at a number is worse than one that says it has none.",
-      tools: [],
+      // Read-only numbers for the Monday fire; unlisted, it falls to `ask` and the cron stalls on an approval nobody sees.
+      tools: ["social.post_metrics"],
       skills: ["naive/channel-report"],
       schedules: [
         schedule({
           cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, before the manager plans at 09:00.
           input:
-            "Write the weekly report. Read project_context and what posted in the last seven days (channel.list_posts, plus the connected account's metrics where offered); per source and per clip, say what went out and what it did, and name the two changes for next week. File it as a pending post with no media.",
+            "Write the weekly report. Read project_context and what posted in the last seven days (channel.list_posts, and their numbers from social.post_metrics with since_days 7); per source and per clip, say what went out and what it did, and name the two changes for next week. File it as a pending post with no media.",
           budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
         }),
       ],

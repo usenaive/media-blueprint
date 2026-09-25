@@ -199,13 +199,17 @@ describe("naive.config", () => {
       // Denied by name: it is not a built-in, so an omitted `social.post` would fall to the `ask`
       // default, and an approved call published without marking the queue row posted.
       expect(agent.tools?.configs["social.post"], agent.name).toEqual({ enabled: false, permission: "deny" });
-      // Nothing else granted may act outward unattended.
+    }
+  });
+
+  it("allows only the read-only social tools, and the metrics read only where a cron calls it", () => {
+    for (const agent of project.agents) {
       const allowed = Object.entries(agent.tools?.configs ?? {})
         .filter(([, config]) => config.permission === "allow")
         .map(([name]) => name);
       expect(allowed).not.toContain("social.post");
       expect(allowed.filter((name) => name.startsWith("social."))).toEqual(
-        agent.name === "channel-manager" ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
+        ["channel-manager", "analyst"].includes(agent.name) ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
       );
     }
   });

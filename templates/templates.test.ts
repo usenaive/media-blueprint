@@ -767,12 +767,22 @@ describe("the crews", () => {
         // Denied by name: it is not a built-in, so an omitted `social.post` would fall to the `ask`
         // default, and an approved call published without marking the queue row posted.
         expect(agent.tools?.configs["social.post"], `${template.name}/${agent.name}`).toEqual({ enabled: false, permission: "deny" });
+      }
+    }
+  });
+
+  it("allows the metrics read on the seats whose crons call it, and no other social tool", () => {
+    for (const template of both) {
+      for (const agent of template.agents) {
+        if (agent.name === "analyst") expect(agent.schedules?.[0]?.input, template.name).toMatch(/social\.post_metrics/);
         const allowed = Object.entries(agent.tools?.configs ?? {})
           .filter(([, config]) => config.permission === "allow")
           .map(([name]) => name);
-        // The manager's metrics read is the one other social grant, and it only reads.
+        // The metrics read is the one other social grant, and it only reads. The manager's daily fire
+        // and the analyst's weekly one both call it unattended: at the `ask` default it would park
+        // a cron on an approval nobody is there to give.
         expect(allowed.filter((name) => name.startsWith("social."))).toEqual(
-          agent.name === "channel-manager" ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
+          ["channel-manager", "analyst"].includes(agent.name) ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
         );
       }
     }

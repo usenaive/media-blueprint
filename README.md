@@ -189,7 +189,7 @@ file behind.
 | `producer` | Video production | `generate_video` (models pinned), `generate_image` | — | daily 07:00 render ($15) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-render` — renders the first piece, once there is a plan |
 | `trend-scout` | Trends & briefs | `web_search`, `web_fetch`, hands off to `scriptwriter` | `naive/video-trend-brief`, `naive/short-video-hooks` | Mon & Thu 06:00 briefs ($10) | `first-briefs` — researches the niche and files the channel's **first five briefs** |
 | `scriptwriter` | Hooks & scripts | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), hands off to `producer` | `naive/short-video-hooks`, `naive/caption-writing`, `naive/reference-teardown` | daily 06:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `hook-style` — writes the channel's voice, from that teardown · `first-scripts` — turns the five briefs into video projects |
-| `analyst` | Performance | — | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
+| `analyst` | Performance | `social.post_metrics` | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
 
 ### `longform`
 
@@ -204,7 +204,7 @@ job.
 | `researcher` | Topics & sourcing | `web_search`, `web_fetch`, hands off to `writer` | `naive/video-trend-brief` | Mon/Wed/Fri 05:00 topics ($10) | `first-topic` — researches the niche and files the channel's **first topic brief**, with the exemplars to plan against |
 | `writer` | Arc & script | `web_search`, `web_fetch`, `view_image`, `bash` (samples frames out of the exemplars), `publish_file`, hands off to `producer` | `naive/long-form-arc`, `naive/caption-writing` | Mon/Wed/Fri 05:30 scripts ($10) | `reference-study` — watches the channel or video you named and files the teardown · `arc-style` — writes the channel's arc, from that teardown · `first-script` — turns the first topic into a video project |
 | `producer` | Render & assembly | `generate_video` (models pinned), `bash` (joins the segments with ffmpeg), `publish_file` | `naive/video-assembly` | Mon/Wed/Fri 06:00 render ($70) | `look` — picks the style templates this channel renders in, from the reference teardown where there is one · `first-assembly` — renders each segment and joins them into the first piece |
-| `analyst` | Performance | — | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
+| `analyst` | Performance | `social.post_metrics` | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report, against the manager's plan |
 
 **There is no stitching tool on the platform, and that is why `producer` holds `bash`.**
 `clip_video` cuts and never joins, so assembly is ffmpeg inside the seat's own sandbox, followed
@@ -220,7 +220,7 @@ required to check that it did.
 | `clipper` | Clip production | `clip_video` | `naive/clip-selection` | daily 07:00 cuts ($10) | `source-check` — confirms it can reach every named reference · `first-cuts` — cuts the first two clips from the scout's plans |
 | `scout` | Source watch | `web_search`, `web_fetch` | `naive/clip-selection` | daily 06:00 moments ($10) | `first-moments` — goes through the named references and plans the **first five moments** worth cutting |
 | `caption-editor` | Captions & titles | `web_search` | `naive/caption-writing` | daily 07:30 captions ($10) | `caption-style` — writes the channel's voice · `first-captions` — titles and captions the first clips |
-| `analyst` | Performance | — | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report by source and clip, against the manager's plan |
+| `analyst` | Performance | `social.post_metrics` | `naive/channel-report` | Mon 07:30 report ($10) | `report-frame` — sets up the weekly report by source and clip, against the manager's plan |
 
 Only the `channel-manager` is `required` — it is the seat the dashboard's Chat talks to. Every
 other seat can be left unticked when the template is installed, and its crons are then never armed
