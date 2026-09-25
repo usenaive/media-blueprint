@@ -217,7 +217,7 @@ those seams rather than across them.
 There is **no relational schema for posts**. The whole store is one JSON document:
 
 ```ts
-interface StoreState { posts: Post[]; projects: VideoProject[]; templates: StyleTemplateSeed[] }
+interface StoreState { posts: Post[]; projects: VideoProject[]; templates: StyleTemplateSeed[]; settings?: { publishAs?: "private" | "unlisted" | "public" } }
 ```
 
 - **Local (`pnpm serve`)** — `server/store.ts` persists it as one JSON file under `data/`, seeded
@@ -477,7 +477,10 @@ new cut unseen and a rejection would drop the plan under it. The finishing write
    fails the move (`routes.ts` `sendReview`).
 4. Operator presses Post now → `POST /api/posts/:id/post-now` (`routes.ts` `postNow`): requires
    `approved`, a publishable platform, and media; then `POST /v1/identities/:idn/social/posts`
-   with `{content, title?, platforms:[…], media_urls | file_ids}`; on success the store stamps
+   with `{content, title?, platforms:[…], visibility?, media_urls | file_ids}` — `visibility` is the
+   channel's "Publish as" (Channel settings, `GET/PATCH /api/settings`, default `unlisted`), sent
+   only to a network that takes one (YouTube; the platform refuses it on TikTok and Instagram);
+   on success the store stamps
    `status: posted`, `postedAt: <ISO now>`, `views/likes ??= 0`.
 5. Analytics reads only `posted` rows and derives totals and the daily series from `postedAt`,
    `views` and `likes` — there is no separate metrics table; views/likes are whatever is on the

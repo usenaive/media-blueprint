@@ -200,4 +200,26 @@ describe("the Channel settings screen", () => {
     expect(host.querySelector(".chip-fail")?.textContent).toBe("no platform key");
     expect(host.querySelector(".absence")?.textContent).toBe("No roster to show.");
   });
+
+  it("shows the channel's Publish as, and saves a change to it", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url !== "/api/settings") return Promise.resolve(json({ data: [] }));
+      if (init?.method === "PATCH") return Promise.resolve(json(JSON.parse(init.body as string)));
+      return Promise.resolve(json({ publishAs: "unlisted" }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<Agents />));
+
+    const select = host.querySelector<HTMLSelectElement>('select[aria-label="Publish as"]')!;
+    expect(select.value).toBe("unlisted");
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(["private", "unlisted", "public"]);
+
+    await act(async () => {
+      select.value = "public";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const patch = fetchMock.mock.calls.find(([url, init]) => url === "/api/settings" && init?.method === "PATCH");
+    expect(JSON.parse(patch![1]!.body as string)).toEqual({ publishAs: "public" });
+    expect(select.value).toBe("public");
+  });
 });

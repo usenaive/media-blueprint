@@ -11,6 +11,7 @@ import { CLIPPING_SEEDS, FACELESS_SEEDS, type Post, type PostPlatform, type Post
 import { CLIPPING_PROJECT_SEEDS, FACELESS_PROJECT_SEEDS, LONGFORM_PROJECT_SEEDS, type ProjectSession, type ProjectStatus, type Render, type VideoProject } from "../seed/projects.ts";
 import { STYLE_TEMPLATE_SEEDS, type StyleTemplateSeed } from "../seed/style-templates.ts";
 import { ACTIVE, type MediaTemplate, type TemplateName } from "../templates/index.ts";
+import { DEFAULT_VISIBILITY, type Visibility } from "../templates/template.ts";
 
 /**
  * The demo rows of each template; a deployment starts empty, so these are `pnpm serve` only.
@@ -36,7 +37,20 @@ export interface StoreState {
   projects: VideoProject[];
   /** The style-template catalogue (`seed/style-templates.ts`), not the blueprint's templates. */
   templates: StyleTemplateSeed[];
+  /** The operator's channel settings; absent until first saved, read through `settingsOf`. */
+  settings?: Partial<ChannelSettings>;
 }
+
+/** What the operator sets once for the whole channel, on the Channel settings screen. */
+export interface ChannelSettings {
+  /** The visibility Post now publishes with, on the networks that take one (`VISIBILITY_PLATFORMS`). */
+  publishAs: Visibility;
+}
+
+/** The channel's settings with every default filled in. */
+export const settingsOf = (state: StoreState): ChannelSettings => ({
+  publishAs: state.settings?.publishAs ?? DEFAULT_VISIBILITY,
+});
 
 /**
  * What an agent files over MCP.
@@ -115,6 +129,8 @@ export interface Store {
   closeRevision(id: string): VideoProject | null;
   /** Stamps a plan as scanned for the sessions it was made in, and found in none; the scan does not run again. */
   markBackfilled(id: string): VideoProject | null;
+  /** Saves the operator's channel settings and answers them with defaults filled in. */
+  updateSettings(patch: Partial<ChannelSettings>): ChannelSettings;
 }
 
 const seedState = (template: MediaTemplate = ACTIVE): StoreState => ({
@@ -428,6 +444,11 @@ export function openStoreOver(
       project.backfilledAt = now();
       save();
       return project;
+    },
+    updateSettings(patch) {
+      state.settings = { ...state.settings, ...patch };
+      save();
+      return settingsOf(state);
     },
   };
 }

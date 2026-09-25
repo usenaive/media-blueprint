@@ -11,10 +11,10 @@
  */
 import { authError, bearerMatches, handleMcp, secretMatches, ticketMatches, type WhoIsRunning } from "./mcp.ts";
 import { REVIEWS, SESSION_CREATE, collect, notActivated, proxyFetch, sessionEvents, sessionList, sessionMessages, upstreamFor, type ProxyConfig } from "./proxy.ts";
-import type { Store } from "./store.ts";
+import { settingsOf, type Store } from "./store.ts";
 import { POST_MEDIA_PLATFORMS, POST_PLATFORMS, POST_STATUSES, type Post, type PostStatus } from "../seed/posts.ts";
 import type { ProjectSession, VideoProject } from "../seed/projects.ts";
-import { RENDERER } from "../templates/template.ts";
+import { RENDERER, VISIBILITIES, VISIBILITY_PLATFORMS, type Visibility } from "../templates/template.ts";
 
 /** The statuses the operator's screens move a row between; `posted` is `postNow`'s to write. */
 const PATCHABLE = POST_STATUSES.filter((status) => status !== "posted");
@@ -628,6 +628,9 @@ async function postNow(store: Store, config: ProxyConfig | null, id: string): Pr
       // operator approved is not left permanently unpublishable over a field nobody typed.
       ...(post.title.trim() === "" ? {} : { title: post.title }),
       platforms: [post.platform],
+      // The operator's "Publish as". Omitted, YouTube publishes at the account's default, which is
+      // normally public; the platform refuses it on a network with no per-post visibility.
+      ...(VISIBILITY_PLATFORMS.includes(post.platform) ? { visibility: settingsOf(store.read()).publishAs } : {}),
       ...(post.mediaUrl === undefined
         ? {}
         : /^fil_\w+$/.test(post.mediaUrl)
@@ -779,6 +782,13 @@ async function storeRoutes(req: ApiRequest, ctx: ApiContext): Promise<ApiReply |
   const { method, path } = req;
   if (method === "GET" && path === "/api/posts") return json(200, (await ctx.store()).read().posts);
   if (method === "GET" && path === "/api/templates") return json(200, (await ctx.store()).read().templates);
+  if (path === "/api/settings") {
+    if (method === "GET") return json(200, settingsOf((await ctx.store()).read()));
+    if (method !== "PATCH") return fail(405, "method not allowed");
+    const { publishAs } = parse(req.body) as { publishAs?: unknown };
+    if (!(VISIBILITIES as readonly unknown[]).includes(publishAs)) return fail(400, `publishAs must be one of ${VISIBILITIES.join(", ")}`);
+    return json(200, (await ctx.store()).updateSettings({ publishAs: publishAs as Visibility }));
+  }
   const patch = /^\/api\/posts\/([\w-]+)$/.exec(path);
   if (patch) {
     if (method !== "PATCH") return fail(405, "method not allowed");

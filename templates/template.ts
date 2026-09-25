@@ -86,6 +86,28 @@ export const PLATFORM_CHOICES: readonly { option: string; platform: PostPlatform
 ];
 
 /**
+ * Who may see a published post — the platform's `SOCIAL_VISIBILITIES`
+ * (`packages/core/src/schema/social.ts`), pinned because a blueprint imports no workspace package.
+ * Here and not in `seed/posts.ts` because the dashboard reads them too, and no value from that file
+ * may reach the bundle.
+ */
+export const VISIBILITIES = ["private", "unlisted", "public"] as const;
+export type Visibility = (typeof VISIBILITIES)[number];
+
+/**
+ * The networks whose publish takes a `visibility` — the platform's `SOCIAL_VISIBILITY_PLATFORMS`.
+ * The platform refuses a post that sends one to any other network, so Post now sends it only to these.
+ */
+export const VISIBILITY_PLATFORMS: readonly string[] = ["mastodon", "youtube"];
+
+/**
+ * What "Post now" publishes as until the operator says otherwise. Omitting `visibility` publishes at
+ * the account's own default, which on YouTube is normally public — so an approved video went out to
+ * everyone on one click. Unlisted is reachable by link, so the operator can check it live first.
+ */
+export const DEFAULT_VISIBILITY: Visibility = "unlisted";
+
+/**
  * *** WHERE THIS CHANNEL POSTS, ASKED OF THE PERSON WHOSE CHANNEL IT IS. ***
  *
  * It was a constant. `templates/faceless.ts` and `templates/clipping.ts` each carried

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { StyleTemplateSeed } from "../../seed/style-templates";
-import { apiGet, messageOf } from "../api";
+import { apiGet, apiSend, messageOf } from "../api";
 import { ago, Avatar, Card, Clamp, Facts, PageHeader, SectionHead, usd } from "../components/kit";
 import { STYLE_TEMPLATES, toStyleTemplates, type ChannelAgent, type StyleTemplate } from "../data";
 import { ACTIVE } from "../../templates";
+import { DEFAULT_VISIBILITY, VISIBILITIES, type Visibility } from "../../templates/template";
 import type { WireSession } from "./Approvals";
 
 interface WireAgent {
@@ -217,6 +218,49 @@ function StyleCard({ style }: { style: StyleTemplate }) {
   );
 }
 
+const VISIBILITY_WORDS: Record<Visibility, string> = { private: "Private", unlisted: "Unlisted", public: "Public" };
+
+/** The channel's "Publish as": the visibility Post now sends to a network that takes one (YouTube). */
+function PublishAs() {
+  // `null` until the server answers; the select is disabled rather than showing a guess.
+  const [value, setValue] = useState<Visibility | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    apiGet<{ publishAs: Visibility }>("/settings").then((saved) => setValue(saved.publishAs), (err: unknown) => setError(messageOf(err)));
+  }, []);
+  const save = (next: Visibility) => {
+    setError(null);
+    apiSend<{ publishAs: Visibility }>("PATCH", "/settings", { publishAs: next }).then(
+      (saved) => setValue(saved.publishAs),
+      (err: unknown) => setError(messageOf(err)),
+    );
+  };
+  return (
+    <Card title="Publishing" aside={error ? <span className="chip chip-fail">{error}</span> : null} className="mb-8">
+      <label className="flex items-center gap-3">
+        <span className="prop-label">Publish as</span>
+        <select
+          className="filter"
+          aria-label="Publish as"
+          value={value ?? DEFAULT_VISIBILITY}
+          disabled={value === null}
+          onChange={(e) => save(e.target.value as Visibility)}
+        >
+          {VISIBILITIES.map((option) => (
+            <option key={option} value={option}>
+              {VISIBILITY_WORDS[option]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
+        How Post now publishes a YouTube video. Unlisted is seen only by people with the link, so you can check it
+        live before making it public. TikTok and Instagram have no such setting and publish at the account&apos;s own.
+      </p>
+    </Card>
+  );
+}
+
 /** The channel's agents and their style templates (reference image + prompt).
  * A style template is what makes produced videos look like one channel. */
 export function Agents() {
@@ -275,6 +319,8 @@ export function Agents() {
           </p>
         </details>
       </Card>
+
+      <PublishAs />
 
       <SectionHead label="Agents" count={agents?.length} />
       {agents === null ? (

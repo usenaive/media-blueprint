@@ -357,7 +357,52 @@ describe("post now", () => {
       content: "Love what happens. All of it.",
       title: "Amor fati in 40 seconds",
       platforms: ["youtube"],
+      visibility: "unlisted",
       media_urls: ["https://cdn.test/amor-fati.mp4"],
+    });
+  });
+
+  describe("publish as", () => {
+    const approvedOn = (platform: "youtube" | "tiktok" | "instagram") => {
+      const state = demoState();
+      const post = state.posts.find((p) => p.id === "post_4a6f")!;
+      post.mediaUrl = "https://cdn.test/amor-fati.mp4";
+      post.platform = platform;
+      return state;
+    };
+    const sentBody = async (ctx: ApiContext) => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ id: "sp_1" }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+      expect((await handleRequest(req("POST", "/api/posts/post_4a6f/post-now"), ctx)).status).toBe(200);
+      return JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
+    };
+
+    it("defaults to unlisted, so an approved YouTube video never goes public on one click", async () => {
+      const ctx = ctxOver(approvedOn("youtube"), CONFIG);
+      expect((await handleRequest(req("GET", "/api/settings"), ctx)).body).toEqual({ publishAs: "unlisted" });
+      expect(await sentBody(ctx)).toMatchObject({ visibility: "unlisted" });
+    });
+
+    it("sends what the operator set, and keeps it in the document", async () => {
+      const state = approvedOn("youtube");
+      const ctx = ctxOver(state, CONFIG);
+      const saved = await handleRequest(req("PATCH", "/api/settings", '{"publishAs":"private"}'), ctx);
+      expect(saved).toEqual({ status: 200, body: { publishAs: "private" } });
+      expect(state.settings).toEqual({ publishAs: "private" });
+      expect(await sentBody(ctx)).toMatchObject({ visibility: "private" });
+    });
+
+    it("sends no visibility to a network that has none — the platform refuses one there", async () => {
+      for (const platform of ["tiktok", "instagram"] as const) {
+        expect(await sentBody(ctxOver(approvedOn(platform), CONFIG)), platform).not.toHaveProperty("visibility");
+      }
+    });
+
+    it("refuses a visibility the platform does not spell", async () => {
+      const state = demoState();
+      const reply = await handleRequest(req("PATCH", "/api/settings", '{"publishAs":"friends"}'), ctxOver(state, CONFIG));
+      expect(reply).toEqual({ status: 400, body: { error: "publishAs must be one of private, unlisted, public" } });
+      expect(state.settings).toBeUndefined();
     });
   });
 
@@ -960,6 +1005,8 @@ describe("every /api/* route is behind the operator's bearer", () => {
   const anyRoute: [string, string, string][] = [
     ["GET", "/api/posts", ""],
     ["GET", "/api/templates", ""],
+    ["GET", "/api/settings", ""],
+    ["PATCH", "/api/settings", '{"publishAs":"public"}'],
     ["GET", "/api/context", ""],
     ["GET", "/api/deployments", ""],
     ["PATCH", "/api/posts/post_9f2a", '{"status":"posted"}'],
