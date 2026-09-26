@@ -8,6 +8,7 @@
  */
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
+import { viewsFor } from "./templates/views.ts";
 
 /**
  * Every template this repo carries that the installed engine admits. The engine refuses a repo
@@ -34,6 +35,12 @@ export const declaration = {
   title: ACTIVE.title,
   description: ACTIVE.description,
   platforms: ACTIVE.platforms,
+
+  /**
+   * The channel's pages (`canonical-spec §50`): Home, Posts and Performance, as data. The platform
+   * draws them with its own blocks and reads every number; a platform with no views keeps its home.
+   */
+  views: viewsFor(ACTIVE),
 
   /**
    * What the studio asks before anything is provisioned (`canonical-spec §31.2`). The answers land

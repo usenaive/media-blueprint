@@ -3,6 +3,7 @@ import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
+import { viewsFor } from "./templates/views.ts";
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -40,6 +41,28 @@ describe("naive.config", () => {
       expect(one.title.length, one.name).toBeLessThanOrEqual(80);
       expect(one.description.length, one.name).toBeLessThanOrEqual(280);
     }
+  });
+
+  /**
+   * canonical-spec §50: the channel's pages are data the platform draws. Read off `declaration`, like
+   * the label above: the pinned engine 0.8.0 strips `views`; the platform's publisher checks them
+   * against its catalog.
+   */
+  it("declares Home, Posts and Performance, each home leading with what its setup asked", () => {
+    expect(declaration.views.map((view) => [view.slug, view.title, view.mark])).toEqual([
+      ["home", "Home", "home"],
+      ["posts", "Posts", "list"],
+      ["performance", "Performance", "chart"],
+    ]);
+    for (const one of Object.values(TEMPLATES)) {
+      const [home] = viewsFor(one);
+      const asked = one.questions.map((question) => question.key);
+      const keys = (home!.spec.elements["intro"]!.props["answers"] as { keys: string[] }).keys;
+      for (const key of keys) expect(asked, one.name).toContain(key);
+      expect(keys.at(-1)).toBe("cadence");
+    }
+    // Words only: a digit in a title would be refused, since the platform writes every number.
+    expect(JSON.stringify(declaration.views.map((view) => view.title))).not.toMatch(/[0-9]/);
   });
 
   it("declares no app: the crew runs on the platform's own board, media gallery and approval card", () => {
