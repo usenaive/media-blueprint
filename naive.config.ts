@@ -8,7 +8,7 @@
  */
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
-import { mediaManagerFor } from "./templates/media-manager.ts";
+import { MEDIA_MANAGER } from "./templates/media-manager.ts";
 
 /**
  * Every template this repo carries that the installed engine admits. The engine refuses a repo
@@ -41,7 +41,7 @@ export const declaration = {
    * and Media, as data. It replaces the old hosted dashboard. The platform lists it under Apps, draws it with its
    * own blocks and reads every number.
    */
-  mini_apps: [mediaManagerFor(ACTIVE)],
+  mini_apps: [MEDIA_MANAGER],
 
   /**
    * What the studio asks before anything is provisioned (`canonical-spec §31.2`). The answers land

@@ -3,7 +3,7 @@ import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
-import { leadKeys, mediaManagerFor } from "./templates/media-manager.ts";
+import { MEDIA_MANAGER } from "./templates/media-manager.ts";
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -44,39 +44,58 @@ describe("naive.config", () => {
   });
 
   /**
-   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988). Read off
-   * `declaration`, like the label above: the pinned engine 0.8.0 strips `mini_apps`; the platform
-   * checks it against its catalog when it is read.
+   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988, ADR-0993).
+   * Read off `declaration`, like the label above: the pinned engine 0.8.0 strips `mini_apps`; the
+   * platform checks it against its catalog when it is read.
    */
-  it("declares one mini app, Media manager, with Posts, Schedule, Analytics and Media, its setup line asking what was asked", () => {
+  it("declares one mini app, Media manager, with Posts, Analytics and Media", () => {
     const [manager, ...rest] = declaration.mini_apps;
     expect(rest).toEqual([]);
     expect([manager!.slug, manager!.name, manager!.icon]).toEqual(["media-manager", "Media manager", "play"]);
     expect(manager!.pages.map((one) => [one.slug, one.title])).toEqual([
       ["posts", "Posts"],
-      ["schedule", "Schedule"],
       ["analytics", "Analytics"],
       ["media", "Media"],
     ]);
-    // The Media page is the platform's whole gallery, and the latest media on Analytics leads to it.
-    expect(Object.values(manager!.pages[3]!.spec.elements).map((element) => element.type)).toEqual(["Page", "MediaLibrary"]);
-    expect(JSON.stringify(manager!.pages[2]!.spec)).toContain('"to":"/apps/media-manager?page=media"');
-    // Every link inside the app names the app's own slug.
-    for (const to of JSON.stringify(manager!.pages).match(/"to":"\/apps\/[^"?]+/g) ?? []) expect(to).toBe('"to":"/apps/media-manager');
-    for (const one of Object.values(TEMPLATES)) {
-      const asked = one.questions.map((question) => question.key);
-      for (const key of leadKeys(one)) expect(asked, one.name).toContain(key);
-      expect(leadKeys(one).at(-1)).toBe("cadence");
-    }
+    // The Media page is the platform's whole gallery.
+    expect(Object.values(manager!.pages[2]!.spec.elements).map((element) => element.type)).toEqual(["Page", "MediaLibrary"]);
     // Words only: a digit in a title would be refused, since the platform writes every number.
     const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(element.props["title"] ?? element.props["label"] ?? ""))]);
     expect(words.join(" ")).not.toMatch(/[0-9]/);
   });
 
+  /**
+   * ADR-0993: Posts is the queue in the order a person acts on it — what waits on them, what goes
+   * out next, what went out — and a section with nothing in it is not drawn, except what went out,
+   * which says so. The header already carries the networks, so no accounts strip; no setup line.
+   */
+  it("lays Posts out as the queue: waiting, then scheduled, then posted, the first two hidden while empty", () => {
+    const { elements } = MEDIA_MANAGER.pages[0]!.spec;
+    const sections = elements["page"]!.children!.map((key) => elements[key]!);
+    expect(sections.map((one) => [one.type, one.props["title"], one.props["hide_empty"] ?? false])).toEqual([
+      ["Section", "Waiting on you", true],
+      ["Section", "Scheduled", true],
+      ["Section", "Posted", false],
+    ]);
+    expect(sections.map((one) => (elements[one.children![0]!]!.props["posts"] as { status: string }).status)).toEqual(["waiting", "scheduled", "posted"]);
+    expect(Object.values(elements).map((element) => element.type)).not.toContain("Accounts");
+    expect(Object.values(elements).map((element) => element.type)).not.toContain("Answers");
+  });
+
+  /** ADR-0993: three numbers, then views per post, hidden until a post has been counted. Nothing the Media page repeats. */
+  it("lays Analytics out as three numbers and views per post, with no second gallery", () => {
+    const { elements } = MEDIA_MANAGER.pages[1]!.spec;
+    const top = elements["page"]!.children!.map((key) => elements[key]!);
+    expect(top.map((one) => one.type)).toEqual(["Grid", "Section"]);
+    expect(top[0]!.children!.map((key) => elements[key]!.type)).toEqual(["Metric", "Progress", "Metric"]);
+    expect([top[1]!.props["title"], top[1]!.props["hide_empty"], elements[top[1]!.children![0]!]!.type]).toEqual(["Views per post", true, "BarList"]);
+    expect(Object.values(elements).map((element) => element.type)).not.toContain("Media");
+  });
+
   /** Each page is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
   it("lays each page out as one tree under its Page, of the platform's blocks only", () => {
     const BLOCKS = new Set(["Page", "Section", "Stack", "Grid", "Metric", "LineChart", "BarList", "Progress", "Roadmap", "Schedule", "Media", "Text", "Needs", "Activity", "Accounts", "Posts", "Answers", "MediaLibrary"]);
-    for (const one of mediaManagerFor(ACTIVE).pages) {
+    for (const one of MEDIA_MANAGER.pages) {
       const { root, elements } = one.spec;
       expect(elements[root]!.type, one.slug).toBe("Page");
       const reached = new Set([root]);
@@ -90,10 +109,10 @@ describe("naive.config", () => {
     }
   });
 
-  /** The old dashboard's Posts, Analytics and accounts strip, read by the platform's own sources. */
-  it("covers what the old dashboard showed: the accounts, each post by what it waits on, views, spend and media", () => {
-    const sources = JSON.stringify(mediaManagerFor(ACTIVE).pages.map((one) => one.spec));
-    for (const source of ["accounts", "posts", "roadmap", "schedule", "posts_this_week", "views_total", "views_change", "spend_total", "spend_by_day", "post_views", "newest_media"]) {
+  /** The old dashboard's Posts and Analytics, read by the platform's own sources (the legacy table is ADR-0993). */
+  it("covers what the old dashboard showed: each post by what it waits on, views, posts against the cadence and spend", () => {
+    const sources = JSON.stringify(MEDIA_MANAGER.pages.map((one) => one.spec));
+    for (const source of ["posts", "posts_this_week", "views_total", "views_change", "spend_total", "post_views"]) {
       expect(sources).toContain(`"$source":"${source}"`);
     }
     for (const status of ["waiting", "scheduled", "posted"]) expect(sources).toContain(`"status":"${status}"`);
