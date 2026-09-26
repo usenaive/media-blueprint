@@ -10,9 +10,8 @@ the crew, its timers and its first day of work into your organization.**
 There is no hosted app. The crew runs on the platform's own screens:
 
 - **Media manager.** One mini app under Apps, declared as data in `templates/`: one page with the
-  week's numbers on top and one list of posts under them (what waits on you, what is scheduled,
-  what went out), and a Media panel for the gallery. The platform draws it and
-  reads every number.
+  week's numbers on top, then what waits on you, what is scheduled (a row of cards), and what went
+  out (a picture grid with each post's views). The platform draws it and reads every number.
 - **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
 - **The Media gallery.** Every render and every cut lands there on its own.
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.

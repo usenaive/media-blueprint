@@ -37,8 +37,8 @@ export const declaration = {
   platforms: ACTIVE.platforms,
 
   /**
-   * The channel's mini app (`canonical-spec §50`): "Media manager", one page of numbers and posts
-   * with a Media panel beside it, as data. It replaces the old hosted dashboard. The platform lists it under Apps, draws it with its
+   * The channel's mini app (`canonical-spec §50`): "Media manager", one page of numbers and posts,
+   * as data. It replaces the old hosted dashboard. The platform lists it under Apps, draws it with its
    * own blocks and reads every number.
    */
   mini_apps: [MEDIA_MANAGER],

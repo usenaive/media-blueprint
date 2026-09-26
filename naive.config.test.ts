@@ -44,44 +44,52 @@ describe("naive.config", () => {
   });
 
   /**
-   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988, ADR-1012).
+   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988, ADR-1023).
    * Read off `declaration`, like the label above: the pinned engine 0.8.0 strips `mini_apps`; the
    * platform checks it against its catalog when it is read.
    */
-  it("declares one mini app, Media manager: one page, and the gallery as a Media panel", () => {
+  it("declares one mini app, Media manager: one page and no panel", () => {
     const [manager, ...rest] = declaration.mini_apps;
     expect(rest).toEqual([]);
     expect([manager!.slug, manager!.name, manager!.icon]).toEqual(["media-manager", "Media manager", "play"]);
-    // One page: the platform draws no tabs for it.
+    // One page: the platform draws no tabs for it. No panel: the platform has none (ADR-1022).
     expect(manager!.pages.map((one) => one.slug)).toEqual(["overview"]);
-    expect(manager!.panels.map((one) => [one.slug, one.title])).toEqual([["media", "Media"]]);
-    expect(Object.values(manager!.panels[0]!.spec.elements).map((element) => element.type)).toEqual(["Page", "MediaLibrary"]);
+    expect(manager).not.toHaveProperty("panels");
     // Words only: a digit in a title would be refused, since the platform writes every number.
-    const words = [...manager!.pages, ...manager!.panels].flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(element.props["title"] ?? element.props["label"] ?? ""))]);
+    const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(element.props["title"] ?? element.props["label"] ?? ""))]);
     expect(words.join(" ")).not.toMatch(/[0-9]/);
   });
 
   /**
-   * ADR-1012: the numbers first, then ONE list of posts in the order a person acts on it — what waits
-   * on them, what goes out next, what went out. No views per post: each posted row carries its views.
+   * ADR-1023: the numbers first, then posts in the order a person acts on them, each its own section —
+   * what waits on them (rows, only while something does), what goes out next (a sideways row of
+   * cards, only while something is), what went out (a picture grid, always, with its views).
    */
-  it("lays the page out as three numbers, then one list of every post, waiting first", () => {
+  it("lays the page out as three numbers, then Waiting on you, Scheduled as a row and Posted as a grid", () => {
     const { elements } = MEDIA_MANAGER.pages[0]!.spec;
     const top = elements["page"]!.children!.map((key) => elements[key]!);
-    expect(top.map((one) => one.type)).toEqual(["Grid", "Section"]);
+    expect(top.map((one) => one.type)).toEqual(["Grid", "Section", "Section", "Section"]);
     expect(top[0]!.children!.map((key) => elements[key]!.type)).toEqual(["Metric", "Progress", "Metric"]);
-    expect([top[1]!.props["title"], top[1]!.props["hide_empty"]]).toEqual(["Posts", undefined]);
-    const list = elements[top[1]!.children![0]!]!;
-    expect(list.type).toBe("Posts");
-    expect((list.props["posts"] as { status: string[] }).status).toEqual(["waiting", "scheduled", "posted"]);
+    const sections = top.slice(1).map((section) => {
+      const [only, ...more] = section.children!.map((key) => elements[key]!);
+      expect(more).toEqual([]);
+      expect(only!.type).toBe("Posts");
+      const { status } = only!.props["posts"] as { status: string };
+      return [section.props["title"], section.props["hide_empty"] ?? false, status, only!.props["layout"] ?? "list"];
+    });
+    expect(sections).toEqual([
+      ["Waiting on you", true, "waiting", "list"],
+      ["Scheduled", true, "scheduled", "row"],
+      ["Posted", false, "posted", "grid"],
+    ]);
     const types = Object.values(elements).map((element) => element.type);
     for (const gone of ["BarList", "Accounts", "Answers", "Media", "MediaLibrary"]) expect(types).not.toContain(gone);
   });
 
-  /** Each page and panel is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
-  it("lays each page and panel out as one tree under its Page, of the platform's blocks only", () => {
+  /** Each page is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
+  it("lays each page out as one tree under its Page, of the platform's blocks only", () => {
     const BLOCKS = new Set(["Page", "Section", "Stack", "Grid", "Metric", "LineChart", "BarList", "Progress", "Roadmap", "Schedule", "Media", "Text", "Needs", "Activity", "Accounts", "Posts", "Answers", "MediaLibrary"]);
-    for (const one of [...MEDIA_MANAGER.pages, ...MEDIA_MANAGER.panels]) {
+    for (const one of MEDIA_MANAGER.pages) {
       const { root, elements } = one.spec;
       expect(elements[root]!.type, one.slug).toBe("Page");
       const reached = new Set([root]);
