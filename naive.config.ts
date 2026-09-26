@@ -8,7 +8,7 @@
  */
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
-import { viewsFor } from "./templates/views.ts";
+import { channelFor } from "./templates/channel.ts";
 
 /**
  * Every template this repo carries that the installed engine admits. The engine refuses a repo
@@ -37,10 +37,11 @@ export const declaration = {
   platforms: ACTIVE.platforms,
 
   /**
-   * The channel's pages (`canonical-spec §50`): Home, Posts and Performance, as data. The platform
-   * draws them with its own blocks and reads every number; a platform with no views keeps its home.
+   * The channel's mini app (`canonical-spec §50`): "Channel", with Posts, Schedule and Analytics, as
+   * data. It replaces the old hosted dashboard. The platform lists it under Apps, draws it with its
+   * own blocks and reads every number.
    */
-  views: viewsFor(ACTIVE),
+  mini_apps: [channelFor(ACTIVE)],
 
   /**
    * What the studio asks before anything is provisioned (`canonical-spec §31.2`). The answers land

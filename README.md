@@ -7,8 +7,10 @@ the crew, its timers and its first day of work into your organization.**
 [![engine: @usenaive-sdk/blueprints](https://img.shields.io/npm/v/@usenaive-sdk/blueprints?label=engine%3A%20%40usenaive-sdk%2Fblueprints&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/blueprints)
 [![CLI: @usenaive-sdk/vetta-cli](https://img.shields.io/npm/v/@usenaive-sdk/vetta-cli?label=cli%3A%20naive&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/vetta-cli)
 
-There is no app. The crew runs on the platform's own screens:
+There is no hosted app. The crew runs on the platform's own screens:
 
+- **Channel.** One mini app under Apps, declared as data in `templates/channel.ts`: Posts,
+  Schedule and Analytics. The platform draws it and reads every number.
 - **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
 - **The Media gallery.** Every render and every cut lands there on its own.
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
