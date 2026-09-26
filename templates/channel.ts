@@ -6,7 +6,7 @@
  * number covers is written by the platform from its binding.
  *
  *   · Posts — the accounts, the setup's line, what waits on you (each opens with its approval card),
- *     what is in production on the board, what is scheduled, what went out with its views;
+ *     what is scheduled, what went out with its views, and what is in production on the board;
  *   · Schedule — the week (routines and scheduled posts), posts against the cadence, who is working;
  *   · Analytics — views with their change, posts against the cadence, spend and its line, views per
  *     post, the newest media.
@@ -26,17 +26,17 @@ export function leadKeys(template: MediaTemplate): string[] {
 const posts = (template: MediaTemplate) => ({
   slug: "posts",
   title: "Posts",
-  spec: page(["accounts", "intro", "waiting", "production", "scheduled", "posted"], {
+  spec: page(["accounts", "intro", "waiting", "scheduled", "posted", "production"], {
     accounts: { type: "Accounts", props: { accounts: { $source: "accounts" } } },
     intro: { type: "Answers", props: { answers: { $source: "answers", keys: leadKeys(template) } } },
     waiting: section("Waiting on you", ["pending"]),
     pending: { type: "Posts", props: { posts: { $source: "posts", status: "waiting", limit: 20 } } },
-    production: section("In production", ["board"], { to: "/board" }),
-    board: { type: "Roadmap", props: { board: { $source: "roadmap", per_group: 3 } } },
     scheduled: section("Scheduled", ["due"]),
     due: { type: "Posts", props: { posts: { $source: "posts", status: "scheduled", limit: 20 } } },
     posted: section("Posted", ["out"], { to: "/apps/channel?page=analytics" }),
     out: { type: "Posts", props: { posts: { $source: "posts", status: "posted", limit: 20 } } },
+    production: section("In production", ["board"], { to: "/board" }),
+    board: { type: "Roadmap", props: { board: { $source: "roadmap", per_group: 3 } } },
   }),
 });
 
