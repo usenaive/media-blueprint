@@ -3,7 +3,7 @@ import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
-import { channelFor, leadKeys } from "./templates/channel.ts";
+import { leadKeys, mediaManagerFor } from "./templates/media-manager.ts";
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -44,33 +44,39 @@ describe("naive.config", () => {
   });
 
   /**
-   * canonical-spec §50: the channel's pages are one mini app the platform draws. Read off
+   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988). Read off
    * `declaration`, like the label above: the pinned engine 0.8.0 strips `mini_apps`; the platform
    * checks it against its catalog when it is read.
    */
-  it("declares one mini app, Channel, with Posts, Schedule and Analytics, its setup line asking what was asked", () => {
-    const [channel, ...rest] = declaration.mini_apps;
+  it("declares one mini app, Media manager, with Posts, Schedule, Analytics and Media, its setup line asking what was asked", () => {
+    const [manager, ...rest] = declaration.mini_apps;
     expect(rest).toEqual([]);
-    expect([channel!.slug, channel!.name, channel!.icon]).toEqual(["channel", "Channel", "play"]);
-    expect(channel!.pages.map((one) => [one.slug, one.title])).toEqual([
+    expect([manager!.slug, manager!.name, manager!.icon]).toEqual(["media-manager", "Media manager", "play"]);
+    expect(manager!.pages.map((one) => [one.slug, one.title])).toEqual([
       ["posts", "Posts"],
       ["schedule", "Schedule"],
       ["analytics", "Analytics"],
+      ["media", "Media"],
     ]);
+    // The Media page is the platform's whole gallery, and the latest media on Analytics leads to it.
+    expect(Object.values(manager!.pages[3]!.spec.elements).map((element) => element.type)).toEqual(["Page", "MediaLibrary"]);
+    expect(JSON.stringify(manager!.pages[2]!.spec)).toContain('"to":"/apps/media-manager?page=media"');
+    // Every link inside the app names the app's own slug.
+    for (const to of JSON.stringify(manager!.pages).match(/"to":"\/apps\/[^"?]+/g) ?? []) expect(to).toBe('"to":"/apps/media-manager');
     for (const one of Object.values(TEMPLATES)) {
       const asked = one.questions.map((question) => question.key);
       for (const key of leadKeys(one)) expect(asked, one.name).toContain(key);
       expect(leadKeys(one).at(-1)).toBe("cadence");
     }
     // Words only: a digit in a title would be refused, since the platform writes every number.
-    const words = channel!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(element.props["title"] ?? element.props["label"] ?? ""))]);
+    const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(element.props["title"] ?? element.props["label"] ?? ""))]);
     expect(words.join(" ")).not.toMatch(/[0-9]/);
   });
 
   /** Each page is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
   it("lays each page out as one tree under its Page, of the platform's blocks only", () => {
-    const BLOCKS = new Set(["Page", "Section", "Stack", "Grid", "Metric", "LineChart", "BarList", "Progress", "Roadmap", "Schedule", "Media", "Text", "Needs", "Activity", "Accounts", "Posts", "Answers"]);
-    for (const one of channelFor(ACTIVE).pages) {
+    const BLOCKS = new Set(["Page", "Section", "Stack", "Grid", "Metric", "LineChart", "BarList", "Progress", "Roadmap", "Schedule", "Media", "Text", "Needs", "Activity", "Accounts", "Posts", "Answers", "MediaLibrary"]);
+    for (const one of mediaManagerFor(ACTIVE).pages) {
       const { root, elements } = one.spec;
       expect(elements[root]!.type, one.slug).toBe("Page");
       const reached = new Set([root]);
@@ -86,7 +92,7 @@ describe("naive.config", () => {
 
   /** The old dashboard's Posts, Analytics and accounts strip, read by the platform's own sources. */
   it("covers what the old dashboard showed: the accounts, each post by what it waits on, views, spend and media", () => {
-    const sources = JSON.stringify(channelFor(ACTIVE).pages.map((one) => one.spec));
+    const sources = JSON.stringify(mediaManagerFor(ACTIVE).pages.map((one) => one.spec));
     for (const source of ["accounts", "posts", "roadmap", "schedule", "posts_this_week", "views_total", "views_change", "spend_total", "spend_by_day", "post_views", "newest_media"]) {
       expect(sources).toContain(`"$source":"${source}"`);
     }

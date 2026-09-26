@@ -9,8 +9,8 @@ the crew, its timers and its first day of work into your organization.**
 
 There is no hosted app. The crew runs on the platform's own screens:
 
-- **Channel.** One mini app under Apps, declared as data in `templates/`: Posts,
-  Schedule and Analytics. The platform draws it and reads every number.
+- **Media manager.** One mini app under Apps, declared as data in `templates/`: Posts,
+  Schedule, Analytics and Media. The platform draws it and reads every number.
 - **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
 - **The Media gallery.** Every render and every cut lands there on its own.
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.

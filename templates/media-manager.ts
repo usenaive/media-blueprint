@@ -1,6 +1,6 @@
 /**
- * The channel's one mini app, "Channel", as data (the platform's mini apps, canonical-spec §50). It
- * stands where the old hosted dashboard stood. The platform owns every block, reads every number and
+ * The channel's one mini app, "Media manager", as data (the platform's mini apps, canonical-spec §50).
+ * It stands where the old hosted dashboard stood. The platform owns every block, reads every number and
  * draws every mini app with one UI under Apps; this file only says which pages the app has and what
  * sits on each, in what order. Words only: a digit in a title is refused, because the window a
  * number covers is written by the platform from its binding.
@@ -9,7 +9,9 @@
  *     what is scheduled, what went out with its views, and what is in production on the board;
  *   · Schedule — the week (routines and scheduled posts), posts against the cadence, who is working;
  *   · Analytics — views with their change, posts against the cadence, spend and its line, views per
- *     post, the newest media.
+ *     post, the newest media;
+ *   · Media — every picture and clip the crew made: the platform's gallery, with its filters, sort
+ *     and viewer.
  */
 import type { MediaTemplate } from "./template.ts";
 
@@ -33,7 +35,7 @@ const posts = (template: MediaTemplate) => ({
     pending: { type: "Posts", props: { posts: { $source: "posts", status: "waiting", limit: 20 } } },
     scheduled: section("Scheduled", ["due"]),
     due: { type: "Posts", props: { posts: { $source: "posts", status: "scheduled", limit: 20 } } },
-    posted: section("Posted", ["out"], { to: "/apps/channel?page=analytics" }),
+    posted: section("Posted", ["out"], { to: "/apps/media-manager?page=analytics" }),
     out: { type: "Posts", props: { posts: { $source: "posts", status: "posted", limit: 20 } } },
     production: section("In production", ["board"], { to: "/board" }),
     board: { type: "Roadmap", props: { board: { $source: "roadmap", per_group: 3 } } },
@@ -65,10 +67,16 @@ const analytics = {
     line: { type: "LineChart", props: { series: { $source: "spend_by_day", days: 14 } } },
     per: section("Views per post", ["bars"]),
     bars: { type: "BarList", props: { bars: { $source: "post_views", limit: 12 } } },
-    media: section("Latest media", ["tiles"]),
+    media: section("Latest media", ["tiles"], { to: "/apps/media-manager?page=media" }),
     tiles: { type: "Media", props: { files: { $source: "newest_media", count: 6 } } },
   }),
 };
 
-/** The channel's mini app: one, with three pages, in the order the segmented control draws them. */
-export const channelFor = (template: MediaTemplate) => ({ slug: "channel", name: "Channel", icon: "play", pages: [posts(template), schedule, analytics] });
+const media = {
+  slug: "media",
+  title: "Media",
+  spec: page(["library"], { library: { type: "MediaLibrary", props: {} } }),
+};
+
+/** The channel's mini app: one, with four pages, in the order the segmented control draws them. */
+export const mediaManagerFor = (template: MediaTemplate) => ({ slug: "media-manager", name: "Media manager", icon: "play", pages: [posts(template), schedule, analytics, media] });
