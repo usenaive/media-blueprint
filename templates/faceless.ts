@@ -11,6 +11,7 @@
  * manager. Day one sets up the plan, the reference, the look and the voice, then starts one piece.
  */
 import {
+  FIRST_PIECE_KEY,
   agent,
   ANALYST_REPORT,
   analystSchedules,
@@ -105,7 +106,8 @@ export const FACELESS: MediaTemplate = {
       body: "Read project_context and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the metrics you will read per piece and where they come from (social.post_metrics), and the week's target taken from the plan's posting slots rather than invented here. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
     }),
     task({
-      key: "first-piece",
+      // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
+      key: FIRST_PIECE_KEY.faceless,
       title: "Start the channel's first piece",
       assignee: "trend-scout",
       blocked_by: ["look", "hook-style"],

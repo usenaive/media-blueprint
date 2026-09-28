@@ -15,6 +15,7 @@ import {
   CARD_ORDER,
   CONTEXT_PREAMBLE,
   CREW_RULES,
+  FIRST_PIECE_KEY,
   lengthPhrase,
   MAX_RENDER_SECONDS,
   ONE_RENDER_MICRO_USD,
@@ -232,7 +233,7 @@ describe("the board", () => {
         look: ["reference-study"],
         "hook-style": ["reference-study"],
         "report-frame": ["channel-plan"],
-        "first-piece": ["look", "hook-style"],
+        "first-briefs": ["look", "hook-style"],
       },
       longform: {
         "channel-plan": [],
@@ -240,14 +241,14 @@ describe("the board", () => {
         look: ["reference-study"],
         "arc-style": ["reference-study"],
         "report-frame": ["channel-plan"],
-        "first-piece": ["look", "arc-style"],
+        "first-topic": ["look", "arc-style"],
       },
       clipping: {
         "channel-plan": [],
         "source-check": [],
         "caption-style": [],
         "report-frame": ["channel-plan"],
-        "first-piece": ["source-check", "caption-style"],
+        "first-moments": ["source-check", "caption-style"],
       },
     };
     for (const template of all) {
@@ -260,6 +261,21 @@ describe("the board", () => {
       }
       // The piece is started by the head of the pipeline, and it is last.
       expect(template.tasks.at(-1)?.assignee, template.name).toBe(template.pipeline[0]);
+    }
+  });
+
+  /**
+   * THE RE-APPLY GUARD. An org on v1.3.0–v1.7.0 already holds these keys with every blocker done;
+   * a new key there would be seeded, promoted and woken into a paid chain on the next tick. Reusing
+   * the key it holds makes the re-apply a no-op on that card.
+   */
+  it("keys the day-one piece card with the key v1.x already seeded, never `first-piece`", () => {
+    expect(TEMPLATES.faceless.tasks.at(-1)?.key).toBe("first-briefs");
+    expect(TEMPLATES.longform.tasks.at(-1)?.key).toBe("first-topic");
+    expect(TEMPLATES.clipping.tasks.at(-1)?.key).toBe("first-moments");
+    for (const template of all) {
+      expect(template.tasks.at(-1)?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
+      expect(template.tasks.map((task) => task.key), template.name).not.toContain("first-piece");
     }
   });
 

@@ -120,7 +120,7 @@ woken by its cards.
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
 | `producer` | Video production | — | `look` | Renders the plan as one vertical video; creates the Publish card |
-| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-piece` | Starts each piece as a Plan card, with exemplars it opened |
+| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
 | `scriptwriter` | Hooks & scripts | — | `reference-study`, `hook-style` | Looks inside the exemplars, writes the plan, creates the Render card |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
@@ -129,7 +129,7 @@ woken by its cards.
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
-| `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-piece` | Starts one sourced subject a fire, with exemplars of this length |
+| `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-topic` | Starts one sourced subject a fire, with exemplars of this length |
 | `writer` | Structure & scripts | — | `reference-study`, `arc-style` | Samples exemplar frames at chapter boundaries; plans every seam on a shot change |
 | `producer` | Render & assembly | — | `look` | Renders up to six segments, joins them with ffmpeg, probes the file |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports where the audience left each piece |
@@ -140,7 +140,7 @@ woken by its cards.
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the cadence; reads the weekly report |
 | `clipper` | Clip production | — | `source-check` | Cuts the moment with `clip_video`; creates the Caption card |
-| `scout` | Source watch | daily 06:00 ($10) | `first-piece` | Starts each moment from the named channels as a Cut card |
+| `scout` | Source watch | daily 06:00 ($10) | `first-moments` | Starts each moment from the named channels as a Cut card |
 | `caption-editor` | Captions & titles | — | `caption-style` | Writes the caption and credits the creator; creates the Publish card |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports by source and by clip |
 
@@ -174,11 +174,15 @@ nothing, until that card closes.
 ```
 channel-plan ──→ report-frame
 reference-study ──→ look ─────┐
-                └─→ hook-style ┴→ first-piece → the piece's own chain
+                └─→ hook-style ┴→ first-briefs → the piece's own chain
 ```
 
-(`longform` has `arc-style` for `hook-style`; `clipping` has `source-check` and `caption-style`
-open at once, with no reference study.)
+(`longform` has `arc-style` for `hook-style` and `first-topic`; `clipping` has `source-check` and
+`caption-style` open at once, with no reference study, and `first-moments`.)
+
+The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-topic`,
+`first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board
+holds, so updating an existing channel to 2.0 does not start a new paid piece.
 
 Day one sets up the plan, the reference, the look and the voice, then starts **one** piece. That
 piece runs its full chain to your approval card. The timers start the rest.

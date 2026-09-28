@@ -10,6 +10,7 @@
  * costs ~$53.97 of render, so the pipeline starts three pieces a week, not seven.
  */
 import {
+  FIRST_PIECE_KEY,
   agent,
   ANALYST_REPORT,
   analystSchedules,
@@ -122,7 +123,8 @@ export const LONGFORM: MediaTemplate = {
       body: "Read project_context and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report, led by retention: how you will read where the audience left each piece (social.post_metrics), what you will report when no retention curve is offered, and the week's target taken from the plan's posting slots. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
     }),
     task({
-      key: "first-piece",
+      // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
+      key: FIRST_PIECE_KEY.longform,
       title: "Start the channel's first subject",
       assignee: "researcher",
       blocked_by: ["look", "arc-style"],

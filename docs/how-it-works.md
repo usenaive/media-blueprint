@@ -103,9 +103,11 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
 ### Day one
 
 Each template seeds five or six cards. Set-up first — the channel plan, the reference study, the
-look, the voice, the report skeleton — then one `first-piece` card for the head of the chain. That
-piece runs its full chain to the approval card. The reference study never asks the operator: a
-blank reference answer means go and find two or three real videos in the niche.
+look, the voice, the report skeleton — then one piece card for the head of the chain
+(`first-briefs`, `first-topic` or `first-moments`: the key 1.x already seeded, so a re-apply to an
+existing org seeds nothing and starts no paid piece). That piece runs its full chain to the
+approval card. The reference study never asks the operator: a blank reference answer means go and
+find two or three real videos in the niche.
 
 ## 5. Publishing
 

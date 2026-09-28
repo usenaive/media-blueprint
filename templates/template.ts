@@ -100,6 +100,24 @@ export const REFERENCE_QUESTION: SetupQuestion = {
 /** One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`. */
 export type Task = NonNullable<DefineInput["tasks"]>[number];
 
+/**
+ * The key of each template's day-one piece card — the card that starts the first piece's paid chain.
+ *
+ * WHY THESE KEYS, AND NOT `first-piece`. A card is seeded as `media:<key>` and a re-apply that finds
+ * the key already on the board writes nothing. Every install from v1.3.0 on already holds these
+ * three keys (v1.x's day-one briefs / topic / moments card), and already has this card's blockers
+ * done. Under a NEW key, re-applying 2.0.0 to such an org would seed the card, find its blockers
+ * closed, promote it and wake the head of the chain on the next tick — a paid render nobody asked
+ * for. Under the key the org already holds, the re-apply is a no-op there, and a new org gets
+ * exactly the card it would have got as `first-piece`. Title and body are 2.0.0's; only the key is
+ * reused. Do not rename these while any install older than 2.0.0 may still be re-applied.
+ */
+export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
+  faceless: "first-briefs",
+  longform: "first-topic",
+  clipping: "first-moments",
+};
+
 /** How long a piece of a template runs, in seconds. */
 export interface Length {
   min: number;
