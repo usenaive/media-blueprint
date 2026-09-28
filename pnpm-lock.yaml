@@ -12,11 +12,11 @@ importers:
         specifier: ^22.20.1
         version: 22.20.1
       '@usenaive-sdk/blueprints':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.9.0
+        version: 0.9.0
       '@usenaive-sdk/vetta-cli':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.6.0
+        version: 0.6.0
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -247,7 +247,6 @@ packages:
     engines: {node: ^22.20 || ^24.12 || >=25}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-android-arm-eabi@4.63.1':
     resolution: {integrity: sha512-UZ8sUxPTiHWYX9QNdJedb1kDZSpS1t/VPWBWGSgqHNi9w3Cu6IXvu2mzbhiTiPvtrqgTQJ+zqiAq2iPIPilpaQ==}
@@ -283,79 +282,66 @@ packages:
     resolution: {integrity: sha512-YDUNvVM85TI3g/1OpnqKP1h4NeW/j64DfWMf+G3M809xNk1bJSnpFp4sh83NpmVE5DXnkh8ULor4LTVZKoYLHw==}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.63.1':
     resolution: {integrity: sha512-7Mcn71p9ZuQFAj+h+dhQXy/yeLePRS2yKRnmW1DijA9thKO5qap0GNOIQK4yQ6iP3SU0Mrb/yWo8h8vgRba8lw==}
     cpu: [arm]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.63.1':
     resolution: {integrity: sha512-4YiLQTX6U4CSl0L9cluep9A9W6UmTfqBDc2/CH6wlu54pl4E7Jn3cOD8oxzvBDEGk/JMKgJ47C8g+radF7mwvg==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.63.1':
     resolution: {integrity: sha512-2ra8F7w8OquwZN9z2/fKFnli69wa8PLwaVzRMIPGb13ByMJwC28Fbp8YcVGoUhlYMTt7j5j9bNgpysrN2UM+vw==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.63.1':
     resolution: {integrity: sha512-Sy20ncyhjmBP0Ml+UvQbimjlk6VFgjW5uNP+qqwHB00mTE8Bl2C1TuHTlRwK2YoXeZbee5lP2XevBWVkAQAtSQ==}
     cpu: [loong64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-loong64-musl@4.63.1':
     resolution: {integrity: sha512-noITLp8oNjYliPnGWmLyelIHwULGqbHloQHGw1rtxbWhTuWooRpnZarZQJ1y9EUC4szuCusCc+HEpUtxpIwYvA==}
     cpu: [loong64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-ppc64-gnu@4.63.1':
     resolution: {integrity: sha512-hlxxXd+F1mWiAcaFR7Sv9ZQT6m6UfI8+Vy/kFJzztq2pDMU/0wZ9sish0iszNZvsQDo8Gc0i5yuFEOz5dDf6fA==}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-musl@4.63.1':
     resolution: {integrity: sha512-EF7OpqQTQ/BvGqLzUi4rEHuagCV9MugAUXSHemwPW5vxZ75RR+jxO/2j95Ph2dalMpFHSVECjRoioHZgA9zOYA==}
     cpu: [ppc64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-riscv64-gnu@4.63.1':
     resolution: {integrity: sha512-wQO3JesW9PRkwlabQ27y7sPfVOOTLRG73I4F2UYHG5PXun3J9U3y+b7ezVKSYbsvSKGQ1k1cq8Qlun4C9kLt3w==}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.63.1':
     resolution: {integrity: sha512-ouAGwhO6wHRXdnOVCOsB0tRFkA7nhNB2Nwax6oECXN0YiN8EYUTBAOudADOB1PI+yDL61TeNx/u7MVCzksNbkQ==}
     cpu: [riscv64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.63.1':
     resolution: {integrity: sha512-q2R38Sn+1J8RxhfJ+T54wSWmyKXWec+9jgDfqO2AtArEqHO5R2aeayp5H5OYLr5UYDVGsVaZPEFUooMhYCdz5A==}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.63.1':
     resolution: {integrity: sha512-gfI5T24WLLuFfSKw7Go/zDXjAAV0fny0swTaDv+WjK7vqcw4cRhFfdsyKL1n+ukI+ooBxn3bVQnyrn06WpI50w==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.63.1':
     resolution: {integrity: sha512-4h6XqthmB4Hspji84wvgk+ElodTsGj+dbZqHJHHtKxj4mYq0ANSEEPX9ys3moJueqsRjwpaJYH7874Itwnj2ow==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-openbsd-x64@4.63.1':
     resolution: {integrity: sha512-dlfCOa87o1VAYegLQ9EKilx2JCeRofiyPGhTCmqnuXZ6bMPiycO1rq1+sKoulAp7pGLIsTIw+1x5R+zgh5LhhA==}
@@ -399,17 +385,17 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
-  '@usenaive-sdk/blueprints@0.8.0':
-    resolution: {integrity: sha512-1Na3g3VMFzTghNGN9quCLynLTrEGDnpqRGrdW4t6QbVpl/e8sIFQ5b7V2Kl3jX4+gl2Oq/XAyqwC0ekmlraGvg==}
+  '@usenaive-sdk/blueprints@0.9.0':
+    resolution: {integrity: sha512-yEC2dodiw8eoeiDLaWJCjyyZKL8u2amqhpt3tRRm17EugPRYV8m5fjqA/z6AMBLlFbaLBfE/zdJca20/8/Bdzg==}
     engines: {node: '>=20'}
 
-  '@usenaive-sdk/vetta-cli@0.4.0':
-    resolution: {integrity: sha512-telg1jNW5nHW9u1IRjqXOGTauENmL3HfQiGe66ahSK3OSyUf4nlKm9WVdkipnQUXjNMq47o8gdpePfw+qyCpVg==}
+  '@usenaive-sdk/vetta-cli@0.6.0':
+    resolution: {integrity: sha512-OYgrKk5b074IPgKqbEoLMRMeEVsec9uE181+eniN9MEaFl88If8vFqjsticM1l8S2+FYIaZR8E2WLynnANNOgw==}
     engines: {node: '>=20'}
     hasBin: true
 
-  '@usenaive-sdk/vetta@0.5.0':
-    resolution: {integrity: sha512-zgrlQMXlJDbtc+h9hEU1JaS1cb/PTH6Jaw3YYDtrqCdm45HMt68jFp3ID0EvWYOYNfF4Z01pIQnXeVMQzUoO2A==}
+  '@usenaive-sdk/vetta@0.6.0':
+    resolution: {integrity: sha512-u17g1DedkcKq/n/8p/MupEXBTf1Uq/U13/PqFnezdYxFBfiCbzlSYou1BxtDvgpuMLM9jW16vG4zxKLNYymLHA==}
     engines: {node: '>=20'}
 
   '@vitest/expect@3.2.7':
@@ -579,28 +565,24 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.33.0:
     resolution: {integrity: sha512-yiO5ROMuYQgXbC60yjZU5CYSFZGKXL0HFATXt9mHJn1+zW55oCtMI9NfcVhYLMFDL7gV7oBPon/EmMMGg2OvtQ==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.33.0:
     resolution: {integrity: sha512-ar+Ju7LmcN0Jo4FpL4hpFybwNG9/3A/Br5KW2n2jyODg3MEZXaDYADdemoNS+BDNfMgKvylJLj4S5tyRActuAg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.33.0:
     resolution: {integrity: sha512-RYiYbkokw0trfKqqzfF55lginwEPrD3OJDfTuJzFs1MK6iFnDenaz1fqLLtX4ITG3OktJQXOeTaw1awrBAlZPw==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.33.0:
     resolution: {integrity: sha512-1K+MPfLSFVpphzpdbfkhlWk6wBrTObBzS2T6db10PNOZgR9GoVsAWzwNyuhUYYbTp23j+4RrncfujZ4uAzXvwA==}
@@ -1081,17 +1063,17 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@usenaive-sdk/blueprints@0.8.0':
+  '@usenaive-sdk/blueprints@0.9.0':
     dependencies:
-      '@usenaive-sdk/vetta': 0.5.0
+      '@usenaive-sdk/vetta': 0.6.0
       jiti: 2.7.0
       zod: 4.5.4
 
-  '@usenaive-sdk/vetta-cli@0.4.0':
+  '@usenaive-sdk/vetta-cli@0.6.0':
     dependencies:
       jiti: 2.7.0
 
-  '@usenaive-sdk/vetta@0.5.0':
+  '@usenaive-sdk/vetta@0.6.0':
     dependencies:
       zod: 4.5.4
 
