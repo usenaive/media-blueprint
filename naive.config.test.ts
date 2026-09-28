@@ -1,8 +1,12 @@
-/** The blueprint as `naive up` would read it: it parses, it names its template, and every agent carries the approval gate. */
-import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
+/** The blueprint as `naive up` would read it: it parses, it names its template, and it declares no app. */
+import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
+import { MEDIA_MANAGER } from "./templates/media-manager.ts";
+
+/** A block's props, read loosely: the engine types each block's props exactly, the checks here read any. */
+const propsOf = (element: { props: object }) => element.props as Record<string, unknown>;
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -26,24 +30,122 @@ describe("naive.config", () => {
     for (const name of admits) expect(Object.keys(TEMPLATES)).toContain(name);
   });
 
-  it("declares the dashboard and the running template's agents, each gated on operator approval", () => {
-    // `channel`, not `dashboard`: app names are org-unique, and a generic one lets a second
-    // blueprint adopt and overwrite this app on its own `naive up`.
-    expect(project.apps.map((app) => app.name)).toEqual(["channel"]);
-    expect(project.agents.map((agent) => agent.name)).toEqual(ACTIVE.agents.map((agent) => agent.name));
-    for (const agent of project.agents) {
-      expect(agent.system).toMatch(/never publish it yourself/);
-      // Nothing enumerable is left to the default: every built-in this crew was not granted is
-      // written `deny` by name, so the default governs only the tools a connected account
-      // contributes — whose names come from the org's live connections and cannot be written here.
-      expect(agent.tools?.default_config.permission).toBe("ask");
-      // The shell is the one built-in a seat may be granted on purpose — Short Form's scriptwriter
-      // samples frames out of the exemplars it plans against, Long Form's producer joins its
-      // segments with ffmpeg — so what is asserted here is that it is written by name either way,
-      // never left to the default. Which seats hold one is `templates/templates.test.ts`'s list.
-      const bash = agent.tools?.configs["bash"];
-      expect(bash, agent.name).toEqual(bash?.enabled === true ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" });
+  /**
+   * canonical-spec §31.5 (ADR-0921): the studio names the template in words and draws the networks
+   * it is made for. Read off `declaration` here; the test after the mini app's reads the same fields back off
+   * `defineProject`, which engines before 0.9.0 stripped.
+   */
+  it("names the running template for the studio, with the networks it is made for", () => {
+    expect(declaration.title).toBe(ACTIVE.title);
+    expect(declaration.description).toBe(ACTIVE.description);
+    expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
+    expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual(["Clipping channel", "Faceless channel", "Long-form channel"]);
+    for (const one of Object.values(TEMPLATES)) {
+      expect(one.title.length, one.name).toBeLessThanOrEqual(80);
+      expect(one.description.length, one.name).toBeLessThanOrEqual(280);
     }
+  });
+
+  /**
+   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988, ADR-1023).
+   * Read off `declaration`; engine 0.9.0 (the pin) types and parses every block, and the platform
+   * checks it against its catalog when it is read.
+   */
+  it("declares one mini app, Media manager: one page and no panel", () => {
+    const [manager, ...rest] = declaration.mini_apps;
+    expect(rest).toEqual([]);
+    expect([manager!.slug, manager!.name, manager!.icon]).toEqual(["media-manager", "Media manager", "play"]);
+    // One page: the platform draws no tabs for it. No panel: the platform has none (ADR-1022).
+    expect(manager!.pages.map((one) => one.slug)).toEqual(["overview"]);
+    expect(manager).not.toHaveProperty("panels");
+    // Words only: a digit in a title would be refused, since the platform writes every number.
+    const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(propsOf(element)["title"] ?? propsOf(element)["label"] ?? ""))]);
+    expect(words.join(" ")).not.toMatch(/[0-9]/);
+  });
+
+  /**
+   * ADR-1023: the numbers first, then posts in the order a person acts on them, each its own section —
+   * what waits on them (rows, only while something does), what goes out next (a sideways row of
+   * cards, only while something is), what went out (a picture grid, always, with its views).
+   */
+  it("lays the page out as three numbers, then Waiting on you, Scheduled as a row and Posted as a grid", () => {
+    const { elements } = MEDIA_MANAGER.pages[0]!.spec;
+    const top = elements["page"]!.children!.map((key) => elements[key]!);
+    expect(top.map((one) => one.type)).toEqual(["Grid", "Section", "Section", "Section"]);
+    expect(top[0]!.children!.map((key) => elements[key]!.type)).toEqual(["Metric", "Progress", "Metric"]);
+    const sections = top.slice(1).map((section) => {
+      const [only, ...more] = section.children!.map((key) => elements[key]!);
+      expect(more).toEqual([]);
+      expect(only!.type).toBe("Posts");
+      const { status } = propsOf(only!)["posts"] as { status: string };
+      return [propsOf(section)["title"], propsOf(section)["hide_empty"] ?? false, status, propsOf(only!)["layout"] ?? "list"];
+    });
+    expect(sections).toEqual([
+      ["Waiting on you", true, "waiting", "list"],
+      ["Scheduled", true, "scheduled", "row"],
+      ["Posted", false, "posted", "grid"],
+    ]);
+    const types = Object.values(elements).map((element) => element.type);
+    for (const gone of ["BarList", "Accounts", "Answers", "Media", "MediaLibrary"]) expect(types).not.toContain(gone);
+  });
+
+  /**
+   * The same four fields, read back off what `defineProject` RETURNS, for every template. Engines
+   * before 0.9.0 parse the declaration through a schema that does not know `mini_apps`, `title`,
+   * `description` or `platforms` and strip them silently — so a raw-object check passes while the
+   * published artifact carries no Media manager and no label. This is the check that the installed
+   * engine really keeps them.
+   */
+  it.each(Object.values(TEMPLATES).map((one) => [one.name, one] as const))(
+    "keeps Media manager, the title, the description and the networks through defineProject on %s",
+    (_name, one) => {
+      const parsed = defineProject({
+        ...declaration,
+        template: one.name,
+        title: one.title,
+        description: one.description,
+        platforms: one.platforms,
+        questions: one.questions,
+        tasks: one.tasks,
+      });
+      expect(parsed.mini_apps?.[0]?.slug).toBe("media-manager");
+      expect(parsed.mini_apps).toHaveLength(1);
+      expect(parsed.title).toBe(one.title);
+      expect(parsed.description).toBe(one.description);
+      expect(parsed.platforms).toEqual(["youtube", "tiktok", "instagram"]);
+      expect(parsed.template).toBe(one.name);
+    },
+  );
+
+  /** Each page is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
+  it("lays each page out as one tree under its Page, of the platform's blocks only", () => {
+    const BLOCKS = new Set(["Page", "Section", "Stack", "Grid", "Metric", "LineChart", "BarList", "Progress", "Roadmap", "Schedule", "Media", "Text", "Needs", "Activity", "Accounts", "Posts", "Answers", "MediaLibrary"]);
+    for (const one of MEDIA_MANAGER.pages) {
+      const { root, elements } = one.spec;
+      expect(elements[root]!.type, one.slug).toBe("Page");
+      const reached = new Set([root]);
+      for (const key of reached) for (const child of elements[key]!.children ?? []) {
+        expect(elements, `${one.slug}: ${child}`).toHaveProperty(child);
+        expect(reached.has(child), `${one.slug}: ${child} twice`).toBe(false);
+        reached.add(child);
+      }
+      expect([...reached].sort(), one.slug).toEqual(Object.keys(elements).sort());
+      for (const element of Object.values(elements)) expect(BLOCKS.has(element.type), element.type).toBe(true);
+    }
+  });
+
+  /** The old dashboard's Posts and Analytics, read by the platform's own sources (the legacy table is ADR-0993). */
+  it("covers what the old dashboard showed: each post by what it waits on, views, posts against the cadence and spend", () => {
+    const sources = JSON.stringify(MEDIA_MANAGER.pages.map((one) => one.spec));
+    for (const source of ["posts", "posts_this_week", "views_total", "views_change", "spend_total"]) {
+      expect(sources).toContain(`"$source":"${source}"`);
+    }
+  });
+
+  it("declares no app: the crew runs on the platform's own board, media gallery and approval card", () => {
+    expect(project.apps).toEqual([]);
+    expect(declaration).not.toHaveProperty("apps");
+    expect(project.agents.map((agent) => agent.name)).toEqual(ACTIVE.agents.map((agent) => agent.name));
   });
 
   /**
@@ -57,19 +159,19 @@ describe("naive.config", () => {
    */
   it("hands `up` the running crew's crons, each with the timezone and the persona it fires as", () => {
     for (const agent of project.agents) {
-      const schedules = agent.schedules ?? [];
-      expect(schedules.length).toBeGreaterThan(0);
-      for (const one of schedules) {
+      for (const one of agent.schedules ?? []) {
         expect(one.timezone).toBe(CHANNEL_TIMEZONE);
         expect(one.identity).toBe(CHANNEL_IDENTITY);
-        // `up` refuses a schedule naming an identity this project never declares, so the persona
-        // on every fire has to be one of the declared ones.
+        // `up` refuses a schedule naming an identity this project never declares.
         expect(declaration.identities.map((identity) => identity.name)).toContain(one.identity);
       }
     }
-    // The cadence the landing copy promises, on the crew that is actually running: four fires on
-    // the manager and one on each of the four specialists.
-    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(8);
+    // Three fires: the head of the chain once, the analyst twice. Every other seat is woken by the
+    // board, and its EMPTY set survives the parse — `[]` is what deletes an older version's crons.
+    expect(project.agents.flatMap((agent) => agent.schedules ?? [])).toHaveLength(3);
+    expect(project.agents.filter((agent) => agent.schedules?.length === 0).map((agent) => agent.name)).toEqual(
+      ACTIVE.agents.filter((agent) => agent.schedules?.length === 0).map((agent) => agent.name),
+    );
   });
 
   /**
@@ -86,9 +188,9 @@ describe("naive.config", () => {
    */
   it("hands `up` the crew's roles, skills, cards and the running template's setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
-    // Three required, plus the optional fourth where the running template spends it (ADR-0757).
+    // Two required — no question asks where the channel posts — plus the optional one (ADR-0757).
     expect(project.questions.length).toBe(ACTIVE.questions.length);
-    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(3);
+    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(2);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.
@@ -98,8 +200,6 @@ describe("naive.config", () => {
     expect(project.tasks).toEqual(ACTIVE.tasks);
     expect(project.tasks).toHaveLength(ACTIVE.tasks.length);
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
-    // The dashboard is the crew's queue and MCP endpoint: an install cannot untick it.
-    expect(project.apps[0]?.required).toBe(true);
     // The chain survives `defineProject` (engine 0.5.0 validates it), so `up` compiles the grants.
     expect(project.agents.map((agent) => [agent.name, agent.handoffs])).toEqual(
       ACTIVE.agents.map((agent) => [agent.name, agent.handoffs]),
@@ -141,72 +241,27 @@ describe("naive.config", () => {
     expect(project.kept.agents).not.toContain("channel-manager");
   });
 
-  it("gives the deployed dashboard the org key, without putting a secret in this file", () => {
-    // Declared nowhere before, so the deployed process had no key at all: the chat relay and every
-    // platform-backed route could only ever answer 503. `{from_env}` also refuses the apply by name
-    // when the variable is unset, instead of deploying a dashboard that cannot reach the platform.
-    expect(project.apps[0]?.env?.["NAIVE_API_KEY"]).toEqual({ from_env: "NAIVE_API_KEY" });
-    expect(JSON.stringify(project.apps[0]?.env)).not.toMatch(/sk_|secret/i);
-  });
-
-  it("declares the operator token every /api/* route is gated on, and has the platform invent it", () => {
-    // Declared nowhere before, so the deployed dashboard had no token to compare against and its
-    // whole API — the queue, publishing, the roster, opening a billable session — answered anyone
-    // who found the URL. It is `{generate: true}` (`canonical-spec §29.7`) rather than `{from_env}`
-    // because the value is "any long random string": a person inventing entropy is not a setup
-    // question, and a hosted install has no shell to read one out of. The platform makes it once,
-    // on the apply that creates the app, and a later apply leaves it exactly where it is.
-    expect(project.apps[0]?.env?.["DASHBOARD_TOKEN"]).toEqual({ generate: true });
-  });
-
-  it("declares a generated dashboard password beside the token: the operator's own way through the gate", () => {
-    // The token is never shown to anyone; the password exists to be shown — in the studio's Access
-    // panel — and typed into the gate by a browser that arrived without the studio's handoff. Same
-    // `{generate: true}`: the platform shapes the value, and a later apply leaves it where it is.
-    expect(project.apps[0]?.env?.["DASHBOARD_PASSWORD"]).toEqual({ generate: true });
-  });
-
-  /**
-   * The platform's own two values are the platform's to write (`canonical-spec §29.7`).
-   *
-   * They used to be `process.env` reads in `naive.config.ts`, which is two bugs in one line. At
-   * publish time the PUBLISHER'S shell was baked into the declaration every customer then installs;
-   * on a hosted apply there is no shell at all, so both simply vanished and the dashboard fell back
-   * to the production base URL with no persona — `/api/social/*` answering 503 for every connected
-   * account. Declaring them is not the fix either: a laptop apply would then refuse for want of two
-   * variables nobody has. The platform knows both and writes them itself.
-   */
-  it("declares neither the API base URL nor the identity id, because the platform provides both", () => {
-    expect(project.apps[0]?.env).toEqual({
-      NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" },
-      DASHBOARD_TOKEN: { generate: true },
-      DASHBOARD_PASSWORD: { generate: true },
-    });
-  });
-
-  it("serves its MCP endpoint from the dashboard and lets every agent file work through it", () => {
-    expect(project.apps[0]).toMatchObject({ type: "fullstack", mcp: "/mcp" });
+  /** Read off the parsed project, so an engine that dropped a permission would go red here. */
+  it("publishes through one seat, only with the operator's yes, and denies it to every other", () => {
     for (const agent of project.agents) {
-      expect(agent.system).toMatch(/channel\.create_post/);
-      // The toolsets deny by default, so the dashboard's MCP tools must be allowed by name.
-      expect(agent.tools?.configs["channel.create_post"]).toEqual({ enabled: true, permission: "allow" });
-      expect(Object.keys(agent.tools?.configs ?? {}).some((name) => /^channel\.(approve|reject|post)/.test(name))).toBe(false);
+      expect(agent.tools?.default_config.permission, agent.name).toBe("deny");
+      expect(agent.tools?.configs["social.post"], agent.name).toEqual(
+        agent.name === "channel-manager" ? { enabled: true, permission: "ask" } : { enabled: false, permission: "deny" },
+      );
     }
   });
 
-  it("grants social.post only through the approval queue, and nothing else outward", () => {
+  it("allows the metrics read on the analyst and the channel manager, and the post status on the manager alone", () => {
     for (const agent of project.agents) {
-      // `ask` (canonical-spec §6) parks the turn `awaiting_approval` with the call in
-      // `pending_actions`; `allow` would publish straight past the operator.
-      expect(agent.tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
-      // The only other tool that acts outward. Nothing else granted may run unattended by accident.
-      const allowed = Object.entries(agent.tools?.configs ?? {})
-        .filter(([, config]) => config.permission === "allow")
-        .map(([name]) => name);
-      expect(allowed).not.toContain("social.post");
-      expect(allowed.filter((name) => name.startsWith("social."))).toEqual(
-        agent.name === "channel-manager" ? ["social.post_metrics", "social.accounts"] : ["social.accounts"],
+      expect(agent.tools?.configs["social.post_metrics"], agent.name).toEqual(
+        ["analyst", "channel-manager"].includes(agent.name) ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
       );
+      expect(agent.tools?.configs["social.status"], agent.name).toEqual(
+        agent.name === "channel-manager" ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
+      );
+      for (const tool of ["company.set_timezone", "company.set_logo", "apps.request_access"]) {
+        expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual({ enabled: false, permission: "deny" });
+      }
     }
   });
 });
