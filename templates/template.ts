@@ -24,7 +24,7 @@ export const PROJECT_NAME = "media";
  * `project_context`.
  *
  * The engine caps a template at four. Measured on `@usenaive-sdk/blueprints@0.7.0` (the cap is
- * unchanged in the `^0.8.0` this repo pins), a fifth comes back:
+ * unchanged in the `^0.9.0` this repo pins), a fifth comes back:
  *
  *     template "faceless" asks 5 questions, but a template asks at most 4 before anything is
  *     provisioned — a fifth belongs to the crew's first conversation

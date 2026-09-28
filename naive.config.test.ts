@@ -1,9 +1,12 @@
 /** The blueprint as `naive up` would read it: it parses, it names its template, and it declares no app. */
-import { BLUEPRINTS } from "@usenaive-sdk/blueprints";
+import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
 import { MEDIA_MANAGER } from "./templates/media-manager.ts";
+
+/** A block's props, read loosely: the engine types each block's props exactly, the checks here read any. */
+const propsOf = (element: { props: object }) => element.props as Record<string, unknown>;
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -29,8 +32,8 @@ describe("naive.config", () => {
 
   /**
    * canonical-spec §31.5 (ADR-0921): the studio names the template in words and draws the networks
-   * it is made for. Read off `declaration`: the pinned engine 0.8.0 strips what it does not know, and
-   * the platform's artifact publisher builds with the engine that does.
+   * it is made for. Read off `declaration` here; the test after the mini app's reads the same fields back off
+   * `defineProject`, which engines before 0.9.0 stripped.
    */
   it("names the running template for the studio, with the networks it is made for", () => {
     expect(declaration.title).toBe(ACTIVE.title);
@@ -45,8 +48,8 @@ describe("naive.config", () => {
 
   /**
    * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988, ADR-1023).
-   * Read off `declaration`, like the label above: the pinned engine 0.8.0 strips `mini_apps`; the
-   * platform checks it against its catalog when it is read.
+   * Read off `declaration`; engine 0.9.0 (the pin) types and parses every block, and the platform
+   * checks it against its catalog when it is read.
    */
   it("declares one mini app, Media manager: one page and no panel", () => {
     const [manager, ...rest] = declaration.mini_apps;
@@ -56,7 +59,7 @@ describe("naive.config", () => {
     expect(manager!.pages.map((one) => one.slug)).toEqual(["overview"]);
     expect(manager).not.toHaveProperty("panels");
     // Words only: a digit in a title would be refused, since the platform writes every number.
-    const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(element.props["title"] ?? element.props["label"] ?? ""))]);
+    const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(propsOf(element)["title"] ?? propsOf(element)["label"] ?? ""))]);
     expect(words.join(" ")).not.toMatch(/[0-9]/);
   });
 
@@ -74,8 +77,8 @@ describe("naive.config", () => {
       const [only, ...more] = section.children!.map((key) => elements[key]!);
       expect(more).toEqual([]);
       expect(only!.type).toBe("Posts");
-      const { status } = only!.props["posts"] as { status: string };
-      return [section.props["title"], section.props["hide_empty"] ?? false, status, only!.props["layout"] ?? "list"];
+      const { status } = propsOf(only!)["posts"] as { status: string };
+      return [propsOf(section)["title"], propsOf(section)["hide_empty"] ?? false, status, propsOf(only!)["layout"] ?? "list"];
     });
     expect(sections).toEqual([
       ["Waiting on you", true, "waiting", "list"],
@@ -85,6 +88,34 @@ describe("naive.config", () => {
     const types = Object.values(elements).map((element) => element.type);
     for (const gone of ["BarList", "Accounts", "Answers", "Media", "MediaLibrary"]) expect(types).not.toContain(gone);
   });
+
+  /**
+   * The same four fields, read back off what `defineProject` RETURNS, for every template. Engines
+   * before 0.9.0 parse the declaration through a schema that does not know `mini_apps`, `title`,
+   * `description` or `platforms` and strip them silently — so a raw-object check passes while the
+   * published artifact carries no Media manager and no label. This is the check that the installed
+   * engine really keeps them.
+   */
+  it.each(Object.values(TEMPLATES).map((one) => [one.name, one] as const))(
+    "keeps Media manager, the title, the description and the networks through defineProject on %s",
+    (_name, one) => {
+      const parsed = defineProject({
+        ...declaration,
+        template: one.name,
+        title: one.title,
+        description: one.description,
+        platforms: one.platforms,
+        questions: one.questions,
+        tasks: one.tasks,
+      });
+      expect(parsed.mini_apps?.[0]?.slug).toBe("media-manager");
+      expect(parsed.mini_apps).toHaveLength(1);
+      expect(parsed.title).toBe(one.title);
+      expect(parsed.description).toBe(one.description);
+      expect(parsed.platforms).toEqual(["youtube", "tiktok", "instagram"]);
+      expect(parsed.template).toBe(one.name);
+    },
+  );
 
   /** Each page is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
   it("lays each page out as one tree under its Page, of the platform's blocks only", () => {
