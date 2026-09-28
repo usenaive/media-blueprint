@@ -180,11 +180,6 @@ template agent, and our `CONTEXT_PREAMBLE` adds what the answers are on a media 
 
 Found while building this, with where it lives in the platform repo:
 
-- **A catalog artifact needs a built app.** `scripts/publish-artifacts.mjs:171-176` throws "an
-  artifact addresses at least one built tree"; `packages/core/src/schema/blueprint.ts:188` is
-  `trees: z.array(BlueprintTreeSchema).min(1)`; migration `0040_blueprint_artifact_trees.sql`
-  checks `jsonb_array_length(trees) > 0`. A data-only blueprint installs with `naive up`, not from
-  the studio.
 - **No setup answers without a catalog install.** `projectContextOf`
   (`apps/api/src/routes/sessions.ts:135-146`) needs an install with a published artifact;
   canonical-spec §31.8 says an apply from a working tree has no context.

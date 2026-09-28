@@ -3,7 +3,8 @@
  *
  * `ACTIVE` is the whole switch: edit it and run `naive up`. The switch widens and never narrows —
  * an agent only the other template declares is kept, reported by `up` and left running, with its
- * crons. Retire one on purpose by naming it in `removed` in `naive.config.ts`.
+ * crons. Retire one on purpose by naming it under `removed.agents` in `naive.config.ts` — and never
+ * name an app there: `removed.apps: ["channel"]` would delete a 1.x install's store (README).
  */
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS } from "./faceless.ts";

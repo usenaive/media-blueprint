@@ -41,16 +41,26 @@ pnpm test && naive up
 again changes only what changed. Pick the template in [`templates/index.ts`](templates/index.ts)
 (`ACTIVE`).
 
-### ⚠️ Known limits of a data-only blueprint
+From 2.0.0 the studio's catalog publishes this data-only blueprint too (no built app, zero
+trees), so a new channel can also be installed from the studio.
 
-- **The studio's catalog cannot publish it yet.** The platform's artifact publisher refuses a
-  declaration with no built app (`scripts/publish-artifacts.mjs`, and `trees: .min(1)` in
-  `packages/core/src/schema/blueprint.ts`). So today this installs with `naive up` from a clone.
+### ⚠️ Known limit
+
 - **`project_context` answers only on a catalog install.** A `naive up` from a clone has no setup
   answers, so each seat asks you for what it needs, once. See
-  [docs/how-it-works.md](docs/how-it-works.md#9-what-the-platform-cannot-express-yet).
+  [docs/how-it-works.md](docs/how-it-works.md#9-what-the-platform-cannot-express-yet). That is a
+  platform change, not a change to this repo.
 
-Both are platform changes, not changes to this repo.
+### ⬆️ Coming from 1.x
+
+1.x ran a hosted `channel` app with its own store of posts. 2.0.0 declares no app, and it does
+**not** remove the old one: an install on 1.x keeps its app and its store until an operator
+retires them, after the store is exported.
+
+**Never add `removed: { apps: ["channel"] }`** to `naive.config.ts`. It would delete the old
+store, irreversibly, on whichever apply ran first (a customer's own **Update** included), before
+anyone exported it. It would not revoke the old app's key either. Retiring the old app is an
+operator step, not a change to this repo.
 
 ## 🧭 How a piece is made
 
@@ -225,8 +235,9 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 Edit `ACTIVE` in [`templates/index.ts`](templates/index.ts) and run `naive up`. The switch widens:
 the new crew is created, and a seat only the old template had is **kept and still firing**. Its
-crons keep billing. Retire it by adding its name to `removed` in `naive.config.ts` and running
-`naive up` again.
+crons keep billing. To retire that seat, name it, and only it, under `removed.agents` in
+`naive.config.ts` and run `naive up` again. Never name an app under `removed`: see
+*Coming from 1.x* above.
 
 Schedules are the one place where omission deletes. An agent's `schedules` are owned as a whole
 set and matched by exact cron text: `"0 8 * * 1"` and `"0 08 * * 1"` are a delete plus a create.
