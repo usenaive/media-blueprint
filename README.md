@@ -198,7 +198,9 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - The `longform` producer: **$75 per task, $150 per day.** One piece is up to six segments,
   ~$53.97 of video, in one session.
 - Each fire has its own budget, inside its seat's ceiling.
-- `generate_video` is pinned to `bytedance/seedance-2.5` first (with `google/veo-3.1` allowed).
+- `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
+  allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
+  or context explicitly ask for another.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions

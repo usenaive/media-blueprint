@@ -303,6 +303,17 @@ export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
  */
 export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
 
+/**
+ * How a plan and a render treat the video model. The default path names none: `generate_video`
+ * then renders with the first of `VIDEO_MODELS`, Seedance 2.5 — pinned here, and the platform's own
+ * default too. A seat names another only when the operator's setup or context explicitly asks for
+ * it, so no seat chooses, compares or shops for a model on its own.
+ */
+export const PLAN_MODEL_RULE =
+  "no video model — leave it out, and the render uses the channel's default, Seedance 2.5 — unless project_context explicitly names another, and then that one, word for word";
+export const RENDER_MODEL_RULE =
+  "no model argument, so it renders with the default, Seedance 2.5 — unless the plan names a model because project_context explicitly asked for it, and then that one";
+
 /** Held by every seat: `ask_operator` and `request_tools` can only ever be `ask`. */
 const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
 

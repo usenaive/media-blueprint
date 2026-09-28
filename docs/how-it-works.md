@@ -68,8 +68,9 @@ A card is woken at most three times. After that it is parked for the CEO.
 - **scriptwriter**: opens the exemplars first — the browser for the page, `bash` to sample frames
   through the first three seconds, `view_image` to look. Then research, three hooks, beats, shots.
   Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
-  15–30, model, facts with sources, caption.
-- **producer**: one `generate_video` call — the shots in order as one take, 9:16, the plan's model.
+  15–30, facts with sources, caption — and a video model only where the operator's context names one.
+- **producer**: one `generate_video` call — the shots in order as one take, 9:16, no model named, so
+  it renders with Seedance 2.5.
   Creates the Publish card with the `fil_` id.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).

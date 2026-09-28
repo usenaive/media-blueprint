@@ -20,9 +20,11 @@ import {
   lengthPhrase,
   MAX_RENDER_SECONDS,
   ONE_RENDER_MICRO_USD,
+  PLAN_MODEL_RULE,
   POST_TIME,
   PUBLISHER,
   REFERENCE_RULE,
+  RENDER_MODEL_RULE,
   renderMicroUsd,
   segmentsOf,
   VIDEO_MODELS,
@@ -238,6 +240,27 @@ describe("the toolsets", () => {
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
     for (const agent of TEMPLATES.clipping.agents) expect(agent.tools?.configs["generate_video"]?.enabled, agent.name).toBe(false);
     expect(seat(TEMPLATES.clipping, "clipper").tools?.configs["clip_video"]).toEqual({ enabled: true, permission: "allow" });
+  });
+
+  /**
+   * SEEDANCE 2.5 BY DEFAULT. The producers render with it without anyone asking: it is first in the
+   * pinned allow-list, and no brief, card or fire tells a seat to choose, compare or name a model.
+   * Another is named only when the operator's context explicitly asks for it.
+   */
+  it("renders with Seedance 2.5 by default, and never has a seat pick a video model", () => {
+    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
+      const producer = seat(template, "producer");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("bytedance/seedance-2.5");
+      expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
+    }
+    expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
+    expect(seat(TEMPLATES.longform, "writer").system).toContain(PLAN_MODEL_RULE);
+    expect(RENDER_MODEL_RULE).toMatch(/no model argument.*Seedance 2\.5.*unless.*project_context explicitly/);
+    for (const template of all) {
+      for (const text of everyPrompt(template)) {
+        expect(text, template.name).not.toMatch(/\bveo\b|pick a model|choose a model|the plan's model|the video model;|video model:/i);
+      }
+    }
   });
 
   /** A brief that names a tool its own toolset denies is an instruction the seat cannot follow. */
