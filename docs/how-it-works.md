@@ -156,13 +156,16 @@ a cron fire is not.
 `toolset` in `templates/template.ts` builds every seat's list:
 
 - default `deny`;
-- every built-in, every `social.*` tool and every platform publish-or-pay tool
-  (`ASK_BY_DEFAULT_TOOLS`: email, legal, wallet, card) the seat is not granted is written `deny`
-  by name — unnamed, the platform would default those to `ask`;
+- every built-in (`BUILTIN_TOOLS`) and every platform tool (`PLATFORM_TOOLS`: email, social,
+  connections, legal, wallet, card, `company.*`, `apps.request_access`) the seat is not granted is
+  written `deny` by name — unnamed, the ones in `ASK_BY_DEFAULT_TOOLS` would default to `ask`. Both
+  lists are pinned copies of core's, and a test holds them to it;
 - every seat: `board_read`, `board_write`, `project_context`, `find_files`, `session_spend`,
-  `browser` at `allow`; `ask_operator`, `request_tools` at `ask`;
-- `channel-manager`: `social.accounts` `allow`, `social.post` `ask`;
+  `browser`, `web_search`, `web_fetch` at `allow`; `ask_operator`, `request_tools` at `ask`;
+- `view_image` at `allow` on every seat that judges a picture (all but the analyst);
+- `channel-manager`: `social.accounts`, `social.status`, `social.post_metrics` `allow`, `social.post` `ask`;
 - `analyst`: `social.post_metrics` `allow`;
+- `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first.
 

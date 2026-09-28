@@ -251,11 +251,17 @@ describe("naive.config", () => {
     }
   });
 
-  it("allows the metrics read on the analyst alone", () => {
+  it("allows the metrics read on the analyst and the channel manager, and the post status on the manager alone", () => {
     for (const agent of project.agents) {
       expect(agent.tools?.configs["social.post_metrics"], agent.name).toEqual(
-        agent.name === "analyst" ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
+        ["analyst", "channel-manager"].includes(agent.name) ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
       );
+      expect(agent.tools?.configs["social.status"], agent.name).toEqual(
+        agent.name === "channel-manager" ? { enabled: true, permission: "allow" } : { enabled: false, permission: "deny" },
+      );
+      for (const tool of ["company.set_timezone", "company.set_logo", "apps.request_access"]) {
+        expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual({ enabled: false, permission: "deny" });
+      }
     }
   });
 });

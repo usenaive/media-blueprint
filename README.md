@@ -205,11 +205,16 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 - The default is **deny**. A connected account's own tools are not a second way out.
 - Every seat holds the board (`board_read`, `board_write`), `project_context`, `find_files`,
-  `session_spend` and `browser`.
+  `session_spend`, `browser`, `web_search` and `web_fetch`.
+- `view_image` on every seat that judges a picture: `channel-manager`, the producers, the
+  scriptwriter and writer, `trend-scout`, `researcher`, `clipper`, `scout` and `caption-editor`.
 - `ask_operator` and `request_tools` are always `ask`.
 - `social.post`: `ask` on `channel-manager`, `deny` everywhere else.
-- `social.post_metrics`: `allow` on `analyst` only.
-- Every other publish, pay or file tool (email, legal, wallet, card) is denied by name.
+- `social.accounts` and `social.status`: `allow` on `channel-manager` only.
+- `social.post_metrics`: `allow` on `analyst` and `channel-manager`.
+- `company.set_timezone`, `company.set_logo` and `apps.request_access` are denied on every seat.
+- Every other built-in and platform tool (email, legal, wallet, card, connections) is denied by
+  name. `generate_speech` and `transcribe_audio` are not granted to any seat.
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and the Long Form writer
   sample frames; the Long Form producer joins segments.
