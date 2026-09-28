@@ -10,17 +10,21 @@ import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.t
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
+  PLATFORM_TOOLS,
   CADENCE_QUESTION,
   CADENCE_SLOTS,
   CARD_ORDER,
   CONTEXT_PREAMBLE,
   CREW_RULES,
+  FIRST_PIECE_KEY,
   lengthPhrase,
   MAX_RENDER_SECONDS,
   ONE_RENDER_MICRO_USD,
+  PLAN_MODEL_RULE,
   POST_TIME,
   PUBLISHER,
   REFERENCE_RULE,
+  RENDER_MODEL_RULE,
   renderMicroUsd,
   segmentsOf,
   VIDEO_MODELS,
@@ -124,11 +128,48 @@ describe("the toolsets", () => {
     }
   });
 
-  it("allows the metrics read on the analyst alone, and the account list on the publisher alone", () => {
+  /** The social reads: the analyst's numbers, and the publisher's accounts, post status and numbers (v1.7.0 had them). */
+  it("allows the metrics read on the analyst and the publisher, and the accounts and post status on the publisher alone", () => {
     for (const { template, agent, id } of everySeat) {
-      expect(permissionFor(template, agent.name, "social.post_metrics"), id).toBe(agent.name === "analyst" ? "allow" : "deny");
+      expect(permissionFor(template, agent.name, "social.post_metrics"), id).toBe(["analyst", PUBLISHER].includes(agent.name) ? "allow" : "deny");
       expect(permissionFor(template, agent.name, "social.accounts"), id).toBe(agent.name === PUBLISHER ? "allow" : "deny");
-      expect(permissionFor(template, agent.name, "social.status"), id).toBe("deny");
+      expect(permissionFor(template, agent.name, "social.status"), id).toBe(agent.name === PUBLISHER ? "allow" : "deny");
+    }
+  });
+
+  /** Offered to every session and asking by default; a media seat has no app and no say over the company. */
+  it("denies the company's timezone and logo and an app's key to every seat by name", () => {
+    for (const { template, agent, id } of everySeat) {
+      for (const tool of ["company.set_timezone", "company.set_logo", "apps.request_access"]) {
+        expect(agent.tools?.configs[tool], `${id}/${tool}`).toEqual({ enabled: false, permission: "deny" });
+        expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
+      }
+    }
+  });
+
+  /** Every seat that judges a picture can open one: the look, a frame, a thumbnail, a render. */
+  it("lets every seat that judges visuals look at an image", () => {
+    const LOOKERS = new Set([
+      "faceless/channel-manager", "faceless/producer", "faceless/trend-scout", "faceless/scriptwriter",
+      "longform/channel-manager", "longform/researcher", "longform/writer", "longform/producer",
+      "clipping/channel-manager", "clipping/clipper", "clipping/scout", "clipping/caption-editor",
+    ]);
+    for (const { template, agent, id } of everySeat) {
+      expect(permissionFor(template, agent.name, "view_image"), id).toBe(LOOKERS.has(id) ? "allow" : "deny");
+    }
+  });
+
+  /** The audio provider is broken: no seat is handed a tool that cannot work. */
+  it("grants no seat speech or transcription", () => {
+    for (const { template, agent, id } of everySeat) {
+      for (const tool of ["generate_speech", "transcribe_audio"]) expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
+    }
+  });
+
+  /** A tool no media seat uses is denied by name, so it never falls to a default. */
+  it("denies every platform tool a seat is not granted, by name", () => {
+    for (const { agent, id } of everySeat) {
+      for (const tool of [...BUILTIN_TOOLS, ...PLATFORM_TOOLS]) expect(agent.tools?.configs[tool], `${id}/${tool}`).toBeDefined();
     }
   });
 
@@ -146,9 +187,9 @@ describe("the toolsets", () => {
   });
 
   /** The board is how a woken seat reads its card and hands on; the rest is what every seat reads. */
-  it("grants every seat the board, the context, the file library, its own bill and the browser", () => {
+  it("grants every seat the board, the context, the file library, its own bill, the browser and the web", () => {
     for (const { agent, id } of everySeat) {
-      for (const tool of ["board_read", "board_write", "project_context", "find_files", "session_spend", "browser"]) {
+      for (const tool of ["board_read", "board_write", "project_context", "find_files", "session_spend", "browser", "web_search", "web_fetch"]) {
         expect(agent.tools?.configs[tool], `${id}/${tool}`).toEqual({ enabled: true, permission: "allow" });
       }
     }
@@ -201,11 +242,32 @@ describe("the toolsets", () => {
     expect(seat(TEMPLATES.clipping, "clipper").tools?.configs["clip_video"]).toEqual({ enabled: true, permission: "allow" });
   });
 
+  /**
+   * SEEDANCE 2.5 BY DEFAULT. The producers render with it without anyone asking: it is first in the
+   * pinned allow-list, and no brief, card or fire tells a seat to choose, compare or name a model.
+   * Another is named only when the operator's context explicitly asks for it.
+   */
+  it("renders with Seedance 2.5 by default, and never has a seat pick a video model", () => {
+    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
+      const producer = seat(template, "producer");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("bytedance/seedance-2.5");
+      expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
+    }
+    expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
+    expect(seat(TEMPLATES.longform, "writer").system).toContain(PLAN_MODEL_RULE);
+    expect(RENDER_MODEL_RULE).toMatch(/no model argument.*Seedance 2\.5.*unless.*project_context explicitly/);
+    for (const template of all) {
+      for (const text of everyPrompt(template)) {
+        expect(text, template.name).not.toMatch(/\bveo\b|pick a model|choose a model|the plan's model|the video model;|video model:/i);
+      }
+    }
+  });
+
   /** A brief that names a tool its own toolset denies is an instruction the seat cannot follow. */
   it("never tells a seat to use a tool its toolset denies", () => {
-    // Identifiers only: "read", "write", "edit", "find", "ls" and "apps" are ordinary English.
-    const NAMES = [...BUILTIN_TOOLS, "social.post", "social.post_metrics", "social.accounts", "social.status"]
-      .filter((name) => !["read", "write", "edit", "find", "ls", "apps"].includes(name));
+    // Identifiers only: "read", "write", "edit", "find", "ls", "apps", "show" and "compose" are ordinary English.
+    const NAMES = [...BUILTIN_TOOLS, ...PLATFORM_TOOLS]
+      .filter((name) => !["read", "write", "edit", "find", "ls", "apps", "show", "compose"].includes(name));
     const offences: string[] = [];
     for (const { template, agent, id } of everySeat) {
       const said = [agent.system ?? "", ...(agent.schedules ?? []).map((one) => one.input), ...template.tasks.filter((t) => t.assignee === agent.name).map((t) => t.body ?? "")].join("\n");
@@ -232,7 +294,7 @@ describe("the board", () => {
         look: ["reference-study"],
         "hook-style": ["reference-study"],
         "report-frame": ["channel-plan"],
-        "first-piece": ["look", "hook-style"],
+        "first-briefs": ["look", "hook-style"],
       },
       longform: {
         "channel-plan": [],
@@ -240,14 +302,14 @@ describe("the board", () => {
         look: ["reference-study"],
         "arc-style": ["reference-study"],
         "report-frame": ["channel-plan"],
-        "first-piece": ["look", "arc-style"],
+        "first-topic": ["look", "arc-style"],
       },
       clipping: {
         "channel-plan": [],
         "source-check": [],
         "caption-style": [],
         "report-frame": ["channel-plan"],
-        "first-piece": ["source-check", "caption-style"],
+        "first-moments": ["source-check", "caption-style"],
       },
     };
     for (const template of all) {
@@ -260,6 +322,21 @@ describe("the board", () => {
       }
       // The piece is started by the head of the pipeline, and it is last.
       expect(template.tasks.at(-1)?.assignee, template.name).toBe(template.pipeline[0]);
+    }
+  });
+
+  /**
+   * THE RE-APPLY GUARD. An org on v1.3.0–v1.7.0 already holds these keys with every blocker done;
+   * a new key there would be seeded, promoted and woken into a paid chain on the next tick. Reusing
+   * the key it holds makes the re-apply a no-op on that card.
+   */
+  it("keys the day-one piece card with the key v1.x already seeded, never `first-piece`", () => {
+    expect(TEMPLATES.faceless.tasks.at(-1)?.key).toBe("first-briefs");
+    expect(TEMPLATES.longform.tasks.at(-1)?.key).toBe("first-topic");
+    expect(TEMPLATES.clipping.tasks.at(-1)?.key).toBe("first-moments");
+    for (const template of all) {
+      expect(template.tasks.at(-1)?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
+      expect(template.tasks.map((task) => task.key), template.name).not.toContain("first-piece");
     }
   });
 
@@ -616,35 +693,48 @@ describe("the long-form crew", () => {
  * tool no seat can be granted or denied, so it is held to a pinned copy of the platform's list.
  */
 describe("the built-in tool list", () => {
-  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at 385eb4bd (2026-09-25). */
+  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at fc7923648 (2026-09-27). */
   const CORE_BUILTIN_TOOLS = [
     "bash", "read", "write", "edit", "ls", "find",
     "browser", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video", "apps",
     "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
     "ask_operator", "request_tools", "project_context",
     "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+    "show", "compose", "write_plan", "propose_plan",
   ];
-  /** Core's `PLATFORM_TOOLS`, not built-ins: listed here so every seat denies them by name. */
-  const DENIED_PLATFORM_TOOLS = ["email.inboxes", "email.read", "email.send"];
+  /** The same file's `PLATFORM_TOOLS`, at the same commit. */
+  const CORE_PLATFORM_TOOLS = [
+    "email.inboxes", "email.read", "email.send",
+    "social.accounts", "social.post", "social.status", "social.post_metrics",
+    "connections.search", "connections.connect", "connections.status",
+    "legal.verifications", "legal.verification", "legal.companies", "legal.company", "legal.documents", "legal.naics",
+    "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
+    "wallet.balance", "wallet.transactions", "wallet.receipts", "wallet.quote", "wallet.pay", "wallet.transfer",
+    "card.list", "card.show", "card.quote", "card.transactions", "card.spend", "card.issue", "card.credentials", "card.cancel",
+    "company.set_timezone", "company.set_logo", "apps.request_access",
+  ];
+  const drift = (ours: readonly string[], core: string[]) => ({
+    missing: core.filter((name) => !ours.includes(name)),
+    extra: ours.filter((name) => !core.includes(name)),
+  });
+  const HOW =
+    "has drifted from vetta core (packages/core/src/schema/agent.ts). `missing` are platform tools no seat can be " +
+    "granted or denied; `extra` are names the platform does not publish. Re-copy the list from core into both " +
+    "template.ts and the copy here, and update the commit pin.";
 
-  it("matches the platform's list, name for name", () => {
-    const ours = BUILTIN_TOOLS.filter((name) => !DENIED_PLATFORM_TOOLS.includes(name));
-    const missing = CORE_BUILTIN_TOOLS.filter((name) => !(ours as readonly string[]).includes(name));
-    const extra = ours.filter((name) => !CORE_BUILTIN_TOOLS.includes(name));
-    expect(
-      { missing, extra },
-      "templates/template.ts BUILTIN_TOOLS has drifted from vetta core's BUILTIN_TOOLS " +
-        "(packages/core/src/schema/agent.ts). `missing` are platform tools no seat can be granted or denied; " +
-        "`extra` are names the platform does not publish. Re-copy the list from core into both " +
-        "template.ts and CORE_BUILTIN_TOOLS here, and update the commit pin.",
-    ).toEqual({ missing: [], extra: [] });
+  it("matches the platform's built-in list, name for name", () => {
+    expect(drift(BUILTIN_TOOLS, CORE_BUILTIN_TOOLS), `templates/template.ts BUILTIN_TOOLS ${HOW}`).toEqual({ missing: [], extra: [] });
+  });
+
+  it("matches the platform's own namespaced list, name for name", () => {
+    expect(drift(PLATFORM_TOOLS, CORE_PLATFORM_TOOLS), `templates/template.ts PLATFORM_TOOLS ${HOW}`).toEqual({ missing: [], extra: [] });
   });
 
   /** Core's `ASK_BY_DEFAULT_TOOLS`, pinned: each falls to `ask` unless a toolset names it. */
   it("pins the platform's ask-by-default list", () => {
     expect([...ASK_BY_DEFAULT_TOOLS].sort()).toEqual([
-      "card.cancel", "card.credentials", "card.issue", "email.send", "legal.form", "legal.resend_link",
-      "legal.submit", "legal.verify", "social.post", "wallet.pay", "wallet.transfer",
+      "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_logo", "company.set_timezone",
+      "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "social.post", "wallet.pay", "wallet.transfer",
     ]);
   });
 });

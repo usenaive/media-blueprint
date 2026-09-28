@@ -24,7 +24,7 @@ export const PROJECT_NAME = "media";
  * `project_context`.
  *
  * The engine caps a template at four. Measured on `@usenaive-sdk/blueprints@0.7.0` (the cap is
- * unchanged in the `^0.8.0` this repo pins), a fifth comes back:
+ * unchanged in the `^0.9.0` this repo pins), a fifth comes back:
  *
  *     template "faceless" asks 5 questions, but a template asks at most 4 before anything is
  *     provisioned — a fifth belongs to the crew's first conversation
@@ -99,6 +99,24 @@ export const REFERENCE_QUESTION: SetupQuestion = {
 
 /** One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`. */
 export type Task = NonNullable<DefineInput["tasks"]>[number];
+
+/**
+ * The key of each template's day-one piece card — the card that starts the first piece's paid chain.
+ *
+ * WHY THESE KEYS, AND NOT `first-piece`. A card is seeded as `media:<key>` and a re-apply that finds
+ * the key already on the board writes nothing. Every install from v1.3.0 on already holds these
+ * three keys (v1.x's day-one briefs / topic / moments card), and already has this card's blockers
+ * done. Under a NEW key, re-applying 2.0.0 to such an org would seed the card, find its blockers
+ * closed, promote it and wake the head of the chain on the next tick — a paid render nobody asked
+ * for. Under the key the org already holds, the re-apply is a no-op there, and a new org gets
+ * exactly the card it would have got as `first-piece`. Title and body are 2.0.0's; only the key is
+ * reused. Do not rename these while any install older than 2.0.0 may still be re-applied.
+ */
+export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
+  faceless: "first-briefs",
+  longform: "first-topic",
+  clipping: "first-moments",
+};
 
 /** How long a piece of a template runs, in seconds. */
 export interface Length {
@@ -235,28 +253,47 @@ const SLOTS = `${Object.entries(CADENCE_SLOTS).map(([answer, days]) => `${answer
 /**
  * Every built-in tool the platform publishes, pinned: a blueprint imports no workspace package, and
  * `toolset` denies by name every one a seat is not granted. `templates.test.ts` holds it to a copy
- * of core's `BUILTIN_TOOLS`. The `email.*` names are platform tools, listed so every seat denies them.
+ * of core's `BUILTIN_TOOLS` (vetta-mono `packages/core/src/schema/agent.ts` at fc7923648).
  */
 export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
-  "browser", "read_skill", "publish_file", "web_search", "web_fetch", "project_context",
-  "generate_image", "generate_video", "clip_video", "generate_speech", "transcribe_audio", "apps",
-  "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+  "browser", "read_skill", "publish_file", "web_search", "web_fetch",
+  "generate_image", "generate_video", "clip_video", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
-  "ask_operator", "request_tools", "email.inboxes", "email.read", "email.send",
+  "ask_operator", "request_tools", "project_context",
+  "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+  "show", "compose", "write_plan", "propose_plan",
 ] as const;
 
 /**
- * The platform tools that publish, pay or file — core's `ASK_BY_DEFAULT_TOOLS`, pinned. A toolset
- * that does not name one gets `ask`, whatever its default says, so every seat names each of them.
+ * The platform's own namespaced tools — core's `PLATFORM_TOOLS`, pinned at the same commit. Offered
+ * only when the session's identity owns what they reach (an inbox, a social workspace, the
+ * connections layer) or, for `company.*` and `apps.request_access`, to every session. `toolset`
+ * denies by name every one a seat is not granted.
+ */
+export const PLATFORM_TOOLS = [
+  "email.inboxes", "email.read", "email.send",
+  "social.accounts", "social.post", "social.status", "social.post_metrics",
+  "connections.search", "connections.connect", "connections.status",
+  "legal.verifications", "legal.verification", "legal.companies", "legal.company", "legal.documents", "legal.naics",
+  "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
+  "wallet.balance", "wallet.transactions", "wallet.receipts", "wallet.quote", "wallet.pay", "wallet.transfer",
+  "card.list", "card.show", "card.quote", "card.transactions", "card.spend", "card.issue", "card.credentials", "card.cancel",
+  "company.set_timezone", "company.set_logo", "apps.request_access",
+] as const;
+
+/**
+ * The platform tools that publish, pay, file or change the company's settings — core's
+ * `ASK_BY_DEFAULT_TOOLS`, pinned. A toolset that does not name one gets `ask`, whatever its default
+ * says, so every seat names each of them. `company.set_timezone`, `company.set_logo` and
+ * `apps.request_access` are offered to every session: a media seat has no app to request and no
+ * business changing the company's clock or logo, so each is denied by name.
  */
 export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
   "social.post", "email.send", "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
   "wallet.pay", "wallet.transfer", "card.issue", "card.credentials", "card.cancel",
+  "company.set_timezone", "company.set_logo", "apps.request_access",
 ];
-
-/** The social tools a channel's identity is offered once it has a social workspace. */
-const SOCIAL_TOOLS = ["social.accounts", "social.post", "social.post_metrics", "social.status"];
 
 /**
  * The video models a seat may render with, first is the default. `generate_video` derives no
@@ -266,21 +303,37 @@ const SOCIAL_TOOLS = ["social.accounts", "social.post", "social.post_metrics", "
  */
 export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
 
+/**
+ * How a plan and a render treat the video model. The default path names none: `generate_video`
+ * then renders with the first of `VIDEO_MODELS`, Seedance 2.5 — pinned here, and the platform's own
+ * default too. A seat names another only when the operator's setup or context explicitly asks for
+ * it, so no seat chooses, compares or shops for a model on its own.
+ */
+export const PLAN_MODEL_RULE =
+  "no video model — leave it out, and the render uses the channel's default, Seedance 2.5 — unless project_context explicitly names another, and then that one, word for word";
+export const RENDER_MODEL_RULE =
+  "no model argument, so it renders with the default, Seedance 2.5 — unless the plan names a model because project_context explicitly asked for it, and then that one";
+
 /** Held by every seat: `ask_operator` and `request_tools` can only ever be `ask`. */
 const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
 
-/** Held by every seat at `allow`: its card, the setup answers, the file library, its own bill, the web as pictures. */
-const EVERY_SEAT: readonly string[] = ["board_read", "board_write", "project_context", "find_files", "session_spend", "browser"];
+/**
+ * Held by every seat at `allow`: its card, the setup answers, the file library, its own bill, and the
+ * web — as pictures (`browser`) and as text (`web_search`, `web_fetch`).
+ */
+const EVERY_SEAT: readonly string[] = [
+  "board_read", "board_write", "project_context", "find_files", "session_spend", "browser", "web_search", "web_fetch",
+];
 
 /**
  * A seat's toolset: the named tools allowed, the `ask` ones held for the operator, and everything
- * else denied — every built-in, every social tool and every publish-or-pay tool by name, and the
+ * else denied — every built-in and every platform tool (social, publish, pay, settings) by name, and the
  * rest by the default. `deny` is the default because a connected account adds tools no blueprint
  * can name; the publisher's `social.post` is the one way out.
  */
 export const toolset = (allow: readonly string[], ask: readonly string[] = []) => {
   const named = new Set([...allow, ...ask, ...ALWAYS]);
-  const denied = [...BUILTIN_TOOLS, ...SOCIAL_TOOLS, ...ASK_BY_DEFAULT_TOOLS].filter((name) => !named.has(name));
+  const denied = [...BUILTIN_TOOLS, ...PLATFORM_TOOLS].filter((name) => !named.has(name));
   return {
     default_config: { permission: "deny" as const },
     configs: {
@@ -380,7 +433,8 @@ export const channelManager = (): AgentDecl =>
     description:
       "Runs the channel: publishes each finished piece on the cadence you chose — every post waits for your approval — and reads the weekly report.",
     brief: `You are the channel manager: the operator's lead and the only seat that publishes. A Publish card wakes you: its body names the video (a fil_ id), the caption and the card it came from. Read the plan behind it with board_read, and fix the caption where it drifts from the plan or the channel's voice (\`naive/caption-writing\`). A post id already in the card's comments is a post already made: never make it again. The channel posts to every account connected to it, and nowhere else: read them with social.accounts. If social.post is not offered, or no account is connected, ask the operator once with ask_operator to connect one, and wait — never request_tools for a social tool. Then call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the connected accounts' platforms, by the ids social.accounts gives. YouTube goes on its own call with visibility — lower-case — the context's visibility answer where it gives one, else unlisted — because every other network refuses a visibility; the rest go together on a second call without one. scheduled_at is the next free slot for the cadence answer (${SLOTS}), written with that date's UTC offset, at least a day from now — an approved call goes out exactly as filed — and not a slot another Publish card's note already took. Each call waits for the operator's approval on the platform. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once with ask_operator what to change. Close the card done with each post id and when it goes out. A Weekly report card wakes you too: apply its advice on captions and posting times, and close it noting what you changed. Asked in chat, answer from the board, never from memory, and route new work as a card for the seat it belongs to.`,
-    tools: ["social.accounts"],
+    // Read-only: where it posts, whether a post went out, how posts did, and what a render looks like.
+    tools: ["social.accounts", "social.status", "social.post_metrics", "view_image"],
     ask: ["social.post"],
     skills: ["naive/caption-writing"],
     schedules: [],

@@ -8,6 +8,7 @@
  * frame this template posts is somebody else's, so every caption credits the original creator.
  */
 import {
+  FIRST_PIECE_KEY,
   agent,
   ANALYST_REPORT,
   analystSchedules,
@@ -41,7 +42,7 @@ export const CLIPPING: MediaTemplate = {
       role: "Clip production",
       description: "Cuts each moment the scout picked into one vertical clip and hands it to the caption editor. Never cuts from a channel the context does not name.",
       brief: `You are the clipper. A Cut card wakes you; its body is the moment the scout picked: the source URL, where it starts and ends, and why. Cut only from the reference channels project_context names — a card from anywhere else is stopped, saying so. clip_video takes the whole source URL, no timestamps, and returns titled file ids: call it once, vertical, and pick by title the clip that is the card's moment. A clip of this channel runs ${LENGTH} — clip_video's own band — so a moment that needs longer is not a clip: stop the card with that reason rather than ship half of it. Hand the clip on as the Caption card for the caption editor — title "Caption: <the moment>", assignee caption-editor, blocked_by your Cut card — whose body is the clip's fil_ id, the source URL and its creator, and the scout's why. One cut per card. If clip_video is not among your tools, request it once with request_tools and wait.`,
-      tools: ["clip_video"],
+      tools: ["clip_video", "view_image"],
       skills: ["naive/clip-selection"],
       schedules: [],
     }),
@@ -50,7 +51,7 @@ export const CLIPPING: MediaTemplate = {
       role: "Source watch",
       description: "Watches the named reference channels for new episodes and starts each moment worth cutting as a Cut card, with the reasoning.",
       brief: `You are the scout, the head of the chain. You watch the reference channels the context names — only those — for new episodes and the moments in them that stand alone as a short: a claim, a turn, a laugh, a play (web_search, web_fetch, \`naive/clip-selection\`). Look at the episode before you pick from it: open its page with the browser and screenshot it, because a title tells you what a moment says and nothing about what it looks like. Read the board first: never start a moment already on it, and read the newest weekly report card for which sources and moments to cut more and less of. Start the moments the cadence needs until your next fire, each as a Cut card for the clipper — title "Cut: <the moment>", assignee clipper, with no blocked_by — whose body is the source URL, where the moment starts and ends (estimated from what you can read — never transcribe; the cut finds it), why it lands for this audience, and what you saw. One moment per card. Never start one from a channel the context does not name. You neither cut nor caption.`,
-      tools: ["web_search", "web_fetch"],
+      tools: ["view_image"],
       skills: ["naive/clip-selection"],
       schedules: [
         schedule({
@@ -66,7 +67,7 @@ export const CLIPPING: MediaTemplate = {
       role: "Captions & titles",
       description: "Writes the title, caption and hashtags on every clip, credits the original creator, and hands it to the channel manager to publish.",
       brief: `You are the caption editor. A Caption card wakes you; its body is a cut clip — its fil_ id, its source and its creator, and why the scout picked it. Write it a publishable caption (\`naive/caption-writing\`): a first line that says the one idea — it becomes the YouTube title — a caption in the tone the context asks for that gives the moment a reason to be watched, and hashtags this audience actually follows. Credit the original creator on every clip: these are reference channels, not the operator's footage, and a clip posted without the credit costs the channel rather than a view. Write it to work on YouTube, TikTok and Instagram alike; the skill carries each one's norms. Use your caption-style card's note as the voice. Hand it on as the Publish card for the channel manager — title "Publish: <the moment>", assignee channel-manager, blocked_by your Caption card — whose body is the fil_ id, the caption and the source. You neither pick moments nor cut.`,
-      tools: ["web_search"],
+      tools: ["view_image"],
       skills: ["naive/caption-writing"],
       schedules: [],
     }),
@@ -103,7 +104,8 @@ export const CLIPPING: MediaTemplate = {
       body: "Read project_context for the reference channels and the cadence, and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the sources it cuts from, the metrics you will read per clip (social.post_metrics), and the week's target taken from the plan's posting slots. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
     }),
     task({
-      key: "first-piece",
+      // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
+      key: FIRST_PIECE_KEY.clipping,
       title: "Start the channel's first clip",
       assignee: "scout",
       blocked_by: ["source-check", "caption-style"],

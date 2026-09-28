@@ -68,8 +68,9 @@ A card is woken at most three times. After that it is parked for the CEO.
 - **scriptwriter**: opens the exemplars first — the browser for the page, `bash` to sample frames
   through the first three seconds, `view_image` to look. Then research, three hooks, beats, shots.
   Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
-  15–30, model, facts with sources, caption.
-- **producer**: one `generate_video` call — the shots in order as one take, 9:16, the plan's model.
+  15–30, facts with sources, caption — and a video model only where the operator's context names one.
+- **producer**: one `generate_video` call — the shots in order as one take, 9:16, no model named, so
+  it renders with Seedance 2.5.
   Creates the Publish card with the `fil_` id.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
@@ -103,9 +104,11 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
 ### Day one
 
 Each template seeds five or six cards. Set-up first — the channel plan, the reference study, the
-look, the voice, the report skeleton — then one `first-piece` card for the head of the chain. That
-piece runs its full chain to the approval card. The reference study never asks the operator: a
-blank reference answer means go and find two or three real videos in the niche.
+look, the voice, the report skeleton — then one piece card for the head of the chain
+(`first-briefs`, `first-topic` or `first-moments`: the key 1.x already seeded, so a re-apply to an
+existing org seeds nothing and starts no paid piece). That piece runs its full chain to the
+approval card. The reference study never asks the operator: a blank reference answer means go and
+find two or three real videos in the niche.
 
 ## 5. Publishing
 
@@ -154,13 +157,16 @@ a cron fire is not.
 `toolset` in `templates/template.ts` builds every seat's list:
 
 - default `deny`;
-- every built-in, every `social.*` tool and every platform publish-or-pay tool
-  (`ASK_BY_DEFAULT_TOOLS`: email, legal, wallet, card) the seat is not granted is written `deny`
-  by name — unnamed, the platform would default those to `ask`;
+- every built-in (`BUILTIN_TOOLS`) and every platform tool (`PLATFORM_TOOLS`: email, social,
+  connections, legal, wallet, card, `company.*`, `apps.request_access`) the seat is not granted is
+  written `deny` by name — unnamed, the ones in `ASK_BY_DEFAULT_TOOLS` would default to `ask`. Both
+  lists are pinned copies of core's, and a test holds them to it;
 - every seat: `board_read`, `board_write`, `project_context`, `find_files`, `session_spend`,
-  `browser` at `allow`; `ask_operator`, `request_tools` at `ask`;
-- `channel-manager`: `social.accounts` `allow`, `social.post` `ask`;
+  `browser`, `web_search`, `web_fetch` at `allow`; `ask_operator`, `request_tools` at `ask`;
+- `view_image` at `allow` on every seat that judges a picture (all but the analyst);
+- `channel-manager`: `social.accounts`, `social.status`, `social.post_metrics` `allow`, `social.post` `ask`;
 - `analyst`: `social.post_metrics` `allow`;
+- `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first.
 
@@ -174,11 +180,6 @@ template agent, and our `CONTEXT_PREAMBLE` adds what the answers are on a media 
 
 Found while building this, with where it lives in the platform repo:
 
-- **A catalog artifact needs a built app.** `scripts/publish-artifacts.mjs:171-176` throws "an
-  artifact addresses at least one built tree"; `packages/core/src/schema/blueprint.ts:188` is
-  `trees: z.array(BlueprintTreeSchema).min(1)`; migration `0040_blueprint_artifact_trees.sql`
-  checks `jsonb_array_length(trees) > 0`. A data-only blueprint installs with `naive up`, not from
-  the studio.
 - **No setup answers without a catalog install.** `projectContextOf`
   (`apps/api/src/routes/sessions.ts:135-146`) needs an install with a published artifact;
   canonical-spec §31.8 says an apply from a working tree has no context.

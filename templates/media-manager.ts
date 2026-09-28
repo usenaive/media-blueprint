@@ -17,7 +17,11 @@
  * What the old dashboard had and this leaves out, and why, is ADR-0993's table.
  */
 
-type Elements = Record<string, { type: string; props: Record<string, unknown>; children?: string[] }>;
+import type { DefineInput } from "@usenaive-sdk/blueprints";
+
+/** The engine's own mini-app shape: from 0.9.0 it types every block, so a wrong prop is a compile error. */
+export type MiniApp = NonNullable<DefineInput["mini_apps"]>[number];
+type Elements = MiniApp["pages"][number]["spec"]["elements"];
 const page = (children: string[], elements: Elements): { root: string; elements: Elements } => ({ root: "page", elements: { page: { type: "Page", props: {}, children }, ...elements } });
 
 const overview = {
@@ -38,4 +42,4 @@ const overview = {
 };
 
 /** The channel's mini app: one page. The same for every template. */
-export const MEDIA_MANAGER = { slug: "media-manager", name: "Media manager", icon: "play", pages: [overview] };
+export const MEDIA_MANAGER = { slug: "media-manager", name: "Media manager", icon: "play", pages: [overview] } satisfies MiniApp;

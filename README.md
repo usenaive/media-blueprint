@@ -41,16 +41,26 @@ pnpm test && naive up
 again changes only what changed. Pick the template in [`templates/index.ts`](templates/index.ts)
 (`ACTIVE`).
 
-### ⚠️ Known limits of a data-only blueprint
+From 2.0.0 the studio's catalog publishes this data-only blueprint too (no built app, zero
+trees), so a new channel can also be installed from the studio.
 
-- **The studio's catalog cannot publish it yet.** The platform's artifact publisher refuses a
-  declaration with no built app (`scripts/publish-artifacts.mjs`, and `trees: .min(1)` in
-  `packages/core/src/schema/blueprint.ts`). So today this installs with `naive up` from a clone.
+### ⚠️ Known limit
+
 - **`project_context` answers only on a catalog install.** A `naive up` from a clone has no setup
   answers, so each seat asks you for what it needs, once. See
-  [docs/how-it-works.md](docs/how-it-works.md#9-what-the-platform-cannot-express-yet).
+  [docs/how-it-works.md](docs/how-it-works.md#9-what-the-platform-cannot-express-yet). That is a
+  platform change, not a change to this repo.
 
-Both are platform changes, not changes to this repo.
+### ⬆️ Coming from 1.x
+
+1.x ran a hosted `channel` app with its own store of posts. 2.0.0 declares no app, and it does
+**not** remove the old one: an install on 1.x keeps its app and its store until an operator
+retires them, after the store is exported.
+
+**Never add `removed: { apps: ["channel"] }`** to `naive.config.ts`. It would delete the old
+store, irreversibly, on whichever apply ran first (a customer's own **Update** included), before
+anyone exported it. It would not revoke the old app's key either. Retiring the old app is an
+operator step, not a change to this repo.
 
 ## 🧭 How a piece is made
 
@@ -120,7 +130,7 @@ woken by its cards.
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
 | `producer` | Video production | — | `look` | Renders the plan as one vertical video; creates the Publish card |
-| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-piece` | Starts each piece as a Plan card, with exemplars it opened |
+| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
 | `scriptwriter` | Hooks & scripts | — | `reference-study`, `hook-style` | Looks inside the exemplars, writes the plan, creates the Render card |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
@@ -129,7 +139,7 @@ woken by its cards.
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
-| `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-piece` | Starts one sourced subject a fire, with exemplars of this length |
+| `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-topic` | Starts one sourced subject a fire, with exemplars of this length |
 | `writer` | Structure & scripts | — | `reference-study`, `arc-style` | Samples exemplar frames at chapter boundaries; plans every seam on a shot change |
 | `producer` | Render & assembly | — | `look` | Renders up to six segments, joins them with ffmpeg, probes the file |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports where the audience left each piece |
@@ -140,7 +150,7 @@ woken by its cards.
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the cadence; reads the weekly report |
 | `clipper` | Clip production | — | `source-check` | Cuts the moment with `clip_video`; creates the Caption card |
-| `scout` | Source watch | daily 06:00 ($10) | `first-piece` | Starts each moment from the named channels as a Cut card |
+| `scout` | Source watch | daily 06:00 ($10) | `first-moments` | Starts each moment from the named channels as a Cut card |
 | `caption-editor` | Captions & titles | — | `caption-style` | Writes the caption and credits the creator; creates the Publish card |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports by source and by clip |
 
@@ -174,11 +184,15 @@ nothing, until that card closes.
 ```
 channel-plan ──→ report-frame
 reference-study ──→ look ─────┐
-                └─→ hook-style ┴→ first-piece → the piece's own chain
+                └─→ hook-style ┴→ first-briefs → the piece's own chain
 ```
 
-(`longform` has `arc-style` for `hook-style`; `clipping` has `source-check` and `caption-style`
-open at once, with no reference study.)
+(`longform` has `arc-style` for `hook-style` and `first-topic`; `clipping` has `source-check` and
+`caption-style` open at once, with no reference study, and `first-moments`.)
+
+The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-topic`,
+`first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board
+holds, so updating an existing channel to 2.0 does not start a new paid piece.
 
 Day one sets up the plan, the reference, the look and the voice, then starts **one** piece. That
 piece runs its full chain to your approval card. The timers start the rest.
@@ -194,18 +208,25 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - The `longform` producer: **$75 per task, $150 per day.** One piece is up to six segments,
   ~$53.97 of video, in one session.
 - Each fire has its own budget, inside its seat's ceiling.
-- `generate_video` is pinned to `bytedance/seedance-2.5` first (with `google/veo-3.1` allowed).
+- `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
+  allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
+  or context explicitly ask for another.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions
 
 - The default is **deny**. A connected account's own tools are not a second way out.
 - Every seat holds the board (`board_read`, `board_write`), `project_context`, `find_files`,
-  `session_spend` and `browser`.
+  `session_spend`, `browser`, `web_search` and `web_fetch`.
+- `view_image` on every seat that judges a picture: `channel-manager`, the producers, the
+  scriptwriter and writer, `trend-scout`, `researcher`, `clipper`, `scout` and `caption-editor`.
 - `ask_operator` and `request_tools` are always `ask`.
 - `social.post`: `ask` on `channel-manager`, `deny` everywhere else.
-- `social.post_metrics`: `allow` on `analyst` only.
-- Every other publish, pay or file tool (email, legal, wallet, card) is denied by name.
+- `social.accounts` and `social.status`: `allow` on `channel-manager` only.
+- `social.post_metrics`: `allow` on `analyst` and `channel-manager`.
+- `company.set_timezone`, `company.set_logo` and `apps.request_access` are denied on every seat.
+- Every other built-in and platform tool (email, legal, wallet, card, connections) is denied by
+  name. `generate_speech` and `transcribe_audio` are not granted to any seat.
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and the Long Form writer
   sample frames; the Long Form producer joins segments.
@@ -214,8 +235,9 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 Edit `ACTIVE` in [`templates/index.ts`](templates/index.ts) and run `naive up`. The switch widens:
 the new crew is created, and a seat only the old template had is **kept and still firing**. Its
-crons keep billing. Retire it by adding its name to `removed` in `naive.config.ts` and running
-`naive up` again.
+crons keep billing. To retire that seat, name it, and only it, under `removed.agents` in
+`naive.config.ts` and run `naive up` again. Never name an app under `removed`: see
+*Coming from 1.x* above.
 
 Schedules are the one place where omission deletes. An agent's `schedules` are owned as a whole
 set and matched by exact cron text: `"0 8 * * 1"` and `"0 08 * * 1"` are a delete plus a create.
