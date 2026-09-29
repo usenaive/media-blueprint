@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { declaration } from "./naive.config.ts";
 import { TEMPLATES } from "./templates/index.ts";
-import { LOOK_QUESTION, PLATFORMS, REFERENCE_ANSWER_KEY, VISIBILITY_QUESTION } from "./templates/template.ts";
+import { LOOK_QUESTION, PLATFORMS, REFERENCE_ANSWER_KEY, REFERENCE_QUESTION, VISIBILITY_QUESTION } from "./templates/template.ts";
 import { STYLE_TEMPLATE_SEEDS } from "./seed/style-templates.ts";
 
 const all = Object.values(TEMPLATES);
@@ -72,11 +72,16 @@ describe("the question that asks how the channel looks", () => {
     expect(TEMPLATES.clipping.questions).not.toContain(LOOK_QUESTION);
   });
 
-  /** Second, so the form reads as what the channel is, what it looks like, how often. */
-  it("is asked after the niche and before the cadence, in place of the reference", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", "look", "cadence"]);
-    expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", "look", "cadence"]);
-    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) expect(template.questions.map((q) => q.key)).not.toContain(REFERENCE_ANSWER_KEY);
+  /** The form reads as what the channel is, what it looks like, what they like, how often. */
+  it("is asked after the niche, then the person's own media, then the cadence", () => {
+    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
+      expect(template.questions.map((q) => q.key)).toEqual(["niche", "look", REFERENCE_ANSWER_KEY, "cadence"]);
+    }
+  });
+
+  it("takes the reference as the person's own media, and it may be left blank", () => {
+    expect(REFERENCE_QUESTION).toMatchObject({ key: REFERENCE_ANSWER_KEY, type: "media", optional: true });
+    expect(TEMPLATES.clipping.questions).not.toContain(REFERENCE_QUESTION);
   });
 
   it("is honoured by the producer's look card", () => {

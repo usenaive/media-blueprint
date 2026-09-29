@@ -83,6 +83,21 @@ export const VISIBILITY_QUESTION: SetupQuestion = {
 /** The key the platform stores the reference answer under. */
 export const REFERENCE_ANSWER_KEY = "reference";
 
+/**
+ * "SHOW US WHAT YOU LIKE" — the customer's own example, as media (2026-09-29): images or a video
+ * uploaded on the card, or a link. The answer is a list of `fil_` ids and links, which
+ * `reference-study` opens by kind. Optional because a mandatory field extracts a made-up answer;
+ * left blank, the study goes and finds real videos instead.
+ */
+export const REFERENCE_QUESTION: SetupQuestion = {
+  key: REFERENCE_ANSWER_KEY,
+  label: "Show us what you like",
+  type: "media",
+  optional: true,
+  placeholder: "Or paste a link to a channel or video",
+  help: "Images or a video of what you want, or a channel to model. The team studies it once, up front. Skip it and they find real videos in your niche.",
+};
+
 /** The looks the setup shows, each by its picture on the dashboard (`/setup/styles/`). */
 const LOOK_PICTURES: Record<string, string> = {
   "Pixar-style 3D": "/setup/styles/pixar-3d.jpg",
@@ -97,8 +112,7 @@ const LOOK_PICTURES: Record<string, string> = {
  * HOW IT LOOKS, PICKED FROM PICTURES (2026-09-29). Six of the style library's looks, each shown as
  * its picture, because a look is chosen by seeing it. The option is the look's name in
  * `STYLE_TEMPLATE_SEEDS`, so the producer's `look` card matches it by name. Optional: left blank,
- * the producer chooses from the study, as before. It took the reference question's slot; the
- * study still reads a `reference` answer an older install gave.
+ * the producer chooses from the study, as before. The reference is asked after it, as media.
  */
 export const LOOK_QUESTION: SetupQuestion = {
   key: "look",

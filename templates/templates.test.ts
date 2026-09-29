@@ -571,10 +571,10 @@ describe("the channel's clock", () => {
 });
 
 describe("the setup questions", () => {
-  it("asks two per template, and a third that is optional", () => {
+  it("asks two per template that must be answered, and at most two that may be skipped", () => {
     for (const template of all) {
       expect(template.questions.filter((q) => q.optional !== true), template.name).toHaveLength(2);
-      expect(template.questions.length, template.name).toBe(3);
+      expect(template.questions.length, template.name).toBeLessThanOrEqual(4);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
     }
     // The cadence is one question, spelled once.

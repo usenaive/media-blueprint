@@ -26,6 +26,7 @@ import {
   referenceStudyCard,
   LOOK_QUESTION,
   NICHE_QUESTION,
+  REFERENCE_QUESTION,
   REFERENCE_RULE,
   schedule,
   SHORT_FORM_LENGTH,
@@ -119,8 +120,8 @@ export const FACELESS: MediaTemplate = {
   ],
 
   /**
-   * The niche, how it looks (optional, from pictures) and how often. Where it posts is the accounts the
+   * The niche, how it looks (optional, from pictures), what they like (optional, their own media) and how often. Where it posts is the accounts the
    * operator connects; the tone and who it is for, the manager asks on its day-one card.
    */
-  questions: [NICHE_QUESTION, LOOK_QUESTION, CADENCE_QUESTION],
+  questions: [NICHE_QUESTION, LOOK_QUESTION, REFERENCE_QUESTION, CADENCE_QUESTION],
 };

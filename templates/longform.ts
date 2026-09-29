@@ -28,6 +28,7 @@ import {
   referenceStudyCard,
   LOOK_QUESTION,
   NICHE_QUESTION,
+  REFERENCE_QUESTION,
   REFERENCE_RULE,
   renderMicroUsd,
   schedule,
@@ -135,5 +136,5 @@ export const LONGFORM: MediaTemplate = {
     }),
   ],
 
-  questions: [NICHE_QUESTION, LOOK_QUESTION, CADENCE_QUESTION],
+  questions: [NICHE_QUESTION, LOOK_QUESTION, REFERENCE_QUESTION, CADENCE_QUESTION],
 };
