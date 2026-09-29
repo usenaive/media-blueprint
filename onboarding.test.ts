@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { declaration } from "./naive.config.ts";
 import { TEMPLATES } from "./templates/index.ts";
-import { PLATFORMS, REFERENCE_ANSWER_KEY, REFERENCE_QUESTION, VISIBILITY_QUESTION } from "./templates/template.ts";
+import { LOOK_QUESTION, PLATFORMS, REFERENCE_ANSWER_KEY, VISIBILITY_QUESTION } from "./templates/template.ts";
+import { STYLE_TEMPLATE_SEEDS } from "./seed/style-templates.ts";
 
 const all = Object.values(TEMPLATES);
 
@@ -56,21 +57,31 @@ describe("the question form", () => {
   });
 });
 
-describe("the question that asks what to model the channel on", () => {
-  it("is optional free text, asked only by the templates that generate video", () => {
-    expect(REFERENCE_QUESTION.optional).toBe(true);
-    expect(REFERENCE_QUESTION.type).toBe("text");
-    expect(REFERENCE_QUESTION.key).toBe(REFERENCE_ANSWER_KEY);
-    expect(TEMPLATES.faceless.questions).toContain(REFERENCE_QUESTION);
-    expect(TEMPLATES.longform.questions).toContain(REFERENCE_QUESTION);
-    // `clipping` names its sources instead, and means something stronger: cut from these only.
-    expect(TEMPLATES.clipping.questions).not.toContain(REFERENCE_QUESTION);
+describe("the question that asks how the channel looks", () => {
+  it("is optional, picked from pictures of looks the library has, asked only by the templates that generate video", () => {
+    expect(LOOK_QUESTION.optional).toBe(true);
+    if (LOOK_QUESTION.type !== "choice") throw new Error("the look is a choice");
+    const names = STYLE_TEMPLATE_SEEDS.map((style) => style.name);
+    expect(LOOK_QUESTION.options).toHaveLength(6);
+    for (const option of LOOK_QUESTION.options) {
+      expect(names).toContain(option);
+      expect(LOOK_QUESTION.details?.find((one) => one.option === option)?.image).toMatch(/^\/setup\/styles\/[a-z0-9-]+\.jpg$/);
+    }
+    expect(TEMPLATES.faceless.questions).toContain(LOOK_QUESTION);
+    expect(TEMPLATES.longform.questions).toContain(LOOK_QUESTION);
+    expect(TEMPLATES.clipping.questions).not.toContain(LOOK_QUESTION);
   });
 
-  /** Second, so the form reads as what the channel is, what it is like, how often. */
-  it("is asked after the niche and before the cadence", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
-    expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
+  /** Second, so the form reads as what the channel is, what it looks like, how often. */
+  it("is asked after the niche and before the cadence, in place of the reference", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", "look", "cadence"]);
+    expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", "look", "cadence"]);
+    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) expect(template.questions.map((q) => q.key)).not.toContain(REFERENCE_ANSWER_KEY);
+  });
+
+  it("is honoured by the producer's look card", () => {
+    const look = TEMPLATES.faceless.tasks.find((one) => one.key === "look");
+    expect(look?.body).toMatch(/`look` answer/);
   });
 });
 

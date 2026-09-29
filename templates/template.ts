@@ -49,7 +49,7 @@ export const CADENCE_SLOTS: Record<string, string> = {
 /** How often the channel posts. Shared: one cadence, spelled once. */
 export const CADENCE_QUESTION: SetupQuestion = {
   key: "cadence",
-  label: "Posting cadence",
+  label: "How often it posts",
   type: "choice",
   options: Object.keys(CADENCE_SLOTS),
   other: false,
@@ -83,18 +83,48 @@ export const VISIBILITY_QUESTION: SetupQuestion = {
 /** The key the platform stores the reference answer under. */
 export const REFERENCE_ANSWER_KEY = "reference";
 
+/** The looks the setup shows, each by its picture on the dashboard (`/setup/styles/`). */
+const LOOK_PICTURES: Record<string, string> = {
+  "Pixar-style 3D": "/setup/styles/pixar-3d.jpg",
+  Claymation: "/setup/styles/claymation.jpg",
+  "Brainrot absurdist": "/setup/styles/brainrot.jpg",
+  "Ghibli dusk": "/setup/styles/ghibli-dusk.jpg",
+  "Paper cutout": "/setup/styles/paper-cutout.jpg",
+  "Photoreal cinematic": "/setup/styles/photoreal-cinematic.jpg",
+};
+
 /**
- * What good looks like on this channel, in the customer's own example — and it may be blank.
- * `reference-study` studies it once on day one; when it is blank, the study goes and finds real
- * videos instead. Optional because a mandatory field extracts a made-up answer.
+ * HOW IT LOOKS, PICKED FROM PICTURES (2026-09-29). Six of the style library's looks, each shown as
+ * its picture, because a look is chosen by seeing it. The option is the look's name in
+ * `STYLE_TEMPLATE_SEEDS`, so the producer's `look` card matches it by name. Optional: left blank,
+ * the producer chooses from the study, as before. It took the reference question's slot; the
+ * study still reads a `reference` answer an older install gave.
  */
-export const REFERENCE_QUESTION: SetupQuestion = {
-  key: REFERENCE_ANSWER_KEY,
-  label: "Reference",
-  type: "text",
+export const LOOK_QUESTION: SetupQuestion = {
+  key: "look",
+  label: "How it looks",
+  type: "choice",
   optional: true,
-  placeholder: "A link, or image URLs — one per line",
-  help: "A channel or video to model this on. Stills are worth more than a link. Left blank, the team finds real videos to study.",
+  options: Object.keys(LOOK_PICTURES),
+  details: Object.entries(LOOK_PICTURES).map(([option, image]) => ({ option, image })),
+  help: "Every video is rendered in this look. Skip it and the team picks one for your niche.",
+};
+
+/** What a generating channel is about: one line under each niche. */
+export const NICHE_QUESTION: SetupQuestion = {
+  key: "niche",
+  label: "What it's about",
+  type: "choice",
+  options: ["Funny animal skits", "History mysteries", "True crime recaps", "Space & astronomy", "Stoicism & philosophy", "Personal finance"],
+  details: [
+    { option: "Funny animal skits", note: "Animals in very human jobs, played dead straight." },
+    { option: "History mysteries", note: "Lost colonies, vanished ships, unsolved cases." },
+    { option: "True crime recaps", note: "One case, told tight." },
+    { option: "Space & astronomy", note: "The universe, one fact at a time." },
+    { option: "Stoicism & philosophy", note: "Old ideas for modern problems." },
+    { option: "Personal finance", note: "Money habits, explained plainly." },
+  ],
+  help: "Pick one or type your own. The channel manager asks about tone and audience next.",
 };
 
 /** One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`. */
@@ -482,7 +512,7 @@ export const lookCard = (studyAuthor: string, holdAcross: string): Task =>
     title: "Choose the look this channel renders in",
     assignee: "producer",
     blocked_by: ["reference-study"],
-    body: `Day one is set-up, not a render. Read project_context and the teardown — the note on the reference-study card the ${studyAuthor} just closed. Choose the one or two looks from the style library below closest to the teardown's shot grammar, and write them in your note with one line on why for each; every plan names its look from your note.${holdAcross} The style library: ${STYLE_LIBRARY}. Then look for generate_video in the tools offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing today.`,
+    body: `Day one is set-up, not a render. If project_context has a \`look\` answer, the operator chose it from pictures of the style library: make the look of that name (or, if they typed their own, the closest one) the first, and say so. Read project_context and the teardown — the note on the reference-study card the ${studyAuthor} just closed. Choose the one or two looks from the style library below closest to the teardown's shot grammar, and write them in your note with one line on why for each; every plan names its look from your note.${holdAcross} The style library: ${STYLE_LIBRARY}. Then look for generate_video in the tools offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing today.`,
   });
 
 /**

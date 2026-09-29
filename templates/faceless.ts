@@ -24,7 +24,8 @@ import {
   lookCard,
   PLATFORMS,
   referenceStudyCard,
-  REFERENCE_QUESTION,
+  LOOK_QUESTION,
+  NICHE_QUESTION,
   REFERENCE_RULE,
   schedule,
   SHORT_FORM_LENGTH,
@@ -118,18 +119,8 @@ export const FACELESS: MediaTemplate = {
   ],
 
   /**
-   * The niche, what it should be like (optional) and how often. Where it posts is the accounts the
+   * The niche, how it looks (optional, from pictures) and how often. Where it posts is the accounts the
    * operator connects; the tone and who it is for, the manager asks on its day-one card.
    */
-  questions: [
-    {
-      key: "niche",
-      label: "Niche",
-      type: "choice",
-      options: ["Stoicism & philosophy", "True crime recaps", "Space & astronomy", "Personal finance", "History mysteries", "Health & longevity"],
-      help: "Pick one or type your own. The channel manager asks about tone and audience next.",
-    },
-      REFERENCE_QUESTION,
-    CADENCE_QUESTION,
-  ],
+  questions: [NICHE_QUESTION, LOOK_QUESTION, CADENCE_QUESTION],
 };

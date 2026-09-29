@@ -26,7 +26,8 @@ import {
   MAX_RENDER_SECONDS,
   PLATFORMS,
   referenceStudyCard,
-  REFERENCE_QUESTION,
+  LOOK_QUESTION,
+  NICHE_QUESTION,
   REFERENCE_RULE,
   renderMicroUsd,
   schedule,
@@ -134,15 +135,5 @@ export const LONGFORM: MediaTemplate = {
     }),
   ],
 
-  questions: [
-    {
-      key: "niche",
-      label: "Niche",
-      type: "choice",
-      options: ["Stoicism & philosophy", "True crime recaps", "Space & astronomy", "Personal finance", "History mysteries", "Health & longevity"],
-      help: "Pick one or type your own. The channel manager asks about tone and audience next.",
-    },
-      REFERENCE_QUESTION,
-    CADENCE_QUESTION,
-  ],
+  questions: [NICHE_QUESTION, LOOK_QUESTION, CADENCE_QUESTION],
 };
