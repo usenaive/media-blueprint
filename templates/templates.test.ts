@@ -27,6 +27,7 @@ import {
   RENDER_MODEL_RULE,
   renderMicroUsd,
   SEGMENT_MAX_SECONDS,
+  SEGMENT_MIN_SECONDS,
   SEGMENT_VIDEO_MODELS,
   segmentsOf,
   VIDEO_MODELS,
@@ -501,7 +502,7 @@ describe("publishing", () => {
 
   /** No connected account means no social tools at all; asking for the tool changes nothing. */
   it("asks the operator to connect an account rather than requesting a social tool", () => {
-    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected: where the channel-plan card says the operator will connect none/);
+    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected: where the channel-plan card's comments say the operator will connect none/);
     expect(brief()).toMatch(/else ask the operator once with ask_operator to connect one/);
     expect(brief()).toMatch(/never request_tools for a social tool/);
   });
@@ -509,6 +510,7 @@ describe("publishing", () => {
   /** The operator who already said "no account" is not asked again on every Publish card. */
   it("reads the operator's earlier answer before asking to connect an account, and does not ask again", () => {
     expect(brief()).toMatch(/close this card "Not posted:" and do not ask again/);
+    expect(brief()).toMatch(/connect one, comment the answer on the channel-plan card, and wait/);
     for (const template of all) {
       expect(seat(template, "analyst").schedules![1]!.input, template.name).toMatch(/If social\.post_metrics is not offered, no account is connected yet/);
     }
@@ -559,6 +561,7 @@ describe("the prompts", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
       const brief = seat(TEMPLATES[name], "scriptwriter").system ?? "";
       expect(brief, name).toMatch(/FIRST read the teardown/);
+      expect(brief, name).toMatch(/Then open the exemplars the brief names/);
       expect(brief, name).toMatch(/stop researching once session_spend reads past \$1/);
     }
   });
@@ -764,11 +767,12 @@ describe("the segmented short-form niches", () => {
       expect(producer.system, name).toMatch(/concat demuxer/);
       expect(producer.system, name).toContain(RENDER_MODEL_RULE);
       const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system;
-      expect(scriptwriter, name).toContain(`No segment runs over ${SEGMENT_MAX_SECONDS} seconds`);
+      expect(scriptwriter, name).toContain(`No segment runs over ${SEGMENT_MAX_SECONDS} seconds or under ${SEGMENT_MIN_SECONDS}`);
       expect(scriptwriter, name).toMatch(/all on the same model/);
     }
     expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(SEGMENT_MAX_SECONDS).toBe(15);
+    expect(SEGMENT_MIN_SECONDS).toBe(5);
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
     const base = seat(TEMPLATES.faceless, "producer");
@@ -786,6 +790,7 @@ describe("the segmented short-form niches", () => {
       expect(producer, name).toMatch(/step 5b/);
       expect(producer, name).toMatch(/generate_speech/);
       expect(producer, name).toMatch(/concat demuxer/);
+      expect(producer, name).toMatch(/all on one model/);
     }
     expect(seat(TEMPLATES.faceless, "producer").system).not.toMatch(/step 5b/);
   });

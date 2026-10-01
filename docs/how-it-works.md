@@ -169,7 +169,7 @@ a cron fire is not.
 - `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first; on the segmented short-form niches'
-  producers, `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, 15 seconds a call at most);
+  producers, `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, 5 to 15 seconds a call);
 - `generate_speech` at `allow` on the segmented short-form niches' producers only.
 
 ## 8. Setup questions and `project_context`

@@ -42,7 +42,7 @@ Where a niche's playbook needs a seat to do more than its base seat, `niche()` t
 appended, and a brief clause before the crew's rules. The base template is left as it was. The three
 short-form niches use it (`SEGMENTED_SHORT_FORM` in [`templates/faceless.ts`](templates/faceless.ts)):
 image-to-video cannot cut, so a piece is a start, a middle and an end rendered as segments and joined.
-Their scriptwriter plans the segments, 15 seconds or fewer each and all on one model, and their
+Their scriptwriter plans the segments, 5 to 15 seconds each and all on one model, and their
 producer gets `bash`, `fetch_file`, `publish_file`, `generate_speech` and `naive/video-assembly` to
 render each one, join them with ffmpeg and burn in the hook and label (the skill's step 5b), still
 15–30 seconds in all. It renders on `minimax/hailuo-3` first, `bytedance/seedance-2.5` allowed
