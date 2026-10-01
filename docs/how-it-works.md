@@ -70,7 +70,7 @@ A card is woken at most three times. After that it is parked for the CEO.
   Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
   15–30, facts with sources, caption — and a video model only where the operator's context names one.
 - **producer**: one `generate_video` call — the shots in order as one take, 9:16, no model named, so
-  it renders with Seedance 2.5.
+  it renders with the first pinned model (Seedance 2.5). It ends its turn while the render runs.
   Creates the Publish card with the `fil_` id.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
@@ -168,7 +168,9 @@ a cron fire is not.
 - `analyst`: `social.post_metrics` `allow`;
 - `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
-- `generate_video` carries `config.models`, Seedance 2.5 first.
+- `generate_video` carries `config.models`, Seedance 2.5 first; on the segmented short-form niches'
+  producers, `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, 15 seconds a call at most);
+- `generate_speech` at `allow` on the segmented short-form niches' producers only.
 
 ## 8. Setup questions and `project_context`
 

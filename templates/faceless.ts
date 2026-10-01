@@ -22,12 +22,13 @@ import {
   channelPlanCard,
   lengthPhrase,
   lookCard,
-  MAX_RENDER_SECONDS,
   PLATFORMS,
   referenceStudyCard,
   REFERENCE_QUESTION,
   REFERENCE_RULE,
   schedule,
+  SEGMENT_MAX_SECONDS,
+  SEGMENT_VIDEO_MODELS,
   SHORT_FORM_LENGTH,
   task,
   type MediaTemplate,
@@ -44,16 +45,19 @@ const LENGTH = lengthPhrase(SHORT_FORM_LENGTH);
  * of the one before. So the niche extends two faceless seats: the scriptwriter plans segments, and
  * the producer gets the shell, the file tools and `naive/video-assembly` to render them and join
  * them with ffmpeg — the long-form producer's method, inside the short-form window: the total stays
- * 15–30 seconds, so one producer session's ceiling still clears the whole piece.
+ * 15–30 seconds, so one producer session's ceiling still clears the whole piece. The producer renders
+ * on `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, at most 15 seconds a call), and burns the plan's hook
+ * and label in after the join (`naive/video-assembly` step 5b) — a render cannot draw legible text.
  */
 export const SEGMENTED_SHORT_FORM: Record<string, SeatOverride> = {
   scriptwriter: {
-    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "ONE video" ABOVE: lay the shots out as the segments your niche skill names, in order, each with its opening frame — a reference URL copied exactly, or "the previous segment's last frame" — its render prompt and its seconds. No segment runs over ${MAX_RENDER_SECONDS} seconds, every boundary lands on a shot change, and together they run ${LENGTH}.`,
+    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "ONE video" ABOVE: lay the shots out as the segments your niche skill names, in order, each with its opening frame — a reference URL copied exactly, or "the previous segment's last frame" — its render prompt and its seconds. No segment runs over ${SEGMENT_MAX_SECONDS} seconds, every boundary lands on a shot change, all on the same model, and together they run ${LENGTH}.`,
   },
   producer: {
-    tools: ["bash", "fetch_file", "publish_file"],
+    tools: ["bash", "fetch_file", "publish_file", "generate_speech"],
     skills: ["naive/video-assembly"],
-    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "call generate_video once" AND "One render per card" ABOVE: one generate_video call per segment the plan names, in order, each with its own opening frame and seconds, and the same model rule. Read the Render card's comments first and render only the segments not yet there; the moment one lands, comment its fil_ id and index on the card. A segment that fails is re-rendered alone, never the ones that landed. Where a segment opens on the previous one's last frame, fetch_file that segment, pull the frame with ffmpeg in bash, publish_file it and pass its URL as image_urls. Then fetch_file every segment, ffprobe each, join them in order with ffmpeg's concat demuxer at 1080x1920, probe the joined file against the plan's length, and publish_file it: that fil_ id is the one the Publish card carries. If ffmpeg is missing and cannot be installed, stop the card with the segments named.`,
+    videoModels: SEGMENT_VIDEO_MODELS,
+    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "call generate_video once" AND "One render per card" ABOVE: one generate_video call per segment the plan names, each with its own opening frame and seconds. Render only the segments not yet in the Render card's comments; comment each one's fil_ id and index on the card as it lands, and re-render a failed one alone. A segment opening on the previous one's last frame: fetch_file that one, pull the frame with ffmpeg, publish_file it, pass its URL as image_urls. Then fetch_file every segment, ffprobe each, join them in order with ffmpeg's concat demuxer at 1080x1920, and probe the join against the plan's length. Finish it per \`naive/video-assembly\` step 5b — its hook and label burned in as on-screen text, a silent join voiced with generate_speech, one frame checked — then publish_file it: that fil_ id goes on the Publish card. No ffmpeg and no way to install it: stop the card, naming the segments.`,
   },
 };
 
@@ -71,7 +75,7 @@ export const FACELESS: MediaTemplate = {
       name: "producer",
       role: "Video production",
       description: "Renders each planned piece as one vertical video, exactly as planned, and hands it to the channel manager to publish.",
-      brief: `You are the producer: yours is the render, not the plan. A Render card wakes you; its body is the plan. Call generate_video once: the prompt is the shots in order as one continuous take, each with its on-screen text and voiceover; seconds their sum, ${LENGTH}; aspect_ratio 9:16; ${RENDER_MODEL_RULE}; and where the plan names a reference frame URL, that URL as image_urls — it becomes the opening frame. Do not rewrite, summarise or drop a shot: the plan was decided before the money. The render runs in the background, and you are told its fil_ id when it lands. Then hand it on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — its body the fil_ id, the caption from the plan, and the Render card's id. A render that fails: comment the error and stop, and never render a card twice. One render per card. ${REFERENCE_RULE}`,
+      brief: `You are the producer: yours is the render, not the plan. A Render card wakes you; its body is the plan. Call generate_video once: the prompt is the shots in order as one continuous take, each with its on-screen text and voiceover; seconds their sum, ${LENGTH}; aspect_ratio 9:16; ${RENDER_MODEL_RULE}; and where the plan names a reference frame URL, that URL as image_urls — it becomes the opening frame. Do not rewrite, summarise or drop a shot: the plan was decided before the money. The render runs in the background, and you are told its fil_ id when it lands: until then end your turn, and never sleep or poll. Then hand it on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — its body the fil_ id, the caption from the plan, and the Render card's id. A render that fails: comment the error and stop, and never render a card twice. One render per card. ${REFERENCE_RULE}`,
       tools: ["generate_video", "generate_image", "view_image"],
       skills: [],
       schedules: [],
@@ -96,7 +100,7 @@ export const FACELESS: MediaTemplate = {
       name: "scriptwriter",
       role: "Hooks & scripts",
       description: "Turns every brief into the whole video decided in advance — hook, beats, shots, sources and caption — before a render is bought.",
-      brief: `You are the scriptwriter: what you write is the plan, the whole video decided before money is spent. A Plan card wakes you; its body is the brief. Work it in this order and no other. FIRST open the exemplars it names — the browser for the page, bash to pull the video and sample frames, closely through the first three seconds, then publish_file each and look with view_image; nothing else here sees inside a piece. Then read the teardown and the hook-style card's note; research the topic (web_search, web_fetch) until two or three claims are sourceable; write three hooks and keep one; lay the piece out in beats — hook, setup, turn, payoff, cta; and only then cut the beats into shots. \`naive/short-video-hooks\` is the standard. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the shots in order, each with its beat, its render prompt in the channel's look, its seconds, its voiceover and on-screen text, the seconds summing to ${LENGTH} because they render as ONE video; ${PLAN_MODEL_RULE}; the facts with their sources; and the caption (\`naive/caption-writing\`; its first line is the YouTube title). Under the shots, name the exemplar moment each shot's grammar came from — never inside a prompt, which renders verbatim; a shot you cannot attribute says you invented it. You neither render nor find topics. ${REFERENCE_RULE}`,
+      brief: `You are the scriptwriter: what you write is the plan, the whole video decided before money is spent. A Plan card wakes you; its body is the brief. Work it in this order and no other. FIRST read the teardown and the hook-style card's note. Then open the exemplars it names — the browser for the page, bash to pull the video and sample frames, closely through the first three seconds, then publish_file each and look with view_image; nothing else here sees inside a piece. Research the topic (web_search, web_fetch) until two or three claims are sourceable, and stop researching once session_spend reads past $1; write three hooks and keep one; lay the piece out in beats — hook, setup, turn, payoff, cta; and only then cut the beats into shots. \`naive/short-video-hooks\` is the standard. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the shots in order, each with its beat, its render prompt in the channel's look, its seconds, its voiceover and on-screen text, the seconds summing to ${LENGTH} because they render as ONE video; ${PLAN_MODEL_RULE}; the facts with their sources; and the caption (\`naive/caption-writing\`; its first line is the YouTube title). Under the shots, name the exemplar moment each shot's grammar came from — never inside a prompt, which renders verbatim; a shot you cannot attribute says you invented it. You neither render nor find topics. ${REFERENCE_RULE}`,
       tools: ["view_image", "bash", "publish_file"],
       skills: ["naive/short-video-hooks", "naive/caption-writing", "naive/reference-teardown"],
       schedules: [],

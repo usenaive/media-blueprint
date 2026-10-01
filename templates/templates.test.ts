@@ -26,6 +26,8 @@ import {
   REFERENCE_RULE,
   RENDER_MODEL_RULE,
   renderMicroUsd,
+  SEGMENT_MAX_SECONDS,
+  SEGMENT_VIDEO_MODELS,
   segmentsOf,
   VIDEO_MODELS,
   words,
@@ -185,10 +187,12 @@ describe("the toolsets", () => {
     }
   });
 
-  /** The audio provider is broken: no seat is handed a tool that cannot work. */
-  it("grants no seat speech or transcription", () => {
+  /** Speech only where a silent join needs a voiceover (the segmented producers); transcription nowhere. */
+  it("grants speech to the segmented producers only, and transcription to no seat", () => {
+    const SPEAKERS = new Set(SEGMENTED.map((name) => `${name}/producer`));
     for (const { template, agent, id } of everySeat) {
-      for (const tool of ["generate_speech", "transcribe_audio"]) expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
+      expect(permissionFor(template, agent.name, "generate_speech"), id).toBe(SPEAKERS.has(id) ? "allow" : "deny");
+      expect(permissionFor(template, agent.name, "transcribe_audio"), id).toBe("deny");
     }
   });
 
@@ -257,10 +261,11 @@ describe("the toolsets", () => {
    */
   it("pins the video models on every seat that renders, cheapest measured first, and on no other", () => {
     expect(VIDEO_MODELS[0]).toBe("bytedance/seedance-2.5");
-    for (const { agent, id } of everySeat) {
+    for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      expect(video.config, id).toEqual({ models: VIDEO_MODELS });
+      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`); every other renderer the base's.
+      expect(video.config, id).toEqual({ models: SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
@@ -270,11 +275,11 @@ describe("the toolsets", () => {
   });
 
   /**
-   * SEEDANCE 2.5 BY DEFAULT. The producers render with it without anyone asking: it is first in the
-   * pinned allow-list, and no brief, card or fire tells a seat to choose, compare or name a model.
+   * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
+   * Seedance 2.5 on the base crews — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
-  it("renders with Seedance 2.5 by default, and never has a seat pick a video model", () => {
+  it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
       const producer = seat(template, "producer");
       expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("bytedance/seedance-2.5");
@@ -282,10 +287,10 @@ describe("the toolsets", () => {
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
     expect(seat(TEMPLATES.longform, "writer").system).toContain(PLAN_MODEL_RULE);
-    expect(RENDER_MODEL_RULE).toMatch(/no model argument.*Seedance 2\.5.*unless.*project_context explicitly/);
+    expect(RENDER_MODEL_RULE).toMatch(/no model argument.*the channel's default.*unless.*project_context explicitly/);
     for (const template of all) {
       for (const text of everyPrompt(template)) {
-        expect(text, template.name).not.toMatch(/\bveo\b|pick a model|choose a model|the plan's model|the video model;|video model:/i);
+        expect(text, template.name).not.toMatch(/\bveo\b|seedance|hailuo|pick a model|choose a model|the plan's model|the video model;|video model:/i);
       }
     }
   });
@@ -449,6 +454,11 @@ describe("the board", () => {
     }
   });
 
+  /** A seat that created its hand-off card once and is woken again must not file a duplicate. */
+  it("updates the card that already waits on yours instead of creating a second", () => {
+    expect(CREW_RULES).toMatch(/where a card already waits on yours, update that one instead of creating a second/);
+  });
+
   it("tells the crew where a file lands and who publishes", () => {
     expect(CREW_RULES).toMatch(/fil_/);
     expect(CREW_RULES).toMatch(/Media gallery/);
@@ -491,8 +501,14 @@ describe("publishing", () => {
 
   /** No connected account means no social tools at all; asking for the tool changes nothing. */
   it("asks the operator to connect an account rather than requesting a social tool", () => {
-    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected, ask the operator once with ask_operator to connect one/);
+    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected: where the channel-plan card says the operator will connect none/);
+    expect(brief()).toMatch(/else ask the operator once with ask_operator to connect one/);
     expect(brief()).toMatch(/never request_tools for a social tool/);
+  });
+
+  /** The operator who already said "no account" is not asked again on every Publish card. */
+  it("reads the operator's earlier answer before asking to connect an account, and does not ask again", () => {
+    expect(brief()).toMatch(/close this card "Not posted:" and do not ask again/);
     for (const template of all) {
       expect(seat(template, "analyst").schedules![1]!.input, template.name).toMatch(/If social\.post_metrics is not offered, no account is connected yet/);
     }
@@ -533,6 +549,20 @@ describe("analytics", () => {
  * button and no `channel.*` tool — a seat told to use any of them spends its turn looking.
  */
 describe("the prompts", () => {
+  /** A render lands on its own; a seat that sleeps between polls pays for every second of it. */
+  it("has the short-form producer end its turn while a render runs, never sleep or poll", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) expect(seat(TEMPLATES[name], "producer").system, name).toMatch(/end your turn, and never sleep or poll/);
+  });
+
+  /** Research is the scriptwriter's open-ended spend: it starts from the teardown and has a stop. */
+  it("has the scriptwriter read the teardown first and stop researching past $1 of session_spend", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const brief = seat(TEMPLATES[name], "scriptwriter").system ?? "";
+      expect(brief, name).toMatch(/FIRST read the teardown/);
+      expect(brief, name).toMatch(/stop researching once session_spend reads past \$1/);
+    }
+  });
+
   const GONE = [/dashboard/i, /Post now/i, /\bchannel\.[a-z_]+/, /pending post/i, /Approve button/i, /Approvals screen/i, /\bqueue row/i, /\bhandoff/i];
   it("never mention the dashboard, Post now, a pending post or a channel tool", () => {
     const offences: string[] = [];
@@ -728,13 +758,19 @@ describe("the segmented short-form niches", () => {
       for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill"]) {
         expect(permissionFor(TEMPLATES[name], "producer", tool), `${name}/${tool}`).toBe("allow");
       }
-      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: VIDEO_MODELS });
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: SEGMENT_VIDEO_MODELS });
       expect(producer.skills, name).toEqual(["naive/video-assembly", `naive/channel-template-${name}`]);
       expect(producer.system, name).toMatch(/OVERRIDES "call generate_video once" AND "One render per card"/);
       expect(producer.system, name).toMatch(/concat demuxer/);
       expect(producer.system, name).toContain(RENDER_MODEL_RULE);
-      expect(seat(TEMPLATES[name], "scriptwriter").system, name).toContain(`No segment runs over ${MAX_RENDER_SECONDS} seconds`);
+      const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system;
+      expect(scriptwriter, name).toContain(`No segment runs over ${SEGMENT_MAX_SECONDS} seconds`);
+      expect(scriptwriter, name).toMatch(/all on the same model/);
     }
+    expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
+    expect(SEGMENT_MAX_SECONDS).toBe(15);
+    expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
+    expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
     const base = seat(TEMPLATES.faceless, "producer");
     for (const tool of ["bash", "fetch_file", "publish_file", "read_skill"]) expect(permissionFor(TEMPLATES.faceless, "producer", tool), tool).toBe("deny");
     expect(base.skills).toEqual([]);
@@ -742,8 +778,36 @@ describe("the segmented short-form niches", () => {
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).not.toMatch(/SEGMENTS JOINED/);
   });
 
-  it("refuses to extend a seat the base crew does not have", () => {
+  /** A render carries no legible text, so the join is finished — hook and label burned in — before it ships. */
+  it("burn the plan's text in after the join, as video-assembly step 5b says, and voice a silent join", () => {
+    for (const name of SEGMENTED) {
+      const producer = seat(TEMPLATES[name], "producer").system;
+      expect(producer, name).toMatch(/drawtext|on-screen text/);
+      expect(producer, name).toMatch(/step 5b/);
+      expect(producer, name).toMatch(/generate_speech/);
+      expect(producer, name).toMatch(/concat demuxer/);
+    }
+    expect(seat(TEMPLATES.faceless, "producer").system).not.toMatch(/step 5b/);
+  });
+
+  /** The niche is fixed by the template: its setup offers the niche's own examples, not Stoicism. */
+  it("offer the niche's own examples in the niche question, and leave the base's as they were", () => {
+    const options = (template: MediaTemplate) => {
+      const question = template.questions.find((q) => q.key === "niche");
+      return question !== undefined && "options" in question ? question.options : undefined;
+    };
+    for (const name of SEGMENTED) {
+      expect(options(TEMPLATES[name]), name).toHaveLength(3);
+      expect(options(TEMPLATES[name]), name).not.toContain("Stoicism & philosophy");
+    }
+    expect(options(TEMPLATES.history)).toEqual(["Wars and battles", "Accidents and disasters", "Myths and legends"]);
+    expect(options(TEMPLATES.faceless)).toContain("Stoicism & philosophy");
+    expect(() => niche(TEMPLATES.clipping, { name: "news", title: "t", description: "d", skill: "s", niches: ["a"] })).toThrow(/asks no niche question/);
+  });
+
+  it("refuses to extend a seat the base crew does not have, or pin models on one that does not render", () => {
     expect(() => niche(TEMPLATES.faceless, { name: "ufc", title: "t", description: "d", skill: "s", seats: { clipper: { tools: ["bash"] } } })).toThrow(/does not have/);
+    expect(() => niche(TEMPLATES.faceless, { name: "ufc", title: "t", description: "d", skill: "s", seats: { analyst: { videoModels: ["m"] } } })).toThrow(/does not render/);
   });
 });
 
