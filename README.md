@@ -47,12 +47,12 @@ and `naive/video-assembly` to render each one and join them with ffmpeg, still 1
 
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
-| `gaming-clips` | Gaming clipping channel | `clipping` | `naive/channel-template-gaming-clips` |
-| `news` | News clipping channel | `clipping` | `naive/channel-template-news` |
-| `sports` | Sports clipping channel | `clipping` | `naive/channel-template-sports` |
-| `ufc` | AI UFC Fight short-form channel | `faceless` | `naive/channel-template-ufc` |
-| `history` | AI History Events short-form channel | `faceless` | `naive/channel-template-history` |
-| `animal-feast` | AI Eating Animal short-form channel | `faceless` | `naive/channel-template-animal-feast` |
+| `gaming-clips` | Gaming Clips Channel | `clipping` | `naive/channel-template-gaming-clips` |
+| `news` | News Clips Channel | `clipping` | `naive/channel-template-news` |
+| `sports` | Sports Clips Channel | `clipping` | `naive/channel-template-sports` |
+| `ufc` | AI UFC Channel | `faceless` | `naive/channel-template-ufc` |
+| `history` | AI History Channel | `faceless` | `naive/channel-template-history` |
+| `animal-feast` | AI Eating Animal Channel | `faceless` | `naive/channel-template-animal-feast` |
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
 the first session. It publishes, installs and switches through the exact paths the base three do.

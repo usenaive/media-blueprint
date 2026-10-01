@@ -25,40 +25,40 @@ export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, lengthPhra
  */
 export const GAMING_CLIPS = niche(CLIPPING, {
   name: "gaming-clips",
-  title: "Gaming clipping channel",
-  description: "Clipping crew for streamer clutches, fails and reactions — the livestream moments worth cutting, facecam kept in frame.",
+  title: "Gaming Clips Channel",
+  description: "Gaming Clips Channel is a template that builds an agent team that manages an entire social media account for you, finding the best moments in the streams you pick and cutting them into clips. This lets you post the clutch plays and streamer reactions getting big views right now.",
   skill: "channel-template-gaming-clips",
 });
 export const NEWS = niche(CLIPPING, {
   name: "news",
-  title: "News clipping channel",
-  description: "Clipping crew for the development, the soundbite and the on-camera moment — recency-first and rights-first.",
+  title: "News Clips Channel",
+  description: "News Clips Channel is a template that builds an agent team that manages an entire social media account for you, finding the key moments in news broadcasts and cutting them into captioned clips. This lets you post the biggest moment of a story while it is still news.",
   skill: "channel-template-news",
 });
 export const SPORTS = niche(CLIPPING, {
   name: "sports",
-  title: "Sports clipping channel",
-  description: "Clipping crew for the clutch play, the upset and the wild reaction — cut from sources the channel may clip.",
+  title: "Sports Clips Channel",
+  description: "Sports Clips Channel is a template that builds an agent team that manages an entire social media account for you, finding the best plays in the games you have rights to and cutting them into clips. This lets you post highlights while people are still talking about the game.",
   skill: "channel-template-sports",
 });
 export const UFC = niche(FACELESS, {
   name: "ufc",
-  title: "AI UFC Fight short-form channel",
-  description: "Short-form crew that generates a cage-fight look from shipped reference stills: a tale-of-the-tape card joined to an octagon fight.",
+  title: "AI UFC Channel",
+  description: "AI UFC Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing content using a UFC-style template. This lets you create the UFC-style fighting videos that are going really viral right now.",
   skill: "channel-template-ufc",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const HISTORY = niche(FACELESS, {
   name: "history",
-  title: "AI History Events short-form channel",
-  description: "Short-form crew that colorizes and modernizes major pre-1950s events — wars, disasters, natural disasters — from a reference frame.",
+  title: "AI History Channel",
+  description: "AI History Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing videos of major historical events in color, as if filmed today. This lets you create the history videos that are going really viral right now.",
   skill: "channel-template-history",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const ANIMAL_FEAST = niche(FACELESS, {
   name: "animal-feast",
-  title: "AI Eating Animal short-form channel",
-  description: "Short-form crew that generates cozy pet-mukbang video — a cute animal eating an aesthetic, ring-lit feast — from shipped reference stills.",
+  title: "AI Eating Animal Channel",
+  description: "AI Eating Animal Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing videos of an animal eating a big feast. This lets you create the animal eating videos that are going really viral right now.",
   skill: "channel-template-animal-feast",
   seats: SEGMENTED_SHORT_FORM,
 });
