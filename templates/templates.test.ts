@@ -19,6 +19,7 @@ import {
   FIRST_PIECE_KEY,
   lengthPhrase,
   MAX_RENDER_SECONDS,
+  nicheFixed,
   ONE_RENDER_MICRO_USD,
   PLAN_MODEL_RULE,
   POST_TIME,
@@ -65,6 +66,9 @@ const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<Template
   for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] = base[from]!;
   return out;
 };
+/** A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base. */
+const unniched = (template: MediaTemplate, system: string): string =>
+  BASE_OF[template.name] === undefined ? system : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "");
 /** Expand a set of `template/seat` ids to include the same seats on each niche that mirrors the base. */
 const withNicheIds = (ids: readonly string[]): Set<string> => {
   const out = new Set(ids);
@@ -102,7 +106,7 @@ describe("the crews", () => {
     for (const { template, agent, id } of everySeat) {
       expect(agent.role, id).toMatch(/\S/);
       expect(agent.description, id).toMatch(/\S/);
-      const system = agent.system ?? "";
+      const system = unniched(template, agent.system ?? "");
       expect(system.startsWith(CONTEXT_PREAMBLE), id).toBe(true);
       expect(system.endsWith(CREW_RULES), id).toBe(true);
       const own = system.slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length).replace(REFERENCE_RULE, "");
@@ -472,7 +476,7 @@ describe("publishing", () => {
 
   it("is the channel manager's, from a Publish card, with the rendered file", () => {
     expect(PUBLISHER).toBe("channel-manager");
-    for (const template of all) expect(seat(template, PUBLISHER).system).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
+    for (const template of all) expect(unniched(template, seat(template, PUBLISHER).system ?? "")).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
     expect(brief()).toMatch(/A Publish card wakes you/);
     expect(brief()).toMatch(/social\.post.*file_ids/s);
   });
@@ -631,13 +635,69 @@ describe("the channel's clock", () => {
 });
 
 describe("the setup questions", () => {
-  it("asks two per template, and a third that is optional", () => {
-    for (const template of all) {
-      expect(template.questions.filter((q) => q.optional !== true), template.name).toHaveLength(2);
-      expect(template.questions.length, template.name).toBe(3);
+  const BASES: TemplateName[] = ["faceless", "longform", "clipping"];
+
+  it("asks two per base template, and a third that is optional", () => {
+    for (const name of BASES) {
+      const template = TEMPLATES[name];
+      expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(2);
+      expect(template.questions.length, name).toBe(3);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
     }
-    // The cadence is one question, spelled once.
+  });
+
+  /**
+   * A NICHE ASKS NEITHER THE NICHE NOR THE REFERENCE (ADR-1143): the template IS the niche, and the
+   * reference is the niche skill's playbook, not something the operator models the channel on.
+   */
+  it("drops the niche and the reference from every niche template", () => {
+    for (const name of Object.keys(BASE_OF) as TemplateName[]) {
+      const keys = TEMPLATES[name].questions.map((q) => q.key);
+      expect(keys, name).not.toContain("niche");
+      expect(keys, name).not.toContain("reference");
+    }
+  });
+
+  /** The generative niches asked only `niche`, `reference` and the cadence, so the cadence is all that is left. */
+  it("leaves a generative niche asking only the cadence", () => {
+    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  });
+
+  /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
+  it("leaves a clipping niche its sources and visibility", () => {
+    for (const name of ["gaming-clips", "news", "sports"] as TemplateName[]) {
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+    }
+  });
+
+  /**
+   * A generative niche's form asks only the cadence, so nothing it puts in front of its crew may
+   * promise a niche or a reference answer, or say the form asked for one (ADR-1143): every seat reads
+   * instead that the niche is fixed by the template and its pinned skill.
+   */
+  it("never tells a generative niche's crew the form asked for the niche or the reference", () => {
+    for (const name of SEGMENTED) {
+      const template = TEMPLATES[name];
+      for (const said of everyPrompt(template)) {
+        expect(said, name).not.toMatch(/asked for the niche|from the niche and the reference|the niche, the cadence|asks (three|four) questions/i);
+      }
+      for (const agent of template.agents) expect(agent.system, `${name}/${agent.name}`).toContain(nicheFixed(`naive/channel-template-${name}`));
+    }
+  });
+
+  /** The engine refuses more than four; a template with none, or with nothing required, is a broken form. */
+  it("asks one to four questions on every template, uniquely keyed, at least one required", () => {
+    for (const template of all) {
+      const keys = template.questions.map((q) => q.key);
+      expect(keys.length, template.name).toBeGreaterThanOrEqual(1);
+      expect(keys.length, template.name).toBeLessThanOrEqual(4);
+      expect(new Set(keys).size, template.name).toBe(keys.length);
+      expect(template.questions.some((q) => q.optional !== true), template.name).toBe(true);
+    }
+  });
+
+  /** The cadence is one question, spelled once, on every template. */
+  it("asks the cadence on every template, the same question object", () => {
     for (const template of all) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
   });
 
@@ -793,21 +853,6 @@ describe("the segmented short-form niches", () => {
       expect(producer, name).toMatch(/all on one model/);
     }
     expect(seat(TEMPLATES.faceless, "producer").system).not.toMatch(/step 5b/);
-  });
-
-  /** The niche is fixed by the template: its setup offers the niche's own examples, not Stoicism. */
-  it("offer the niche's own examples in the niche question, and leave the base's as they were", () => {
-    const options = (template: MediaTemplate) => {
-      const question = template.questions.find((q) => q.key === "niche");
-      return question !== undefined && "options" in question ? question.options : undefined;
-    };
-    for (const name of SEGMENTED) {
-      expect(options(TEMPLATES[name]), name).toHaveLength(3);
-      expect(options(TEMPLATES[name]), name).not.toContain("Stoicism & philosophy");
-    }
-    expect(options(TEMPLATES.history)).toEqual(["Wars and battles", "Accidents and disasters", "Myths and legends"]);
-    expect(options(TEMPLATES.faceless)).toContain("Stoicism & philosophy");
-    expect(() => niche(TEMPLATES.clipping, { name: "news", title: "t", description: "d", skill: "s", niches: ["a"] })).toThrow(/asks no niche question/);
   });
 
   it("refuses to extend a seat the base crew does not have, or pin models on one that does not render", () => {

@@ -190,8 +190,13 @@ export interface MediaTemplate {
    * the last is always the publisher.
    */
   pipeline: string[];
-  /** At most three required and one optional; the engine refuses a fifth. */
-  questions: [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
+  /**
+   * The setup questions the studio asks, head to cadence. At most three required and one optional;
+   * the engine refuses a fifth. A niche template answers the niche and the reference by being the
+   * niche it is, so `niche()` drops both (ADR-1143) — a generative niche is left asking only the
+   * cadence — which is why this is a list and not a three-or-four tuple.
+   */
+  questions: SetupQuestion[];
   /** Day one, as cards on the company board. */
   tasks: Task[];
 }
@@ -211,38 +216,49 @@ export interface SeatOverride {
 }
 
 /**
+ * The setup questions a niche no longer asks. A niche IS its niche, and its look is the niche skill's
+ * playbook rather than a reference the operator models it on, so neither the `niche` choice nor the
+ * `reference` question is relevant to a niche template (ADR-1143). `niche()` drops both by key: a
+ * generative niche (`ufc`/`history`/`animal-feast`) is left asking only the cadence, and a clipping
+ * niche keeps the `sources` it cannot cut without. The dropped reference becomes the crew's, found and
+ * studied on day one exactly as it is when the operator leaves the question blank.
+ */
+const NICHE_ANSWERED: ReadonlySet<string> = new Set(["niche", REFERENCE_ANSWER_KEY]);
+
+/**
  * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
- * seats, pipeline, questions and day-one cards — with two editorial overrides (`name`, `title`,
- * `description`) and one load-bearing change: `naive/channel-template-<niche>` is appended to every
- * seat's `skills[]`, so the niche playbook is the channel's standard from the first session, read
- * through progressive disclosure. No new crew, no new question, no new card: a template is data, and
- * a niche is the least of it. Where the niche's playbook needs a seat to do more than the base seat
- * can (a short-form niche that renders segments and joins them), `seats` extends that seat; `niches`
- * swaps the base's niche-question examples for the niche's own. The skill itself lives in the
- * platform catalogue (`skills/` in vetta-mono), published by `scripts/publish-skills.mjs`.
+ * seats, pipeline and day-one cards — with two editorial overrides (`name`, `title`, `description`),
+ * fewer questions (the niche and the reference are the niche's, not the operator's — ADR-1143), a
+ * line after every seat's preamble saying so (`nicheFixed`), and one load-bearing change:
+ * `naive/channel-template-<niche>` is appended to every seat's `skills[]`, so the niche playbook is
+ * the channel's standard from the first session, read through progressive disclosure. No new crew, no new card: a template is data, and a niche is the least of it. Where the
+ * niche's playbook needs a seat to do more than the base seat can (a short-form niche that renders
+ * segments and joins them), `seats` extends that seat. The skill itself lives in the platform
+ * catalogue (`skills/` in vetta-mono), published by `scripts/publish-skills.mjs`.
  */
 export function niche(
   base: MediaTemplate,
-  over: { name: TemplateName; title: string; description: string; skill: string; seats?: Record<string, SeatOverride>; niches?: string[] },
+  over: { name: TemplateName; title: string; description: string; skill: string; seats?: Record<string, SeatOverride> },
 ): MediaTemplate {
   const ref = `naive/${over.skill}`;
   for (const name of Object.keys(over.seats ?? {})) {
     if (!base.agents.some((seat) => seat.name === name)) throw new Error(`niche "${over.name}" extends seat "${name}", which ${base.name} does not have`);
   }
-  if (over.niches !== undefined && !base.questions.some((q) => q.key === "niche")) throw new Error(`niche "${over.name}" lists niches, but ${base.name} asks no niche question`);
   return {
     ...base,
     name: over.name,
     title: over.title,
     description: over.description,
-    // The base's examples (Stoicism, true crime…) are wrong for a fixed niche: offer the niche's own.
-    questions: over.niches === undefined ? base.questions : (base.questions.map((q) => (q.key === "niche" ? { ...q, options: over.niches } : q)) as MediaTemplate["questions"]),
+    questions: base.questions.filter((question) => !NICHE_ANSWERED.has(question.key)),
     agents: base.agents.map((seat) => {
       const extra = over.seats?.[seat.name] ?? {};
       // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.
       const allowed: [string, NonNullable<AgentDecl["tools"]>["configs"][string]][] = ["read_skill", ...(extra.tools ?? [])].map((name) => [name, { enabled: true, permission: "allow" as const }]);
-      const system = seat.system ?? "";
-      if (extra.brief !== undefined && !system.endsWith(CREW_RULES)) throw new Error(`seat "${seat.name}" has no crew rules to insert a brief before`);
+      const inherited = seat.system ?? "";
+      if (!inherited.startsWith(CONTEXT_PREAMBLE)) throw new Error(`seat "${seat.name}" has no preamble to say the niche after`);
+      if (extra.brief !== undefined && !inherited.endsWith(CREW_RULES)) throw new Error(`seat "${seat.name}" has no crew rules to insert a brief before`);
+      // The niche is the template's, never a setup answer: say so right after the preamble.
+      const system = `${CONTEXT_PREAMBLE} ${nicheFixed(ref)}${inherited.slice(CONTEXT_PREAMBLE.length)}`;
       const video = seat.tools!.configs["generate_video"];
       if (extra.videoModels !== undefined) {
         if (video?.enabled !== true) throw new Error(`seat "${seat.name}" does not render, so it takes no video models`);
@@ -250,7 +266,7 @@ export function niche(
       }
       return {
         ...seat,
-        ...(extra.brief === undefined ? {} : { system: `${system.slice(0, -CREW_RULES.length)}${extra.brief} ${CREW_RULES}` }),
+        system: extra.brief === undefined ? system : `${system.slice(0, -CREW_RULES.length)}${extra.brief} ${CREW_RULES}`,
         skills: [...(seat.skills ?? []), ...(extra.skills ?? []), ref],
         tools: { default_config: seat.tools!.default_config, configs: { ...seat.tools!.configs, ...Object.fromEntries(allowed) } },
       };
@@ -307,10 +323,13 @@ export const CHANNEL_TIMEZONE = "America/New_York";
 
 /**
  * Every system opens with this. The engine also prepends its own `project_context` preamble to every
- * template agent; this one says what the answers are on a media channel.
+ * template agent; this one says whose the answers are. A niche adds `nicheFixed` after it.
  */
 export const CONTEXT_PREAMBLE =
-  "You are one seat of a video channel's crew. The setup answers in project_context are the operator's — the niche, the cadence and any reference or sources; never invent one, and when one you need is missing, ask the operator once with ask_operator rather than filling it in.";
+  "You are one seat of a video channel's crew. The setup answers in project_context are the operator's; never invent one, and when one you need is missing, ask the operator once with ask_operator rather than filling it in.";
+
+/** What a niche seat reads after the preamble: the niche is no answer to look for or ask (ADR-1143). */
+export const nicheFixed = (skill: string): string => `This channel's niche is fixed by its template and its pinned skill, ${skill}; it is not a setup answer, so never ask for it.`;
 
 /**
  * Every system ends with this: how the board works, where files land, and the one way out. A rule
@@ -546,7 +565,7 @@ export const channelPlanCard = (firstAsk: string): Task =>
     key: "channel-plan",
     title: "File the channel plan, then ask the operator the question the form had no room for",
     assignee: PUBLISHER,
-    body: `Read project_context — what this channel is about and how often it posts — and the connected accounts (social.accounts; not offered means none is connected yet): they are where the channel posts. The first line of your note names them, or says no account is connected yet and nothing can be published until the operator connects one. Then write the channel plan in the note: the posting slots for the cadence answer (${SLOTS}), and what the first two weeks look like. The setup form asks four questions and no more, so one thing this channel needs is not in there: ${firstAsk} Write your own reading of it as the plan's second line, from the niche and the reference, and say it is your reading and not the operator's answer. Close this card with the plan as its note: the analyst's card waits on it. THEN, once it is closed and not before, ask the operator to confirm that line with ask_operator, once, and comment their answer on this card, where every later session reads it.`,
+    body: `Read project_context — what this channel is about and how often it posts — and the connected accounts (social.accounts; not offered means none is connected yet): they are where the channel posts. The first line of your note names them, or says no account is connected yet and nothing can be published until the operator connects one. Then write the channel plan in the note: the posting slots for the cadence answer (${SLOTS}), and what the first two weeks look like. One thing this channel needs is not in the setup answers: ${firstAsk} Write your own reading of it as the plan's second line, from project_context and your skills, and say it is your reading and not the operator's answer. Close this card with the plan as its note: the analyst's card waits on it. THEN, once it is closed and not before, ask the operator to confirm that line with ask_operator, once, and comment their answer on this card, where every later session reads it.`,
   });
 
 /** The analyst's two crons, the same on every template: the weekly report and the daily numbers. */
