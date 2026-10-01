@@ -598,13 +598,43 @@ describe("the channel's clock", () => {
 });
 
 describe("the setup questions", () => {
-  it("asks two per template, and a third that is optional", () => {
-    for (const template of all) {
-      expect(template.questions.filter((q) => q.optional !== true), template.name).toHaveLength(2);
-      expect(template.questions.length, template.name).toBe(3);
+  const BASES: TemplateName[] = ["faceless", "longform", "clipping"];
+
+  it("asks two per base template, and a third that is optional", () => {
+    for (const name of BASES) {
+      const template = TEMPLATES[name];
+      expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(2);
+      expect(template.questions.length, name).toBe(3);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
     }
-    // The cadence is one question, spelled once.
+  });
+
+  /**
+   * A NICHE ASKS NEITHER THE NICHE NOR THE REFERENCE (ADR-1134): the template IS the niche, and the
+   * reference is the niche skill's playbook, not something the operator models the channel on.
+   */
+  it("drops the niche and the reference from every niche template", () => {
+    for (const name of Object.keys(BASE_OF) as TemplateName[]) {
+      const keys = TEMPLATES[name].questions.map((q) => q.key);
+      expect(keys, name).not.toContain("niche");
+      expect(keys, name).not.toContain("reference");
+    }
+  });
+
+  /** The generative niches asked only `niche`, `reference` and the cadence, so the cadence is all that is left. */
+  it("leaves a generative niche asking only the cadence", () => {
+    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  });
+
+  /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
+  it("leaves a clipping niche its sources and visibility", () => {
+    for (const name of ["gaming-clips", "news", "sports"] as TemplateName[]) {
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+    }
+  });
+
+  /** The cadence is one question, spelled once, on every template. */
+  it("asks the cadence on every template, the same question object", () => {
     for (const template of all) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
   });
 

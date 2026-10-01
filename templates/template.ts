@@ -182,8 +182,13 @@ export interface MediaTemplate {
    * the last is always the publisher.
    */
   pipeline: string[];
-  /** At most three required and one optional; the engine refuses a fifth. */
-  questions: [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
+  /**
+   * The setup questions the studio asks, head to cadence. At most three required and one optional;
+   * the engine refuses a fifth. A niche template answers the niche and the reference by being the
+   * niche it is, so `niche()` drops both (ADR-1134) — a generative niche is left asking only the
+   * cadence — which is why this is a list and not a three-or-four tuple.
+   */
+  questions: SetupQuestion[];
   /** Day one, as cards on the company board. */
   tasks: Task[];
 }
@@ -201,15 +206,25 @@ export interface SeatOverride {
 }
 
 /**
+ * The setup questions a niche no longer asks. A niche IS its niche, and its look is the niche skill's
+ * playbook rather than a reference the operator models it on, so neither the `niche` choice nor the
+ * `reference` question is relevant to a niche template (ADR-1134). `niche()` drops both by key: a
+ * generative niche (`ufc`/`history`/`animal-feast`) is left asking only the cadence, and a clipping
+ * niche keeps the `sources` it cannot cut without. The dropped reference becomes the crew's, found and
+ * studied on day one exactly as it is when the operator leaves the question blank.
+ */
+const NICHE_ANSWERED: ReadonlySet<string> = new Set(["niche", REFERENCE_ANSWER_KEY]);
+
+/**
  * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
- * seats, pipeline, questions and day-one cards — with two editorial overrides (`name`, `title`,
- * `description`) and one load-bearing change: `naive/channel-template-<niche>` is appended to every
- * seat's `skills[]`, so the niche playbook is the channel's standard from the first session, read
- * through progressive disclosure. No new crew, no new question, no new card: a template is data, and
- * a niche is the least of it. Where the niche's playbook needs a seat to do more than the base seat
- * can (a short-form niche that renders segments and joins them), `seats` extends that seat. The skill
- * itself lives in the platform catalogue (`skills/` in vetta-mono), published by
- * `scripts/publish-skills.mjs`.
+ * seats, pipeline and day-one cards — with two editorial overrides (`name`, `title`, `description`),
+ * fewer questions (the niche and the reference are the niche's, not the operator's — ADR-1134), and
+ * one load-bearing change: `naive/channel-template-<niche>` is appended to every seat's `skills[]`,
+ * so the niche playbook is the channel's standard from the first session, read through progressive
+ * disclosure. No new crew, no new card: a template is data, and a niche is the least of it. Where the
+ * niche's playbook needs a seat to do more than the base seat can (a short-form niche that renders
+ * segments and joins them), `seats` extends that seat. The skill itself lives in the platform
+ * catalogue (`skills/` in vetta-mono), published by `scripts/publish-skills.mjs`.
  */
 export function niche(
   base: MediaTemplate,
@@ -224,6 +239,7 @@ export function niche(
     name: over.name,
     title: over.title,
     description: over.description,
+    questions: base.questions.filter((question) => !NICHE_ANSWERED.has(question.key)),
     agents: base.agents.map((seat) => {
       const extra = over.seats?.[seat.name] ?? {};
       // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.

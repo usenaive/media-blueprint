@@ -95,3 +95,30 @@ describe("the question that asks who sees a new YouTube video", () => {
     expect(TEMPLATES.longform.questions).not.toContain(VISIBILITY_QUESTION);
   });
 });
+
+/**
+ * NICHE TEMPLATES. A niche IS its niche, and the reference is the niche skill's playbook — not
+ * something the operator models the channel on — so the studio asks neither (ADR-1134). The
+ * generative niches, whose base asks only the niche, the reference and the cadence, are left asking
+ * the cadence alone; the clipping niches keep the `sources` they cannot cut without.
+ */
+describe("a niche template's questions", () => {
+  const GENERATIVE = ["ufc", "history", "animal-feast"] as const;
+  const CLIPPING_NICHES = ["gaming-clips", "news", "sports"] as const;
+
+  it("asks neither the niche nor the reference, on any niche", () => {
+    for (const name of [...GENERATIVE, ...CLIPPING_NICHES]) {
+      const keys = TEMPLATES[name].questions.map((q) => q.key);
+      expect(keys, name).not.toContain("niche");
+      expect(keys, name).not.toContain(REFERENCE_ANSWER_KEY);
+    }
+  });
+
+  it("leaves a generative niche asking only the cadence", () => {
+    for (const name of GENERATIVE) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  });
+
+  it("leaves a clipping niche its sources and visibility", () => {
+    for (const name of CLIPPING_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+  });
+});

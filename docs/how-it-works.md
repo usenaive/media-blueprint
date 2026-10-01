@@ -172,9 +172,11 @@ a cron fire is not.
 
 ## 8. Setup questions and `project_context`
 
-The studio asks three questions, never where to post; the answers land on the install; every seat reads them with
-`project_context`. The engine prepends its own "read the project context first" preamble to every
-template agent, and our `CONTEXT_PREAMBLE` adds what the answers are on a media channel.
+The studio asks at most three questions, never where to post; the answers land on the install; every seat reads them with
+`project_context`. A niche template asks fewer — it is its niche, and its reference is the niche skill's,
+so both are dropped and a generative niche asks only the cadence (ADR-1134). The engine prepends its own
+"read the project context first" preamble to every template agent, and our `CONTEXT_PREAMBLE` adds what
+the answers are on a media channel.
 
 ## 9. What the platform cannot express yet
 

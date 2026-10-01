@@ -190,12 +190,17 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks three before anything is provisioned. The engine refuses a fifth.
+The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
+template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
+niche and the reference questions are dropped (ADR-1134). A generative niche is then left asking only
+the cadence; a clipping niche keeps the sources it cannot cut without.
 
 | Template | Questions |
 |---|---|
 | `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
+| `ufc`, `history`, `animal-feast` | Posting cadence |
+| `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
 manager asks you for one when none is connected. `faceless` and `longform` do not ask the
