@@ -20,8 +20,8 @@ export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, lengthPhra
  * seat and a niche title/description — `niche()` is the whole of it. Clipping niches reuse the
  * `clipping` crew; short-form niches reuse `faceless`, and their
  * playbooks build a piece from segments, so they extend its scriptwriter and producer
- * (`SEGMENTED_SHORT_FORM`), and offer three niche examples from their skill in place of the base's.
- * The skill slugs are the platform catalogue's `channel-template-<niche>` (vetta-mono `skills/`).
+ * (`SEGMENTED_SHORT_FORM`). The skill slugs are the platform catalogue's
+ * `channel-template-<niche>` (vetta-mono `skills/`).
  */
 export const GAMING_CLIPS = niche(CLIPPING, {
   name: "gaming-clips",
@@ -47,7 +47,6 @@ export const UFC = niche(FACELESS, {
   description: "AI UFC Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing content using a UFC-style template. This lets you create the UFC-style fighting videos that are going really viral right now.",
   skill: "channel-template-ufc",
   seats: SEGMENTED_SHORT_FORM,
-  niches: ["Title fights", "Knockout finishes", "Grudge-match rematches"],
 });
 export const HISTORY = niche(FACELESS, {
   name: "history",
@@ -55,7 +54,6 @@ export const HISTORY = niche(FACELESS, {
   description: "AI History Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing videos of major historical events in color, as if filmed today. This lets you create the history videos that are going really viral right now.",
   skill: "channel-template-history",
   seats: SEGMENTED_SHORT_FORM,
-  niches: ["Wars and battles", "Accidents and disasters", "Myths and legends"],
 });
 export const ANIMAL_FEAST = niche(FACELESS, {
   name: "animal-feast",
@@ -63,7 +61,6 @@ export const ANIMAL_FEAST = niche(FACELESS, {
   description: "AI Eating Animal Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing videos of an animal eating a big feast. This lets you create the animal eating videos that are going really viral right now.",
   skill: "channel-template-animal-feast",
   seats: SEGMENTED_SHORT_FORM,
-  niches: ["Dog raw-feast mukbang", "Big-dog ASMR feasts", "AI pet mukbang"],
 });
 
 /**

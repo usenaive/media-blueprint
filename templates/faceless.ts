@@ -118,7 +118,7 @@ export const FACELESS: MediaTemplate = {
   ],
 
   tasks: [
-    channelPlanCard("the channel's tone and who it is for, in one line — the setup form asked for the niche and not for this."),
+    channelPlanCard("the channel's tone and who it is for, in one line."),
     referenceStudyCard("scriptwriter", SHORT_FORM_LENGTH),
     lookCard("scriptwriter", ""),
     task({
