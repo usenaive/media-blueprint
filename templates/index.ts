@@ -7,7 +7,7 @@
  * name an app there: `removed.apps: ["channel"]` would delete a 1.x install's store (README).
  */
 import { CLIPPING } from "./clipping.ts";
-import { FACELESS } from "./faceless.ts";
+import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
 import { niche } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
@@ -16,9 +16,11 @@ export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./templ
 export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, lengthPhrase, niche, segmentsOf } from "./template.ts";
 
 /**
- * The niche channel templates (ADR-1101). Each is its base crew with one niche skill pinned in every
+ * The niche channel templates (ADR-1115). Each is its base crew with one niche skill pinned in every
  * seat and a niche title/description — `niche()` is the whole of it. Clipping niches reuse the
- * `clipping` crew; short-form niches reuse `faceless`. The skill slugs are the platform catalogue's
+ * `clipping` crew; short-form niches reuse `faceless`, and their
+ * playbooks build a piece from segments, so they extend its scriptwriter and producer
+ * (`SEGMENTED_SHORT_FORM`). The skill slugs are the platform catalogue's
  * `channel-template-<niche>` (vetta-mono `skills/`).
  */
 export const GAMING_CLIPS = niche(CLIPPING, {
@@ -44,24 +46,27 @@ export const UFC = niche(FACELESS, {
   title: "AI UFC Fight short-form channel",
   description: "Short-form crew that generates a cage-fight look from shipped reference stills: a tale-of-the-tape card joined to an octagon fight.",
   skill: "channel-template-ufc",
+  seats: SEGMENTED_SHORT_FORM,
 });
 export const HISTORY = niche(FACELESS, {
   name: "history",
   title: "AI History Events short-form channel",
   description: "Short-form crew that colorizes and modernizes major pre-1950s events — wars, disasters, natural disasters — from a reference frame.",
   skill: "channel-template-history",
+  seats: SEGMENTED_SHORT_FORM,
 });
 export const ANIMAL_FEAST = niche(FACELESS, {
   name: "animal-feast",
   title: "AI Eating Animal short-form channel",
   description: "Short-form crew that generates cozy pet-mukbang video — a cute animal eating an aesthetic, ring-lit feast — from shipped reference stills.",
   skill: "channel-template-animal-feast",
+  seats: SEGMENTED_SHORT_FORM,
 });
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * six niche templates (ADR-1101, ADR-1105) reuse their crews.
+ * six niche templates (ADR-1115, ADR-1119) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,

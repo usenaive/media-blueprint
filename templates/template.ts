@@ -17,7 +17,7 @@ export type TemplateName =
   | "faceless"
   | "clipping"
   | "longform"
-  // Niche channel templates (ADR-1101): each reuses a base crew and pins its niche skill in every
+  // Niche channel templates (ADR-1115): each reuses a base crew and pins its niche skill in every
   // seat's `skills[]`. `gaming-clips`/`news`/`sports` reuse `clipping`; `ufc`/`history` reuse `faceless`.
   | "gaming-clips"
   | "news"
@@ -189,28 +189,53 @@ export interface MediaTemplate {
 }
 
 /**
- * A niche channel template (ADR-1101), derived from a base crew. It IS the base template — the same
+ * What a niche changes on one seat of its base crew. Tools are added at `allow` over the base's
+ * explicit, default-deny toolset — every other tool stays denied by name; skills are appended after
+ * the base's; `brief` is inserted after the seat's own brief, before `CREW_RULES`. Nothing is taken
+ * away: a niche extends a seat, and the base template is left as it was.
+ */
+export interface SeatOverride {
+  tools?: string[];
+  skills?: string[];
+  brief?: string;
+}
+
+/**
+ * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
  * seats, pipeline, questions and day-one cards — with two editorial overrides (`name`, `title`,
  * `description`) and one load-bearing change: `naive/channel-template-<niche>` is appended to every
  * seat's `skills[]`, so the niche playbook is the channel's standard from the first session, read
  * through progressive disclosure. No new crew, no new question, no new card: a template is data, and
- * a niche is the least of it. The skill itself lives in the platform catalogue (`skills/` in
- * vetta-mono), published by `scripts/publish-skills.mjs`.
+ * a niche is the least of it. Where the niche's playbook needs a seat to do more than the base seat
+ * can (a short-form niche that renders segments and joins them), `seats` extends that seat. The skill
+ * itself lives in the platform catalogue (`skills/` in vetta-mono), published by
+ * `scripts/publish-skills.mjs`.
  */
-export function niche(base: MediaTemplate, over: { name: TemplateName; title: string; description: string; skill: string }): MediaTemplate {
+export function niche(
+  base: MediaTemplate,
+  over: { name: TemplateName; title: string; description: string; skill: string; seats?: Record<string, SeatOverride> },
+): MediaTemplate {
   const ref = `naive/${over.skill}`;
+  for (const name of Object.keys(over.seats ?? {})) {
+    if (!base.agents.some((seat) => seat.name === name)) throw new Error(`niche "${over.name}" extends seat "${name}", which ${base.name} does not have`);
+  }
   return {
     ...base,
     name: over.name,
     title: over.title,
     description: over.description,
     agents: base.agents.map((seat) => {
-      const had = (seat.skills ?? []).length > 0;
+      const extra = over.seats?.[seat.name] ?? {};
       // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.
-      const tools = had
-        ? seat.tools
-        : { default_config: seat.tools!.default_config, configs: { ...seat.tools!.configs, read_skill: { enabled: true, permission: "allow" as const } } };
-      return { ...seat, skills: [...(seat.skills ?? []), ref], tools };
+      const allowed = ["read_skill", ...(extra.tools ?? [])].map((name) => [name, { enabled: true, permission: "allow" as const }]);
+      const system = seat.system ?? "";
+      if (extra.brief !== undefined && !system.endsWith(CREW_RULES)) throw new Error(`seat "${seat.name}" has no crew rules to insert a brief before`);
+      return {
+        ...seat,
+        ...(extra.brief === undefined ? {} : { system: `${system.slice(0, -CREW_RULES.length)}${extra.brief} ${CREW_RULES}` }),
+        skills: [...(seat.skills ?? []), ...(extra.skills ?? []), ref],
+        tools: { default_config: seat.tools!.default_config, configs: { ...seat.tools!.configs, ...Object.fromEntries(allowed) } },
+      };
     }),
   };
 }

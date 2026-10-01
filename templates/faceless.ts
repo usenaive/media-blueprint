@@ -22,6 +22,7 @@ import {
   channelPlanCard,
   lengthPhrase,
   lookCard,
+  MAX_RENDER_SECONDS,
   PLATFORMS,
   referenceStudyCard,
   REFERENCE_QUESTION,
@@ -30,9 +31,31 @@ import {
   SHORT_FORM_LENGTH,
   task,
   type MediaTemplate,
+  type SeatOverride,
 } from "./template.ts";
 
 const LENGTH = lengthPhrase(SHORT_FORM_LENGTH);
+
+/**
+ * The short-form niches whose playbook builds a piece as a start, a middle and an end: image-to-video
+ * animates forward from one opening frame and cannot cut, so each beat is its own render and the
+ * piece is their join. A single 30-second render cannot open the fight on a restyled fight frame
+ * after a tale-of-the-tape card, or keep a feast continuous by opening each take on the last frame
+ * of the one before. So the niche extends two faceless seats: the scriptwriter plans segments, and
+ * the producer gets the shell, the file tools and `naive/video-assembly` to render them and join
+ * them with ffmpeg — the long-form producer's method, inside the short-form window: the total stays
+ * 15–30 seconds, so one producer session's ceiling still clears the whole piece.
+ */
+export const SEGMENTED_SHORT_FORM: Record<string, SeatOverride> = {
+  scriptwriter: {
+    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "ONE video" ABOVE: lay the shots out as the segments your niche skill names, in order, each with its opening frame — a reference URL copied exactly, or "the previous segment's last frame" — its render prompt and its seconds. No segment runs over ${MAX_RENDER_SECONDS} seconds, every boundary lands on a shot change, and together they run ${LENGTH}.`,
+  },
+  producer: {
+    tools: ["bash", "fetch_file", "publish_file"],
+    skills: ["naive/video-assembly"],
+    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "call generate_video once" AND "One render per card" ABOVE: one generate_video call per segment the plan names, in order, each with its own opening frame and seconds, and the same model rule. Read the Render card's comments first and render only the segments not yet there; the moment one lands, comment its fil_ id and index on the card. A segment that fails is re-rendered alone, never the ones that landed. Where a segment opens on the previous one's last frame, fetch_file that segment, pull the frame with ffmpeg in bash, publish_file it and pass its URL as image_urls. Then fetch_file every segment, ffprobe each, join them in order with ffmpeg's concat demuxer at 1080x1920, probe the joined file against the plan's length, and publish_file it: that fil_ id is the one the Publish card carries. If ffmpeg is missing and cannot be installed, stop the card with the segments named.`,
+  },
+};
 
 export const FACELESS: MediaTemplate = {
   name: "faceless",

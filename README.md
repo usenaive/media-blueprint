@@ -37,6 +37,14 @@ pinned in **every** seat's `skills[]`, plus a niche title and one-line descripti
 [`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card.
 The niche's own content is the skill, which lives in the platform catalogue, not this repo.
 
+Where a niche's playbook needs a seat to do more than its base seat, `niche()` takes `seats`, which
+**extends** that seat: tools added at `allow` (every other tool stays denied by name), skills
+appended, and a brief clause before the crew's rules. The base template is left as it was. The three
+short-form niches use it (`SEGMENTED_SHORT_FORM` in [`templates/faceless.ts`](templates/faceless.ts)):
+image-to-video cannot cut, so a piece is a start, a middle and an end rendered as segments and joined.
+Their scriptwriter plans the segments, and their producer gets `bash`, `fetch_file`, `publish_file`
+and `naive/video-assembly` to render each one and join them with ffmpeg, still 15–30 seconds in all.
+
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
 | `gaming-clips` | Gaming clipping channel | `clipping` | `naive/channel-template-gaming-clips` |

@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
@@ -33,7 +33,7 @@ import {
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 /** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. The last
- * five are the niche channel-template skills a niche template pins in every seat (ADR-1101). */
+ * five are the niche channel-template skills a niche template pins in every seat (ADR-1115). */
 const CATALOGUE = [
   "naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/channel-report",
   "naive/video-trend-brief", "naive/reference-teardown", "naive/long-form-arc", "naive/video-assembly",
@@ -42,12 +42,14 @@ const CATALOGUE = [
 ];
 
 const all = Object.values(TEMPLATES);
+/** The short-form niches whose playbook renders segments and joins them (`SEGMENTED_SHORT_FORM`). */
+const SEGMENTED: TemplateName[] = ["ufc", "history", "animal-feast"];
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
 const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ template, agent, id: `${template.name}/${agent.name}` })));
 
 /**
- * Each niche template (ADR-1101) mirrors a base crew, so its per-template expectations ARE the
+ * Each niche template (ADR-1115) mirrors a base crew, so its per-template expectations ARE the
  * base's. `BASE_OF` maps each niche to the crew it reuses; the helpers expand a base-keyed map or an
  * id set to cover the niches too, so a structural assertion holds for all eight templates at once.
  */
@@ -231,7 +233,8 @@ describe("the toolsets", () => {
 
   /** A shell provisions and bills a machine; each seat that holds one is a decision written here. */
   it("gives a shell only to the seats that sample frames or join segments", () => {
-    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "longform/writer", "longform/producer"]);
+    // The segmented short-form niches extend the producer with a shell to join their segments.
+    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "longform/writer", "longform/producer", ...SEGMENTED.map((name) => `${name}/producer`)]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "bash"), id).toBe(SHELL_SEATS.has(id) ? "allow" : "deny");
       for (const sandbox of ["read", "write", "edit", "ls", "find"]) expect(permissionFor(template, agent.name, sandbox), id).toBe("deny");
@@ -710,6 +713,37 @@ describe("the long-form crew", () => {
 
   it("points the analyst at retention", () => {
     expect(briefOf("analyst")).toMatch(/RETENTION/);
+  });
+});
+
+/**
+ * The short-form niches whose playbook is a start, a middle and an end. Image-to-video cannot cut, so
+ * each beat is its own render and the producer joins them: it needs the shell and file tools the
+ * base faceless producer does not hold, and a brief that lifts "call generate_video once".
+ */
+describe("the segmented short-form niches", () => {
+  it("give the producer a shell, the file tools and the assembly skill, and leave the faceless producer as it was", () => {
+    for (const name of SEGMENTED) {
+      const producer = seat(TEMPLATES[name], "producer");
+      for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill"]) {
+        expect(permissionFor(TEMPLATES[name], "producer", tool), `${name}/${tool}`).toBe("allow");
+      }
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: VIDEO_MODELS });
+      expect(producer.skills, name).toEqual(["naive/video-assembly", `naive/channel-template-${name}`]);
+      expect(producer.system, name).toMatch(/OVERRIDES "call generate_video once" AND "One render per card"/);
+      expect(producer.system, name).toMatch(/concat demuxer/);
+      expect(producer.system, name).toContain(RENDER_MODEL_RULE);
+      expect(seat(TEMPLATES[name], "scriptwriter").system, name).toContain(`No segment runs over ${MAX_RENDER_SECONDS} seconds`);
+    }
+    const base = seat(TEMPLATES.faceless, "producer");
+    for (const tool of ["bash", "fetch_file", "publish_file", "read_skill"]) expect(permissionFor(TEMPLATES.faceless, "producer", tool), tool).toBe("deny");
+    expect(base.skills).toEqual([]);
+    expect(base.system).not.toMatch(/SEGMENTS JOINED/);
+    expect(seat(TEMPLATES.faceless, "scriptwriter").system).not.toMatch(/SEGMENTS JOINED/);
+  });
+
+  it("refuses to extend a seat the base crew does not have", () => {
+    expect(() => niche(TEMPLATES.faceless, { name: "ufc", title: "t", description: "d", skill: "s", seats: { clipper: { tools: ["bash"] } } })).toThrow(/does not have/);
   });
 });
 

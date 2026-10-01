@@ -40,7 +40,7 @@ describe("naive.config", () => {
     expect(declaration.description).toBe(ACTIVE.description);
     expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
     expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual([
-      // The base three, then the five niche channel templates (ADR-1101).
+      // The base three, then the five niche channel templates (ADR-1115).
       "AI Eating Animal short-form channel",
       "AI History Events short-form channel",
       "AI UFC Fight short-form channel",

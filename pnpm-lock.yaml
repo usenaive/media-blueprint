@@ -12,7 +12,7 @@ importers:
         specifier: ^22.20.1
         version: 22.20.1
       '@usenaive-sdk/blueprints':
-        specifier: ^0.9.0
+        specifier: ^0.10.0
         version: 0.9.0
       '@usenaive-sdk/vetta-cli':
         specifier: ^0.6.0
