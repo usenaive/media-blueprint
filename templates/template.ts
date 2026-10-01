@@ -13,7 +13,18 @@
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import { STYLE_TEMPLATE_SEEDS } from "../seed/style-templates.ts";
 
-export type TemplateName = "faceless" | "clipping" | "longform";
+export type TemplateName =
+  | "faceless"
+  | "clipping"
+  | "longform"
+  // Niche channel templates (ADR-1115): each reuses a base crew and pins its niche skill in every
+  // seat's `skills[]`. `gaming-clips`/`news`/`sports` reuse `clipping`; `ufc`/`history` reuse `faceless`.
+  | "gaming-clips"
+  | "news"
+  | "sports"
+  | "ufc"
+  | "history"
+  | "animal-feast";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -116,6 +127,14 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   faceless: "first-briefs",
   longform: "first-topic",
   clipping: "first-moments",
+  // A niche reuses its base crew's day-one cards verbatim (`niche()` below), so its first-piece card
+  // is seeded under the base's key — these values exist only to satisfy the record's key set.
+  "gaming-clips": "first-moments",
+  news: "first-moments",
+  sports: "first-moments",
+  ufc: "first-briefs",
+  history: "first-briefs",
+  "animal-feast": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -167,6 +186,58 @@ export interface MediaTemplate {
   questions: [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
   /** Day one, as cards on the company board. */
   tasks: Task[];
+}
+
+/**
+ * What a niche changes on one seat of its base crew. Tools are added at `allow` over the base's
+ * explicit, default-deny toolset — every other tool stays denied by name; skills are appended after
+ * the base's; `brief` is inserted after the seat's own brief, before `CREW_RULES`. Nothing is taken
+ * away: a niche extends a seat, and the base template is left as it was.
+ */
+export interface SeatOverride {
+  tools?: string[];
+  skills?: string[];
+  brief?: string;
+}
+
+/**
+ * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
+ * seats, pipeline, questions and day-one cards — with two editorial overrides (`name`, `title`,
+ * `description`) and one load-bearing change: `naive/channel-template-<niche>` is appended to every
+ * seat's `skills[]`, so the niche playbook is the channel's standard from the first session, read
+ * through progressive disclosure. No new crew, no new question, no new card: a template is data, and
+ * a niche is the least of it. Where the niche's playbook needs a seat to do more than the base seat
+ * can (a short-form niche that renders segments and joins them), `seats` extends that seat. The skill
+ * itself lives in the platform catalogue (`skills/` in vetta-mono), published by
+ * `scripts/publish-skills.mjs`.
+ */
+export function niche(
+  base: MediaTemplate,
+  over: { name: TemplateName; title: string; description: string; skill: string; seats?: Record<string, SeatOverride> },
+): MediaTemplate {
+  const ref = `naive/${over.skill}`;
+  for (const name of Object.keys(over.seats ?? {})) {
+    if (!base.agents.some((seat) => seat.name === name)) throw new Error(`niche "${over.name}" extends seat "${name}", which ${base.name} does not have`);
+  }
+  return {
+    ...base,
+    name: over.name,
+    title: over.title,
+    description: over.description,
+    agents: base.agents.map((seat) => {
+      const extra = over.seats?.[seat.name] ?? {};
+      // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.
+      const allowed = ["read_skill", ...(extra.tools ?? [])].map((name) => [name, { enabled: true, permission: "allow" as const }]);
+      const system = seat.system ?? "";
+      if (extra.brief !== undefined && !system.endsWith(CREW_RULES)) throw new Error(`seat "${seat.name}" has no crew rules to insert a brief before`);
+      return {
+        ...seat,
+        ...(extra.brief === undefined ? {} : { system: `${system.slice(0, -CREW_RULES.length)}${extra.brief} ${CREW_RULES}` }),
+        skills: [...(seat.skills ?? []), ...(extra.skills ?? []), ref],
+        tools: { default_config: seat.tools!.default_config, configs: { ...seat.tools!.configs, ...Object.fromEntries(allowed) } },
+      };
+    }),
+  };
 }
 
 /**

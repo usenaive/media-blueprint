@@ -17,7 +17,8 @@ There is no hosted app. The crew runs on the platform's own screens:
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three templates**. A template is a crew:
+The repo carries **three base templates**, plus six niche channel templates that reuse them (below).
+A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
 |---|---|---|---|---|
@@ -27,6 +28,34 @@ The repo carries **three templates**. A template is a crew:
 
 The id in the first column is stored on every install. It never changes. The studio shows the
 title, the one-line description, and the networks each template is made for (`PLATFORMS`) as icons.
+
+### Niche channel templates
+
+On top of the base three, the repo carries **six niche channel templates**. Each is its base crew
+with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
+pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
+[`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card.
+The niche's own content is the skill, which lives in the platform catalogue, not this repo.
+
+Where a niche's playbook needs a seat to do more than its base seat, `niche()` takes `seats`, which
+**extends** that seat: tools added at `allow` (every other tool stays denied by name), skills
+appended, and a brief clause before the crew's rules. The base template is left as it was. The three
+short-form niches use it (`SEGMENTED_SHORT_FORM` in [`templates/faceless.ts`](templates/faceless.ts)):
+image-to-video cannot cut, so a piece is a start, a middle and an end rendered as segments and joined.
+Their scriptwriter plans the segments, and their producer gets `bash`, `fetch_file`, `publish_file`
+and `naive/video-assembly` to render each one and join them with ffmpeg, still 15–30 seconds in all.
+
+| Template | Shown as | Reuses | Pins the skill |
+|---|---|---|---|
+| `gaming-clips` | Gaming clipping channel | `clipping` | `naive/channel-template-gaming-clips` |
+| `news` | News clipping channel | `clipping` | `naive/channel-template-news` |
+| `sports` | Sports clipping channel | `clipping` | `naive/channel-template-sports` |
+| `ufc` | AI UFC Fight short-form channel | `faceless` | `naive/channel-template-ufc` |
+| `history` | AI History Events short-form channel | `faceless` | `naive/channel-template-history` |
+| `animal-feast` | AI Eating Animal short-form channel | `faceless` | `naive/channel-template-animal-feast` |
+
+A niche is picked at company creation like any other template; its crew carries the niche skill from
+the first session. It publishes, installs and switches through the exact paths the base three do.
 
 ## 🚀 Get started
 
