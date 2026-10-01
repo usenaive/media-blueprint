@@ -42,8 +42,12 @@ Where a niche's playbook needs a seat to do more than its base seat, `niche()` t
 appended, and a brief clause before the crew's rules. The base template is left as it was. The three
 short-form niches use it (`SEGMENTED_SHORT_FORM` in [`templates/faceless.ts`](templates/faceless.ts)):
 image-to-video cannot cut, so a piece is a start, a middle and an end rendered as segments and joined.
-Their scriptwriter plans the segments, and their producer gets `bash`, `fetch_file`, `publish_file`
-and `naive/video-assembly` to render each one and join them with ffmpeg, still 15–30 seconds in all.
+Their scriptwriter plans the segments, 5 to 15 seconds each and all on one model, and their
+producer gets `bash`, `fetch_file`, `publish_file`, `generate_speech` and `naive/video-assembly` to
+render each one, join them with ffmpeg and burn in the hook and label (the skill's step 5b), still
+15–30 seconds in all. It renders on `minimax/hailuo-3` first, `bytedance/seedance-2.5` allowed
+(`SEGMENT_VIDEO_MODELS`, `videoModels` on the seat). `niche()` also takes `niches`, which replaces the
+base's niche-question examples with three from the niche's skill.
 
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
@@ -239,7 +243,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - Each fire has its own budget, inside its seat's ceiling.
 - `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
   allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
-  or context explicitly ask for another.
+  or context explicitly ask for another. The segmented short-form niches (`ufc`, `history`,
+  `animal-feast`) pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions
@@ -255,7 +260,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - `social.post_metrics`: `allow` on `analyst` and `channel-manager`.
 - `company.set_timezone`, `company.set_logo` and `apps.request_access` are denied on every seat.
 - Every other built-in and platform tool (email, legal, wallet, card, connections) is denied by
-  name. `generate_speech` and `transcribe_audio` are not granted to any seat.
+  name. `generate_speech` only on the segmented niches' producers, to voice a silent join;
+  `transcribe_audio` on no seat.
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and the Long Form writer
   sample frames; the Long Form producer joins segments.
