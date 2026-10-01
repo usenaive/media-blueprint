@@ -32,16 +32,40 @@ import {
 } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
-/** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. */
+/** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. The last
+ * five are the niche channel-template skills a niche template pins in every seat (ADR-1101). */
 const CATALOGUE = [
   "naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/channel-report",
   "naive/video-trend-brief", "naive/reference-teardown", "naive/long-form-arc", "naive/video-assembly",
+  "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
+  "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
 ];
 
 const all = Object.values(TEMPLATES);
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
 const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ template, agent, id: `${template.name}/${agent.name}` })));
+
+/**
+ * Each niche template (ADR-1101) mirrors a base crew, so its per-template expectations ARE the
+ * base's. `BASE_OF` maps each niche to the crew it reuses; the helpers expand a base-keyed map or an
+ * id set to cover the niches too, so a structural assertion holds for all eight templates at once.
+ */
+const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
+  "gaming-clips": "clipping", news: "clipping", sports: "clipping", ufc: "faceless", history: "faceless",
+  "animal-feast": "faceless",
+};
+const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
+  const out = { ...base } as Record<TemplateName, T>;
+  for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] = base[from]!;
+  return out;
+};
+/** Expand a set of `template/seat` ids to include the same seats on each niche that mirrors the base. */
+const withNicheIds = (ids: readonly string[]): Set<string> => {
+  const out = new Set(ids);
+  for (const [niche, from] of Object.entries(BASE_OF)) for (const id of ids) if (id.startsWith(`${from}/`)) out.add(`${niche}/${id.slice(from.length + 1)}`);
+  return out;
+};
 
 /** The platform's own rule for one tool (`permissionOf`, core `schema/agent.ts`), written out. */
 const permissionFor = (template: MediaTemplate, agent: string, tool: string): string => {
@@ -149,7 +173,7 @@ describe("the toolsets", () => {
 
   /** Every seat that judges a picture can open one: the look, a frame, a thumbnail, a render. */
   it("lets every seat that judges visuals look at an image", () => {
-    const LOOKERS = new Set([
+    const LOOKERS = withNicheIds([
       "faceless/channel-manager", "faceless/producer", "faceless/trend-scout", "faceless/scriptwriter",
       "longform/channel-manager", "longform/researcher", "longform/writer", "longform/producer",
       "clipping/channel-manager", "clipping/clipper", "clipping/scout", "clipping/caption-editor",
@@ -207,7 +231,7 @@ describe("the toolsets", () => {
 
   /** A shell provisions and bills a machine; each seat that holds one is a decision written here. */
   it("gives a shell only to the seats that sample frames or join segments", () => {
-    const SHELL_SEATS = new Set(["faceless/scriptwriter", "longform/writer", "longform/producer"]);
+    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "longform/writer", "longform/producer"]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "bash"), id).toBe(SHELL_SEATS.has(id) ? "allow" : "deny");
       for (const sandbox of ["read", "write", "edit", "ls", "find"]) expect(permissionFor(template, agent.name, sandbox), id).toBe("deny");
@@ -287,7 +311,7 @@ describe("the board", () => {
    * and voice, then starts ONE piece — whose own chain of cards takes it to the approval card.
    */
   it("seeds day one as a chain: set-up first, then one piece behind it", () => {
-    const chains: Record<TemplateName, Record<string, string[]>> = {
+    const chains: Record<TemplateName, Record<string, string[]>> = withNiches<Record<string, string[]>>({
       faceless: {
         "channel-plan": [],
         "reference-study": [],
@@ -311,7 +335,7 @@ describe("the board", () => {
         "report-frame": ["channel-plan"],
         "first-moments": ["source-check", "caption-style"],
       },
-    };
+    });
     for (const template of all) {
       expect(Object.fromEntries(template.tasks.map((task) => [task.key, task.blocked_by ?? []])), template.name).toEqual(chains[template.name]);
       // Declaration order is dependency order: a blocker declared after its card is refused at apply.
@@ -361,11 +385,11 @@ describe("the board", () => {
    * before it closes. The chain ends at the publisher.
    */
   it("moves each piece along a chain of cards, head to publisher", () => {
-    const PIPELINES: Record<TemplateName, { seats: string[]; cards: string[] }> = {
+    const PIPELINES: Record<TemplateName, { seats: string[]; cards: string[] }> = withNiches<{ seats: string[]; cards: string[] }>({
       faceless: { seats: ["trend-scout", "scriptwriter", "producer", PUBLISHER], cards: ["Plan", "Render", "Publish"] },
       longform: { seats: ["researcher", "writer", "producer", PUBLISHER], cards: ["Plan", "Render", "Publish"] },
       clipping: { seats: ["scout", "clipper", "caption-editor", PUBLISHER], cards: ["Cut", "Caption", "Publish"] },
-    };
+    });
     for (const template of all) {
       const { seats, cards } = PIPELINES[template.name];
       expect(template.pipeline, template.name).toEqual(seats);
@@ -548,7 +572,7 @@ describe("the channel's clock", () => {
 
   /** How often the head starts pieces is a price: a long-form piece renders six segments. */
   it("starts pieces on each template at the cadence its render price can carry", () => {
-    const DAYS: Record<TemplateName, string> = { faceless: "1,4", longform: "1,3,5", clipping: "*" };
+    const DAYS: Record<TemplateName, string> = withNiches<string>({ faceless: "1,4", longform: "1,3,5", clipping: "*" });
     for (const template of all) {
       const [fire] = seat(template, template.pipeline[0]!).schedules!;
       expect(fields(fire!.cron)[4], template.name).toBe(DAYS[template.name]);
@@ -629,10 +653,11 @@ describe("the length each template makes, and the money that follows from it", (
 describe("the reference", () => {
   it("is read by the seats that plan, make and measure a generated piece, and by no clipping seat", () => {
     const carriers = everySeat.filter(({ agent }) => (agent.system ?? "").includes(REFERENCE_RULE)).map(({ id }) => id).sort();
-    expect(carriers).toEqual([
+    // The short-form niches (`ufc`, `history`) reuse the faceless crew, so they carry the same rule.
+    expect(carriers).toEqual([...withNicheIds([
       "faceless/analyst", "faceless/producer", "faceless/scriptwriter", "faceless/trend-scout",
       "longform/analyst", "longform/producer", "longform/researcher", "longform/writer",
-    ]);
+    ])].sort());
     for (const agent of TEMPLATES.clipping.agents) expect(agent.system, agent.name).not.toMatch(/teardown/i);
     expect(REFERENCE_RULE).toMatch(/note on the reference-study card/);
     expect(REFERENCE_RULE).toMatch(/never describe a reference you did not open/);

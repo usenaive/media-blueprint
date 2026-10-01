@@ -17,7 +17,8 @@ There is no hosted app. The crew runs on the platform's own screens:
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three templates**. A template is a crew:
+The repo carries **three base templates**, plus six niche channel templates that reuse them (below).
+A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
 |---|---|---|---|---|
@@ -27,6 +28,26 @@ The repo carries **three templates**. A template is a crew:
 
 The id in the first column is stored on every install. It never changes. The studio shows the
 title, the one-line description, and the networks each template is made for (`PLATFORMS`) as icons.
+
+### Niche channel templates
+
+On top of the base three, the repo carries **six niche channel templates**. Each is its base crew
+with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
+pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
+[`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card.
+The niche's own content is the skill, which lives in the platform catalogue, not this repo.
+
+| Template | Shown as | Reuses | Pins the skill |
+|---|---|---|---|
+| `gaming-clips` | Gaming clipping channel | `clipping` | `naive/channel-template-gaming-clips` |
+| `news` | News clipping channel | `clipping` | `naive/channel-template-news` |
+| `sports` | Sports clipping channel | `clipping` | `naive/channel-template-sports` |
+| `ufc` | AI UFC Fight short-form channel | `faceless` | `naive/channel-template-ufc` |
+| `history` | AI History Events short-form channel | `faceless` | `naive/channel-template-history` |
+| `animal-feast` | AI Eating Animal short-form channel | `faceless` | `naive/channel-template-animal-feast` |
+
+A niche is picked at company creation like any other template; its crew carries the niche skill from
+the first session. It publishes, installs and switches through the exact paths the base three do.
 
 ## 🚀 Get started
 

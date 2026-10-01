@@ -13,7 +13,18 @@
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import { STYLE_TEMPLATE_SEEDS } from "../seed/style-templates.ts";
 
-export type TemplateName = "faceless" | "clipping" | "longform";
+export type TemplateName =
+  | "faceless"
+  | "clipping"
+  | "longform"
+  // Niche channel templates (ADR-1101): each reuses a base crew and pins its niche skill in every
+  // seat's `skills[]`. `gaming-clips`/`news`/`sports` reuse `clipping`; `ufc`/`history` reuse `faceless`.
+  | "gaming-clips"
+  | "news"
+  | "sports"
+  | "ufc"
+  | "history"
+  | "animal-feast";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -116,6 +127,14 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   faceless: "first-briefs",
   longform: "first-topic",
   clipping: "first-moments",
+  // A niche reuses its base crew's day-one cards verbatim (`niche()` below), so its first-piece card
+  // is seeded under the base's key — these values exist only to satisfy the record's key set.
+  "gaming-clips": "first-moments",
+  news: "first-moments",
+  sports: "first-moments",
+  ufc: "first-briefs",
+  history: "first-briefs",
+  "animal-feast": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -167,6 +186,33 @@ export interface MediaTemplate {
   questions: [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
   /** Day one, as cards on the company board. */
   tasks: Task[];
+}
+
+/**
+ * A niche channel template (ADR-1101), derived from a base crew. It IS the base template — the same
+ * seats, pipeline, questions and day-one cards — with two editorial overrides (`name`, `title`,
+ * `description`) and one load-bearing change: `naive/channel-template-<niche>` is appended to every
+ * seat's `skills[]`, so the niche playbook is the channel's standard from the first session, read
+ * through progressive disclosure. No new crew, no new question, no new card: a template is data, and
+ * a niche is the least of it. The skill itself lives in the platform catalogue (`skills/` in
+ * vetta-mono), published by `scripts/publish-skills.mjs`.
+ */
+export function niche(base: MediaTemplate, over: { name: TemplateName; title: string; description: string; skill: string }): MediaTemplate {
+  const ref = `naive/${over.skill}`;
+  return {
+    ...base,
+    name: over.name,
+    title: over.title,
+    description: over.description,
+    agents: base.agents.map((seat) => {
+      const had = (seat.skills ?? []).length > 0;
+      // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.
+      const tools = had
+        ? seat.tools
+        : { default_config: seat.tools!.default_config, configs: { ...seat.tools!.configs, read_skill: { enabled: true, permission: "allow" as const } } };
+      return { ...seat, skills: [...(seat.skills ?? []), ref], tools };
+    }),
+  };
 }
 
 /**
