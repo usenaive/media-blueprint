@@ -61,6 +61,18 @@ export const CADENCE_SLOTS: Record<string, string> = {
 /** The cadence a channel posts on until the operator asks for another. */
 export const DEFAULT_CADENCE = "3× a week";
 
+/**
+ * THE CADENCE LINE, the one place the platform reads the cadence from now that no setup question asks
+ * it (ADR-NEW (pending owner decision)): a line of its own in the channel-plan card's note, or a
+ * comment on that card, that reads exactly `Cadence: <one of CADENCE_SLOTS' keys>`. vetta-mono's
+ * "Posts this week" goal falls back to it when an install has no `cadence` answer, and to 3× a week
+ * when there is none (vetta-mono fix/653-merge-ready).
+ */
+export const cadenceLine = (cadence: string): string => `Cadence: ${cadence}`;
+
+/** How a reader finds the cadence line in a note or comment: its own line, the prefix, then the cadence. */
+export const CADENCE_LINE_PATTERN = /^Cadence: (.+)$/m;
+
 /** The networks that take vertical video — the platform's `SOCIAL_MEDIA_PLATFORMS`. */
 export type Network = "youtube" | "tiktok" | "instagram";
 
@@ -90,19 +102,28 @@ export const VISIBILITY_QUESTION: SetupQuestion = {
 export const REFERENCE_ANSWER_KEY = "reference";
 
 /**
- * "SHOW US WHAT YOU LIKE" — the customer's own example, as media (2026-09-29): images or a video
- * uploaded on the card, or a link. The answer is a list of `fil_` ids and links, which
- * `reference-study` opens by kind. Optional because a mandatory field extracts a made-up answer;
- * left blank, the study goes and finds real videos instead.
+ * "SHOW US WHAT YOU LIKE" — the customer's own example, as a link (or a few, one per line), and it
+ * may be blank. `reference-study` opens what it names by kind; left blank, the study goes and finds
+ * real videos instead. Optional because a mandatory field extracts a made-up answer.
+ *
+ * STILL `text`, NOT `media`. A `media` answer must be `fil_` ids and https links only, so every
+ * install that stored a free-text reference under 2.1.3 or earlier (prose, a bare `youtube.com/…`,
+ * several lines) would be refused on Update until the operator retyped it. A text answer accepts a
+ * link, several links and prose alike, so nothing stored breaks; uploads as the reference wait for a
+ * platform migration of the stored answers. The first-run onboarding takes a link here, so the help
+ * asks for one.
  */
 export const REFERENCE_QUESTION: SetupQuestion = {
   key: REFERENCE_ANSWER_KEY,
   label: "Show us what you like",
-  type: "media",
+  type: "text",
   optional: true,
-  placeholder: "Or paste a link to a channel or video",
-  help: "Images or a video of what you want, or a channel to model. The team studies it once, up front. Skip it and they find real videos in your niche.",
+  placeholder: "Paste a link to a channel or video",
+  help: "A link to a channel or video you want this to be like. The team studies it once, up front. Skip it and they find real videos in your niche.",
 };
+
+/** The key the look is answered under, and the producer's `look` card reads. */
+export const LOOK_ANSWER_KEY = "look";
 
 /** The looks the setup shows, each by its picture on the dashboard (`/setup/styles/`). */
 const LOOK_PICTURES: Record<string, string> = {
@@ -118,10 +139,10 @@ const LOOK_PICTURES: Record<string, string> = {
  * HOW IT LOOKS, PICKED FROM PICTURES (2026-09-29). Six of the style library's looks, each shown as
  * its picture, because a look is chosen by seeing it. The option is the look's name in
  * `STYLE_TEMPLATE_SEEDS`, so the producer's `look` card matches it by name. Optional: left blank,
- * the producer chooses from the study, as before. The reference is asked after it, as media.
+ * the producer chooses from the study, as before. The reference is asked after it, as a link.
  */
 export const LOOK_QUESTION: SetupQuestion = {
-  key: "look",
+  key: LOOK_ANSWER_KEY,
   label: "How it looks",
   type: "choice",
   optional: true,
@@ -232,8 +253,9 @@ export interface MediaTemplate {
   /**
    * The setup questions the studio asks. At most three required and one optional; the engine refuses
    * a fifth. A niche template answers the niche and the reference by being the niche it is, so
-   * `niche()` drops both (ADR-1143) — a generative niche is left asking only the optional look —
-   * which is why this is a list and not a tuple.
+   * `niche()` drops both (ADR-1143) — a generative niche is left asking only the optional look, or
+   * nothing when `LOOK_ON_GENERATIVE` is off (ADR-NEW (pending owner decision)) — which is why this
+   * is a list and not a tuple.
    */
   questions: SetupQuestion[];
   /** Day one, as cards on the company board. */
@@ -255,14 +277,29 @@ export interface SeatOverride {
 }
 
 /**
+ * DOES A GENERATIVE NICHE ASK THE LOOK? — THE OWNER'S CALL, NOT YET MADE (ADR-NEW (pending owner
+ * decision)). ADR-1143 says a niche's look is its pinned skill's playbook; this PR's base templates
+ * ask the look from pictures. `true` (this PR as written): `ufc`/`history`/`animal-feast` keep the
+ * optional look question, and the producer's look card puts the operator's pick first. `false`: a
+ * generative niche asks nothing, and its look stays the niche skill's. Flip this one const; the
+ * tests cover both values through `nicheQuestions`.
+ */
+export const LOOK_ON_GENERATIVE: boolean = true;
+
+/**
  * The setup questions a niche no longer asks. A niche IS its niche, and its look is the niche skill's
  * playbook rather than a reference the operator models it on, so neither the `niche` choice nor the
- * `reference` question is relevant to a niche template (ADR-1143). `niche()` drops both by key: a
- * generative niche (`ufc`/`history`/`animal-feast`) is left asking only the optional look, and a clipping
- * niche keeps the `sources` it cannot cut without. The dropped reference becomes the crew's, found and
- * studied on day one exactly as it is when the operator leaves the question blank.
+ * `reference` question is relevant to a niche template (ADR-1143). Whether the optional look stays is
+ * `LOOK_ON_GENERATIVE` (ADR-NEW (pending owner decision)). A clipping niche keeps the `sources` it
+ * cannot cut without. The dropped reference becomes the crew's, found and studied on day one exactly
+ * as it is when the operator leaves the question blank.
  */
-const NICHE_ANSWERED: ReadonlySet<string> = new Set(["niche", REFERENCE_ANSWER_KEY]);
+export const nicheAnswered = (lookOnGenerative: boolean): ReadonlySet<string> =>
+  new Set(["niche", REFERENCE_ANSWER_KEY, ...(lookOnGenerative ? [] : [LOOK_ANSWER_KEY])]);
+
+/** A niche's questions: its base's, less the ones the niche answers by being itself. */
+export const nicheQuestions = (base: readonly SetupQuestion[], lookOnGenerative: boolean = LOOK_ON_GENERATIVE): SetupQuestion[] =>
+  base.filter((question) => !nicheAnswered(lookOnGenerative).has(question.key));
 
 /**
  * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
@@ -288,7 +325,7 @@ export function niche(
     name: over.name,
     title: over.title,
     description: over.description,
-    questions: base.questions.filter((question) => !NICHE_ANSWERED.has(question.key)),
+    questions: nicheQuestions(base.questions),
     agents: base.agents.map((seat) => {
       const extra = over.seats?.[seat.name] ?? {};
       // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.
@@ -361,10 +398,14 @@ export const CHANNEL_IDENTITY = "channel";
 export const CHANNEL_TIMEZONE = "America/New_York";
 
 /**
- * Where the cadence lives: on the board, not in the setup answers. The channel plan's note names it,
- * and a comment on that card changes it, so every session reads the same one.
+ * Where the cadence lives: on the board, not in the setup answers (ADR-NEW (pending owner decision)).
+ * The channel plan's note names it on a cadence line, and a comment on that card changes it, so every
+ * session — and the platform's "Posts this week" goal — reads the same one. A plan filed before the
+ * question was retired has no cadence line: the cadence is then the install's old `cadence` answer,
+ * else the slots that plan already names, and the first seat to notice writes it down as the line, so
+ * an upgraded channel keeps posting as it did instead of resetting to the default.
  */
-export const CADENCE_RULE = `How often the channel posts is not a setup answer: it is the cadence line of the channel plan — the note on the channel-plan card — or the newest comment on that card that names another cadence, and it is ${DEFAULT_CADENCE} until the operator asks for another. Asked in chat for another cadence, comment it on the channel-plan card as "Cadence: <one of ${Object.keys(CADENCE_SLOTS).join(", ")}>" and tell the operator it holds from the next free slot.`;
+export const CADENCE_RULE = `How often the channel posts is not a setup answer: it is the cadence line of the channel plan — the note on the channel-plan card — or the newest comment on that card that names another cadence, and it is ${DEFAULT_CADENCE} until the operator asks for another. If that note has no cadence line (a plan filed by an earlier version of this crew), the cadence is the \`cadence\` answer in project_context if there is one, else the cadence whose posting slots that note already names; comment it on the channel-plan card as "${cadenceLine("<that cadence>")}", once, and keep posting on it. Asked in chat for another cadence, comment it on the channel-plan card as "${cadenceLine(`<one of ${Object.keys(CADENCE_SLOTS).join(", ")}>`)}" and tell the operator it holds from the next free slot.`;
 
 /**
  * Every system opens with this. The engine also prepends its own `project_context` preamble to every
@@ -609,7 +650,7 @@ export const channelPlanCard = (firstAsk: string): Task =>
     key: "channel-plan",
     title: "File the channel plan, then ask the operator the question the form had no room for",
     assignee: PUBLISHER,
-    body: `Read project_context — what this channel is about — and the connected accounts (social.accounts; not offered means none is connected yet): they are where the channel posts. The first line of your note names them, or says no account is connected yet and nothing can be published until the operator connects one. One thing this channel needs is not in the setup answers: ${firstAsk} Write your own reading of it as the plan's second line, from project_context and your skills, and say it is your reading and not the operator's answer. The third line is the cadence, "Cadence: ${DEFAULT_CADENCE}", unless the operator has already asked for another. Then write the rest of the plan: the posting slots for that cadence (${SLOTS}), and what the first two weeks look like. Close this card with the plan as its note: the analyst's card waits on it. THEN, once it is closed and not before, ask the operator with ask_operator, once, to confirm the second line, and tell them in the same question that the channel posts ${DEFAULT_CADENCE} and they can change that in chat at any time. Comment their answer on this card, where every later session reads it.`,
+    body: `Read project_context — what this channel is about — and the connected accounts (social.accounts; not offered means none is connected yet): they are where the channel posts. The first line of your note names them, or says no account is connected yet and nothing can be published until the operator connects one. One thing this channel needs is not in the setup answers: ${firstAsk} Write your own reading of it as the plan's second line, from project_context and your skills, and say it is your reading and not the operator's answer. The third line is the cadence, on a line of its own written exactly "${cadenceLine("<cadence>")}" — the platform reads it there: the cadence the operator has already asked for, else a \`cadence\` answer in project_context if there is one (the channel was set up when the form still asked it), else "${cadenceLine(DEFAULT_CADENCE)}". Then write the rest of the plan: the posting slots for that cadence (${SLOTS}), and what the first two weeks look like. Close this card with the plan as its note: the analyst's card waits on it. THEN, once it is closed and not before, ask the operator with ask_operator, once, to confirm the second line, and tell them in the same question the cadence on the third line and that they can change it in chat at any time. Comment their answer on this card, where every later session reads it.`,
   });
 
 /** The analyst's two crons, the same on every template: the weekly report and the daily numbers. */

@@ -11,16 +11,20 @@ import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
   PLATFORM_TOOLS,
+  CADENCE_LINE_PATTERN,
   CADENCE_RULE,
   CADENCE_SLOTS,
+  cadenceLine,
   CARD_ORDER,
   CONTEXT_PREAMBLE,
   CREW_RULES,
   DEFAULT_CADENCE,
   FIRST_PIECE_KEY,
   lengthPhrase,
+  LOOK_ON_GENERATIVE,
   MAX_RENDER_SECONDS,
   nicheFixed,
+  nicheQuestions,
   ONE_RENDER_MICRO_USD,
   PLAN_MODEL_RULE,
   POST_TIME,
@@ -553,9 +557,37 @@ describe("the cadence", () => {
     for (const template of all) {
       expect(plan(template), template.name).not.toMatch(/project_context — what this channel is about and how often/);
       expect(plan(template), template.name).toContain(`"Cadence: ${DEFAULT_CADENCE}"`);
-      expect(plan(template), template.name).toMatch(/they can change that in chat/);
+      expect(plan(template), template.name).toMatch(/they can change it in chat/);
       for (const [cadence, days] of Object.entries(CADENCE_SLOTS)) expect(plan(template), template.name).toContain(`${cadence}: ${days}`);
     }
+  });
+
+  /**
+   * THE LINE THE PLATFORM READS. vetta-mono's "Posts this week" goal falls back to the channel plan's
+   * cadence line when an install has no `cadence` answer (fix/653-merge-ready), so the plan writes it
+   * on a line of its own in one fixed shape, and every cadence a seat may write parses back.
+   */
+  it("is written as a 'Cadence: <cadence>' line the platform can read back", () => {
+    for (const template of all) expect(plan(template), template.name).toContain(`"${cadenceLine("<cadence>")}"`);
+    for (const cadence of Object.keys(CADENCE_SLOTS)) {
+      const note = `connected: YouTube (@x)\nmy reading: calm, for night owls\n${cadenceLine(cadence)}\nslots…`;
+      expect(CADENCE_LINE_PATTERN.exec(note)?.[1], cadence).toBe(cadence);
+    }
+    expect(CADENCE_RULE).toContain(`"${cadenceLine("<one of daily, 3× a week, weekly>")}"`);
+  });
+
+  /**
+   * AN UPGRADED 2.1.3 INSTALL KEEPS ITS CADENCE. Its old `cadence` answer is no longer a question, and
+   * its channel plan (seeded once, never rewritten) has posting slots but no cadence line. The plan
+   * card carries the old answer forward on a new install, and every seat falls back to the old answer
+   * or the old plan's slots — never silently to 3× a week — and writes the line down once.
+   */
+  it("carries a 2.1.3 cadence answer forward instead of resetting to the default", () => {
+    for (const template of all) {
+      expect(plan(template), template.name).toMatch(/else a `cadence` answer in project_context if there is one[^"]*, else "Cadence: 3× a week"/);
+    }
+    expect(CADENCE_RULE).toMatch(/If that note has no cadence line \(a plan filed by an earlier version of this crew\), the cadence is the `cadence` answer in project_context if there is one, else the cadence whose posting slots that note already names/);
+    expect(CADENCE_RULE).toMatch(/comment it on the channel-plan card as "Cadence: <that cadence>", once/);
   });
 
   it("is read from the channel-plan card by every seat, and a change heard in chat is commented there", () => {
@@ -717,9 +749,36 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The generative niches' base asks the niche, the look and the reference, so the optional look is all that is left. */
-  it("leaves a generative niche asking only the optional look", () => {
-    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["look"]);
+  /**
+   * WHETHER A GENERATIVE NICHE ASKS THE LOOK IS THE OWNER'S CALL, NOT THIS REPO'S (ADR-NEW (pending
+   * owner decision)): one const, `LOOK_ON_GENERATIVE`. Both values are tested here, so flipping it is
+   * a one-line change that is already covered.
+   */
+  it("leaves a generative niche asking the optional look, or nothing, as LOOK_ON_GENERATIVE says", () => {
+    for (const name of SEGMENTED) {
+      expect(TEMPLATES[name].questions, name).toEqual(nicheQuestions(TEMPLATES[BASE_OF[name]!].questions, LOOK_ON_GENERATIVE));
+    }
+  });
+
+  it("with LOOK_ON_GENERATIVE on (this PR as written), asks a generative niche only the optional look", () => {
+    for (const name of SEGMENTED) {
+      const keys = nicheQuestions(TEMPLATES[BASE_OF[name]!].questions, true).map((q) => q.key);
+      expect(keys, name).toEqual(["look"]);
+    }
+  });
+
+  it("with LOOK_ON_GENERATIVE off, asks a generative niche nothing, and leaves its look to the niche skill", () => {
+    for (const name of SEGMENTED) expect(nicheQuestions(TEMPLATES[BASE_OF[name]!].questions, false), name).toEqual([]);
+  });
+
+  /** The toggle is about the look on generative niches only: the bases and the clipping niches ask the same either way. */
+  it("changes nothing but the generative niches' look question", () => {
+    for (const flag of [true, false]) {
+      for (const name of ["gaming-clips", "news", "sports"] as TemplateName[]) {
+        expect(nicheQuestions(TEMPLATES.clipping.questions, flag).map((q) => q.key), `${name} ${flag}`).toEqual(["sources", "visibility"]);
+      }
+    }
+    for (const name of ["faceless", "longform"] as TemplateName[]) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["niche", "look", "reference"]);
   });
 
   /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
@@ -744,13 +803,31 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The engine refuses more than four, and a form with none is no form. */
-  it("asks one to four questions on every template, uniquely keyed", () => {
-    for (const template of all) {
-      const keys = template.questions.map((q) => q.key);
-      expect(keys.length, template.name).toBeGreaterThanOrEqual(1);
-      expect(keys.length, template.name).toBeLessThanOrEqual(4);
-      expect(new Set(keys).size, template.name).toBe(keys.length);
+  /**
+   * The engine refuses more than four; keys are unique. Every form either has a required question
+   * (the bases and the clipping niches), or is a generative niche's, whose niche and reference the
+   * template answers — wholly optional (the look) with LOOK_ON_GENERATIVE on, empty with it off. A
+   * wholly-optional form anywhere else is a broken one. Checked for both values of the toggle.
+   */
+  it("asks at most four uniquely keyed questions, and at least one required unless it is a generative niche's", () => {
+    for (const flag of [true, false]) {
+      const forms = all.map((template) => ({
+        name: template.name,
+        questions: BASE_OF[template.name] === undefined ? template.questions : nicheQuestions(TEMPLATES[BASE_OF[template.name]!].questions, flag),
+      }));
+      for (const { name, questions } of forms) {
+        const keys = questions.map((q) => q.key);
+        const id = `${name} (LOOK_ON_GENERATIVE=${flag})`;
+        expect(keys.length, id).toBeLessThanOrEqual(4);
+        expect(new Set(keys).size, id).toBe(keys.length);
+        if (SEGMENTED.includes(name)) {
+          expect(keys, id).toEqual(flag ? ["look"] : []);
+          expect(questions.every((q) => q.optional === true), id).toBe(true);
+        } else {
+          expect(keys.length, id).toBeGreaterThanOrEqual(1);
+          expect(questions.some((q) => q.optional !== true), id).toBe(true);
+        }
+      }
     }
   });
 
