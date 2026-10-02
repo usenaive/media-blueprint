@@ -70,7 +70,7 @@ A card is woken at most three times. After that it is parked for the CEO.
   Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
   15–30, facts with sources, caption — and a video model only where the operator's context names one.
 - **producer**: one `generate_video` call — the shots in order as one take, 9:16, no model named, so
-  it renders with Seedance 2.5.
+  it renders with the first pinned model (Seedance 2.5). It ends its turn while the render runs.
   Creates the Publish card with the `fil_` id.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
@@ -169,16 +169,24 @@ a cron fire is not.
 - `analyst`: `social.post_metrics` `allow`;
 - `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
-- `generate_video` carries `config.models`, Seedance 2.5 first.
+- `generate_video` carries `config.models`, Seedance 2.5 first; on the segmented short-form niches'
+  producers, `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, 5 to 15 seconds a call);
+- `generate_speech` at `allow` on the segmented short-form niches' producers only.
 
 ## 8. Setup questions and `project_context`
 
-The studio asks two or three questions, never where to post and never how often; the answers land on the
-install; every seat reads them with `project_context`. The cadence lives on the board: the channel
-manager writes it into the channel plan — 3× a week by default — and tells the operator they can
-change it in chat. A seat asked in chat for another cadence comments it on the channel-plan card,
-and every later session reads it from that card's note and its newest such comment. The engine prepends its own "read the project context first" preamble to every
-template agent, and our `CONTEXT_PREAMBLE` adds what the answers are on a media channel.
+The studio asks at most three questions, never where to post and never how often; the answers land
+on the install; every seat reads them with `project_context`. A niche template asks fewer — it is its
+niche, and its reference is the niche skill's, so both are dropped and a generative niche asks only
+the optional look (ADR-1143). The engine prepends its own "read the project context first" preamble
+to every template agent, and our `CONTEXT_PREAMBLE` adds that the answers are the operator's. On a
+niche, every seat also reads that the niche is fixed by the template and its pinned skill, never
+asked (`nicheFixed`).
+
+The cadence lives on the board, not in the answers. The channel manager writes it into the channel
+plan — 3× a week by default — and tells the operator they can change it in chat. A seat asked in
+chat for another cadence comments it on the channel-plan card, and every later session reads it from
+that card's note and its newest such comment.
 
 ## 9. What the platform cannot express yet
 

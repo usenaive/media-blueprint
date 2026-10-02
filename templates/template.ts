@@ -13,7 +13,18 @@
 import type { AgentDecl, DefineInput, ScheduleDecl } from "@usenaive-sdk/blueprints";
 import { STYLE_TEMPLATE_SEEDS } from "../seed/style-templates.ts";
 
-export type TemplateName = "faceless" | "clipping" | "longform";
+export type TemplateName =
+  | "faceless"
+  | "clipping"
+  | "longform"
+  // Niche channel templates (ADR-1115): each reuses a base crew and pins its niche skill in every
+  // seat's `skills[]`. `gaming-clips`/`news`/`sports` reuse `clipping`; `ufc`/`history` reuse `faceless`.
+  | "gaming-clips"
+  | "news"
+  | "sports"
+  | "ufc"
+  | "history"
+  | "animal-feast";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -155,6 +166,14 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   faceless: "first-briefs",
   longform: "first-topic",
   clipping: "first-moments",
+  // A niche reuses its base crew's day-one cards verbatim (`niche()` below), so its first-piece card
+  // is seeded under the base's key — these values exist only to satisfy the record's key set.
+  "gaming-clips": "first-moments",
+  news: "first-moments",
+  sports: "first-moments",
+  ufc: "first-briefs",
+  history: "first-briefs",
+  "animal-feast": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -179,6 +198,14 @@ export const LONG_FORM_LENGTH: Length = { min: 60, max: 180 };
  */
 export const MAX_RENDER_SECONDS = 30;
 
+/**
+ * The longest and shortest one segment of a segmented short-form piece may run: `minimax/hailuo-3`,
+ * the segmented niches' default (`SEGMENT_VIDEO_MODELS`), renders 5 to 15 seconds a call and refuses
+ * any other length.
+ */
+export const SEGMENT_MAX_SECONDS = 15;
+export const SEGMENT_MIN_SECONDS = 5;
+
 /** How many `generate_video` calls a piece of this length is, at worst. */
 export const segmentsOf = (length: Length): number => Math.ceil(length.max / MAX_RENDER_SECONDS);
 
@@ -202,10 +229,88 @@ export interface MediaTemplate {
    * the last is always the publisher.
    */
   pipeline: string[];
-  /** One to four, at most three of them required; the engine refuses a fifth. */
-  questions: [SetupQuestion] | [SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion] | [SetupQuestion, SetupQuestion, SetupQuestion, SetupQuestion];
+  /**
+   * The setup questions the studio asks. At most three required and one optional; the engine refuses
+   * a fifth. A niche template answers the niche and the reference by being the niche it is, so
+   * `niche()` drops both (ADR-1143) — a generative niche is left asking only the optional look —
+   * which is why this is a list and not a tuple.
+   */
+  questions: SetupQuestion[];
   /** Day one, as cards on the company board. */
   tasks: Task[];
+}
+
+/**
+ * What a niche changes on one seat of its base crew. Tools are added at `allow` over the base's
+ * explicit, default-deny toolset — every other tool stays denied by name; skills are appended after
+ * the base's; `brief` is inserted after the seat's own brief, before `CREW_RULES`. Nothing is taken
+ * away: a niche extends a seat, and the base template is left as it was.
+ */
+export interface SeatOverride {
+  tools?: string[];
+  skills?: string[];
+  brief?: string;
+  /** Replaces the seat's `generate_video` allow-list, first is the default; the seat must render already. */
+  videoModels?: readonly string[];
+}
+
+/**
+ * The setup questions a niche no longer asks. A niche IS its niche, and its look is the niche skill's
+ * playbook rather than a reference the operator models it on, so neither the `niche` choice nor the
+ * `reference` question is relevant to a niche template (ADR-1143). `niche()` drops both by key: a
+ * generative niche (`ufc`/`history`/`animal-feast`) is left asking only the optional look, and a clipping
+ * niche keeps the `sources` it cannot cut without. The dropped reference becomes the crew's, found and
+ * studied on day one exactly as it is when the operator leaves the question blank.
+ */
+const NICHE_ANSWERED: ReadonlySet<string> = new Set(["niche", REFERENCE_ANSWER_KEY]);
+
+/**
+ * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
+ * seats, pipeline and day-one cards — with two editorial overrides (`name`, `title`, `description`),
+ * fewer questions (the niche and the reference are the niche's, not the operator's — ADR-1143), a
+ * line after every seat's preamble saying so (`nicheFixed`), and one load-bearing change:
+ * `naive/channel-template-<niche>` is appended to every seat's `skills[]`, so the niche playbook is
+ * the channel's standard from the first session, read through progressive disclosure. No new crew, no new card: a template is data, and a niche is the least of it. Where the
+ * niche's playbook needs a seat to do more than the base seat can (a short-form niche that renders
+ * segments and joins them), `seats` extends that seat. The skill itself lives in the platform
+ * catalogue (`skills/` in vetta-mono), published by `scripts/publish-skills.mjs`.
+ */
+export function niche(
+  base: MediaTemplate,
+  over: { name: TemplateName; title: string; description: string; skill: string; seats?: Record<string, SeatOverride> },
+): MediaTemplate {
+  const ref = `naive/${over.skill}`;
+  for (const name of Object.keys(over.seats ?? {})) {
+    if (!base.agents.some((seat) => seat.name === name)) throw new Error(`niche "${over.name}" extends seat "${name}", which ${base.name} does not have`);
+  }
+  return {
+    ...base,
+    name: over.name,
+    title: over.title,
+    description: over.description,
+    questions: base.questions.filter((question) => !NICHE_ANSWERED.has(question.key)),
+    agents: base.agents.map((seat) => {
+      const extra = over.seats?.[seat.name] ?? {};
+      // A seat that had no skill was not granted `read_skill` (see `agent()`); pinning one requires it.
+      const allowed: [string, NonNullable<AgentDecl["tools"]>["configs"][string]][] = ["read_skill", ...(extra.tools ?? [])].map((name) => [name, { enabled: true, permission: "allow" as const }]);
+      const inherited = seat.system ?? "";
+      if (!inherited.startsWith(CONTEXT_PREAMBLE)) throw new Error(`seat "${seat.name}" has no preamble to say the niche after`);
+      if (extra.brief !== undefined && !inherited.endsWith(CREW_RULES)) throw new Error(`seat "${seat.name}" has no crew rules to insert a brief before`);
+      // The niche is the template's, never a setup answer: say so right after the preamble.
+      const system = `${CONTEXT_PREAMBLE} ${nicheFixed(ref)}${inherited.slice(CONTEXT_PREAMBLE.length)}`;
+      const video = seat.tools!.configs["generate_video"];
+      if (extra.videoModels !== undefined) {
+        if (video?.enabled !== true) throw new Error(`seat "${seat.name}" does not render, so it takes no video models`);
+        allowed.push(["generate_video", { ...video, config: { models: extra.videoModels } }]);
+      }
+      return {
+        ...seat,
+        system: extra.brief === undefined ? system : `${system.slice(0, -CREW_RULES.length)}${extra.brief} ${CREW_RULES}`,
+        skills: [...(seat.skills ?? []), ...(extra.skills ?? []), ref],
+        tools: { default_config: seat.tools!.default_config, configs: { ...seat.tools!.configs, ...Object.fromEntries(allowed) } },
+      };
+    }),
+  };
 }
 
 /**
@@ -263,16 +368,19 @@ export const CADENCE_RULE = `How often the channel posts is not a setup answer: 
 
 /**
  * Every system opens with this. The engine also prepends its own `project_context` preamble to every
- * template agent; this one says what the answers are on a media channel.
+ * template agent; this one says whose the answers are. A niche adds `nicheFixed` after it.
  */
-export const CONTEXT_PREAMBLE = `You are one seat of a video channel's crew. The setup answers in project_context are the operator's — the niche and any reference or sources; never invent one, and when one you need is missing, ask the operator once with ask_operator rather than filling it in. ${CADENCE_RULE}`;
+export const CONTEXT_PREAMBLE = `You are one seat of a video channel's crew. The setup answers in project_context are the operator's; never invent one, and when one you need is missing, ask the operator once with ask_operator rather than filling it in. ${CADENCE_RULE}`;
+
+/** What a niche seat reads after the preamble: the niche is no answer to look for or ask (ADR-1143). */
+export const nicheFixed = (skill: string): string => `This channel's niche is fixed by its template and its pinned skill, ${skill}; it is not a setup answer, so never ask for it.`;
 
 /**
  * Every system ends with this: how the board works, where files land, and the one way out. A rule
  * every seat needs is appended here so no seat can be written without it.
  */
 export const CREW_RULES =
-  "How this crew works. The company board is the channel's pipeline and memory: each piece is a chain of cards, one seat each, and each card's body is the brief for the seat it is assigned to. Read the card you were woken on with board_read, and claim it (board_write update, doing) before you spend. Hand on by board_write create: the next card, its title and body as your brief says, blocked_by the card you were woken on. A Recurring timer card is never a blocker: the cards a timer starts wait on nothing. Then close yours done, with a note naming what you made and the new card's id. Work you cannot finish: comment what is missing, then close your card done, with a note that starts STOPPED:, and hand nothing on — never move it to blocked, which the board reopens and wakes you on again. When a card you waited on closed STOPPED, stop the same way. A file you make is a fil_ id: write it in your note and your reply; it appears in the operator's Media gallery on its own. Only the channel-manager publishes, and every post waits for the operator's approval; no other seat posts anywhere. session_spend reads what this session was charged: quote it, never estimate. The tools offered this turn are the complete list: a tool or model you lack, request it once with request_tools, then wait; a fact only the operator has, ask once with ask_operator. Never describe a video you did not render or a post you did not make.";
+  "How this crew works. The company board is the channel's pipeline and memory: each piece is a chain of cards, one seat each, and each card's body is the brief for the seat it is assigned to. Read the card you were woken on with board_read, and claim it (board_write update, doing) before you spend. Hand on by board_write create: the next card, its title and body as your brief says, blocked_by the card you were woken on — but where a card already waits on yours, update that one instead of creating a second. A Recurring timer card is never a blocker: the cards a timer starts wait on nothing. Then close yours done, with a note naming what you made and the new card's id. Work you cannot finish: comment what is missing, then close your card done, with a note that starts STOPPED:, and hand nothing on — never move it to blocked, which the board reopens and wakes you on again. When a card you waited on closed STOPPED, stop the same way. A file you make is a fil_ id: write it in your note and your reply; it appears in the operator's Media gallery on its own. Only the channel-manager publishes, and every post waits for the operator's approval; no other seat posts anywhere. session_spend reads what this session was charged: quote it, never estimate. The tools offered this turn are the complete list: a tool or model you lack, request it once with request_tools, then wait; a fact only the operator has, ask once with ask_operator. Never describe a video you did not render or a post you did not make.";
 
 /**
  * What a day-one card body ends with. The tick wakes a seat with the card's title and a pointer to
@@ -348,15 +456,22 @@ export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
 export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
 
 /**
+ * The segmented short-form niches' video models (ADR-1120): Hailuo 3 first — it renders the
+ * restyled fight frames Seedance refuses, at about 0.6× Seedance's price — and Seedance 2.5 allowed.
+ * Hailuo takes at most `SEGMENT_MAX_SECONDS` a call, which the segmented scriptwriter's brief caps.
+ */
+export const SEGMENT_VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "bytedance/seedance-2.5"];
+
+/**
  * How a plan and a render treat the video model. The default path names none: `generate_video`
- * then renders with the first of `VIDEO_MODELS`, Seedance 2.5 — pinned here, and the platform's own
- * default too. A seat names another only when the operator's setup or context explicitly asks for
- * it, so no seat chooses, compares or shops for a model on its own.
+ * then renders with the first of the seat's pinned models — `VIDEO_MODELS`, or a niche's own — so
+ * the rules name no model. A seat names another only when the operator's setup or context
+ * explicitly asks for it, so no seat chooses, compares or shops for a model on its own.
  */
 export const PLAN_MODEL_RULE =
-  "no video model — leave it out, and the render uses the channel's default, Seedance 2.5 — unless project_context explicitly names another, and then that one, word for word";
+  "no video model — leave it out, and the render uses the channel's default — unless project_context explicitly names another, and then that one, word for word";
 export const RENDER_MODEL_RULE =
-  "no model argument, so it renders with the default, Seedance 2.5 — unless the plan names a model because project_context explicitly asked for it, and then that one";
+  "no model argument, so it renders with the channel's default — unless the plan names a model because project_context explicitly asked for it, and then that one";
 
 /** Held by every seat: `ask_operator` and `request_tools` can only ever be `ask`. */
 const ALWAYS: readonly string[] = ["ask_operator", "request_tools"];
@@ -476,7 +591,7 @@ export const channelManager = (): AgentDecl =>
     required: true,
     description:
       `Runs the channel: publishes each finished piece on the channel's cadence — ${DEFAULT_CADENCE} until you ask in chat for another — with every post waiting for your approval, and reads the weekly report.`,
-    brief: `You are the channel manager: the operator's lead and the only seat that publishes. A Publish card wakes you: its body names the video (a fil_ id), the caption and the card it came from. Read the plan behind it with board_read, and fix the caption where it drifts from the plan or the channel's voice (\`naive/caption-writing\`). A post id already in the card's comments is a post already made: never make it again. The channel posts to every account connected to it, and nowhere else: read them with social.accounts. If social.post is not offered, or no account is connected, ask the operator once with ask_operator to connect one, and wait — never request_tools for a social tool. Then call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the connected accounts' platforms, by the ids social.accounts gives. YouTube goes on its own call with visibility — lower-case — the context's visibility answer where it gives one, else unlisted — because every other network refuses a visibility; the rest go together on a second call without one. scheduled_at is the next free slot for the channel plan's cadence (${SLOTS}), written with that date's UTC offset, at least a day from now — an approved call goes out exactly as filed — and not a slot another Publish card's note already took. Each call waits for the operator's approval on the platform. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once with ask_operator what to change. Close the card done with each post id and when it goes out. A Weekly report card wakes you too: apply its advice on captions and posting times, and close it noting what you changed. Asked in chat, answer from the board, never from memory, and route new work as a card for the seat it belongs to.`,
+    brief: `You are the channel manager: the operator's lead and the only seat that publishes. A Publish card wakes you: its body names the video (a fil_ id), the caption and its source card. Read the plan behind it, and fix the caption where it drifts from the plan or the channel's voice (\`naive/caption-writing\`). A post id already in the card's comments is a post already made: never make it again. The channel posts to every account connected to it, and nowhere else: read them with social.accounts. If social.post is not offered, or no account is connected: where the channel-plan card's comments say the operator will connect none, close this card "Not posted:" and do not ask again; else ask the operator once with ask_operator to connect one, comment the answer on the channel-plan card, and wait — never request_tools for a social tool. Then call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the connected accounts' platforms, by the ids social.accounts gives. YouTube goes on its own call with visibility — lower-case — the context's visibility answer where it gives one, else unlisted, since no other network takes a visibility; the rest go together on a second call without one. scheduled_at is the next free slot for the channel plan's cadence (${SLOTS}), written with that date's UTC offset, at least a day from now, and not a slot another Publish card's note already took. Each call waits for the operator's approval. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once what to change. Close the card done with each post id and when it goes out. A Weekly report card wakes you too: apply its advice on captions and posting times, and close it noting what changed. Asked in chat, answer from the board; route new work as a card for its seat.`,
     // Read-only: where it posts, whether a post went out, how posts did, and what a render looks like.
     tools: ["social.accounts", "social.status", "social.post_metrics", "view_image"],
     ask: ["social.post"],
@@ -494,7 +609,7 @@ export const channelPlanCard = (firstAsk: string): Task =>
     key: "channel-plan",
     title: "File the channel plan, then ask the operator the question the form had no room for",
     assignee: PUBLISHER,
-    body: `Read project_context — what this channel is about — and the connected accounts (social.accounts; not offered means none is connected yet): they are where the channel posts. The first line of your note names them, or says no account is connected yet and nothing can be published until the operator connects one. The setup form is short, so one thing this channel needs is not in there: ${firstAsk} Write your own reading of it as the plan's second line, from the niche and the reference, and say it is your reading and not the operator's answer. The third line is the cadence, "Cadence: ${DEFAULT_CADENCE}", unless the operator has already asked for another. Then write the rest of the plan: the posting slots for that cadence (${SLOTS}), and what the first two weeks look like. Close this card with the plan as its note: the analyst's card waits on it. THEN, once it is closed and not before, ask the operator with ask_operator, once, to confirm the second line, and tell them in the same question that the channel posts ${DEFAULT_CADENCE} and they can change that in chat at any time. Comment their answer on this card, where every later session reads it.`,
+    body: `Read project_context — what this channel is about — and the connected accounts (social.accounts; not offered means none is connected yet): they are where the channel posts. The first line of your note names them, or says no account is connected yet and nothing can be published until the operator connects one. One thing this channel needs is not in the setup answers: ${firstAsk} Write your own reading of it as the plan's second line, from project_context and your skills, and say it is your reading and not the operator's answer. The third line is the cadence, "Cadence: ${DEFAULT_CADENCE}", unless the operator has already asked for another. Then write the rest of the plan: the posting slots for that cadence (${SLOTS}), and what the first two weeks look like. Close this card with the plan as its note: the analyst's card waits on it. THEN, once it is closed and not before, ask the operator with ask_operator, once, to confirm the second line, and tell them in the same question that the channel posts ${DEFAULT_CADENCE} and they can change that in chat at any time. Comment their answer on this card, where every later session reads it.`,
   });
 
 /** The analyst's two crons, the same on every template: the weekly report and the daily numbers. */

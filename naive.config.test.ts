@@ -39,7 +39,18 @@ describe("naive.config", () => {
     expect(declaration.title).toBe(ACTIVE.title);
     expect(declaration.description).toBe(ACTIVE.description);
     expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
-    expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual(["Clipping channel", "Faceless channel", "Long-form channel"]);
+    expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual([
+      // The base three, then the five niche channel templates (ADR-1115).
+      "AI Eating Animal Channel",
+      "AI History Channel",
+      "AI UFC Channel",
+      "Clipping channel",
+      "Faceless channel",
+      "Gaming Clips Channel",
+      "Long-form channel",
+      "News Clips Channel",
+      "Sports Clips Channel",
+    ]);
     for (const one of Object.values(TEMPLATES)) {
       expect(one.title.length, one.name).toBeLessThanOrEqual(80);
       expect(one.description.length, one.name).toBeLessThanOrEqual(280);

@@ -17,7 +17,8 @@ There is no hosted app. The crew runs on the platform's own screens:
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three templates**. A template is a crew:
+The repo carries **three base templates**, plus six niche channel templates that reuse them (below).
+A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
 |---|---|---|---|---|
@@ -27,6 +28,37 @@ The repo carries **three templates**. A template is a crew:
 
 The id in the first column is stored on every install. It never changes. The studio shows the
 title, the one-line description, and the networks each template is made for (`PLATFORMS`) as icons.
+
+### Niche channel templates
+
+On top of the base three, the repo carries **six niche channel templates**. Each is its base crew
+with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
+pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
+[`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card.
+The niche's own content is the skill, which lives in the platform catalogue, not this repo.
+
+Where a niche's playbook needs a seat to do more than its base seat, `niche()` takes `seats`, which
+**extends** that seat: tools added at `allow` (every other tool stays denied by name), skills
+appended, and a brief clause before the crew's rules. The base template is left as it was. The three
+short-form niches use it (`SEGMENTED_SHORT_FORM` in [`templates/faceless.ts`](templates/faceless.ts)):
+image-to-video cannot cut, so a piece is a start, a middle and an end rendered as segments and joined.
+Their scriptwriter plans the segments, 5 to 15 seconds each and all on one model, and their
+producer gets `bash`, `fetch_file`, `publish_file`, `generate_speech` and `naive/video-assembly` to
+render each one, join them with ffmpeg and burn in the hook and label (the skill's step 5b), still
+15–30 seconds in all. It renders on `minimax/hailuo-3` first, `bytedance/seedance-2.5` allowed
+(`SEGMENT_VIDEO_MODELS`, `videoModels` on the seat).
+
+| Template | Shown as | Reuses | Pins the skill |
+|---|---|---|---|
+| `gaming-clips` | Gaming Clips Channel | `clipping` | `naive/channel-template-gaming-clips` |
+| `news` | News Clips Channel | `clipping` | `naive/channel-template-news` |
+| `sports` | Sports Clips Channel | `clipping` | `naive/channel-template-sports` |
+| `ufc` | AI UFC Channel | `faceless` | `naive/channel-template-ufc` |
+| `history` | AI History Channel | `faceless` | `naive/channel-template-history` |
+| `animal-feast` | AI Eating Animal Channel | `faceless` | `naive/channel-template-animal-feast` |
+
+A niche is picked at company creation like any other template; its crew carries the niche skill from
+the first session. It publishes, installs and switches through the exact paths the base three do.
 
 ## 🚀 Get started
 
@@ -164,12 +196,17 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks these before anything is provisioned. The engine refuses a fifth.
+The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
+template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
+niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking only
+the look, which may be skipped; a clipping niche keeps the sources it cannot cut without.
 
 | Template | Questions |
 |---|---|
 | `faceless`, `longform` | What it's about · How it looks (optional) · Show us what you like (optional) |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) |
+| `ufc`, `history`, `animal-feast` | How it looks (optional) |
+| `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) |
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
 manager asks you for one when none is connected. `faceless` and `longform` do not ask the
@@ -214,7 +251,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - Each fire has its own budget, inside its seat's ceiling.
 - `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
   allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
-  or context explicitly ask for another.
+  or context explicitly ask for another. The segmented short-form niches (`ufc`, `history`,
+  `animal-feast`) pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions
@@ -230,7 +268,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - `social.post_metrics`: `allow` on `analyst` and `channel-manager`.
 - `company.set_timezone`, `company.set_logo` and `apps.request_access` are denied on every seat.
 - Every other built-in and platform tool (email, legal, wallet, card, connections) is denied by
-  name. `generate_speech` and `transcribe_audio` are not granted to any seat.
+  name. `generate_speech` only on the segmented niches' producers, to voice a silent join;
+  `transcribe_audio` on no seat.
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and the Long Form writer
   sample frames; the Long Form producer joins segments.

@@ -108,7 +108,7 @@ export const LONGFORM: MediaTemplate = {
   ],
 
   tasks: [
-    channelPlanCard("the channel's tone and who it is for, in one line — the setup form asked for the niche and not for this."),
+    channelPlanCard("the channel's tone and who it is for, in one line."),
     referenceStudyCard("writer", LONG_FORM_LENGTH),
     lookCard("writer", " A look is held across every segment of every piece: two segments in different looks read as two videos, so name ONE primary look and treat a second as a fallback."),
     task({

@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
@@ -20,6 +20,7 @@ import {
   FIRST_PIECE_KEY,
   lengthPhrase,
   MAX_RENDER_SECONDS,
+  nicheFixed,
   ONE_RENDER_MICRO_USD,
   PLAN_MODEL_RULE,
   POST_TIME,
@@ -27,22 +28,54 @@ import {
   REFERENCE_RULE,
   RENDER_MODEL_RULE,
   renderMicroUsd,
+  SEGMENT_MAX_SECONDS,
+  SEGMENT_MIN_SECONDS,
+  SEGMENT_VIDEO_MODELS,
   segmentsOf,
   VIDEO_MODELS,
   words,
 } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
-/** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. */
+/** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. The last
+ * five are the niche channel-template skills a niche template pins in every seat (ADR-1115). */
 const CATALOGUE = [
   "naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/channel-report",
   "naive/video-trend-brief", "naive/reference-teardown", "naive/long-form-arc", "naive/video-assembly",
+  "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
+  "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
 ];
 
 const all = Object.values(TEMPLATES);
+/** The short-form niches whose playbook renders segments and joins them (`SEGMENTED_SHORT_FORM`). */
+const SEGMENTED: TemplateName[] = ["ufc", "history", "animal-feast"];
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
 const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ template, agent, id: `${template.name}/${agent.name}` })));
+
+/**
+ * Each niche template (ADR-1115) mirrors a base crew, so its per-template expectations ARE the
+ * base's. `BASE_OF` maps each niche to the crew it reuses; the helpers expand a base-keyed map or an
+ * id set to cover the niches too, so a structural assertion holds for all eight templates at once.
+ */
+const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
+  "gaming-clips": "clipping", news: "clipping", sports: "clipping", ufc: "faceless", history: "faceless",
+  "animal-feast": "faceless",
+};
+const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
+  const out = { ...base } as Record<TemplateName, T>;
+  for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] = base[from]!;
+  return out;
+};
+/** A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base. */
+const unniched = (template: MediaTemplate, system: string): string =>
+  BASE_OF[template.name] === undefined ? system : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "");
+/** Expand a set of `template/seat` ids to include the same seats on each niche that mirrors the base. */
+const withNicheIds = (ids: readonly string[]): Set<string> => {
+  const out = new Set(ids);
+  for (const [niche, from] of Object.entries(BASE_OF)) for (const id of ids) if (id.startsWith(`${from}/`)) out.add(`${niche}/${id.slice(from.length + 1)}`);
+  return out;
+};
 
 /** The platform's own rule for one tool (`permissionOf`, core `schema/agent.ts`), written out. */
 const permissionFor = (template: MediaTemplate, agent: string, tool: string): string => {
@@ -74,7 +107,7 @@ describe("the crews", () => {
     for (const { template, agent, id } of everySeat) {
       expect(agent.role, id).toMatch(/\S/);
       expect(agent.description, id).toMatch(/\S/);
-      const system = agent.system ?? "";
+      const system = unniched(template, agent.system ?? "");
       expect(system.startsWith(CONTEXT_PREAMBLE), id).toBe(true);
       expect(system.endsWith(CREW_RULES), id).toBe(true);
       const own = system.slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length).replace(REFERENCE_RULE, "");
@@ -150,7 +183,7 @@ describe("the toolsets", () => {
 
   /** Every seat that judges a picture can open one: the look, a frame, a thumbnail, a render. */
   it("lets every seat that judges visuals look at an image", () => {
-    const LOOKERS = new Set([
+    const LOOKERS = withNicheIds([
       "faceless/channel-manager", "faceless/producer", "faceless/trend-scout", "faceless/scriptwriter",
       "longform/channel-manager", "longform/researcher", "longform/writer", "longform/producer",
       "clipping/channel-manager", "clipping/clipper", "clipping/scout", "clipping/caption-editor",
@@ -160,10 +193,12 @@ describe("the toolsets", () => {
     }
   });
 
-  /** The audio provider is broken: no seat is handed a tool that cannot work. */
-  it("grants no seat speech or transcription", () => {
+  /** Speech only where a silent join needs a voiceover (the segmented producers); transcription nowhere. */
+  it("grants speech to the segmented producers only, and transcription to no seat", () => {
+    const SPEAKERS = new Set(SEGMENTED.map((name) => `${name}/producer`));
     for (const { template, agent, id } of everySeat) {
-      for (const tool of ["generate_speech", "transcribe_audio"]) expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
+      expect(permissionFor(template, agent.name, "generate_speech"), id).toBe(SPEAKERS.has(id) ? "allow" : "deny");
+      expect(permissionFor(template, agent.name, "transcribe_audio"), id).toBe("deny");
     }
   });
 
@@ -208,7 +243,8 @@ describe("the toolsets", () => {
 
   /** A shell provisions and bills a machine; each seat that holds one is a decision written here. */
   it("gives a shell only to the seats that sample frames or join segments", () => {
-    const SHELL_SEATS = new Set(["faceless/scriptwriter", "longform/writer", "longform/producer"]);
+    // The segmented short-form niches extend the producer with a shell to join their segments.
+    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "longform/writer", "longform/producer", ...SEGMENTED.map((name) => `${name}/producer`)]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "bash"), id).toBe(SHELL_SEATS.has(id) ? "allow" : "deny");
       for (const sandbox of ["read", "write", "edit", "ls", "find"]) expect(permissionFor(template, agent.name, sandbox), id).toBe("deny");
@@ -231,10 +267,11 @@ describe("the toolsets", () => {
    */
   it("pins the video models on every seat that renders, cheapest measured first, and on no other", () => {
     expect(VIDEO_MODELS[0]).toBe("bytedance/seedance-2.5");
-    for (const { agent, id } of everySeat) {
+    for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      expect(video.config, id).toEqual({ models: VIDEO_MODELS });
+      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`); every other renderer the base's.
+      expect(video.config, id).toEqual({ models: SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
@@ -244,11 +281,11 @@ describe("the toolsets", () => {
   });
 
   /**
-   * SEEDANCE 2.5 BY DEFAULT. The producers render with it without anyone asking: it is first in the
-   * pinned allow-list, and no brief, card or fire tells a seat to choose, compare or name a model.
+   * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
+   * Seedance 2.5 on the base crews — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
-  it("renders with Seedance 2.5 by default, and never has a seat pick a video model", () => {
+  it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
       const producer = seat(template, "producer");
       expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("bytedance/seedance-2.5");
@@ -256,10 +293,10 @@ describe("the toolsets", () => {
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
     expect(seat(TEMPLATES.longform, "writer").system).toContain(PLAN_MODEL_RULE);
-    expect(RENDER_MODEL_RULE).toMatch(/no model argument.*Seedance 2\.5.*unless.*project_context explicitly/);
+    expect(RENDER_MODEL_RULE).toMatch(/no model argument.*the channel's default.*unless.*project_context explicitly/);
     for (const template of all) {
       for (const text of everyPrompt(template)) {
-        expect(text, template.name).not.toMatch(/\bveo\b|pick a model|choose a model|the plan's model|the video model;|video model:/i);
+        expect(text, template.name).not.toMatch(/\bveo\b|seedance|hailuo|pick a model|choose a model|the plan's model|the video model;|video model:/i);
       }
     }
   });
@@ -288,7 +325,7 @@ describe("the board", () => {
    * and voice, then starts ONE piece — whose own chain of cards takes it to the approval card.
    */
   it("seeds day one as a chain: set-up first, then one piece behind it", () => {
-    const chains: Record<TemplateName, Record<string, string[]>> = {
+    const chains: Record<TemplateName, Record<string, string[]>> = withNiches<Record<string, string[]>>({
       faceless: {
         "channel-plan": [],
         "reference-study": [],
@@ -312,7 +349,7 @@ describe("the board", () => {
         "report-frame": ["channel-plan"],
         "first-moments": ["source-check", "caption-style"],
       },
-    };
+    });
     for (const template of all) {
       expect(Object.fromEntries(template.tasks.map((task) => [task.key, task.blocked_by ?? []])), template.name).toEqual(chains[template.name]);
       // Declaration order is dependency order: a blocker declared after its card is refused at apply.
@@ -362,11 +399,11 @@ describe("the board", () => {
    * before it closes. The chain ends at the publisher.
    */
   it("moves each piece along a chain of cards, head to publisher", () => {
-    const PIPELINES: Record<TemplateName, { seats: string[]; cards: string[] }> = {
+    const PIPELINES: Record<TemplateName, { seats: string[]; cards: string[] }> = withNiches<{ seats: string[]; cards: string[] }>({
       faceless: { seats: ["trend-scout", "scriptwriter", "producer", PUBLISHER], cards: ["Plan", "Render", "Publish"] },
       longform: { seats: ["researcher", "writer", "producer", PUBLISHER], cards: ["Plan", "Render", "Publish"] },
       clipping: { seats: ["scout", "clipper", "caption-editor", PUBLISHER], cards: ["Cut", "Caption", "Publish"] },
-    };
+    });
     for (const template of all) {
       const { seats, cards } = PIPELINES[template.name];
       expect(template.pipeline, template.name).toEqual(seats);
@@ -423,6 +460,11 @@ describe("the board", () => {
     }
   });
 
+  /** A seat that created its hand-off card once and is woken again must not file a duplicate. */
+  it("updates the card that already waits on yours instead of creating a second", () => {
+    expect(CREW_RULES).toMatch(/where a card already waits on yours, update that one instead of creating a second/);
+  });
+
   it("tells the crew where a file lands and who publishes", () => {
     expect(CREW_RULES).toMatch(/fil_/);
     expect(CREW_RULES).toMatch(/Media gallery/);
@@ -435,7 +477,7 @@ describe("publishing", () => {
 
   it("is the channel manager's, from a Publish card, with the rendered file", () => {
     expect(PUBLISHER).toBe("channel-manager");
-    for (const template of all) expect(seat(template, PUBLISHER).system).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
+    for (const template of all) expect(unniched(template, seat(template, PUBLISHER).system ?? "")).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
     expect(brief()).toMatch(/A Publish card wakes you/);
     expect(brief()).toMatch(/social\.post.*file_ids/s);
   });
@@ -464,8 +506,15 @@ describe("publishing", () => {
 
   /** No connected account means no social tools at all; asking for the tool changes nothing. */
   it("asks the operator to connect an account rather than requesting a social tool", () => {
-    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected, ask the operator once with ask_operator to connect one/);
+    expect(brief()).toMatch(/If social\.post is not offered, or no account is connected: where the channel-plan card's comments say the operator will connect none/);
+    expect(brief()).toMatch(/else ask the operator once with ask_operator to connect one/);
     expect(brief()).toMatch(/never request_tools for a social tool/);
+  });
+
+  /** The operator who already said "no account" is not asked again on every Publish card. */
+  it("reads the operator's earlier answer before asking to connect an account, and does not ask again", () => {
+    expect(brief()).toMatch(/close this card "Not posted:" and do not ask again/);
+    expect(brief()).toMatch(/connect one, comment the answer on the channel-plan card, and wait/);
     for (const template of all) {
       expect(seat(template, "analyst").schedules![1]!.input, template.name).toMatch(/If social\.post_metrics is not offered, no account is connected yet/);
     }
@@ -554,6 +603,21 @@ describe("analytics", () => {
  * button and no `channel.*` tool — a seat told to use any of them spends its turn looking.
  */
 describe("the prompts", () => {
+  /** A render lands on its own; a seat that sleeps between polls pays for every second of it. */
+  it("has the short-form producer end its turn while a render runs, never sleep or poll", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) expect(seat(TEMPLATES[name], "producer").system, name).toMatch(/end your turn, and never sleep or poll/);
+  });
+
+  /** Research is the scriptwriter's open-ended spend: it starts from the teardown and has a stop. */
+  it("has the scriptwriter read the teardown first and stop researching past $1 of session_spend", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const brief = seat(TEMPLATES[name], "scriptwriter").system ?? "";
+      expect(brief, name).toMatch(/FIRST read the teardown/);
+      expect(brief, name).toMatch(/Then open the exemplars the brief names/);
+      expect(brief, name).toMatch(/stop researching once session_spend reads past \$1/);
+    }
+  });
+
   const GONE = [/dashboard/i, /Post now/i, /\bchannel\.[a-z_]+/, /pending post/i, /Approve button/i, /Approvals screen/i, /\bqueue row/i, /\bhandoff/i];
   it("never mention the dashboard, Post now, a pending post or a channel tool", () => {
     const offences: string[] = [];
@@ -596,7 +660,7 @@ describe("the channel's clock", () => {
 
   /** How often the head starts pieces is a price: a long-form piece renders six segments. */
   it("starts pieces on each template at the cadence its render price can carry", () => {
-    const DAYS: Record<TemplateName, string> = { faceless: "1,4", longform: "1,3,5", clipping: "*" };
+    const DAYS: Record<TemplateName, string> = withNiches<string>({ faceless: "1,4", longform: "1,3,5", clipping: "*" });
     for (const template of all) {
       const [fire] = seat(template, template.pipeline[0]!).schedules!;
       expect(fields(fire!.cron)[4], template.name).toBe(DAYS[template.name]);
@@ -619,11 +683,14 @@ describe("the channel's clock", () => {
 });
 
 describe("the setup questions", () => {
-  it("asks one per template that must be answered, and at most two that may be skipped", () => {
-    const REQUIRED: Record<TemplateName, string[]> = { faceless: ["niche"], longform: ["niche"], clipping: ["sources"] };
-    for (const template of all) {
-      expect(template.questions.filter((q) => q.optional !== true).map((q) => q.key), template.name).toEqual(REQUIRED[template.name]);
-      expect(template.questions.length, template.name).toBeLessThanOrEqual(4);
+  const BASES: TemplateName[] = ["faceless", "longform", "clipping"];
+
+  it("asks one per base template that must be answered, and at most two that may be skipped", () => {
+    const REQUIRED: Record<string, string[]> = { faceless: ["niche"], longform: ["niche"], clipping: ["sources"] };
+    for (const name of BASES) {
+      const template = TEMPLATES[name];
+      expect(template.questions.filter((q) => q.optional !== true).map((q) => q.key), name).toEqual(REQUIRED[name]);
+      expect(template.questions.length, name).toBeLessThanOrEqual(4);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
     }
   });
@@ -635,6 +702,55 @@ describe("the setup questions", () => {
         expect(question.key, template.name).not.toBe("cadence");
         expect(`${question.label} ${question.help ?? ""}`, template.name).not.toMatch(/cadence|how often/i);
       }
+    }
+  });
+
+  /**
+   * A NICHE ASKS NEITHER THE NICHE NOR THE REFERENCE (ADR-1143): the template IS the niche, and the
+   * reference is the niche skill's playbook, not something the operator models the channel on.
+   */
+  it("drops the niche and the reference from every niche template", () => {
+    for (const name of Object.keys(BASE_OF) as TemplateName[]) {
+      const keys = TEMPLATES[name].questions.map((q) => q.key);
+      expect(keys, name).not.toContain("niche");
+      expect(keys, name).not.toContain("reference");
+    }
+  });
+
+  /** The generative niches' base asks the niche, the look and the reference, so the optional look is all that is left. */
+  it("leaves a generative niche asking only the optional look", () => {
+    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["look"]);
+  });
+
+  /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
+  it("leaves a clipping niche its sources and visibility", () => {
+    for (const name of ["gaming-clips", "news", "sports"] as TemplateName[]) {
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility"]);
+    }
+  });
+
+  /**
+   * A generative niche's form asks only the look, so nothing it puts in front of its crew may
+   * promise a niche or a reference answer, or say the form asked for one (ADR-1143): every seat reads
+   * instead that the niche is fixed by the template and its pinned skill.
+   */
+  it("never tells a generative niche's crew the form asked for the niche or the reference", () => {
+    for (const name of SEGMENTED) {
+      const template = TEMPLATES[name];
+      for (const said of everyPrompt(template)) {
+        expect(said, name).not.toMatch(/asked for the niche|from the niche and the reference|the niche, the cadence|asks (three|four) questions/i);
+      }
+      for (const agent of template.agents) expect(agent.system, `${name}/${agent.name}`).toContain(nicheFixed(`naive/channel-template-${name}`));
+    }
+  });
+
+  /** The engine refuses more than four, and a form with none is no form. */
+  it("asks one to four questions on every template, uniquely keyed", () => {
+    for (const template of all) {
+      const keys = template.questions.map((q) => q.key);
+      expect(keys.length, template.name).toBeGreaterThanOrEqual(1);
+      expect(keys.length, template.name).toBeLessThanOrEqual(4);
+      expect(new Set(keys).size, template.name).toBe(keys.length);
     }
   });
 
@@ -686,10 +802,11 @@ describe("the length each template makes, and the money that follows from it", (
 describe("the reference", () => {
   it("is read by the seats that plan, make and measure a generated piece, and by no clipping seat", () => {
     const carriers = everySeat.filter(({ agent }) => (agent.system ?? "").includes(REFERENCE_RULE)).map(({ id }) => id).sort();
-    expect(carriers).toEqual([
+    // The short-form niches (`ufc`, `history`) reuse the faceless crew, so they carry the same rule.
+    expect(carriers).toEqual([...withNicheIds([
       "faceless/analyst", "faceless/producer", "faceless/scriptwriter", "faceless/trend-scout",
       "longform/analyst", "longform/producer", "longform/researcher", "longform/writer",
-    ]);
+    ])].sort());
     for (const agent of TEMPLATES.clipping.agents) expect(agent.system, agent.name).not.toMatch(/teardown/i);
     expect(REFERENCE_RULE).toMatch(/note on the reference-study card/);
     expect(REFERENCE_RULE).toMatch(/never describe a reference you did not open/);
@@ -742,6 +859,58 @@ describe("the long-form crew", () => {
 
   it("points the analyst at retention", () => {
     expect(briefOf("analyst")).toMatch(/RETENTION/);
+  });
+});
+
+/**
+ * The short-form niches whose playbook is a start, a middle and an end. Image-to-video cannot cut, so
+ * each beat is its own render and the producer joins them: it needs the shell and file tools the
+ * base faceless producer does not hold, and a brief that lifts "call generate_video once".
+ */
+describe("the segmented short-form niches", () => {
+  it("give the producer a shell, the file tools and the assembly skill, and leave the faceless producer as it was", () => {
+    for (const name of SEGMENTED) {
+      const producer = seat(TEMPLATES[name], "producer");
+      for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill"]) {
+        expect(permissionFor(TEMPLATES[name], "producer", tool), `${name}/${tool}`).toBe("allow");
+      }
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: SEGMENT_VIDEO_MODELS });
+      expect(producer.skills, name).toEqual(["naive/video-assembly", `naive/channel-template-${name}`]);
+      expect(producer.system, name).toMatch(/OVERRIDES "call generate_video once" AND "One render per card"/);
+      expect(producer.system, name).toMatch(/concat demuxer/);
+      expect(producer.system, name).toContain(RENDER_MODEL_RULE);
+      const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system;
+      expect(scriptwriter, name).toContain(`No segment runs over ${SEGMENT_MAX_SECONDS} seconds or under ${SEGMENT_MIN_SECONDS}`);
+      expect(scriptwriter, name).toMatch(/all on the same model/);
+    }
+    expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
+    expect(SEGMENT_MAX_SECONDS).toBe(15);
+    expect(SEGMENT_MIN_SECONDS).toBe(5);
+    expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
+    expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
+    const base = seat(TEMPLATES.faceless, "producer");
+    for (const tool of ["bash", "fetch_file", "publish_file", "read_skill"]) expect(permissionFor(TEMPLATES.faceless, "producer", tool), tool).toBe("deny");
+    expect(base.skills).toEqual([]);
+    expect(base.system).not.toMatch(/SEGMENTS JOINED/);
+    expect(seat(TEMPLATES.faceless, "scriptwriter").system).not.toMatch(/SEGMENTS JOINED/);
+  });
+
+  /** A render carries no legible text, so the join is finished — hook and label burned in — before it ships. */
+  it("burn the plan's text in after the join, as video-assembly step 5b says, and voice a silent join", () => {
+    for (const name of SEGMENTED) {
+      const producer = seat(TEMPLATES[name], "producer").system;
+      expect(producer, name).toMatch(/drawtext|on-screen text/);
+      expect(producer, name).toMatch(/step 5b/);
+      expect(producer, name).toMatch(/generate_speech/);
+      expect(producer, name).toMatch(/concat demuxer/);
+      expect(producer, name).toMatch(/all on one model/);
+    }
+    expect(seat(TEMPLATES.faceless, "producer").system).not.toMatch(/step 5b/);
+  });
+
+  it("refuses to extend a seat the base crew does not have, or pin models on one that does not render", () => {
+    expect(() => niche(TEMPLATES.faceless, { name: "ufc", title: "t", description: "d", skill: "s", seats: { clipper: { tools: ["bash"] } } })).toThrow(/does not have/);
+    expect(() => niche(TEMPLATES.faceless, { name: "ufc", title: "t", description: "d", skill: "s", seats: { analyst: { videoModels: ["m"] } } })).toThrow(/does not render/);
   });
 });
 
