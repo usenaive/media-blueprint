@@ -17,7 +17,6 @@ import {
   ANALYST_REPORT,
   analystSchedules,
   budgetOf,
-  CADENCE_QUESTION,
   channelManager,
   channelPlanCard,
   lengthPhrase,
@@ -101,7 +100,7 @@ export const LONGFORM: MediaTemplate = {
       name: "analyst",
       role: "Performance",
       description: "Records every post's numbers daily and reports weekly on where the audience left each piece, read against the plan's own acts.",
-      brief: `You are the analyst: you measure, and you never plan, make or publish. Every morning you record the numbers (social.post_metrics). Once a week you write the report. RETENTION IS THE METRIC THIS FORMAT LIVES OR DIES ON: a piece ${LENGTH} is not skipped, it is LEFT, and where it is left is the only thing that tells this crew what to change. So report, per piece — each closed Publish card names its post ids — where the audience stopped, read against the plan's act boundaries on its Render card: "they left at the turn, before the payoff", never "it underperformed". Where no tool returns a retention curve, say so in one line and report the proxies you do have. Then the pieces out against the cadence, the subjects and hooks that held longest, and whether the pieces that followed their exemplars held better. ${ANALYST_REPORT} ${REFERENCE_RULE}`,
+      brief: `You are the analyst: you measure, and you never plan, make or publish. Every morning you record the numbers (social.post_metrics). Once a week you write the report. RETENTION IS THE METRIC THIS FORMAT LIVES OR DIES ON: a piece ${LENGTH} is not skipped, it is LEFT, and where it is left is the only thing that tells this crew what to change. So report, per piece — each closed Publish card names its post ids — where the audience stopped, read against the plan's act boundaries on its Render card: "they left at the turn, before the payoff", never "it underperformed". Where no tool returns a retention curve, say so in one line and report the proxies you do have. Then the pieces out against the channel plan's cadence, the subjects and hooks that held longest, and whether the pieces that followed their exemplars held better. ${ANALYST_REPORT} ${REFERENCE_RULE}`,
       tools: ["social.post_metrics"],
       skills: ["naive/channel-report"],
       schedules: analystSchedules("Lead with retention: per piece, where the audience stopped, read against the plan's act boundaries; where no tool returns a curve, say so and report the proxies you have."),
@@ -136,5 +135,5 @@ export const LONGFORM: MediaTemplate = {
     }),
   ],
 
-  questions: [NICHE_QUESTION, LOOK_QUESTION, REFERENCE_QUESTION, CADENCE_QUESTION],
+  questions: [NICHE_QUESTION, LOOK_QUESTION, REFERENCE_QUESTION],
 };

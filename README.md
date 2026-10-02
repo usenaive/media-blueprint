@@ -75,7 +75,7 @@ clipping   scout       ─Cut→  clipper      ─Caption→ caption-editor ─P
 
 Step by step, on `faceless`:
 
-1. **The trend-scout** fires Monday and Thursday. For each slot the cadence needs, it finds a topic
+1. **The trend-scout** fires Monday and Thursday. For each slot the channel plan's cadence needs, it finds a topic
    and one to three real videos doing it well. It creates a **Plan** card for the scriptwriter.
    The card's body is the brief.
 2. **The scriptwriter** is woken on the Plan card. It looks inside the exemplars, researches, and
@@ -102,9 +102,12 @@ platform's approval card. Every other seat is denied `social.post` by name.
   one and waits.
 - **Visibility.** YouTube goes on its own call, `unlisted` unless you answered otherwise. Only
   YouTube takes a visibility; the platform refuses one for any other network.
-- **When.** `scheduled_at` is the next free slot for your cadence at least a day out, at 17:00
-  channel time (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and
+- **When.** `scheduled_at` is the next free slot for the channel's cadence at least a day out, at
+  17:00 channel time (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and
   Friday; weekly is Friday. An approved post goes out exactly as it was filed.
+- **Cadence.** No setup question asks it. The manager writes it into the channel plan — 3× a week
+  by default — and tells you that you can change it in chat. Ask any seat for another cadence and
+  it comments it on the channel-plan card. Every later session reads the cadence from that card.
 - **Declined.** Don't allow, with a reason, and the manager re-files a corrected post. It never
   re-files an identical one. With no reason, it asks you once what to change.
 
@@ -128,7 +131,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the channel plan's cadence; reads the weekly report |
 | `producer` | Video production | — | `look` | Renders the plan as one vertical video; creates the Publish card |
 | `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
 | `scriptwriter` | Hooks & scripts | — | `reference-study`, `hook-style` | Looks inside the exemplars, writes the plan, creates the Render card |
@@ -138,7 +141,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the channel plan's cadence; reads the weekly report |
 | `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-topic` | Starts one sourced subject a fire, with exemplars of this length |
 | `writer` | Structure & scripts | — | `reference-study`, `arc-style` | Samples exemplar frames at chapter boundaries; plans every seam on a shot change |
 | `producer` | Render & assembly | — | `look` | Renders up to six segments, joins them with ffmpeg, probes the file |
@@ -148,7 +151,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the channel plan's cadence; reads the weekly report |
 | `clipper` | Clip production | — | `source-check` | Cuts the moment with `clip_video`; creates the Caption card |
 | `scout` | Source watch | daily 06:00 ($10) | `first-moments` | Starts each moment from the named channels as a Cut card |
 | `caption-editor` | Captions & titles | — | `caption-style` | Writes the caption and credits the creator; creates the Publish card |
@@ -161,12 +164,12 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks three before anything is provisioned. The engine refuses a fifth.
+The studio asks these before anything is provisioned. The engine refuses a fifth.
 
 | Template | Questions |
 |---|---|
-| `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
-| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
+| `faceless`, `longform` | What it's about · How it looks (optional) · Show us what you like (optional) |
+| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) |
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
 manager asks you for one when none is connected. `faceless` and `longform` do not ask the
@@ -174,7 +177,8 @@ visibility question, so they post YouTube unlisted; tell the manager otherwise w
 post.
 
 The tone and who the channel is for is not on the form. The manager asks it once, after its
-day-one card closes.
+day-one card closes. How often the channel posts is not on the form either: it posts 3× a week
+until you ask in chat for another cadence.
 
 ## 🌅 Day one
 

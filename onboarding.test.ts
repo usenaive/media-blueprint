@@ -72,10 +72,10 @@ describe("the question that asks how the channel looks", () => {
     expect(TEMPLATES.clipping.questions).not.toContain(LOOK_QUESTION);
   });
 
-  /** The form reads as what the channel is, what it looks like, what they like, how often. */
-  it("is asked after the niche, then the person's own media, then the cadence", () => {
+  /** The form reads as what the channel is, what it looks like, what they like. How often is the channel plan's. */
+  it("is asked after the niche, then the person's own media", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
-      expect(template.questions.map((q) => q.key)).toEqual(["niche", "look", REFERENCE_ANSWER_KEY, "cadence"]);
+      expect(template.questions.map((q) => q.key)).toEqual(["niche", "look", REFERENCE_ANSWER_KEY]);
     }
   });
 
@@ -106,7 +106,7 @@ describe("the question that asks who sees a new YouTube video", () => {
   });
 
   it("is asked by clipping only, second", () => {
-    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "visibility", "cadence"]);
+    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "visibility"]);
     expect(TEMPLATES.faceless.questions).not.toContain(VISIBILITY_QUESTION);
     expect(TEMPLATES.longform.questions).not.toContain(VISIBILITY_QUESTION);
   });

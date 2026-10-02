@@ -5,9 +5,9 @@
  *
  *   trend-scout ──Plan──▶ scriptwriter ──Render──▶ producer ──Publish──▶ channel-manager ──▶ approval card
  *
- * The scout's twice-weekly fire starts the pieces the cadence needs, each as a Plan card whose body
- * is the brief. Every seat after it is woken by the board when its card becomes due, and hands on by
- * creating the next card. The analyst reads the numbers and files a weekly report card for the
+ * The scout's twice-weekly fire starts the pieces the channel plan's cadence needs, each as a Plan
+ * card whose body is the brief. Every seat after it is woken by the board when its card becomes due,
+ * and hands on by creating the next card. The analyst reads the numbers and files a weekly report card for the
  * manager. Day one sets up the plan, the reference, the look and the voice, then starts one piece.
  */
 import {
@@ -17,7 +17,6 @@ import {
   agent,
   ANALYST_REPORT,
   analystSchedules,
-  CADENCE_QUESTION,
   channelManager,
   channelPlanCard,
   lengthPhrase,
@@ -59,14 +58,14 @@ export const FACELESS: MediaTemplate = {
       name: "trend-scout",
       role: "Trends & briefs",
       description: "Finds what is moving in the channel's niche and starts each piece as a Plan card, with real videos to learn from.",
-      brief: `You are the trend-scout, the head of the chain. Each fire you start the pieces the cadence needs until your next fire, and no more. For each: find what is moving in the niche this week (web_search, web_fetch) and pick one topic that suits the teardown's formats; then find one to three REAL VIDEOS already doing it well — the videos, never an article about them — and open each with the browser before you name it. Read the board first: never start a topic already on it, and read the newest weekly report card for what to make more and less of. Start the piece by creating its Plan card for the scriptwriter — title "Plan: <the topic>", assignee scriptwriter, with no blocked_by — whose body is the brief in markdown: the topic, the format, why now, the hook direction, the look from the look card's note, and each exemplar's URL with one line on what to copy and one on what not to. \`naive/video-trend-brief\` is the standard. A brief with no exemplar is one the scriptwriter has to invent from, so start fewer and better. You never plan or render. ${REFERENCE_RULE}`,
+      brief: `You are the trend-scout, the head of the chain. Each fire you start the pieces the channel plan's cadence needs until your next fire, and no more. For each: find what is moving in the niche this week (web_search, web_fetch) and pick one topic that suits the teardown's formats; then find one to three REAL VIDEOS already doing it well — the videos, never an article about them — and open each with the browser before you name it. Read the board first: never start a topic already on it, and read the newest weekly report card for what to make more and less of. Start the piece by creating its Plan card for the scriptwriter — title "Plan: <the topic>", assignee scriptwriter, with no blocked_by — whose body is the brief in markdown: the topic, the format, why now, the hook direction, the look from the look card's note, and each exemplar's URL with one line on what to copy and one on what not to. \`naive/video-trend-brief\` is the standard. A brief with no exemplar is one the scriptwriter has to invent from, so start fewer and better. You never plan or render. ${REFERENCE_RULE}`,
       tools: ["view_image"],
       skills: ["naive/video-trend-brief", "naive/short-video-hooks"],
       schedules: [
         schedule({
           cron: "0 6 * * 1,4", // Monday and Thursday 06:00 — the week's pieces, and a mid-week refill.
           input:
-            "Start the next pieces. Read project_context, the teardown, the newest weekly report card and the Plan cards already on the board (board_read). Start as many pieces as the cadence needs until your next fire — each a Plan card for the scriptwriter whose body is the brief, with one to three real videos you opened with the browser. Nothing already on the board. Started none, say why in one line.",
+            "Start the next pieces. Read project_context, the channel-plan card for the cadence, the teardown, the newest weekly report card and the Plan cards already on the board (board_read). Start as many pieces as the cadence needs until your next fire — each a Plan card for the scriptwriter whose body is the brief, with one to three real videos you opened with the browser. Nothing already on the board. Started none, say why in one line.",
           budget_micro_usd: 10_000_000, // $10 — a read of the niche and a few briefs.
         }),
       ],
@@ -120,8 +119,10 @@ export const FACELESS: MediaTemplate = {
   ],
 
   /**
-   * The niche, how it looks (optional, from pictures), what they like (optional, their own media) and how often. Where it posts is the accounts the
-   * operator connects; the tone and who it is for, the manager asks on its day-one card.
+   * The niche, how it looks (optional, from pictures) and what they like (optional, their own
+   * media). Where it posts is the accounts the operator connects; the tone and who it is for, the
+   * manager asks on its day-one card; the cadence is the channel plan's, 3× a week until the
+   * operator asks in chat for another.
    */
-  questions: [NICHE_QUESTION, LOOK_QUESTION, REFERENCE_QUESTION, CADENCE_QUESTION],
+  questions: [NICHE_QUESTION, LOOK_QUESTION, REFERENCE_QUESTION],
 };
