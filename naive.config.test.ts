@@ -199,9 +199,10 @@ describe("naive.config", () => {
    */
   it("hands `up` the crew's roles, skills, cards and the running template's setup questions", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
-    // Two required — no question asks where the channel posts — plus the optional one (ADR-0757).
+    // One required — no question asks where the channel posts or how often — plus the optional ones (ADR-0757).
     expect(project.questions.length).toBe(ACTIVE.questions.length);
-    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(2);
+    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(1);
+    expect(project.questions.map((q) => q.key)).not.toContain("cadence");
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.

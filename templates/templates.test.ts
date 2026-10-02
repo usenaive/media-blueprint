@@ -11,11 +11,12 @@ import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
   PLATFORM_TOOLS,
-  CADENCE_QUESTION,
+  CADENCE_RULE,
   CADENCE_SLOTS,
   CARD_ORDER,
   CONTEXT_PREAMBLE,
   CREW_RULES,
+  DEFAULT_CADENCE,
   FIRST_PIECE_KEY,
   lengthPhrase,
   MAX_RENDER_SECONDS,
@@ -488,9 +489,8 @@ describe("publishing", () => {
     expect(brief()).toMatch(/second call without one/);
   });
 
-  it("schedules each post into the next free slot the cadence answer names", () => {
-    expect(CADENCE_QUESTION.type === "choice" && CADENCE_QUESTION.options).toEqual(Object.keys(CADENCE_SLOTS));
-    expect(brief()).toMatch(/scheduled_at/);
+  it("schedules each post into the next free slot the channel plan's cadence names", () => {
+    expect(brief()).toMatch(/scheduled_at is the next free slot for the channel plan's cadence/);
     for (const [answer, days] of Object.entries(CADENCE_SLOTS)) expect(brief()).toContain(`${answer}: ${days}`);
     expect(brief()).toContain(`${POST_TIME} channel time (${CHANNEL_TIMEZONE})`);
   });
@@ -532,6 +532,54 @@ describe("publishing", () => {
     expect(brief()).toMatch(/never an identical one/);
     // A post already made for this card is never made again.
     expect(brief()).toMatch(/comment its post id on your card at once/);
+  });
+});
+
+/**
+ * THE CADENCE IS THE CHANNEL PLAN'S. No setup question asks it: the manager writes the default into
+ * the channel-plan card's note, the operator changes it in chat, and the seat that hears the change
+ * comments it on that card. Every session reads it there, never from a setup answer.
+ */
+describe("the cadence", () => {
+  const plan = (template: MediaTemplate) => template.tasks.find((one) => one.key === "channel-plan")!.body ?? "";
+
+  it("defaults to 3× a week, Monday, Wednesday and Friday at the posting time", () => {
+    expect(DEFAULT_CADENCE).toBe("3× a week");
+    expect(CADENCE_SLOTS[DEFAULT_CADENCE]).toBe("Monday, Wednesday and Friday");
+    expect(POST_TIME).toBe("17:00");
+  });
+
+  it("is written into the channel plan, 3× a week by default, and the operator is told chat changes it", () => {
+    for (const template of all) {
+      expect(plan(template), template.name).not.toMatch(/project_context — what this channel is about and how often/);
+      expect(plan(template), template.name).toContain(`"Cadence: ${DEFAULT_CADENCE}"`);
+      expect(plan(template), template.name).toMatch(/they can change that in chat/);
+      for (const [cadence, days] of Object.entries(CADENCE_SLOTS)) expect(plan(template), template.name).toContain(`${cadence}: ${days}`);
+    }
+  });
+
+  it("is read from the channel-plan card by every seat, and a change heard in chat is commented there", () => {
+    expect(CADENCE_RULE).toMatch(/not a setup answer/);
+    expect(CADENCE_RULE).toMatch(/note on the channel-plan card — or the newest comment on that card that names another cadence/);
+    expect(CADENCE_RULE).toContain(`it is ${DEFAULT_CADENCE} until the operator asks for another`);
+    expect(CADENCE_RULE).toMatch(/Asked in chat for another cadence, comment it on the channel-plan card/);
+    for (const { agent, id } of everySeat) expect(agent.system, id).toContain(CADENCE_RULE);
+  });
+
+  it("is read by the head of each chain that starts pieces to it, from the channel plan", () => {
+    for (const [template, head] of [[TEMPLATES.faceless, "trend-scout"], [TEMPLATES.clipping, "scout"]] as const) {
+      expect(seat(template, head).system, template.name).toMatch(/channel plan's cadence needs/);
+      expect(seat(template, head).schedules![0]!.input, template.name).toMatch(/the channel-plan card for the cadence/);
+    }
+  });
+
+  /** A seat told to read a cadence answer looks for one that no longer exists. */
+  it("is never called a setup answer anywhere", () => {
+    for (const template of all) {
+      for (const text of [...everyPrompt(template), ...template.agents.map((agent) => agent.description ?? "")]) {
+        expect(text, template.name).not.toMatch(/cadence answer|cadence you chose|how often it posts|the niche, the cadence/i);
+      }
+    }
   });
 });
 
@@ -637,12 +685,23 @@ describe("the channel's clock", () => {
 describe("the setup questions", () => {
   const BASES: TemplateName[] = ["faceless", "longform", "clipping"];
 
-  it("asks two per base template, and a third that is optional", () => {
+  it("asks one per base template that must be answered, and at most two that may be skipped", () => {
+    const REQUIRED: Record<string, string[]> = { faceless: ["niche"], longform: ["niche"], clipping: ["sources"] };
     for (const name of BASES) {
       const template = TEMPLATES[name];
-      expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(2);
-      expect(template.questions.length, name).toBe(3);
+      expect(template.questions.filter((q) => q.optional !== true).map((q) => q.key), name).toEqual(REQUIRED[name]);
+      expect(template.questions.length, name).toBeLessThanOrEqual(4);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
+    }
+  });
+
+  /** The owner (2026-10-02): no question about posting volume; the plan carries it and chat changes it. */
+  it("never asks how often the channel posts", () => {
+    for (const template of all) {
+      for (const question of template.questions) {
+        expect(question.key, template.name).not.toBe("cadence");
+        expect(`${question.label} ${question.help ?? ""}`, template.name).not.toMatch(/cadence|how often/i);
+      }
     }
   });
 
@@ -658,20 +717,20 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The generative niches asked only `niche`, `reference` and the cadence, so the cadence is all that is left. */
-  it("leaves a generative niche asking only the cadence", () => {
-    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  /** The generative niches' base asks the niche, the look and the reference, so the optional look is all that is left. */
+  it("leaves a generative niche asking only the optional look", () => {
+    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["look"]);
   });
 
   /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
   it("leaves a clipping niche its sources and visibility", () => {
     for (const name of ["gaming-clips", "news", "sports"] as TemplateName[]) {
-      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility"]);
     }
   });
 
   /**
-   * A generative niche's form asks only the cadence, so nothing it puts in front of its crew may
+   * A generative niche's form asks only the look, so nothing it puts in front of its crew may
    * promise a niche or a reference answer, or say the form asked for one (ADR-1143): every seat reads
    * instead that the niche is fixed by the template and its pinned skill.
    */
@@ -685,20 +744,14 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The engine refuses more than four; a template with none, or with nothing required, is a broken form. */
-  it("asks one to four questions on every template, uniquely keyed, at least one required", () => {
+  /** The engine refuses more than four, and a form with none is no form. */
+  it("asks one to four questions on every template, uniquely keyed", () => {
     for (const template of all) {
       const keys = template.questions.map((q) => q.key);
       expect(keys.length, template.name).toBeGreaterThanOrEqual(1);
       expect(keys.length, template.name).toBeLessThanOrEqual(4);
       expect(new Set(keys).size, template.name).toBe(keys.length);
-      expect(template.questions.some((q) => q.optional !== true), template.name).toBe(true);
     }
-  });
-
-  /** The cadence is one question, spelled once, on every template. */
-  it("asks the cadence on every template, the same question object", () => {
-    for (const template of all) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
   });
 
   it("is keyed by the name `defineProject({ template })` uses, and one of them is running", () => {

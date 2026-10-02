@@ -63,7 +63,7 @@ A card is woken at most three times. After that it is parked for the CEO.
 ### `faceless` — Faceless channel, 15–30 seconds
 
 - **trend-scout** (Mon & Thu 06:00): reads the teardown and the newest weekly report. For each slot
-  the cadence needs, picks a topic, opens one to three real videos doing it well, and creates a
+  the channel plan's cadence needs, picks a topic, opens one to three real videos doing it well, and creates a
   Plan card whose body is the brief.
 - **scriptwriter**: opens the exemplars first — the browser for the page, `bash` to sample frames
   through the first three seconds, `view_image` to look. Then research, three hooks, beats, shots.
@@ -125,7 +125,8 @@ Woken on a Publish card, it:
    and the connected accounts' platform ids;
 5. posts YouTube on its own call with `visibility` — the setup answer, else `unlisted` — and the
    other networks on a second call without one (the platform refuses a visibility on them);
-6. sets `scheduled_at` to the next free slot at least a day out: daily is every day, 3× a week is
+6. sets `scheduled_at` to the next free slot for the channel plan's cadence, at least a day out
+   (3× a week unless the operator asked in chat for another): daily is every day, 3× a week is
    Monday, Wednesday and Friday, weekly is Friday — 17:00 `America/New_York`, with that date's
    UTC offset. An approved call goes out exactly as it was filed, so a slot chosen too close could
    pass while it waits;
@@ -174,12 +175,18 @@ a cron fire is not.
 
 ## 8. Setup questions and `project_context`
 
-The studio asks at most three questions, never where to post; the answers land on the install; every seat reads them with
-`project_context`. A niche template asks fewer — it is its niche, and its reference is the niche skill's,
-so both are dropped and a generative niche asks only the cadence (ADR-1143). The engine prepends its own
-"read the project context first" preamble to every template agent, and our `CONTEXT_PREAMBLE` adds that
-the answers are the operator's. On a niche, every seat also reads that the niche is fixed by the
-template and its pinned skill, never asked (`nicheFixed`).
+The studio asks at most three questions, never where to post and never how often; the answers land
+on the install; every seat reads them with `project_context`. A niche template asks fewer — it is its
+niche, and its reference is the niche skill's, so both are dropped and a generative niche asks only
+the optional look (ADR-1143). The engine prepends its own "read the project context first" preamble
+to every template agent, and our `CONTEXT_PREAMBLE` adds that the answers are the operator's. On a
+niche, every seat also reads that the niche is fixed by the template and its pinned skill, never
+asked (`nicheFixed`).
+
+The cadence lives on the board, not in the answers. The channel manager writes it into the channel
+plan — 3× a week by default — and tells the operator they can change it in chat. A seat asked in
+chat for another cadence comments it on the channel-plan card, and every later session reads it from
+that card's note and its newest such comment.
 
 ## 9. What the platform cannot express yet
 
