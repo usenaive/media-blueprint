@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { declaration } from "./naive.config.ts";
 import { TEMPLATES } from "./templates/index.ts";
-import { PLATFORMS, REFERENCE_ANSWER_KEY, REFERENCE_QUESTION, VISIBILITY_QUESTION } from "./templates/template.ts";
+import { LOOK_ON_GENERATIVE, LOOK_QUESTION, nicheQuestions, PLATFORMS, REFERENCE_ANSWER_KEY, REFERENCE_QUESTION, VISIBILITY_QUESTION } from "./templates/template.ts";
+import { STYLE_TEMPLATE_SEEDS } from "./seed/style-templates.ts";
 
 const all = Object.values(TEMPLATES);
 
@@ -56,21 +57,58 @@ describe("the question form", () => {
   });
 });
 
-describe("the question that asks what to model the channel on", () => {
-  it("is optional free text, asked only by the templates that generate video", () => {
-    expect(REFERENCE_QUESTION.optional).toBe(true);
-    expect(REFERENCE_QUESTION.type).toBe("text");
-    expect(REFERENCE_QUESTION.key).toBe(REFERENCE_ANSWER_KEY);
-    expect(TEMPLATES.faceless.questions).toContain(REFERENCE_QUESTION);
-    expect(TEMPLATES.longform.questions).toContain(REFERENCE_QUESTION);
-    // `clipping` names its sources instead, and means something stronger: cut from these only.
+describe("the question that asks how the channel looks", () => {
+  it("is optional, picked from pictures of looks the library has, asked only by the templates that generate video", () => {
+    expect(LOOK_QUESTION.optional).toBe(true);
+    if (LOOK_QUESTION.type !== "choice") throw new Error("the look is a choice");
+    const names = STYLE_TEMPLATE_SEEDS.map((style) => style.name);
+    expect(LOOK_QUESTION.options).toHaveLength(6);
+    for (const option of LOOK_QUESTION.options) {
+      expect(names).toContain(option);
+      expect(LOOK_QUESTION.details?.find((one) => one.option === option)?.image).toMatch(/^\/setup\/styles\/[a-z0-9-]+\.jpg$/);
+    }
+    expect(TEMPLATES.faceless.questions).toContain(LOOK_QUESTION);
+    expect(TEMPLATES.longform.questions).toContain(LOOK_QUESTION);
+    expect(TEMPLATES.clipping.questions).not.toContain(LOOK_QUESTION);
+  });
+
+  /** The form reads as what the channel is, what it looks like, what they like. How often is the channel plan's. */
+  it("is asked after the niche, then the person's own media", () => {
+    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
+      expect(template.questions.map((q) => q.key)).toEqual(["niche", "look", REFERENCE_ANSWER_KEY]);
+    }
+  });
+
+  it("takes the reference as a link the person pastes, and it may be left blank", () => {
+    expect(REFERENCE_QUESTION).toMatchObject({ key: REFERENCE_ANSWER_KEY, type: "text", optional: true });
+    if (REFERENCE_QUESTION.type !== "text") throw new Error("the reference is text");
+    // The first-run onboarding (vetta-mono#653) takes only a link: the help promises no upload.
+    const said = `${REFERENCE_QUESTION.placeholder} ${REFERENCE_QUESTION.help}`;
+    expect(said).toMatch(/link/i);
+    expect(said).not.toMatch(/upload|images|a video of/i);
     expect(TEMPLATES.clipping.questions).not.toContain(REFERENCE_QUESTION);
   });
 
-  /** Second, so the form reads as what the channel is, what it is like, how often. */
-  it("is asked after the niche and before the cadence", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
-    expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
+  /**
+   * AN UPGRADE KEEPS EVERY STORED REFERENCE. Up to 2.1.3 the reference was free text, and installs
+   * hold prose, bare domains and several lines. The platform checks a `media` answer piece by piece
+   * against `MEDIA_ANSWER` (vetta-mono packages/core/src/schema/session.ts), and a `text` answer only
+   * for being one non-blank string — so the question stays `text`, and Update never refuses one.
+   */
+  it("still accepts every free-text reference a 2.1.3 install stored, which a media question would refuse", () => {
+    const MEDIA_ANSWER = /^(fil_[0-9a-z]+|https:\/\/\S+)$/;
+    const stored = ["youtube.com/@kurzgesagt", "https://youtube.com/@a\nhttps://youtube.com/@b", "Like Kurzgesagt but darker"];
+    for (const answer of stored) {
+      expect(REFERENCE_QUESTION.type, answer).toBe("text");
+      expect(answer.trim(), answer).not.toBe("");
+      // What a `media` question would have done with it: a stored string is one piece, and refused.
+      expect(MEDIA_ANSWER.test(answer), answer).toBe(false);
+    }
+  });
+
+  it("is honoured by the producer's look card", () => {
+    const look = TEMPLATES.faceless.tasks.find((one) => one.key === "look");
+    expect(look?.body).toMatch(/`look` answer/);
   });
 });
 
@@ -90,7 +128,7 @@ describe("the question that asks who sees a new YouTube video", () => {
   });
 
   it("is asked by clipping only, second", () => {
-    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "visibility", "cadence"]);
+    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "visibility"]);
     expect(TEMPLATES.faceless.questions).not.toContain(VISIBILITY_QUESTION);
     expect(TEMPLATES.longform.questions).not.toContain(VISIBILITY_QUESTION);
   });
@@ -99,8 +137,9 @@ describe("the question that asks who sees a new YouTube video", () => {
 /**
  * NICHE TEMPLATES. A niche IS its niche, and the reference is the niche skill's playbook — not
  * something the operator models the channel on — so the studio asks neither (ADR-1143). The
- * generative niches, whose base asks only the niche, the reference and the cadence, are left asking
- * the cadence alone; the clipping niches keep the `sources` they cannot cut without.
+ * generative niches, whose base asks only the niche, the look and the reference, are left asking
+ * the optional look alone — or nothing, if the owner turns `LOOK_ON_GENERATIVE` off (ADR-NEW
+ * (pending owner decision)); the clipping niches keep the `sources` they cannot cut without.
  */
 describe("a niche template's questions", () => {
   const GENERATIVE = ["ufc", "history", "animal-feast"] as const;
@@ -114,11 +153,16 @@ describe("a niche template's questions", () => {
     }
   });
 
-  it("leaves a generative niche asking only the cadence", () => {
-    for (const name of GENERATIVE) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  /** Whether it keeps the look is the owner's call (`LOOK_ON_GENERATIVE`, ADR-NEW (pending owner decision)). */
+  it("leaves a generative niche asking only the optional look, or nothing, as LOOK_ON_GENERATIVE says", () => {
+    for (const name of GENERATIVE) {
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(LOOK_ON_GENERATIVE ? ["look"] : []);
+    }
+    expect(nicheQuestions(TEMPLATES.faceless.questions, true).map((q) => q.key)).toEqual(["look"]);
+    expect(nicheQuestions(TEMPLATES.faceless.questions, false)).toEqual([]);
   });
 
   it("leaves a clipping niche its sources and visibility", () => {
-    for (const name of CLIPPING_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+    for (const name of CLIPPING_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility"]);
   });
 });

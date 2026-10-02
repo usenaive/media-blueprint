@@ -107,7 +107,7 @@ clipping   scout       ─Cut→  clipper      ─Caption→ caption-editor ─P
 
 Step by step, on `faceless`:
 
-1. **The trend-scout** fires Monday and Thursday. For each slot the cadence needs, it finds a topic
+1. **The trend-scout** fires Monday and Thursday. For each slot the channel plan's cadence needs, it finds a topic
    and one to three real videos doing it well. It creates a **Plan** card for the scriptwriter.
    The card's body is the brief.
 2. **The scriptwriter** is woken on the Plan card. It looks inside the exemplars, researches, and
@@ -134,9 +134,16 @@ platform's approval card. Every other seat is denied `social.post` by name.
   one and waits.
 - **Visibility.** YouTube goes on its own call, `unlisted` unless you answered otherwise. Only
   YouTube takes a visibility; the platform refuses one for any other network.
-- **When.** `scheduled_at` is the next free slot for your cadence at least a day out, at 17:00
-  channel time (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and
+- **When.** `scheduled_at` is the next free slot for the channel's cadence at least a day out, at
+  17:00 channel time (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and
   Friday; weekly is Friday. An approved post goes out exactly as it was filed.
+- **Cadence.** No setup question asks it (ADR-NEW (pending owner decision)). The manager writes it
+  into the channel plan as its own line, `Cadence: 3× a week` by default, and tells you that you
+  can change it in chat. Ask any seat for another cadence and it comments `Cadence: <cadence>` on the
+  channel-plan card. Every later session reads the cadence from that card, and so does the
+  platform's "Posts this week" goal when the install has no cadence answer. A channel set up when the
+  form still asked keeps its old answer: the plan carries it forward, and on a plan filed before the
+  line existed, the first seat to read it writes the line from the old answer or the old slots.
 - **Declined.** Don't allow, with a reason, and the manager re-files a corrected post. It never
   re-files an identical one. With no reason, it asks you once what to change.
 
@@ -160,7 +167,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the channel plan's cadence; reads the weekly report |
 | `producer` | Video production | — | `look` | Renders the plan as one vertical video; creates the Publish card |
 | `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
 | `scriptwriter` | Hooks & scripts | — | `reference-study`, `hook-style` | Looks inside the exemplars, writes the plan, creates the Render card |
@@ -170,7 +177,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the channel plan's cadence; reads the weekly report |
 | `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-topic` | Starts one sourced subject a fire, with exemplars of this length |
 | `writer` | Structure & scripts | — | `reference-study`, `arc-style` | Samples exemplar frames at chapter boundaries; plans every seam on a shot change |
 | `producer` | Render & assembly | — | `look` | Renders up to six segments, joins them with ffmpeg, probes the file |
@@ -180,7 +187,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each clip on the channel plan's cadence; reads the weekly report |
 | `clipper` | Clip production | — | `source-check` | Cuts the moment with `clip_video`; creates the Caption card |
 | `scout` | Source watch | daily 06:00 ($10) | `first-moments` | Starts each moment from the named channels as a Cut card |
 | `caption-editor` | Captions & titles | — | `caption-style` | Writes the caption and credits the creator; creates the Publish card |
@@ -196,14 +203,20 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
 template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
 niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking only
-the cadence; a clipping niche keeps the sources it cannot cut without.
+the look, which may be skipped; a clipping niche keeps the sources it cannot cut without.
+
+Whether a generative niche asks the look at all is the owner's call and not yet made
+(ADR-NEW (pending owner decision)): ADR-1143 says a niche's look is its skill's playbook. It is one
+const, `LOOK_ON_GENERATIVE` in `templates/template.ts`. On (as shipped here), `ufc`, `history` and
+`animal-feast` ask the optional look; off, they ask nothing and keep their skill's look. The tests
+cover both.
 
 | Template | Questions |
 |---|---|
-| `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
-| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `ufc`, `history`, `animal-feast` | Posting cadence |
-| `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
+| `faceless`, `longform` | What it's about · How it looks (optional) · Show us what you like (optional) |
+| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) |
+| `ufc`, `history`, `animal-feast` | How it looks (optional) — or none, with `LOOK_ON_GENERATIVE` off |
+| `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) |
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
 manager asks you for one when none is connected. `faceless` and `longform` do not ask the
@@ -211,7 +224,11 @@ visibility question, so they post YouTube unlisted; tell the manager otherwise w
 post.
 
 The tone and who the channel is for is not on the form. The manager asks it once, after its
-day-one card closes.
+day-one card closes. How often the channel posts is not on the form either: it posts 3× a week
+until you ask in chat for another cadence (ADR-NEW (pending owner decision)).
+
+"Show us what you like" takes a link — a channel or a video — and may be skipped. It stays a text
+answer, so a reference an earlier version stored as free text still passes when you Update.
 
 ## 🌅 Day one
 

@@ -12,7 +12,6 @@ import {
   agent,
   ANALYST_REPORT,
   analystSchedules,
-  CADENCE_QUESTION,
   CLIPPING_LENGTH,
   channelManager,
   channelPlanCard,
@@ -50,14 +49,14 @@ export const CLIPPING: MediaTemplate = {
       name: "scout",
       role: "Source watch",
       description: "Watches the named reference channels for new episodes and starts each moment worth cutting as a Cut card, with the reasoning.",
-      brief: `You are the scout, the head of the chain. You watch the reference channels the context names — only those — for new episodes and the moments in them that stand alone as a short: a claim, a turn, a laugh, a play (web_search, web_fetch, \`naive/clip-selection\`). Look at the episode before you pick from it: open its page with the browser and screenshot it, because a title tells you what a moment says and nothing about what it looks like. Read the board first: never start a moment already on it, and read the newest weekly report card for which sources and moments to cut more and less of. Start the moments the cadence needs until your next fire, each as a Cut card for the clipper — title "Cut: <the moment>", assignee clipper, with no blocked_by — whose body is the source URL, where the moment starts and ends (estimated from what you can read — never transcribe; the cut finds it), why it lands for this audience, and what you saw. One moment per card. Never start one from a channel the context does not name. You neither cut nor caption.`,
+      brief: `You are the scout, the head of the chain. You watch the reference channels the context names — only those — for new episodes and the moments in them that stand alone as a short: a claim, a turn, a laugh, a play (web_search, web_fetch, \`naive/clip-selection\`). Look at the episode before you pick from it: open its page with the browser and screenshot it, because a title tells you what a moment says and nothing about what it looks like. Read the board first: never start a moment already on it, and read the newest weekly report card for which sources and moments to cut more and less of. Start the moments the channel plan's cadence needs until your next fire, each as a Cut card for the clipper — title "Cut: <the moment>", assignee clipper, with no blocked_by — whose body is the source URL, where the moment starts and ends (estimated from what you can read — never transcribe; the cut finds it), why it lands for this audience, and what you saw. One moment per card. Never start one from a channel the context does not name. You neither cut nor caption.`,
       tools: ["view_image"],
       skills: ["naive/clip-selection"],
       schedules: [
         schedule({
           cron: "0 6 * * *", // Daily 06:00 — new episodes and moments.
           input:
-            "Watch the references. Read project_context, the newest weekly report card and the Cut cards already on the board (board_read). Check each named reference channel for new episodes since the last fire, open each episode you pick from with the browser, and start the moments the cadence needs until tomorrow — each a Cut card for the clipper with the source URL, start, end, why and what you saw. Only from named references; nothing already on the board.",
+            "Watch the references. Read project_context, the channel-plan card for the cadence, the newest weekly report card and the Cut cards already on the board (board_read). Check each named reference channel for new episodes since the last fire, open each episode you pick from with the browser, and start the moments the cadence needs until tomorrow — each a Cut card for the clipper with the source URL, start, end, why and what you saw. Only from named references; nothing already on the board.",
           budget_micro_usd: 10_000_000, // $10 — a read of the references and a few cards.
         }),
       ],
@@ -101,7 +100,7 @@ export const CLIPPING: MediaTemplate = {
       title: "Set up the weekly report this channel will be measured against",
       assignee: "analyst",
       blocked_by: ["channel-plan"],
-      body: "Read project_context for the reference channels and the cadence, and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the sources it cuts from, the metrics you will read per clip (social.post_metrics), and the week's target taken from the plan's posting slots. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
+      body: "Read project_context for the reference channels, and the channel plan — the note on the channel-plan card this one waited on, with its cadence. Write, as this card's note, the skeleton of the weekly report: the sources it cuts from, the metrics you will read per clip (social.post_metrics), and the week's target taken from the plan's posting slots. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
     }),
     task({
       // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
@@ -115,7 +114,7 @@ export const CLIPPING: MediaTemplate = {
 
   /**
    * The sources come first: they are the one answer no seat may work without and none may infer.
-   * Where it posts is the accounts the operator connects, so no question asks it.
+   * Where it posts is the accounts the operator connects, so no question asks it; the cadence is the channel plan's.
    */
   questions: [
     {
@@ -125,7 +124,6 @@ export const CLIPPING: MediaTemplate = {
       placeholder: "Channel or playlist URLs, one per line",
       help: "The crew cuts from these and nowhere else.",
     },
-      VISIBILITY_QUESTION,
-    CADENCE_QUESTION,
+    VISIBILITY_QUESTION,
   ],
 };
