@@ -577,6 +577,29 @@ describe("the cadence", () => {
   });
 
   /**
+   * vetta-mono's `perWeek` (packages/core/src/sources.ts, main b49cd0c2a) matches the WHOLE string, so
+   * "Cadence: 3× a week (Mon/Wed/Fri)" reads as no goal at all. Every seat that writes the line is told
+   * to end it at the cadence, and the operator's answer to the plan's question is turned into a line
+   * when it names another cadence, not left as free prose the platform cannot read.
+   */
+  it("ends the line at the cadence, in a shape the platform's perWeek reads", () => {
+    const perWeek = (cadence: string): number | null => {
+      const said = cadence.trim().toLowerCase();
+      if (said === "daily" || said === "every day") return 7;
+      if (said === "weekly" || said === "once a week") return 1;
+      if (said === "twice a week") return 2;
+      const count = /^(\d+)\s*(?:×|x|times)\s*(?:a|per)\s*week$/.exec(said);
+      return count ? Number(count[1]) : null;
+    };
+    for (const cadence of Object.keys(CADENCE_SLOTS)) expect(perWeek(CADENCE_LINE_PATTERN.exec(cadenceLine(cadence))![1]!), cadence).not.toBeNull();
+    for (const template of all) {
+      expect(plan(template), template.name).toMatch(/"Cadence: <cadence>" with nothing after the cadence/);
+      expect(plan(template), template.name).toMatch(/if it asks for another cadence, comment that too as "Cadence: <that cadence>" on a line of its own/);
+    }
+    expect(CADENCE_RULE).toMatch(/on a line of its own with nothing after the cadence/);
+  });
+
+  /**
    * AN UPGRADED 2.1.3 INSTALL KEEPS ITS CADENCE. Its old `cadence` answer is no longer a question, and
    * its channel plan (seeded once, never rewritten) has posting slots but no cadence line. The plan
    * card carries the old answer forward on a new install, and every seat falls back to the old answer
