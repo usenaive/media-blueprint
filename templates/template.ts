@@ -479,10 +479,10 @@ export const schedule = (decl: { cron: string; input: string; summary?: string; 
 
 /**
  * The first week as the studio's launch card says it (vetta-mono ADR-1160), the same on every
- * template: day one sets the channel up and makes its first post, and every day after it posts and
+ * template: day one sets the channel up and publishes its first post, and every day after it posts and
  * reads the numbers. Each timer's own `summary` is added on the days it fires.
  */
-export const ROADMAP = { day_one: "Setup and first post", every_day: "New posts · Performance analysis" };
+export const ROADMAP = { day_one: "Setup and publish first post", every_day: "New posts · Performance analysis" };
 
 /** One day-one card. The body is all the woken seat is given, so `CARD_ORDER` is appended to every one. */
 export const task = (decl: { key: string; title: string; body: string; assignee: string; blocked_by?: string[] }): Task => ({
