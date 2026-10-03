@@ -56,6 +56,7 @@ export const CLIPPING: MediaTemplate = {
       schedules: [
         schedule({
           cron: "0 6 * * *", // Daily 06:00 — new episodes and moments.
+          summary: "Find new moments",
           input:
             "Watch the references. Read project_context, the newest weekly report card and the Cut cards already on the board (board_read). Check each named reference channel for new episodes since the last fire, open each episode you pick from with the browser, and start the moments the cadence needs until tomorrow — each a Cut card for the clipper with the source URL, start, end, why and what you saw. Only from named references; nothing already on the board.",
           budget_micro_usd: 10_000_000, // $10 — a read of the references and a few cards.

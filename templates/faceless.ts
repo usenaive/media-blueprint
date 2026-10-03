@@ -91,6 +91,7 @@ export const FACELESS: MediaTemplate = {
       schedules: [
         schedule({
           cron: "0 6 * * 1,4", // Monday and Thursday 06:00 — the week's pieces, and a mid-week refill.
+          summary: "Plan the next pieces",
           input:
             "Start the next pieces. Read project_context, the teardown, the newest weekly report card and the Plan cards already on the board (board_read). Start as many pieces as the cadence needs until your next fire — each a Plan card for the scriptwriter whose body is the brief, with one to three real videos you opened with the browser. Nothing already on the board. Started none, say why in one line.",
           budget_micro_usd: 10_000_000, // $10 — a read of the niche and a few briefs.

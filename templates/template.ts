@@ -471,11 +471,18 @@ export const toolset = (allow: readonly string[], ask: readonly string[] = []) =
  * absent key owns — and deletes — nothing. `budget_micro_usd` is per fire and stays inside the
  * agent's per-task ceiling.
  */
-export const schedule = (decl: { cron: string; input: string; budget_micro_usd: number }): ScheduleDecl => ({
+export const schedule = (decl: { cron: string; input: string; summary?: string; budget_micro_usd: number }): ScheduleDecl => ({
   ...decl,
   timezone: CHANNEL_TIMEZONE,
   identity: CHANNEL_IDENTITY,
 });
+
+/**
+ * The first week as the studio's launch card says it (vetta-mono ADR-1160), the same on every
+ * template: day one sets the channel up and makes its first post, and every day after it posts and
+ * reads the numbers. Each timer's own `summary` is added on the days it fires.
+ */
+export const ROADMAP = { day_one: "Setup and first post", every_day: "New posts · Performance analysis" };
 
 /** One day-one card. The body is all the woken seat is given, so `CARD_ORDER` is appended to every one. */
 export const task = (decl: { key: string; title: string; body: string; assignee: string; blocked_by?: string[] }): Task => ({
@@ -572,11 +579,13 @@ export const channelPlanCard = (firstAsk: string): Task =>
 export const analystSchedules = (focus: string): ScheduleDecl[] => [
   schedule({
     cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, at the start of the week.
+    summary: "Weekly report",
     input: `Write the weekly report. Read project_context, the Publish cards closed in the last seven days (board_read, status done) for their post ids, and their numbers (social.post_metrics, since_days 7). ${focus} Create one card for the channel-manager — title "Weekly report: <the week>", assignee channel-manager — whose body is the report in markdown, ending with two things to make more of and one to make less of. Say its headline in your reply.`,
     budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
   }),
   schedule({
     cron: "5 9 * * *", // Daily 09:05 — every post gets a performance history.
+    summary: "Performance analysis",
     input:
       "Daily performance check. If social.post_metrics is not offered, no account is connected yet: say so in one line and stop — never request_tools for a social tool. Otherwise call social.post_metrics with since_days 14 to record today's numbers for every post from the last two weeks. Do not edit, delete or repost anything. For any post running well above or below the channel's usual, comment one line on its Publish card saying what you think drove it — hook, topic, length or posting time.",
     budget_micro_usd: 2_000_000, // $2 — one metrics read and a few one-line comments.
