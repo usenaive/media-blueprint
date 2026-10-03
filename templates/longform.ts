@@ -70,6 +70,7 @@ export const LONGFORM: MediaTemplate = {
         schedule({
           // Monday, Wednesday and Friday 05:00 — three pieces a week, because each is ~$53.97 of render.
           cron: "0 5 * * 1,3,5",
+          summary: "Research the next subject",
           input:
             "Start the next subject. Read project_context, the teardown, the newest weekly report card and the Plan cards already on the board (board_read). Pick ONE subject worth a whole piece, research it until every claim has a source, find one or two exemplar videos of this channel's own length and open each, then create its Plan card for the writer whose body is the brief. Nothing already on the board.",
           budget_micro_usd: 10_000_000, // $10 — a deep read of one subject and its exemplars.
