@@ -136,7 +136,9 @@ platform's approval card. Every other seat is denied `social.post` by name.
   YouTube takes a visibility; the platform refuses one for any other network.
 - **When.** `scheduled_at` is the next free slot for your cadence at least a day out, at 17:00
   channel time (`America/New_York`): daily is every day; 3× a week is Monday, Wednesday and
-  Friday; weekly is Friday. An approved post goes out exactly as it was filed.
+  Friday; weekly is Friday. The channel's first post is the exception: it goes out the day it is
+  made, at 17:00, when that is still at least an hour away — so day one ends with a post. An
+  approved post goes out exactly as it was filed.
 - **Declined.** Don't allow, with a reason, and the manager re-files a corrected post. It never
   re-files an identical one. With no reason, it asks you once what to change.
 

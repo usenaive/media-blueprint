@@ -89,7 +89,7 @@ export const CLIPPING: MediaTemplate = {
       key: "source-check",
       title: "Confirm this channel can reach the references and cut at all",
       assignee: "clipper",
-      body: "Day one is set-up, not a cut. Read project_context for the reference channels the operator named, then open each with the browser and say whether you can reach it. Look for clip_video in the tools offered this turn — that list is complete. If it is there, say so and do not call request_tools. Only if it is missing, request exactly it with request_tools, once. Write in this card's note which sources you can reach, which you cannot, and plainly whether this channel can work at all. Cut nothing today.",
+      body: "Day one is set-up, not a cut. Read project_context for the reference channels the operator named, then open each with the browser and say whether you can reach it. Look for clip_video in the tools offered this turn — that list is complete. If it is there, say so and do not call request_tools. Only if it is missing, request exactly it with request_tools, once. Write in this card's note which sources you can reach, which you cannot, and plainly whether this channel can work at all. Cut nothing on this card.",
     }),
     task({
       key: "caption-style",
