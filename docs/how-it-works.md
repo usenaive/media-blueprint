@@ -128,7 +128,10 @@ Woken on a Publish card, it:
 6. sets `scheduled_at` to the next free slot at least a day out: daily is every day, 3× a week is
    Monday, Wednesday and Friday, weekly is Friday — 17:00 `America/New_York`, with that date's
    UTC offset. An approved call goes out exactly as it was filed, so a slot chosen too close could
-   pass while it waits;
+   pass while it waits. The first post — no Publish card done and no post id on any card yet — is
+   the exception: it takes today's 17:00, whatever day the cadence names, when that is at least an
+   hour away, else the next free slot; a post refused because its time passed is re-filed for the
+   next free slot;
 7. comments each post id on the card the moment it is approved, then closes the card.
 
 `social.post` is `ask` for this seat, so each call stops on the platform's approval card: the

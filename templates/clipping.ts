@@ -56,6 +56,7 @@ export const CLIPPING: MediaTemplate = {
       schedules: [
         schedule({
           cron: "0 6 * * *", // Daily 06:00 — new episodes and moments.
+          summary: "Find new moments",
           input:
             "Watch the references. Read project_context, the newest weekly report card and the Cut cards already on the board (board_read). Check each named reference channel for new episodes since the last fire, open each episode you pick from with the browser, and start the moments the cadence needs until tomorrow — each a Cut card for the clipper with the source URL, start, end, why and what you saw. Only from named references; nothing already on the board.",
           budget_micro_usd: 10_000_000, // $10 — a read of the references and a few cards.
@@ -88,7 +89,7 @@ export const CLIPPING: MediaTemplate = {
       key: "source-check",
       title: "Confirm this channel can reach the references and cut at all",
       assignee: "clipper",
-      body: "Day one is set-up, not a cut. Read project_context for the reference channels the operator named, then open each with the browser and say whether you can reach it. Look for clip_video in the tools offered this turn — that list is complete. If it is there, say so and do not call request_tools. Only if it is missing, request exactly it with request_tools, once. Write in this card's note which sources you can reach, which you cannot, and plainly whether this channel can work at all. Cut nothing today.",
+      body: "Day one is set-up, not a cut. Read project_context for the reference channels the operator named, then open each with the browser and say whether you can reach it. Look for clip_video in the tools offered this turn — that list is complete. If it is there, say so and do not call request_tools. Only if it is missing, request exactly it with request_tools, once. Write in this card's note which sources you can reach, which you cannot, and plainly whether this channel can work at all. Cut nothing on this card.",
     }),
     task({
       key: "caption-style",

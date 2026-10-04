@@ -7,7 +7,7 @@
  * Re-running `naive up` is idempotent — every resource is keyed by name.
  */
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
-import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, TEMPLATES } from "./templates/index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, ROADMAP, TEMPLATES } from "./templates/index.ts";
 import { MEDIA_MANAGER } from "./templates/media-manager.ts";
 
 /**
@@ -35,6 +35,8 @@ export const declaration = {
   title: ACTIVE.title,
   description: ACTIVE.description,
   platforms: ACTIVE.platforms,
+  /** The first week as the studio's launch card says it (`canonical-spec §31.5`). Printed, never provisioned. */
+  roadmap: ROADMAP,
 
   /**
    * The channel's mini app (`canonical-spec §50`): "Media manager", one page of numbers and posts,

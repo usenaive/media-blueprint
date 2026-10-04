@@ -13,7 +13,7 @@ import { niche } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
-export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, lengthPhrase, niche, segmentsOf } from "./template.ts";
+export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, ROADMAP, lengthPhrase, niche, segmentsOf } from "./template.ts";
 
 /**
  * The niche channel templates (ADR-1115). Each is its base crew with one niche skill pinned in every

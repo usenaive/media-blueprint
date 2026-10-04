@@ -525,6 +525,17 @@ describe("publishing", () => {
     expect(brief()).toMatch(/at least a day from now/);
   });
 
+  /** The launch card promises a post on day one: the first one takes today's slot while it is still ahead. */
+  it("lets the channel's first post go out today, and keeps a day's margin on every later one", () => {
+    expect(brief()).toContain(`The channel's first post — no post id on any card yet — takes today's ${POST_TIME} whatever the cadence, if an hour or more away.`);
+    expect(brief()).toMatch(/at least a day from now/);
+    expect(brief()).toMatch(/Refused for a passed time, re-file it for the next free slot/);
+    // A day-one set-up card must not read as "nothing ships today".
+    for (const template of all) {
+      for (const card of template.tasks) expect(card.body, `${template.name}/${card.key}`).not.toMatch(/(Render|Cut) nothing today/);
+    }
+  });
+
   /** The approval card has Allow and Don't allow; a decline comes back to the seat as words. */
   it("re-files a corrected post when the operator declines, never an identical one", () => {
     expect(brief()).toMatch(/waits for the operator's approval/);

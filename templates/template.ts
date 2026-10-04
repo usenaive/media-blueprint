@@ -471,11 +471,23 @@ export const toolset = (allow: readonly string[], ask: readonly string[] = []) =
  * absent key owns — and deletes — nothing. `budget_micro_usd` is per fire and stays inside the
  * agent's per-task ceiling.
  */
-export const schedule = (decl: { cron: string; input: string; budget_micro_usd: number }): ScheduleDecl => ({
+export const schedule = (decl: { cron: string; input: string; summary?: string; budget_micro_usd: number }): ScheduleDecl => ({
   ...decl,
   timezone: CHANNEL_TIMEZONE,
   identity: CHANNEL_IDENTITY,
 });
+
+/**
+ * The first week as the studio's launch card says it (vetta-mono ADR-1172), the same on every
+ * template: day one sets the channel up and publishes its first post, and every day after it posts and
+ * reads the numbers. Each timer's own `summary` is added on the days it fires. `after` is the card's
+ * "Day 8 on" line (engine 0.11.0, at most 80 characters); without it the card says "The week repeats".
+ */
+export const ROADMAP = {
+  day_one: "Setup and publish first post",
+  every_day: "New posts · Performance analysis",
+  after: "The week repeats · the CEO finds sponsors, you approve the deals",
+};
 
 /** One day-one card. The body is all the woken seat is given, so `CARD_ORDER` is appended to every one. */
 export const task = (decl: { key: string; title: string; body: string; assignee: string; blocked_by?: string[] }): Task => ({
@@ -536,6 +548,12 @@ export const agent = (decl: {
  * the seat that turns the cadence answer into `scheduled_at`. And it spends nothing on renders, so
  * the seat that bought a video is never the one that decides it ships.
  *
+ * WHY THE FIRST POST GOES OUT THE SAME DAY. The launch card promises day one ends with a post
+ * (`ROADMAP.day_one`), and the seeded first-piece card runs its chain to a Publish card that day.
+ * Every later post keeps a day's margin, because an approved call replays byte-identical and a slot
+ * chosen too close passes while it waits; the first one takes today's `POST_TIME` only with an hour
+ * still to go, and a refusal for a passed time is re-filed for the next free slot.
+ *
  * `social.post` rules it is written to: YouTube and Mastodon alone accept `visibility`, and any
  * other network in the same call is refused; `scheduled_at` needs a UTC offset; the approval card
  * has Allow and Don't allow, and a decline comes back as "do not issue it again unchanged".
@@ -547,7 +565,7 @@ export const channelManager = (): AgentDecl =>
     required: true,
     description:
       "Runs the channel: publishes each finished piece on the cadence you chose — every post waits for your approval — and reads the weekly report.",
-    brief: `You are the channel manager: the operator's lead and the only seat that publishes. A Publish card wakes you: its body names the video (a fil_ id), the caption and its source card. Read the plan behind it, and fix the caption where it drifts from the plan or the channel's voice (\`naive/caption-writing\`). A post id already in the card's comments is a post already made: never make it again. The channel posts to every account connected to it, and nowhere else: read them with social.accounts. If social.post is not offered, or no account is connected: where the channel-plan card's comments say the operator will connect none, close this card "Not posted:" and do not ask again; else ask the operator once with ask_operator to connect one, comment the answer on the channel-plan card, and wait — never request_tools for a social tool. Then call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the connected accounts' platforms, by the ids social.accounts gives. YouTube goes on its own call with visibility — lower-case — the context's visibility answer where it gives one, else unlisted, since no other network takes a visibility; the rest go together on a second call without one. scheduled_at is the next free slot for the cadence answer (${SLOTS}), written with that date's UTC offset, at least a day from now, and not a slot another Publish card's note already took. Each call waits for the operator's approval. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once what to change. Close the card done with each post id and when it goes out. A Weekly report card wakes you too: apply its advice on captions and posting times, and close it noting what you changed. Asked in chat, answer from the board; route new work as a card for its seat.`,
+    brief: `You are the channel manager, the operator's lead. A Publish card wakes you with a video (a fil_ id), its caption and source card. Fix the caption where it drifts from its plan or the channel's voice (\`naive/caption-writing\`). A post id in the card's comments is a post made: never repeat it. The channel posts to every account connected to it, and nowhere else: read them with social.accounts. If social.post is not offered, or no account is connected: where the channel-plan card's comments say the operator will connect none, close this card "Not posted:" and do not ask again; else ask the operator once with ask_operator to connect one, comment the answer on the channel-plan card, and wait — never request_tools for a social tool. Call social.post with file_ids the video, content the caption — its first line is the YouTube title — and platforms the connected accounts' platforms, by the ids social.accounts gives. YouTube goes on its own call with visibility — lower-case — the context's answer, else unlisted; the rest share a second call without one. scheduled_at is the next free slot for the cadence answer (${SLOTS}), with that date's UTC offset, at least a day from now, and not one another Publish card's note took. The channel's first post — no post id on any card yet — takes today's ${POST_TIME} whatever the cadence, if an hour or more away. Refused for a passed time, re-file it for the next free slot. Each call waits for the operator's approval. Approved, comment its post id on your card at once. If the operator declines it or asks for changes, re-file a corrected post from what they said — never an identical one; declined with no reason, ask once what to change. Close the card done with each post id and when it goes out. A Weekly report card wakes you too: apply its advice on captions and posting times, and close it with what you changed. In chat, answer from the board; route new work as a card for its seat.`,
     // Read-only: where it posts, whether a post went out, how posts did, and what a render looks like.
     tools: ["social.accounts", "social.status", "social.post_metrics", "view_image"],
     ask: ["social.post"],
@@ -572,11 +590,13 @@ export const channelPlanCard = (firstAsk: string): Task =>
 export const analystSchedules = (focus: string): ScheduleDecl[] => [
   schedule({
     cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, at the start of the week.
+    summary: "Weekly report",
     input: `Write the weekly report. Read project_context, the Publish cards closed in the last seven days (board_read, status done) for their post ids, and their numbers (social.post_metrics, since_days 7). ${focus} Create one card for the channel-manager — title "Weekly report: <the week>", assignee channel-manager — whose body is the report in markdown, ending with two things to make more of and one to make less of. Say its headline in your reply.`,
     budget_micro_usd: 10_000_000, // $10 — a read of the week and one report.
   }),
   schedule({
     cron: "5 9 * * *", // Daily 09:05 — every post gets a performance history.
+    summary: "Performance analysis",
     input:
       "Daily performance check. If social.post_metrics is not offered, no account is connected yet: say so in one line and stop — never request_tools for a social tool. Otherwise call social.post_metrics with since_days 14 to record today's numbers for every post from the last two weeks. Do not edit, delete or repost anything. For any post running well above or below the channel's usual, comment one line on its Publish card saying what you think drove it — hook, topic, length or posting time.",
     budget_micro_usd: 2_000_000, // $2 — one metrics read and a few one-line comments.
@@ -597,7 +617,7 @@ export const lookCard = (studyAuthor: string, holdAcross: string): Task =>
     title: "Choose the look this channel renders in",
     assignee: "producer",
     blocked_by: ["reference-study"],
-    body: `Day one is set-up, not a render. Read project_context and the teardown — the note on the reference-study card the ${studyAuthor} just closed. Choose the one or two looks from the style library below closest to the teardown's shot grammar, and write them in your note with one line on why for each; every plan names its look from your note.${holdAcross} The style library: ${STYLE_LIBRARY}. Then look for generate_video in the tools offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing today.`,
+    body: `Day one is set-up, not a render. Read project_context and the teardown — the note on the reference-study card the ${studyAuthor} just closed. Choose the one or two looks from the style library below closest to the teardown's shot grammar, and write them in your note with one line on why for each; every plan names its look from your note.${holdAcross} The style library: ${STYLE_LIBRARY}. Then look for generate_video in the tools offered this turn — that list is complete. If it is there, say so in the note and do not call request_tools. Only if it is missing, request exactly it with request_tools, once, and say in the note whether it was granted. Render nothing on this card.`,
   });
 
 /**

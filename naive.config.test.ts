@@ -2,7 +2,7 @@
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, TEMPLATES } from "./templates/index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, ROADMAP, TEMPLATES } from "./templates/index.ts";
 import { MEDIA_MANAGER } from "./templates/media-manager.ts";
 
 /** A block's props, read loosely: the engine types each block's props exactly, the checks here read any. */
@@ -274,5 +274,16 @@ describe("naive.config", () => {
         expect(agent.tools?.configs[tool], `${agent.name}/${tool}`).toEqual({ enabled: false, permission: "deny" });
       }
     }
+  });
+  /**
+   * The launch card's first week (vetta-mono ADR-1172): Day 1, the line every day after carries, and
+   * "Day 8 on" in media's own words. Read back off `defineProject`, since an engine before 0.11.0
+   * strips `roadmap` without a word.
+   */
+  it("says the first week and what follows it in the launch card's words", () => {
+    expect(project.roadmap).toEqual(ROADMAP);
+    expect(ROADMAP.after).toBe("The week repeats · the CEO finds sponsors, you approve the deals");
+    expect(ROADMAP.after.length).toBeLessThanOrEqual(80);
+    for (const line of [ROADMAP.day_one, ROADMAP.every_day]) expect(line.length).toBeLessThanOrEqual(60);
   });
 });
