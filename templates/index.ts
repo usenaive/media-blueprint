@@ -95,13 +95,6 @@ export const CARTOONS_IRL = niche(FACELESS, {
   skill: "channel-template-cartoons-irl",
   seats: SEGMENTED_SHORT_FORM,
 });
-export const DANCING_CELEBRITY = niche(FACELESS, {
-  name: "dancing-celebrity",
-  title: "AI Dancing Celebrity Channel",
-  description: "AI Dancing Celebrity Channel is a template that builds an agent team that manages a social media account for you, producing clearly-labelled AI parody videos of an invented public-figure type dancing. This lets you create the dancing-celebrity parody videos going viral right now.",
-  skill: "channel-template-dancing-celebrity",
-  seats: SEGMENTED_SHORT_FORM,
-});
 export const DANCING_ANIMALS = niche(FACELESS, {
   name: "dancing-animals",
   title: "AI Dancing Animals Channel",
@@ -128,7 +121,6 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "channel-cloning": CHANNEL_CLONING,
   comics: COMICS,
   "cartoons-irl": CARTOONS_IRL,
-  "dancing-celebrity": DANCING_CELEBRITY,
   "dancing-animals": DANCING_ANIMALS,
 };
 

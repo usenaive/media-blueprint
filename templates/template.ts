@@ -30,7 +30,6 @@ export type TemplateName =
   | "channel-cloning"
   | "comics"
   | "cartoons-irl"
-  | "dancing-celebrity"
   | "dancing-animals";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
@@ -162,7 +161,6 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "channel-cloning": "first-briefs",
   comics: "first-briefs",
   "cartoons-irl": "first-briefs",
-  "dancing-celebrity": "first-briefs",
   "dancing-animals": "first-briefs",
 };
 

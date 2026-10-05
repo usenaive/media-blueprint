@@ -103,7 +103,7 @@ describe("the question that asks who sees a new YouTube video", () => {
  * the cadence alone; the clipping niches keep the `sources` they cannot cut without.
  */
 describe("a niche template's questions", () => {
-  const GENERATIVE = ["ufc", "history", "animal-feast", "comics", "cartoons-irl", "dancing-celebrity", "dancing-animals"] as const;
+  const GENERATIVE = ["ufc", "history", "animal-feast", "comics", "cartoons-irl", "dancing-animals"] as const;
   const CLIPPING_NICHES = ["gaming-clips", "news", "sports"] as const;
   // `channel-cloning` is generative too, but keeps one question: the channel it clones.
   const CLONE_NICHES = ["channel-cloning"] as const;

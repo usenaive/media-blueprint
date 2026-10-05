@@ -45,7 +45,6 @@ describe("naive.config", () => {
       "AI Channel Cloning",
       "AI Comics Channel",
       "AI Dancing Animals Channel",
-      "AI Dancing Celebrity Channel",
       "AI Eating Animal Channel",
       "AI History Channel",
       "AI UFC Channel",

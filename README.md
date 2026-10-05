@@ -31,7 +31,7 @@ title, the one-line description, and the networks each template is made for (`PL
 
 ### Niche channel templates
 
-On top of the base three, the repo carries **eleven niche channel templates**. Each is its base crew
+On top of the base three, the repo carries **ten niche channel templates**. Each is its base crew
 with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
 pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
 [`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card
@@ -61,7 +61,6 @@ render each one, join them with ffmpeg and burn in the hook and label (the skill
 | `channel-cloning` | AI Channel Cloning | `faceless` | `naive/channel-template-channel-cloning` |
 | `comics` | AI Comics Channel | `faceless` | `naive/channel-template-comics` |
 | `cartoons-irl` | AI Cartoons IRL Channel | `faceless` | `naive/channel-template-cartoons-irl` |
-| `dancing-celebrity` | AI Dancing Celebrity Channel | `faceless` | `naive/channel-template-dancing-celebrity` |
 | `dancing-animals` | AI Dancing Animals Channel | `faceless` | `naive/channel-template-dancing-animals` |
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
@@ -212,7 +211,7 @@ exception: in place of the dropped niche it keeps a single question, the channel
 |---|---|
 | `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-celebrity`, `dancing-animals` | Posting cadence |
+| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals` | Posting cadence |
 | `channel-cloning` | Channel to clone · Posting cadence |
 | `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
 
@@ -259,7 +258,7 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
   allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
   or context explicitly ask for another. The generated short-form niches (`ufc`, `history`,
-  `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-celebrity`, `dancing-animals`)
+  `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-animals`)
   pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
