@@ -9,7 +9,7 @@
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
-import { niche } from "./template.ts";
+import { CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
@@ -64,9 +64,49 @@ export const ANIMAL_FEAST = niche(FACELESS, {
 });
 
 /**
+ * The second wave of generated short-form niches (ADR-1190). Each reuses the `faceless` crew with
+ * `SEGMENTED_SHORT_FORM` (a piece is segments joined), pins `naive/channel-template-<niche>`, and
+ * drops the niche and reference questions like the others. `channel-cloning` is the one exception:
+ * it keeps a custom "clone" question in place of the dropped niche, because a clone channel's niche
+ * IS the channel it clones, so `niche()` is spread and its `questions` replaced.
+ */
+export const CHANNEL_CLONING: MediaTemplate = {
+  ...niche(FACELESS, {
+    name: "channel-cloning",
+    title: "AI Channel Cloning",
+    description: "AI Channel Cloning is a template that builds an agent team that manages a social media account for you, cloning the format of a channel you name and producing its own original videos in that style. This lets you spin up a channel in the exact format going viral right now.",
+    skill: "channel-template-channel-cloning",
+    seats: SEGMENTED_SHORT_FORM,
+  }),
+  // A clone channel's niche is the channel it clones, so it asks for that in place of the niche.
+  questions: [CLONE_CHANNEL_QUESTION, CADENCE_QUESTION],
+};
+export const COMICS = niche(FACELESS, {
+  name: "comics",
+  title: "AI Comics Channel",
+  description: "AI Comics Channel is a template that builds an agent team that manages an entire social media account for you, writing original comic-book stories and producing them as motion-comic videos. This lets you create the comic videos that are going really viral right now.",
+  skill: "channel-template-comics",
+  seats: SEGMENTED_SHORT_FORM,
+});
+export const CARTOONS_IRL = niche(FACELESS, {
+  name: "cartoons-irl",
+  title: "AI Cartoons IRL Channel",
+  description: "AI Cartoons IRL Channel is a template that builds an agent team that manages a social media account for you, turning the look of 2D cartoons into hyperrealistic live-action videos with original characters. This lets you make the cartoon-in-real-life videos going viral right now.",
+  skill: "channel-template-cartoons-irl",
+  seats: SEGMENTED_SHORT_FORM,
+});
+export const DANCING_ANIMALS = niche(FACELESS, {
+  name: "dancing-animals",
+  title: "AI Dancing Animals Channel",
+  description: "AI Dancing Animals Channel is a template that builds an agent team that manages an entire social media account for you, producing videos of an animal from your niche doing a funny dance. This lets you create the dancing-animal videos that are going really viral right now.",
+  skill: "channel-template-dancing-animals",
+  seats: SEGMENTED_SHORT_FORM,
+});
+
+/**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * six niche templates (ADR-1115, ADR-1119) reuse their crews.
+ * eleven niche templates (ADR-1115, ADR-1119, ADR-1190) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -78,6 +118,10 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   ufc: UFC,
   history: HISTORY,
   "animal-feast": ANIMAL_FEAST,
+  "channel-cloning": CHANNEL_CLONING,
+  comics: COMICS,
+  "cartoons-irl": CARTOONS_IRL,
+  "dancing-animals": DANCING_ANIMALS,
 };
 
 /**
