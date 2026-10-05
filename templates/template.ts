@@ -18,13 +18,20 @@ export type TemplateName =
   | "clipping"
   | "longform"
   // Niche channel templates (ADR-1115): each reuses a base crew and pins its niche skill in every
-  // seat's `skills[]`. `gaming-clips`/`news`/`sports` reuse `clipping`; `ufc`/`history` reuse `faceless`.
+  // seat's `skills[]`. `gaming-clips`/`news`/`sports` reuse `clipping`; the rest reuse `faceless`.
   | "gaming-clips"
   | "news"
   | "sports"
   | "ufc"
   | "history"
-  | "animal-feast";
+  | "animal-feast"
+  // The second wave of generated short-form niches (ADR-1190): each reuses `faceless` (segmented).
+  // `channel-cloning` also keeps a custom "clone" question in place of the dropped niche question.
+  | "channel-cloning"
+  | "comics"
+  | "cartoons-irl"
+  | "dancing-celebrity"
+  | "dancing-animals";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -91,6 +98,23 @@ export const VISIBILITY_QUESTION: SetupQuestion = {
   help: "YouTube only. Left blank, videos go up unlisted, so you can check one before anyone finds it.",
 };
 
+/** The key the platform stores the clone target under, on the `channel-cloning` niche only. */
+export const CLONE_ANSWER_KEY = "clone";
+
+/**
+ * The one channel the `channel-cloning` niche clones the FORMAT of. Required, and the whole of what
+ * that niche models itself on: the crew tears it down on day one (its pinned skill drives this) and
+ * generates its own original content in the same format. It replaces the `niche` question the other
+ * generated niches drop — a clone channel's "niche" IS the channel it clones.
+ */
+export const CLONE_CHANNEL_QUESTION: SetupQuestion = {
+  key: CLONE_ANSWER_KEY,
+  label: "Channel to clone",
+  type: "text",
+  placeholder: "A channel link or @handle",
+  help: "The channel whose format this clones. The team studies how its videos are made and makes its own in the same style.",
+};
+
 /** The key the platform stores the reference answer under. */
 export const REFERENCE_ANSWER_KEY = "reference";
 
@@ -135,6 +159,11 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   ufc: "first-briefs",
   history: "first-briefs",
   "animal-feast": "first-briefs",
+  "channel-cloning": "first-briefs",
+  comics: "first-briefs",
+  "cartoons-irl": "first-briefs",
+  "dancing-celebrity": "first-briefs",
+  "dancing-animals": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */

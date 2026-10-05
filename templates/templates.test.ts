@@ -36,18 +36,25 @@ import {
 } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
-/** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. The last
- * five are the niche channel-template skills a niche template pins in every seat (ADR-1115). */
+/** The `naive/*` catalogue skills a media crew has a use for; a seat may name no other ref. The
+ * channel-template skills are the niche playbooks a niche template pins in every seat (ADR-1115, ADR-1190). */
 const CATALOGUE = [
   "naive/short-video-hooks", "naive/clip-selection", "naive/caption-writing", "naive/channel-report",
   "naive/video-trend-brief", "naive/reference-teardown", "naive/long-form-arc", "naive/video-assembly",
   "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
   "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
+  "naive/channel-template-channel-cloning", "naive/channel-template-comics", "naive/channel-template-cartoons-irl",
+  "naive/channel-template-dancing-celebrity", "naive/channel-template-dancing-animals",
 ];
 
 const all = Object.values(TEMPLATES);
 /** The short-form niches whose playbook renders segments and joins them (`SEGMENTED_SHORT_FORM`). */
-const SEGMENTED: TemplateName[] = ["ufc", "history", "animal-feast"];
+const SEGMENTED: TemplateName[] = [
+  "ufc", "history", "animal-feast",
+  "channel-cloning", "comics", "cartoons-irl", "dancing-celebrity", "dancing-animals",
+];
+/** Segmented niches whose form is cadence-only; `channel-cloning` adds a `clone` question, so it is apart. */
+const CADENCE_ONLY_NICHES: TemplateName[] = SEGMENTED.filter((name) => name !== "channel-cloning");
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
 const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ template, agent, id: `${template.name}/${agent.name}` })));
@@ -60,6 +67,8 @@ const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ te
 const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "gaming-clips": "clipping", news: "clipping", sports: "clipping", ufc: "faceless", history: "faceless",
   "animal-feast": "faceless",
+  "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
+  "dancing-celebrity": "faceless", "dancing-animals": "faceless",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
   const out = { ...base } as Record<TemplateName, T>;
@@ -671,7 +680,12 @@ describe("the setup questions", () => {
 
   /** The generative niches asked only `niche`, `reference` and the cadence, so the cadence is all that is left. */
   it("leaves a generative niche asking only the cadence", () => {
-    for (const name of SEGMENTED) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+    for (const name of CADENCE_ONLY_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  });
+
+  /** `channel-cloning` is the one generated niche that keeps a question: the channel it clones. */
+  it("asks the channel-cloning niche for the channel to clone, then the cadence", () => {
+    expect(TEMPLATES["channel-cloning"].questions.map((q) => q.key)).toEqual(["clone", "cadence"]);
   });
 
   /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
