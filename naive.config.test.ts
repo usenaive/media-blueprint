@@ -40,7 +40,11 @@ describe("naive.config", () => {
     expect(declaration.description).toBe(ACTIVE.description);
     expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
     expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual([
-      // The base three, then the five niche channel templates (ADR-1115).
+      // The base three and the ten niche channel templates (ADR-1115, ADR-1174), sorted.
+      "AI Cartoons IRL Channel",
+      "AI Channel Cloning",
+      "AI Comics Channel",
+      "AI Dancing Animals Channel",
       "AI Eating Animal Channel",
       "AI History Channel",
       "AI UFC Channel",
@@ -101,13 +105,23 @@ describe("naive.config", () => {
   });
 
   /**
-   * The same four fields, read back off what `defineProject` RETURNS, for every template. Engines
-   * before 0.9.0 parse the declaration through a schema that does not know `mini_apps`, `title`,
-   * `description` or `platforms` and strip them silently — so a raw-object check passes while the
-   * published artifact carries no Media manager and no label. This is the check that the installed
-   * engine really keeps them.
+   * The same four fields, read back off what `defineProject` RETURNS, for every template the INSTALLED
+   * engine admits. Engines before 0.9.0 parse the declaration through a schema that does not know
+   * `mini_apps`, `title`, `description` or `platforms` and strip them silently — so a raw-object check
+   * passes while the published artifact carries no Media manager and no label. This is the check that
+   * the installed engine really keeps them.
+   *
+   * Gated on `BLUEPRINTS.media.templates` (the installed engine's allow-list) exactly as `naive.config.ts`
+   * gates what it hands `up`: a template this repo carries but the installed engine does not yet admit
+   * (a new niche added here ahead of the `@usenaive-sdk/blueprints` release that lists it) cannot be
+   * round-tripped through `defineProject` until that engine ships — `defineProject` refuses it by name.
+   * Its crew, tools and questions are still held by `templates.test.ts` and `onboarding.test.ts`.
    */
-  it.each(Object.values(TEMPLATES).map((one) => [one.name, one] as const))(
+  it.each(
+    Object.values(TEMPLATES)
+      .filter((one) => (BLUEPRINTS.media?.templates ?? Object.keys(TEMPLATES)).includes(one.name))
+      .map((one) => [one.name, one] as const),
+  )(
     "keeps Media manager, the title, the description and the networks through defineProject on %s",
     (_name, one) => {
       const parsed = defineProject({

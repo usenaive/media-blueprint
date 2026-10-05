@@ -23,6 +23,11 @@ const carried = new Set<string>(BLUEPRINTS.media?.templates ?? Object.keys(TEMPL
 const templates = Object.values(TEMPLATES)
   .filter((one) => carried.has(one.name))
   .map((one) => ({ ...one, kinds: [], seed: {}, words: {} }));
+/** Said out loud, so a publish against an engine that predates a template never drops it silently. */
+const skipped = Object.keys(TEMPLATES).filter((name) => !carried.has(name));
+if (skipped.length > 0) {
+  console.warn(`media: the installed @usenaive-sdk/blueprints does not list ${skipped.join(", ")}; left out until an engine that lists them is installed.`);
+}
 
 /** What `naive up` is handed. Named so `naive.config.test.ts` can read the declaration itself. */
 export const declaration = {
