@@ -103,11 +103,13 @@ describe("the question that asks who sees a new YouTube video", () => {
  * the cadence alone; the clipping niches keep the `sources` they cannot cut without.
  */
 describe("a niche template's questions", () => {
-  const GENERATIVE = ["ufc", "history", "animal-feast"] as const;
+  const GENERATIVE = ["ufc", "history", "animal-feast", "comics", "cartoons-irl", "dancing-animals"] as const;
   const CLIPPING_NICHES = ["gaming-clips", "news", "sports"] as const;
+  // `channel-cloning` is generative too, but keeps one question: the channel it clones.
+  const CLONE_NICHES = ["channel-cloning"] as const;
 
   it("asks neither the niche nor the reference, on any niche", () => {
-    for (const name of [...GENERATIVE, ...CLIPPING_NICHES]) {
+    for (const name of [...GENERATIVE, ...CLIPPING_NICHES, ...CLONE_NICHES]) {
       const keys = TEMPLATES[name].questions.map((q) => q.key);
       expect(keys, name).not.toContain("niche");
       expect(keys, name).not.toContain(REFERENCE_ANSWER_KEY);
@@ -116,6 +118,10 @@ describe("a niche template's questions", () => {
 
   it("leaves a generative niche asking only the cadence", () => {
     for (const name of GENERATIVE) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  });
+
+  it("asks the channel-cloning niche for the channel to clone, then the cadence", () => {
+    for (const name of CLONE_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["clone", "cadence"]);
   });
 
   it("leaves a clipping niche its sources and visibility", () => {
