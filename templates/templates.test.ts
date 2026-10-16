@@ -867,6 +867,12 @@ describe("the generated short-form scene pipeline", () => {
       expect(scriptwriter, name).toContain(`scenes of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds`);
       expect(scriptwriter, name).toMatch(/SOURCE PROVENANCE/);
       expect(scriptwriter, name).toMatch(/CONTINUITY CONTRACT/);
+      expect(scriptwriter, name).toMatch(/STORY LOGIC/);
+      expect(scriptwriter, name).toMatch(/BECAUSE\/BUT\/THEREFORE\/SO spine/);
+      expect(scriptwriter, name).toMatch(/transition ledger/);
+      expect(scriptwriter, name).toMatch(/cold-viewer check/);
+      expect(scriptwriter, name).toMatch(/incoming state, outgoing state/);
+      expect(producer.system, name).toMatch(/opening state does not follow the preceding scene's outgoing state/);
     }
     expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(SEGMENT_MAX_SECONDS).toBe(15);
