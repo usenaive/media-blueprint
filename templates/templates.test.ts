@@ -208,10 +208,10 @@ describe("the toolsets", () => {
     }
   });
 
-  /** Generated shorts assemble exact speech; their writers may transcribe dialogue references. */
-  it("grants speech to generated-short producers and transcription to their scriptwriters", () => {
+  /** Generated shorts can replace dialogue; their writers and producers inspect spoken audio. */
+  it("grants speech to generated-short producers and transcription to their writers and producers", () => {
     const SPEAKERS = withNicheIds(["faceless/producer"]);
-    const TRANSCRIBERS = withNicheIds(["faceless/scriptwriter"]);
+    const TRANSCRIBERS = withNicheIds(["faceless/scriptwriter", "faceless/producer"]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "generate_speech"), id).toBe(SPEAKERS.has(id) ? "allow" : "deny");
       expect(permissionFor(template, agent.name, "transcribe_audio"), id).toBe(TRANSCRIBERS.has(id) ? "allow" : "deny");
@@ -848,7 +848,7 @@ describe("the generated short-form scene pipeline", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
       const template = TEMPLATES[name];
       const producer = seat(template, "producer");
-      for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill"]) {
+      for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill", "transcribe_audio"]) {
         expect(permissionFor(template, "producer", tool), `${name}/${tool}`).toBe("allow");
       }
       expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({
@@ -875,11 +875,16 @@ describe("the generated short-form scene pipeline", () => {
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
   });
 
-  it("generates exact speech, burns text, joins and probes before publishing", () => {
+  it("chooses one dialogue source, burns text, joins and probes before publishing", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
       const producer = seat(TEMPLATES[name], "producer").system;
       expect(producer, name).toMatch(/drawtext|on-screen text/);
       expect(producer, name).toMatch(/generate_speech/);
+      expect(producer, name).toMatch(/AUDIO MODE: NATIVE/);
+      expect(producer, name).toMatch(/AUDIO MODE: GENERATED/);
+      expect(producer, name).toMatch(/Never use amix/);
+      expect(producer, name).toMatch(/exactly one intelligible voice/);
+      expect(producer, name).toMatch(/do not substitute an undeclared local or system voice/i);
       expect(producer, name).toMatch(/ffmpeg/);
       expect(producer, name).toMatch(/ffprobe/);
       expect(producer, name).toMatch(/publish_file the one finished video/);

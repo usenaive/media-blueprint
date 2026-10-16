@@ -72,8 +72,10 @@ A card is woken at most three times. After that it is parked for the CEO.
   on-screen text and editing instructions; all scenes total 15–30 seconds.
 - **producer**: for each scene, `generate_image`, inspect it, then `generate_video` with the accepted
   image's `fil_` id as its first frame. It records every id on the card so a wake resumes rather than
-  buys work twice. After all scenes land it generates exact speech, fetches and probes the assets,
-  normalizes and joins them with ffmpeg, burns in text, checks frames and publishes one final `fil_`.
+  buys work twice. After all scenes land it transcribes their audio and chooses one dialogue source
+  for the whole piece: keep usable native character performances, or strip every source audio track
+  and generate exact replacement speech. It never mixes both. It then normalizes and joins with
+  ffmpeg, burns in text, listens for doubled voices, checks frames and publishes one final `fil_`.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
 

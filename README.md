@@ -116,8 +116,10 @@ Step by step, on `faceless`:
    and writes the whole scene plan: provenance, continuity contract, image and motion prompts,
    exact dialogue, edit instructions, sources and caption. It creates the **Render** card.
 3. **The producer** generates and checks each scene's opening image, passes that stored `fil_` image
-   to `generate_video`, records every image and segment on the card, then adds authoritative speech
-   and on-screen text, joins and probes the result, and creates the **Publish** card.
+   to `generate_video`, records every image and segment on the card, then transcribes the renders and
+   chooses one dialogue source for the whole piece. It either keeps native character performances or
+   strips source audio and adds generated speech—never both—then adds on-screen text, joins and probes
+   the result, listens for doubled voices, and creates the **Publish** card.
 4. **The channel manager** is woken on the Publish card. It checks the caption and calls
    `social.post`. The post waits on the approval card.
 5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
