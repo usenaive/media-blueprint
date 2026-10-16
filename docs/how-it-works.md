@@ -63,15 +63,17 @@ A card is woken at most three times. After that it is parked for the CEO.
 ### `faceless` — Faceless channel, 15–30 seconds
 
 - **trend-scout** (Mon & Thu 06:00): reads the teardown and the newest weekly report. For each slot
-  the cadence needs, picks a topic, opens one to three real videos doing it well, and creates a
-  Plan card whose body is the brief.
-- **scriptwriter**: opens the exemplars first — the browser for the page, `bash` to sample frames
-  through the first three seconds, `view_image` to look. Then research, three hooks, beats, shots.
-  Creates the Render card; its body is the plan: hook, shots with prompts and seconds summing to
-  15–30, facts with sources, caption — and a video model only where the operator's context names one.
-- **producer**: one `generate_video` call — the shots in order as one take, 9:16, no model named, so
-  it renders with the first pinned model (Seedance 2.5). It ends its turn while the render runs.
-  Creates the Publish card with the `fil_` id.
+  the cadence needs, picks a topic within the approved bible, opens one to three real videos doing
+  it well, and creates a Plan card whose body names its theme, narrative pattern and cast.
+- **scriptwriter**: first creates the character bible from the creator's exact words and timestamped
+  reference evidence, and waits for the operator to approve it. For a piece it samples the opening
+  and later scene changes, then writes source provenance, a continuity contract and 5–15 second
+  scenes. Every scene has an opening-image prompt, an image-to-video motion prompt, exact dialogue,
+  on-screen text and editing instructions; all scenes total 15–30 seconds.
+- **producer**: for each scene, `generate_image`, inspect it, then `generate_video` with the accepted
+  image's `fil_` id as its first frame. It records every id on the card so a wake resumes rather than
+  buys work twice. After all scenes land it generates exact speech, fetches and probes the assets,
+  normalizes and joins them with ffmpeg, burns in text, checks frames and publishes one final `fil_`.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
 
@@ -103,8 +105,8 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
 
 ### Day one
 
-Each template seeds five or six cards. Set-up first — the channel plan, the reference study, the
-look, the voice, the report skeleton — then one piece card for the head of the chain
+Each template seeds its set-up cards first — the channel plan, reference study, look, voice, report
+skeleton and, for generated shorts, the approved character bible — then one piece card for the head of the chain
 (`first-briefs`, `first-topic` or `first-moments`: the key 1.x already seeded, so a re-apply to an
 existing org seeds nothing and starts no paid piece). That piece runs its full chain to the
 approval card. The reference study never asks the operator: a blank reference answer means go and
@@ -171,9 +173,10 @@ a cron fire is not.
 - `analyst`: `social.post_metrics` `allow`;
 - `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
-- `generate_video` carries `config.models`, Seedance 2.5 first; on the segmented short-form niches'
-  producers, `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, 5 to 15 seconds a call);
-- `generate_speech` at `allow` on the segmented short-form niches' producers only.
+- `generate_video` carries `config.models`, Seedance 2.5 first; on the generated niche producers,
+  `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first. Every generated short renders 5–15 second scenes;
+- `generate_speech`, shell and file tools on every generated-short producer; `transcribe_audio` on
+  their scriptwriters.
 
 ## 8. Setup questions and `project_context`
 

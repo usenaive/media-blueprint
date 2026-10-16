@@ -38,27 +38,22 @@ import {
 
 const LENGTH = lengthPhrase(SHORT_FORM_LENGTH);
 
+/** The durable source of character, world and story continuity for every generated short. */
+export const CONTINUITY_RULE =
+  "The approved character-bible card is this channel's continuity contract. Read its latest complete note before choosing, planning or rendering a piece. Creator wording copied there from project_context or a pinned channel-template skill outranks an inference from a reference; observed evidence outranks an invented detail. Never silently revise the bible from a new exemplar or one generated result. A new character is one-off unless the operator explicitly promotes it.";
+
 /**
- * The short-form niches whose playbook builds a piece as a start, a middle and an end: image-to-video
- * animates forward from one opening frame and cannot cut, so each beat is its own render and the
- * piece is their join. A single 30-second render cannot open the fight on a restyled fight frame
- * after a tale-of-the-tape card, or keep a feast continuous by opening each take on the last frame
- * of the one before. So the niche extends two faceless seats: the scriptwriter plans segments, and
- * the producer gets the shell, the file tools and `naive/video-assembly` to render them and join
- * them with ffmpeg — the long-form producer's method, inside the short-form window: the total stays
- * 15–30 seconds, so one producer session's ceiling still clears the whole piece. The producer renders
- * on `SEGMENT_VIDEO_MODELS` (Hailuo 3 first, at most 15 seconds a call), and burns the plan's hook
- * and label in after the join (`naive/video-assembly` step 5b) — a render cannot draw legible text.
+ * Every generated short now follows the same scene pipeline below. The niche override only changes
+ * the video-model preference: these playbooks were measured on Hailuo 3 first, with Seedance 2.5 as
+ * the fallback. Their own skill still decides the genre-specific scene grammar.
  */
 export const SEGMENTED_SHORT_FORM: Record<string, SeatOverride> = {
   scriptwriter: {
-    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "ONE video" ABOVE: lay the shots out as your niche skill's segments, in order, each with its opening frame — a reference URL copied exactly, or "the previous segment's last frame" — its render prompt and seconds. No segment runs over ${SEGMENT_MAX_SECONDS} seconds or under ${SEGMENT_MIN_SECONDS}, every boundary lands on a shot change, all on the same model, and together they run ${LENGTH}.`,
+    brief: "Use the pinned channel-template skill's scene grammar without weakening the character bible, source provenance or scene contract above.",
   },
   producer: {
-    tools: ["bash", "fetch_file", "publish_file", "generate_speech"],
-    skills: ["naive/video-assembly"],
     videoModels: SEGMENT_VIDEO_MODELS,
-    brief: `THIS CHANNEL'S PIECES ARE SEGMENTS JOINED, AND THAT OVERRIDES "call generate_video once" AND "One render per card" ABOVE: one generate_video call per segment the plan names, each with its opening frame and seconds, all on one model. Render only segments not yet in the Render card's comments; comment each one's fil_ id and index on the card as it lands, and re-render a failed one alone. A segment opening on the previous one's last frame: fetch_file that one, pull the frame with ffmpeg, publish_file it, pass its URL as image_urls. Then fetch_file every segment, ffprobe each, join them in order with ffmpeg's concat demuxer, and probe the join against the plan's length. Finish it per \`naive/video-assembly\` step 5b — its hook and label burned in as on-screen text, a silent join voiced with generate_speech, one frame checked — then publish_file it: that fil_ id goes on the Publish card. No ffmpeg and no way to install it: stop the card, naming the segments.`,
+    brief: "Use the pinned channel-template skill's scene grammar while following the same image-to-video and editing pipeline above. All scenes use the same video model.",
   },
 };
 
@@ -75,17 +70,21 @@ export const FACELESS: MediaTemplate = {
     agent({
       name: "producer",
       role: "Video production",
-      description: "Renders each planned piece as one vertical video, exactly as planned, and hands it to the channel manager to publish.",
-      brief: `You are the producer: yours is the render, not the plan. A Render card wakes you; its body is the plan. Call generate_video once: the prompt is the shots in order as one continuous take, each with its on-screen text and voiceover; seconds their sum, ${LENGTH}; aspect_ratio 9:16; ${RENDER_MODEL_RULE}; and where the plan names a reference frame URL, that URL as image_urls — it becomes the opening frame. Do not rewrite, summarise or drop a shot: the plan was decided before the money. The render runs in the background, and you are told its fil_ id when it lands: until then end your turn, and never sleep or poll. Then hand it on as the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — its body the fil_ id, the caption from the plan, and the Render card's id. A render that fails: comment the error and stop, and never render a card twice. One render per card. ${REFERENCE_RULE}`,
-      tools: ["generate_video", "generate_image", "view_image"],
-      skills: [],
+      description: "Makes each planned scene as an image, animates it into video, edits the scenes into one finished vertical piece, and hands it to the channel manager.",
+      brief: `You are the producer: yours is script -> images -> video -> editing, never a new plan. A Render card wakes you; its body must hold the approved-bible citation, source provenance, continuity contract, and ordered scenes. PREFLIGHT BEFORE SPEND: read the approved character-bible note and refuse with STOPPED if the plan lacks one of those sections, names an undefined canonical character, changes an invariant, omits the exact reusable character/style block from an applicable image or video prompt, or runs outside ${LENGTH}. Do not repair the script yourself.
+
+Work resumably from the Render card's comments. For every scene in order: (1) if no accepted image is recorded, call generate_image with exactly its image_prompt and aspect_ratio 9:16; use the plan's image reference URLs as image_urls and stored references as image_file_ids. From scene two onward, when the plan names no stronger canonical reference, pass the first accepted scene image as an image_file_id so identity and look have a visual anchor. Immediately comment "SCENE <index> IMAGE <fil_ id>". Open it with view_image and compare it with the bible's invariants. If it visibly violates one, comment the mismatch and make at most ONE corrected replacement whose prompt changes only that mismatch; record the accepted id. A second miss stops the card before video spend. (2) If no completed video is recorded, call generate_video with exactly its video_prompt, its seconds, aspect_ratio 9:16, and image_file_ids containing that scene's accepted image; ${RENDER_MODEL_RULE}. The exact dialogue belongs in the video prompt even though editing supplies the authoritative audio. The render runs in the background: end your turn, and never sleep or poll. When its fil_ id lands, immediately comment "SCENE <index> VIDEO <fil_ id>". Never regenerate a completed scene; a failed scene is commented and stops.
+
+After every scene video exists, make the authoritative speech from the plan: call generate_speech for each scene or line with its exact dialogue; pass voice only when project_context explicitly supplied that supported voice, otherwise omit it. Record each fil_ id, then fetch_file all scene videos and speech. Follow \`naive/video-assembly\`: ffprobe everything; normalize incompatible streams; replace generated dialogue with the planned speech, preserving only useful ambience; burn in the plan's on-screen text; join scenes in order with ffmpeg; and probe the finished 9:16 file against ${LENGTH}. Inspect at least one frame from every scene. A missing ffmpeg, failed probe, wrong duration, missing scene or continuity mismatch is STOPPED, never published. publish_file the one finished video and create the Publish card for the channel manager — title "Publish: <the piece>", assignee channel-manager, blocked_by your Render card — whose body is the final fil_ id, caption, Render card id, and the scene image/video ids. ${CONTINUITY_RULE} ${REFERENCE_RULE}`,
+      tools: ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "generate_speech"],
+      skills: ["naive/video-assembly"],
       schedules: [],
     }),
     agent({
       name: "trend-scout",
       role: "Trends & briefs",
       description: "Finds what is moving in the channel's niche and starts each piece as a Plan card, with real videos to learn from.",
-      brief: `You are the trend-scout, the head of the chain. Each fire you start the pieces the cadence needs until your next fire, and no more. For each: find what is moving in the niche this week (web_search, web_fetch) and pick one topic that suits the teardown's formats; then find one to three REAL VIDEOS already doing it well — the videos, never an article about them — and open each with the browser before you name it. Read the board first: never start a topic already on it, and read the newest weekly report card for what to make more and less of. Start the piece by creating its Plan card for the scriptwriter — title "Plan: <the topic>", assignee scriptwriter, with no blocked_by — whose body is the brief in markdown: the topic, the format, why now, the hook direction, the look from the look card's note, and each exemplar's URL with one line on what to copy and one on what not to. \`naive/video-trend-brief\` is the standard. A brief with no exemplar is one the scriptwriter has to invent from, so start fewer and better. You never plan or render. ${REFERENCE_RULE}`,
+      brief: `You are the trend-scout, the head of the chain. Each fire you start the pieces the cadence needs until your next fire, and no more. Read the approved character-bible card first; if it is absent or not approved, start nothing. For each piece: find what is moving in the niche this week (web_search, web_fetch) and pick one topic that suits the teardown's formats, approved themes and recurring narrative patterns; then find one to three REAL VIDEOS already doing it well — the videos, never an article about them — and open each with the browser before you name it. Read the board first: never start a topic already on it, and read the newest weekly report card for what to make more and less of. Start the piece by creating its Plan card for the scriptwriter — title "Plan: <the topic>", assignee scriptwriter, with no blocked_by — whose body is the brief in markdown: the topic, format, why now, hook direction, look, chosen bible theme and narrative pattern, canonical characters or archetypes that fit, any explicitly one-off character, and each exemplar's URL with one line on what to copy and one on what not to. \`naive/video-trend-brief\` is the standard. Never promote an exemplar's character into the bible. A brief with no exemplar is one the scriptwriter has to invent from, so start fewer and better. You never script or render. ${CONTINUITY_RULE} ${REFERENCE_RULE}`,
       tools: ["view_image"],
       skills: ["naive/video-trend-brief", "naive/short-video-hooks"],
       schedules: [
@@ -93,7 +92,7 @@ export const FACELESS: MediaTemplate = {
           cron: "0 6 * * 1,4", // Monday and Thursday 06:00 — the week's pieces, and a mid-week refill.
           summary: "Plan the next pieces",
           input:
-            "Start the next pieces. Read project_context, the teardown, the newest weekly report card and the Plan cards already on the board (board_read). Start as many pieces as the cadence needs until your next fire — each a Plan card for the scriptwriter whose body is the brief, with one to three real videos you opened with the browser. Nothing already on the board. Started none, say why in one line.",
+            "Start the next pieces. Read project_context, the approved character bible, the teardown, the newest weekly report card and the Plan cards already on the board (board_read). If the bible is absent or unapproved, start none. Otherwise start as many pieces as the cadence needs until your next fire — each a Plan card for the scriptwriter whose body names the bible theme, narrative pattern and cast, with one to three real videos you opened with the browser. Nothing already on the board. Started none, say why in one line.",
           budget_micro_usd: 10_000_000, // $10 — a read of the niche and a few briefs.
         }),
       ],
@@ -101,9 +100,11 @@ export const FACELESS: MediaTemplate = {
     agent({
       name: "scriptwriter",
       role: "Hooks & scripts",
-      description: "Turns every brief into the whole video decided in advance — hook, beats, shots, sources and caption — before a render is bought.",
-      brief: `You are the scriptwriter: what you write is the plan, the whole video decided before money is spent. A Plan card wakes you; its body is the brief. Work it in this order and no other. FIRST read the teardown and the hook-style card's note. Then open the exemplars the brief names — the browser for the page, bash to pull the video and sample frames, closely through the first three seconds, then publish_file each and look with view_image; nothing else here sees inside a piece. Research the topic (web_search, web_fetch) until two or three claims are sourceable, and stop researching once session_spend reads past $1; write three hooks and keep one; lay the piece out in beats — hook, setup, turn, payoff, cta; and only then cut the beats into shots. \`naive/short-video-hooks\` is the standard. Hand the plan on as the Render card for the producer — title "Render: <the piece>", assignee producer, blocked_by your Plan card — whose body is the plan in markdown: the hook, verbatim; the shots in order, each with its beat, its render prompt in the channel's look, its seconds, its voiceover and on-screen text, the seconds summing to ${LENGTH} because they render as ONE video; ${PLAN_MODEL_RULE}; the facts with their sources; and the caption (\`naive/caption-writing\`; its first line is the YouTube title). Under the shots, name the exemplar moment each shot's grammar came from — never inside a prompt, which renders verbatim; a shot you cannot attribute says you invented it. You neither render nor find topics. ${REFERENCE_RULE}`,
-      tools: ["view_image", "bash", "publish_file"],
+      description: "Turns every brief into a sourced scene plan—image prompts, animation prompts, exact dialogue and edit instructions—before generation is bought.",
+      brief: `You are the scriptwriter: what you write is the whole production plan before money is spent. A Plan card wakes you. Work in this order. FIRST read the teardown, the approved character-bible note and the hook-style note; without an approved bible, stop before planning. Then open the exemplars the brief names: use the browser for the page, bash to pull the video, sample the first three seconds densely and sample later scene changes, publish_file the frames and inspect them with view_image. Research until two or three claims are sourceable and stop researching once session_spend reads past $1. Write three hooks and keep one; lay the narrative out as hook, setup, turn, payoff, cta; then divide it at shot changes into scenes of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds whose sum is ${LENGTH}.
+
+Create the producer's Render card — title "Render: <the piece>", assignee producer, blocked_by your Plan card — with these required sections. SOURCE PROVENANCE: quote the relevant creator wording from project_context or the pinned channel-template skill verbatim, cite the approved bible card, and give every exemplar URL plus timestamp; label every other choice inferred or invented. CONTINUITY CONTRACT: chosen theme, narrative pattern, canonical character IDs, one-off characters, world/location, exact invariant character/style prompt blocks copied from the bible, allowed variations, negative constraints, canonical reference URLs or fil_ ids, and one numeric continuity seed when useful. SCENES IN ORDER: for each, id, beat, seconds, character IDs, location/props, exact dialogue or voiceover with speaker and voice direction, on-screen text, transition, image references, an image_prompt and a video_prompt. Name a speech voice id only when project_context supplied that supported voice. The image_prompt combines the creator's relevant words, canonical character/style/world blocks, composition, lighting and negative constraints; it describes one strong opening frame. The video_prompt says to begin from that generated image and combines the same canonical blocks with action, expression, camera movement, ambience and the exact dialogue; it must forbid identity, wardrobe, palette and setting drift. Prompts contain no provenance commentary because they render verbatim. EDIT PLAN: scene order, speech placement, ambience, text timing and transition. Then include ${PLAN_MODEL_RULE}; sourced facts; and the caption (\`naive/caption-writing\`, first line the YouTube title). Under each scene, outside its prompts, name the exact reference moment whose grammar it follows; otherwise say invented. You neither generate nor find topics. ${CONTINUITY_RULE} ${REFERENCE_RULE}`,
+      tools: ["view_image", "bash", "publish_file", "transcribe_audio"],
       skills: ["naive/short-video-hooks", "naive/caption-writing", "naive/reference-teardown"],
       schedules: [],
     }),
@@ -123,6 +124,17 @@ export const FACELESS: MediaTemplate = {
     referenceStudyCard("scriptwriter", SHORT_FORM_LENGTH),
     lookCard("scriptwriter", ""),
     task({
+      key: "character-bible",
+      title: "Extract the character, world and story bible, then get the operator's approval",
+      assignee: "scriptwriter",
+      blocked_by: ["reference-study"],
+      body: `Day one is set-up, not a script. Read project_context, the completed reference teardown and every pinned channel-template skill. Preserve the creator's relevant wording verbatim and label it CREATOR DIRECTIVE; never rewrite it as though the creator said your interpretation. Re-open the named reference videos and inspect evidence throughout each one: sample the opening densely, every major scene change and story turn, recurring character appearances and the ending; extract audio and use transcribe_audio only where dialogue or voice is part of the format. publish_file representative frames and inspect them with view_image.
+
+Write a complete draft in a comment with: CHARACTER MODE (recurring cast, recurring archetype, or none); CONTENT THEMES; NARRATIVE PATTERNS; CANONICAL CAST (stable id, role, physical invariants, wardrobe/material/palette, personality, expressions/movement, voice, relationships, exact reusable prompt block); ONE-OFF CHARACTER RULE; WORLD (locations, props, period and environment); VISUAL LANGUAGE; DIALOGUE/VOICE; MUST NOT CHANGE; ALLOWED VARIATION; NEGATIVE CONSTRAINTS; and REFERENCES. Every observed claim cites URL and timestamp and says observed; every synthesis says inferred with confidence. A trait seen once is optional, not canon. Conflicts are listed, not guessed. Copy usable creator-provided still URLs exactly; record representative fil_ frame ids as evidence. If the references do not repeat a cast, define an archetype or none instead of inventing a named character.
+
+Then ask the operator once with ask_operator to approve the draft or state corrections. Wait for the answer. Apply stated corrections without overriding them, and close this card only with a final note beginning "APPROVED CHARACTER BIBLE" followed by the entire approved bible; if approved unchanged, copy the entire draft there. Every future piece reads that final note. Generate nothing on this card.`,
+    }),
+    task({
       key: "hook-style",
       title: "Write the channel's hook style, so every piece is in one voice",
       assignee: "scriptwriter",
@@ -141,8 +153,8 @@ export const FACELESS: MediaTemplate = {
       key: FIRST_PIECE_KEY.faceless,
       title: "Start the channel's first piece",
       assignee: "trend-scout",
-      blocked_by: ["look", "hook-style"],
-      body: "The look and the voice exist now — the notes on the look and hook-style cards this one waited on. Read project_context and the teardown. Find what is moving in the niche right now and pick ONE topic; find one to three real videos already doing it well, and open each with the browser before you name it. Then create its Plan card for the scriptwriter — title \"Plan: <the topic>\", assignee scriptwriter — whose body is the brief: the topic, the format, why now, the hook direction, the look, and each exemplar's URL with one line on what to copy. ONE piece today: its chain of cards takes it to the approval card, and your Monday and Thursday fires start the rest. Put the Plan card's id in your note.",
+      blocked_by: ["look", "hook-style", "character-bible"],
+      body: "The look, voice and approved character bible exist now — the notes on the cards this one waited on. Read project_context and the teardown. Find what is moving in the niche right now and pick ONE topic within the bible's approved themes and narrative patterns; choose its canonical cast or explicitly one-off characters; find one to three real videos already doing it well, and open each with the browser before you name it. Then create its Plan card for the scriptwriter — title \"Plan: <the topic>\", assignee scriptwriter — whose body is the brief: the topic, format, why now, hook direction, look, bible theme, narrative pattern, cast, and each exemplar's URL with one line on what to copy. ONE piece today: its chain of cards takes it to the approval card, and your Monday and Thursday fires start the rest. Put the Plan card's id in your note.",
     }),
   ],
 

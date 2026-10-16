@@ -40,15 +40,11 @@ in place of the dropped niche question). The niche's own content is the skill, w
 platform catalogue, not this repo.
 
 Where a niche's playbook needs a seat to do more than its base seat, `niche()` takes `seats`, which
-**extends** that seat: tools added at `allow` (every other tool stays denied by name), skills
-appended, and a brief clause before the crew's rules. The base template is left as it was. The seven
-generated short-form niches use it (`SEGMENTED_SHORT_FORM` in [`templates/faceless.ts`](templates/faceless.ts)):
-image-to-video cannot cut, so a piece is a start, a middle and an end rendered as segments and joined.
-Their scriptwriter plans the segments, 5 to 15 seconds each and all on one model, and their
-producer gets `bash`, `fetch_file`, `publish_file`, `generate_speech` and `naive/video-assembly` to
-render each one, join them with ffmpeg and burn in the hook and label (the skill's step 5b), still
-15–30 seconds in all. It renders on `minimax/hailuo-3` first, `bytedance/seedance-2.5` allowed
-(`SEGMENT_VIDEO_MODELS`, `videoModels` on the seat).
+**extends** that seat: tools added at `allow`, skills appended, and a brief clause before the crew's
+rules. Every generated short uses the base scene pipeline: script, one generated opening image per
+scene, one image-to-video render per scene, then speech, text and an ffmpeg join. Scenes run 5 to 15
+seconds and total 15–30. The seven niche templates use `SEGMENTED_SHORT_FORM` only to pin Hailuo 3
+first with Seedance 2.5 allowed; their pinned skill supplies the genre-specific scene grammar.
 
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
@@ -116,12 +112,12 @@ Step by step, on `faceless`:
 1. **The trend-scout** fires Monday and Thursday. For each slot the cadence needs, it finds a topic
    and one to three real videos doing it well. It creates a **Plan** card for the scriptwriter.
    The card's body is the brief.
-2. **The scriptwriter** is woken on the Plan card. It looks inside the exemplars, researches, and
-   writes the whole plan: hook, shots with prompts and seconds, sources, caption. It
-   creates a **Render** card for the producer. The card's body is the plan.
-3. **The producer** is woken on the Render card. It renders the plan with `generate_video`. The
-   video lands in the Media gallery. It creates a **Publish** card for the channel manager with
-   the file id and the caption.
+2. **The scriptwriter** reads the approved character bible, looks inside the exemplars, researches,
+   and writes the whole scene plan: provenance, continuity contract, image and motion prompts,
+   exact dialogue, edit instructions, sources and caption. It creates the **Render** card.
+3. **The producer** generates and checks each scene's opening image, passes that stored `fil_` image
+   to `generate_video`, records every image and segment on the card, then adds authoritative speech
+   and on-screen text, joins and probes the result, and creates the **Publish** card.
 4. **The channel manager** is woken on the Publish card. It checks the caption and calls
    `social.post`. The post waits on the approval card.
 5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
@@ -169,9 +165,9 @@ woken by its cards.
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
-| `producer` | Video production | — | `look` | Renders the plan as one vertical video; creates the Publish card |
+| `producer` | Video production | — | `look` | Generates scene images and videos, edits the final piece, creates the Publish card |
 | `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
-| `scriptwriter` | Hooks & scripts | — | `reference-study`, `hook-style` | Looks inside the exemplars, writes the plan, creates the Render card |
+| `scriptwriter` | Hooks & scripts | — | `reference-study`, `character-bible`, `hook-style` | Gets the continuity bible approved; writes every scene and prompt |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
 ### `longform`
@@ -231,7 +227,8 @@ nothing, until that card closes.
 ```
 channel-plan ──→ report-frame
 reference-study ──→ look ─────┐
-                └─→ hook-style ┴→ first-briefs → the piece's own chain
+                ├─→ hook-style ─────┤
+                └─→ character-bible ┴→ first-briefs → the piece's own chain
 ```
 
 (`longform` has `arc-style` for `hook-style` and `first-topic`; `clipping` has `source-check` and
@@ -241,12 +238,12 @@ The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-t
 `first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board
 holds, so updating an existing channel to 2.0 does not start a new paid piece.
 
-Day one sets up the plan, the reference, the look and the voice, then starts **one** piece. That
+Day one sets up the plan, reference, look, voice and operator-approved continuity bible, then starts **one** piece. That
 piece runs its full chain to your approval card. The timers start the rest.
 
 A card carries no budget of its own: a woken seat runs on its per-task ceiling. So day one is
 bounded by one ceiling per seeded card, plus one per card of the first piece's chain
-($180 on `faceless`, $290 on `longform`, $160 on `clipping`).
+($200 on `faceless`, $290 on `longform`, $160 on `clipping`).
 
 ## 💰 Money
 
@@ -275,11 +272,11 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - `social.post_metrics`: `allow` on `analyst` and `channel-manager`.
 - `company.set_timezone`, `company.set_logo` and `apps.request_access` are denied on every seat.
 - Every other built-in and platform tool (email, legal, wallet, card, connections) is denied by
-  name. `generate_speech` only on the segmented niches' producers, to voice a silent join;
-  `transcribe_audio` on no seat.
+  name. `generate_speech` is on generated-short producers for exact dialogue;
+  `transcribe_audio` is on their scriptwriters for dialogue references.
 - Nobody messages another seat. The board wakes the next one.
-- `bash` only where a shell is the job: the Short Form scriptwriter and the Long Form writer
-  sample frames; the Long Form producer joins segments.
+- `bash` only where a shell is the job: the Short Form scriptwriter and Long Form writer sample
+  frames; Short Form and Long Form producers assemble segments.
 
 ## 🔁 Switching template
 
