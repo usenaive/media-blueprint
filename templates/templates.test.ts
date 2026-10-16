@@ -127,7 +127,7 @@ describe("the crews", () => {
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
         : false;
-      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 520 : 360);
+      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 620 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
@@ -872,7 +872,15 @@ describe("the generated short-form scene pipeline", () => {
       expect(scriptwriter, name).toMatch(/transition ledger/);
       expect(scriptwriter, name).toMatch(/cold-viewer check/);
       expect(scriptwriter, name).toMatch(/incoming state, outgoing state/);
+      expect(scriptwriter, name).toMatch(/THEME\/PROMISE/);
+      expect(scriptwriter, name).toMatch(/first 2–3 seconds must introduce the protagonist, setting, immediate situation, goal and stakes/);
+      expect(scriptwriter, name).toMatch(/CUT MAP/);
+      expect(scriptwriter, name).toMatch(/0\.25 seconds of dialogue-free stable picture/);
+      expect(scriptwriter, name).toMatch(/match on action, eyeline, prop, composition or continuous ambience/);
+      expect(scriptwriter, name).toMatch(/Never use a cut merely because a segment ended/);
       expect(producer.system, name).toMatch(/opening state does not follow the preceding scene's outgoing state/);
+      expect(producer.system, name).toMatch(/never cut mid-word, mid-gesture or before the reaction lands/);
+      expect(producer.system, name).toMatch(/Watch it once at normal speed/);
     }
     expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(SEGMENT_MAX_SECONDS).toBe(15);
