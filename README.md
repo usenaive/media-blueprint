@@ -75,7 +75,8 @@ operator's own photos ($3.25, about 20 minutes, approved first). Every still of 
 `generate_image` with their character and a look, and every video is `generate_video` with the
 character and such a still as its first frame, so the face never changes. Day one's `look` card
 becomes **Meet the influencer** (same key): the producer resolves the character, trains it if photos
-were uploaded, and renders one still per picked look as the channel's look sheet. The producer holds
+were uploaded (waiting on an `ask_operator` reply, since nothing wakes a seat when training ends),
+and renders one still per picked look as the channel's look sheet. The producer holds
 `get_character` and `list_characters`, and `create_character` at `ask`; the scriptwriter reads
 `get_character`. It renders on `minimax/hailuo-3` first, `alibaba/wan-3.0/image-to-video` allowed —
 the two measured keeping a face from a still. It asks no cadence: the manager and the scout read it
