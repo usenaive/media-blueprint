@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_VIDEO_MODELS, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, PREBUILT_CREATORS } from "./ai-influencer.ts";
+import { AI_INFLUENCER_VIDEO_MODELS, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, PREBUILT_CREATORS } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -81,7 +81,7 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
   const out = { ...base } as Record<TemplateName, T>;
-  for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] = base[from]!;
+  for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] ??= base[from]!;
   return out;
 };
 /**
@@ -377,6 +377,14 @@ describe("the board", () => {
         "hook-style": ["reference-study"],
         "report-frame": ["channel-plan"],
         "first-briefs": ["look", "hook-style", "character-bible"],
+      },
+      "ai-influencer": {
+        "channel-plan": [],
+        "reference-study": [],
+        look: [],
+        "hook-style": ["reference-study"],
+        "report-frame": ["channel-plan"],
+        "first-briefs": ["look", "hook-style"],
       },
       longform: {
         "channel-plan": [],
@@ -1214,7 +1222,8 @@ describe("the AI Influencer template", () => {
 
   it("meets the influencer on the look card's key, and tells the first piece who it is about", () => {
     const meet = AI.tasks.find((one) => one.key === "look")!;
-    expect([meet.title, meet.assignee, meet.blocked_by]).toEqual(["Meet the influencer", "producer", ["reference-study"]]);
+    // Waits on nothing: the study opening pages (staging round 1 stalled there) never holds the face up.
+    expect([meet.title, meet.assignee, meet.blocked_by]).toEqual(["Meet the influencer", "producer", []]);
     expect(meet.body).toMatch(/get_character\{character:<its id>\}/);
     // By fixed id, never by name: an org's own character of the same name would win a lookup by name.
     for (const creator of PREBUILT_CREATORS) expect(meet.body).toContain(`${creator.name} = ${creator.id}`);
@@ -1226,6 +1235,11 @@ describe("the AI Influencer template", () => {
     // No niche question: every card and seat that looks for "the niche" is told it is the influencer's.
     for (const key of ["reference-study", "first-briefs"]) expect(AI.tasks.find((one) => one.key === key)!.body, key).toContain(INFLUENCER_NICHE);
     expect(seat(AI, "trend-scout").system).toContain(INFLUENCER_NICHE);
+    // A page the browser will not open is worked around on every card and seat that opens pages.
+    for (const key of ["reference-study", "first-briefs"]) expect(AI.tasks.find((one) => one.key === key)!.body, key).toContain(INFLUENCER_PAGES);
+    // The scriptwriter's brief is at its word cap: its pinned skill says the same (vetta-mono SKILL.md §pages).
+    expect(seat(AI, "trend-scout").system).toContain(INFLUENCER_PAGES);
+    expect(INFLUENCER_PAGES).toMatch(/Never sign up or log in/);
     // The faceless template keeps its own look card.
     expect(TEMPLATES.faceless.tasks.find((one) => one.key === "look")!.title).toBe("Choose the look this channel renders in");
   });
