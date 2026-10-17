@@ -11,6 +11,7 @@ import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
+  FOLLOWS_TOOL,
   PLATFORM_TOOLS,
   CADENCE_QUESTION,
   CADENCE_SLOTS,
@@ -92,6 +93,12 @@ const permissionFor = (template: MediaTemplate, agent: string, tool: string): st
   const config = toolset.configs[tool];
   if (config?.enabled === false) return "deny";
   if (["ask_operator", "request_tools"].includes(tool)) return (config?.permission ?? toolset.default_config.permission) === "deny" ? "deny" : "ask";
+  const leader = FOLLOWS_TOOL[tool];
+  // An unnamed follower takes its leader's policy (core ADR-1309), and an ask-by-default one asks for an allow.
+  if (!config && leader) {
+    const led = permissionFor(template, agent, leader);
+    return led === "allow" && ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : led;
+  }
   return config?.permission ?? (ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : toolset.default_config.permission);
 };
 
@@ -171,7 +178,8 @@ describe("the toolsets", () => {
   /** The other tools the platform holds for approval — email, legal, wallet, card — no seat needs. */
   it("denies every other publish, pay or file tool to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
-      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post")) {
+      // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an edit.
+      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post" && name !== "edit_video")) {
         expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
       }
     }
@@ -187,9 +195,9 @@ describe("the toolsets", () => {
   });
 
   /** Offered to every session and asking by default; a media seat has no app and no say over the company. */
-  it("denies the company's timezone and logo and an app's key to every seat by name", () => {
+  it("denies the company's timezone, logo and brand and an app's key to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
-      for (const tool of ["company.set_timezone", "company.set_logo", "apps.request_access"]) {
+      for (const tool of ["company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access"]) {
         expect(agent.tools?.configs[tool], `${id}/${tool}`).toEqual({ enabled: false, permission: "deny" });
         expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
       }
@@ -1045,13 +1053,15 @@ describe("the generated short-form scene pipeline", () => {
  * tool no seat can be granted or denied, so it is held to a pinned copy of the platform's list.
  */
 describe("the built-in tool list", () => {
-  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at fc7923648 (2026-09-27). */
+  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at 15bef0ee0 (2026-10-17). */
   const CORE_BUILTIN_TOOLS = [
     "bash", "read", "write", "edit", "ls", "find",
-    "browser", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video", "apps",
+    "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video",
+    "create_character", "get_character", "list_characters", "delete_character", "apps",
     "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
     "ask_operator", "request_tools", "project_context",
-    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo",
+    "data_search", "data_describe", "data_run", "session_spend",
     "show", "compose", "write_plan", "propose_plan",
   ];
   /** The same file's `PLATFORM_TOOLS`, at the same commit. */
@@ -1063,7 +1073,7 @@ describe("the built-in tool list", () => {
     "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
     "wallet.balance", "wallet.transactions", "wallet.receipts", "wallet.quote", "wallet.pay", "wallet.transfer",
     "card.list", "card.show", "card.quote", "card.transactions", "card.spend", "card.issue", "card.credentials", "card.cancel",
-    "company.set_timezone", "company.set_logo", "apps.request_access",
+    "company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access",
   ];
   const drift = (ours: readonly string[], core: string[]) => ({
     missing: core.filter((name) => !ours.includes(name)),
@@ -1085,8 +1095,9 @@ describe("the built-in tool list", () => {
   /** Core's `ASK_BY_DEFAULT_TOOLS`, pinned: each falls to `ask` unless a toolset names it. */
   it("pins the platform's ask-by-default list", () => {
     expect([...ASK_BY_DEFAULT_TOOLS].sort()).toEqual([
-      "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_logo", "company.set_timezone",
-      "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "social.post", "wallet.pay", "wallet.transfer",
+      "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_brand", "company.set_logo", "company.set_timezone",
+      "create_character", "data_run", "edit_video", "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
+      "social.post", "wallet.pay", "wallet.transfer",
     ]);
   });
 });
