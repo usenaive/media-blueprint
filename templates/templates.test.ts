@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_VIDEO_MODELS, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, PREBUILT_CREATORS } from "./ai-influencer.ts";
+import { AI_INFLUENCER_VIDEO_MODELS, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, PREBUILT_CREATORS } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -1217,7 +1217,19 @@ describe("the AI Influencer template", () => {
     expect(producer.system).toMatch(/generate_video with character, its seconds and image_urls that still/);
     expect(producer.system).toMatch(/never a frame cut from a clip/);
     expect(producer.system).toContain(RENDER_MODEL_RULE);
-    expect(seat(AI, "scriptwriter").system).toMatch(/each opening on a new still of them in one look — never a URL or a last frame/);
+    expect(seat(AI, "scriptwriter").system).toMatch(/each opening on a new still — never a URL or a last frame/);
+  });
+
+  it("draws no words into a render, and keeps one outfit and setting across a piece's segments", () => {
+    // Staging round 2: the plan's on-screen text went into the clip's prompt and was burned in again
+    // at step 5b, so every caption showed twice; and each segment's still changed clothes and room.
+    const producer = seat(AI, "producer").system!;
+    expect(producer).toContain(NO_DRAWN_WORDS);
+    expect(producer).toMatch(/OVERRIDING .*"each with its on-screen text"/);
+    expect(producer).toMatch(/in the piece's one outfit and setting/);
+    const scriptwriter = seat(AI, "scriptwriter").system!;
+    expect(scriptwriter).toContain(ONE_OUTFIT);
+    expect(scriptwriter).toMatch(/never their face or words/);
   });
 
   it("meets the influencer on the look card's key, and tells the first piece who it is about", () => {

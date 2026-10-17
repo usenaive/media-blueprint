@@ -84,7 +84,7 @@ const LOOK_OPTIONS: readonly { name: string; slug: string; note: string }[] = [
   { name: "Realistic", slug: "realistic", note: "No filter, crisp true-to-life detail in skin, light and fabric." },
   { name: "Library", slug: "library", note: "Soft indoor light, cozy academia, books and warm wood." },
   { name: "Quiet luxury", slug: "quiet-luxury", note: "Understated expensive: neutral tones, fine fabrics, calm interiors." },
-  { name: "Through the glass", slug: "through-the-glass", note: "Seen through a fogged window or café pane; a quiet observed moment." },
+  { name: "Through the glass", slug: "through-the-glass", note: "Seen through a window or café pane; a quiet observed moment." },
   { name: "Japandi", slug: "japandi", note: "Warm minimalism: clean lines, natural light, pale wood." },
   { name: "Rainy day", slug: "rainy-day", note: "Moody sky, wet-pavement reflections, soft sweaters, slow and cinematic." },
   { name: "Selfcare", slug: "selfcare", note: "Candles, skincare and robes; glowing calm in muted tones." },
@@ -146,15 +146,26 @@ export const INFLUENCER_CADENCE =
   "THIS CHANNEL POSTS DAILY: its setup asks no cadence, so wherever this brief says the cadence answer, read daily, and never ask for one.";
 
 /**
+ * No render draws words. The faceless producer puts each shot's on-screen text in the prompt, and step 5b
+ * burns the same words in after the join: on staging (round 2) every caption showed twice.
+ */
+export const NO_DRAWN_WORDS =
+  "NO RENDER PROMPT HOLDS WORDS: not the on-screen text, a caption or a sign; words go on once, at step 5b.";
+
+/** One outfit and one place per piece: on staging (round 2) each segment's new still changed both. */
+export const ONE_OUTFIT =
+  "Name the piece's ONE look, outfit and setting once; every segment's still repeats them verbatim.";
+
+/**
  * The producer's and the scriptwriter's override. It REPLACES the segmented one rather than following
  * it: the segmented seats open a segment on a reference URL or the previous one's last frame, and an
  * influencer's segment opens on a still of the character — the platform refuses a character video
  * from any other first frame. Each seat's own brief stays within the 360 words a person will read, so
  * the detail is the pinned skill's and the "Meet the influencer" card's.
  */
-export const PRODUCER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, AND THAT OVERRIDES "call generate_video once", "One render per card" AND THE REFERENCE FRAME ABOVE. Per segment the plan names: its opening still is generate_image with character and style (the plan's look), aspect_ratio 9:16, or the look-sheet still the plan names; then generate_video with character, its seconds and image_urls that still, all on one model — never a frame cut from a clip. Render only segments not yet in the Render card's comments; comment each one's fil_ id and index as it lands, and re-render a failed one alone. Then fetch_file every segment, ffprobe each, join them in order with ffmpeg's concat demuxer, and probe the join against the plan's length. Finish it per \`naive/video-assembly\` step 5b — hook and label burned in as on-screen text, a silent join voiced with generate_speech, one frame checked — then publish_file it: that fil_ id goes on the Publish card. No ffmpeg: stop the card, naming the segments.`;
+export const PRODUCER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "call generate_video once", "One render per card", "each with its on-screen text" AND THE REFERENCE FRAME ABOVE. Per segment: an opening still, generate_image with character and style (the plan's look), aspect_ratio 9:16, in the piece's one outfit and setting; then generate_video with character, its seconds and image_urls that still, one model — never a frame cut from a clip. ${NO_DRAWN_WORDS} Render only segments not in the Render card's comments, commenting each fil_ id and index; re-render a failed one alone. Then fetch_file and ffprobe every segment, join them in order (ffmpeg concat demuxer) and probe the join's length. Finish per \`naive/video-assembly\` step 5b — hook and label burned in, a silent join voiced with generate_speech, one frame checked — then publish_file it for the Publish card. No ffmpeg: stop the card, naming the segments.`;
 
-const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, AND THAT OVERRIDES "ONE video" ABOVE: get_character first, for their voice, wardrobe and looks. Lay out segments in order, each opening on a new still of them in one look — never a URL or a last frame — with its prompt (what they do, never their face) and seconds: ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} each, cut on shot changes, one model, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
+const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "ONE video" ABOVE: get_character first (voice, wardrobe, looks). ${ONE_OUTFIT} Segments in order, each opening on a new still — never a URL or a last frame — prompted with action and framing only, never their face or words; ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds each, cut on shot changes, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
 
 /** The `look` card's replacement: same key, so the day-one chain and its re-apply guard are unchanged. */
 const characterCard = (look: Task): Task =>
