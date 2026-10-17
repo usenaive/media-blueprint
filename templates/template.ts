@@ -30,7 +30,9 @@ export type TemplateName =
   | "channel-cloning"
   | "comics"
   | "cartoons-irl"
-  | "dancing-animals";
+  | "dancing-animals"
+  // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
+  | "roadster";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -162,6 +164,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   comics: "first-briefs",
   "cartoons-irl": "first-briefs",
   "dancing-animals": "first-briefs",
+  roadster: "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
