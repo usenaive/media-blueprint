@@ -6,6 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
+import { AI_INFLUENCER_VIDEO_MODELS, INFLUENCER_CADENCE } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -46,7 +47,7 @@ const CATALOGUE = [
   "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
   "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
   "naive/channel-template-channel-cloning", "naive/channel-template-comics", "naive/channel-template-cartoons-irl",
-  "naive/channel-template-dancing-animals", "naive/channel-template-roadster",
+  "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-ai-influencer",
 ];
 
 const all = Object.values(TEMPLATES);
@@ -55,6 +56,11 @@ const SEGMENTED: TemplateName[] = [
   "ufc", "history", "animal-feast",
   "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster",
 ];
+/**
+ * Every template whose producer renders segments and joins them: the segmented niches and
+ * `ai-influencer`, which takes the same seats but its own models, questions and opening frames.
+ */
+const JOINS_SEGMENTS: TemplateName[] = [...SEGMENTED, "ai-influencer"];
 /** Segmented niches whose form is cadence-only; `channel-cloning` adds a `clone` question, so it is apart. */
 const CADENCE_ONLY_NICHES: TemplateName[] = SEGMENTED.filter((name) => name !== "channel-cloning");
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
@@ -71,15 +77,22 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "animal-feast": "faceless",
   "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
   "dancing-animals": "faceless", roadster: "faceless",
+  "ai-influencer": "faceless",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
   const out = { ...base } as Record<TemplateName, T>;
   for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] = base[from]!;
   return out;
 };
-/** A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base. */
+/**
+ * A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base
+ * — and, on `ai-influencer`, without the daily-cadence line its manager and scout are told instead of a
+ * cadence question.
+ */
 const unniched = (template: MediaTemplate, system: string): string =>
-  BASE_OF[template.name] === undefined ? system : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "");
+  BASE_OF[template.name] === undefined
+    ? system
+    : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "").replace(`${INFLUENCER_CADENCE} `, "");
 /** Expand a set of `template/seat` ids to include the same seats on each niche that mirrors the base. */
 const withNicheIds = (ids: readonly string[]): Set<string> => {
   const out = new Set(ids);
@@ -175,12 +188,16 @@ describe("the toolsets", () => {
     }
   });
 
-  /** The other tools the platform holds for approval — email, legal, wallet, card — no seat needs. */
+  /**
+   * The other tools the platform holds for approval — email, legal, wallet, card — no seat needs. The
+   * one paid tool a seat may ask for is training a face, on the `ai-influencer` producer.
+   */
   it("denies every other publish, pay or file tool to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
       // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an edit.
       for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post" && name !== "edit_video")) {
-        expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
+        const asks = id === "ai-influencer/producer" && tool === "create_character";
+        expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe(asks ? "ask" : "deny");
       }
     }
   });
@@ -293,8 +310,10 @@ describe("the toolsets", () => {
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`); every other renderer the base's.
-      expect(video.config, id).toEqual({ models: SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS });
+      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`), the influencer the ones
+      // measured keeping a face; every other renderer the base's.
+      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS;
+      expect(video.config, id).toEqual({ models });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
@@ -593,12 +612,12 @@ describe("analytics", () => {
 describe("the prompts", () => {
   /** A render lands on its own; a seat that sleeps between polls pays for every second of it. */
   it("has the short-form producer end its turn while a render runs, never sleep or poll", () => {
-    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) expect(seat(TEMPLATES[name], "producer").system, name).toMatch(/end your turn, and never sleep or poll/);
+    for (const name of ["faceless", ...JOINS_SEGMENTS] as TemplateName[]) expect(seat(TEMPLATES[name], "producer").system, name).toMatch(/end your turn, and never sleep or poll/);
   });
 
   /** Research is the scriptwriter's open-ended spend: it starts from the teardown and has a stop. */
   it("has the scriptwriter read the teardown first and stop researching past $1 of session_spend", () => {
-    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+    for (const name of ["faceless", ...JOINS_SEGMENTS] as TemplateName[]) {
       const brief = seat(TEMPLATES[name], "scriptwriter").system ?? "";
       expect(brief, name).toMatch(/FIRST read the teardown/);
       expect(brief, name).toMatch(/Then open the exemplars the brief names/);
@@ -748,9 +767,16 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The cadence is one question, spelled once, on every template. */
+  /**
+   * The cadence is one question, spelled once, on every template but `ai-influencer`: its four are
+   * who, their photos, the looks and what for, so it posts daily and tells the two seats that read a
+   * cadence so.
+   */
   it("asks the cadence on every template, the same question object", () => {
-    for (const template of all) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
+    for (const template of all.filter((one) => one.name !== "ai-influencer")) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
+    const influencer = TEMPLATES["ai-influencer"];
+    expect(influencer.questions.map((q) => q.key)).not.toContain("cadence");
+    for (const name of [PUBLISHER, "trend-scout"]) expect(seat(influencer, name).system, name).toContain(INFLUENCER_CADENCE);
   });
 
   it("is keyed by the name `defineProject({ template })` uses, and one of them is running", () => {
@@ -1099,5 +1125,103 @@ describe("the built-in tool list", () => {
       "create_character", "data_run", "edit_video", "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
       "social.post", "wallet.pay", "wallet.transfer",
     ]);
+  });
+});
+
+/**
+ * AI INFLUENCER (ADR-1281). One photoreal creator on the faceless crew: the character is a setup
+ * answer, every still of them is rendered with their character and a look, and every video starts
+ * from such a still. Its form is the four approved questions, with pictures that are the dashboard's
+ * own files (vetta-mono `apps/web/public/setup/`).
+ */
+describe("the AI Influencer template", () => {
+  const AI = TEMPLATES["ai-influencer"];
+  const LOOK_SLUGS = [
+    "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
+    "foggy-morning", "rainy-day", "digital-cam", "90s-editorial", "wide-angle-outfit", "elevator-mirror", "escalator", "tokyo-street-style",
+  ];
+  /** The first-party pictures vetta-mono ships for the form (canonical-spec §33.6, SPEC §4.6). */
+  const ASSETS = new Set([
+    ...["priya-raman", "maya-elusing", "hank-delgado", "ava-lindqvist"].map((slug) => `/setup/characters/${slug}.jpg`),
+    "/setup/characters/upload.svg",
+    "/setup/looks/usual.jpg",
+    ...LOOK_SLUGS.map((slug) => `/setup/looks/${slug}.jpg`),
+  ]);
+
+  it("asks who, their photos, the looks and what for — four, in that order, three required", () => {
+    expect(AI.questions.map((q) => [q.key, q.type, q.optional === true])).toEqual([
+      ["character", "choice", false],
+      ["photos", "media", true],
+      ["looks", "choice", false],
+      ["purpose", "text", false],
+    ]);
+    const [who, , looks] = [AI.questions[0]!, AI.questions[1]!, AI.questions[2]!];
+    expect(who.type === "choice" && [who.options, who.multiple, who.other]).toEqual([
+      ["Priya Raman", "Maya Elusing", "Hank Delgado", "Ava Lindqvist", "Upload your own photos"],
+      false,
+      false,
+    ]);
+    expect(looks.type === "choice" && [looks.options.length, looks.options[0], looks.multiple, looks.other]).toEqual([12, "Their usual looks", true, false]);
+  });
+
+  it("pictures every option with a file on the dashboard itself, and every option has one", () => {
+    for (const question of AI.questions) {
+      if (question.type !== "choice") continue;
+      expect(question.details?.map((one) => one.option), question.key).toEqual(question.options);
+      for (const detail of question.details ?? []) {
+        expect(detail.image, detail.option).toMatch(/^\/(?!\/)/);
+        expect(ASSETS.has(detail.image!), `${detail.option} → ${detail.image}`).toBe(true);
+        expect((detail.note ?? "").length, detail.option).toBeLessThanOrEqual(120);
+      }
+    }
+  });
+
+  it("is a form and a crew the engine will install", async () => {
+    const { defineProject } = await import("@usenaive-sdk/blueprints");
+    const { declaration } = await import("../naive.config.ts");
+    const project = defineProject({ ...declaration, template: "ai-influencer", title: AI.title, description: AI.description, questions: AI.questions, tasks: AI.tasks });
+    expect(project.template).toBe("ai-influencer");
+  });
+
+  it("lets the producer read characters and train one only with the operator's yes; no other seat trains or deletes", () => {
+    for (const agent of AI.agents) {
+      const id = `ai-influencer/${agent.name}`;
+      expect(permissionFor(AI, agent.name, "create_character"), id).toBe(agent.name === "producer" ? "ask" : "deny");
+      expect(permissionFor(AI, agent.name, "delete_character"), id).toBe("deny");
+      expect(permissionFor(AI, agent.name, "get_character"), id).toBe(["producer", "scriptwriter"].includes(agent.name) ? "allow" : "deny");
+      expect(permissionFor(AI, agent.name, "list_characters"), id).toBe(agent.name === "producer" ? "allow" : "deny");
+      expect(agent.skills, id).toContain("naive/channel-template-ai-influencer");
+    }
+    for (const template of all.filter((one) => one !== AI)) {
+      for (const agent of template.agents) expect(permissionFor(template, agent.name, "create_character"), `${template.name}/${agent.name}`).toBe("deny");
+    }
+  });
+
+  it("animates a still of the character on the models measured keeping a face, and never opens on another frame", () => {
+    const producer = seat(AI, "producer");
+    expect(producer.tools?.configs["generate_video"]?.config).toEqual({ models: AI_INFLUENCER_VIDEO_MODELS });
+    expect(AI_INFLUENCER_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
+    expect(producer.skills).toEqual(["naive/video-assembly", "naive/channel-template-ai-influencer"]);
+    expect(producer.system).toMatch(/generate_image with character and style/);
+    expect(producer.system).toMatch(/generate_video with character, its seconds and image_urls that still/);
+    expect(producer.system).toMatch(/never a frame cut from a clip/);
+    expect(producer.system).toContain(RENDER_MODEL_RULE);
+    expect(seat(AI, "scriptwriter").system).toMatch(/each opening on a new still of them in one look — never a URL or a last frame/);
+  });
+
+  it("meets the influencer on the look card's key, and tells the first piece who it is about", () => {
+    const meet = AI.tasks.find((one) => one.key === "look")!;
+    expect([meet.title, meet.assignee, meet.blocked_by]).toEqual(["Meet the influencer", "producer", ["reference-study"]]);
+    expect(meet.body).toMatch(/get_character\{character:<that name>\}/);
+    expect(meet.body).toMatch(/create_character\{name, image_urls, style_pack:<the picked looks>\}/);
+    expect(meet.body).toMatch(/generate_image\{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"\}/);
+    expect(meet.body).toMatch(/generate_video\{character, image_urls:\[the still\]\}/);
+    expect(AI.tasks.find((one) => one.key === "first-briefs")!.body).toMatch(/This channel is one person/);
+    // The faceless template keeps its own look card.
+    expect(TEMPLATES.faceless.tasks.find((one) => one.key === "look")!.title).toBe("Choose the look this channel renders in");
+  });
+
+  it("names no vendor anywhere a person or a seat reads it", () => {
+    expect(JSON.stringify(AI)).not.toMatch(/higgsfield|\bsoul\b/i);
   });
 });

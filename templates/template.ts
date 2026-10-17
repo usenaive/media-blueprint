@@ -32,7 +32,9 @@ export type TemplateName =
   | "cartoons-irl"
   | "dancing-animals"
   // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
-  | "roadster";
+  | "roadster"
+  // One photoreal creator on the faceless crew (ADR-1281): the character is a setup answer, not a niche.
+  | "ai-influencer";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -165,6 +167,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "cartoons-irl": "first-briefs",
   "dancing-animals": "first-briefs",
   roadster: "first-briefs",
+  "ai-influencer": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -428,7 +431,8 @@ export const PLATFORM_TOOLS = [
  * says, so every seat names each of them. `company.set_timezone`, `company.set_logo`,
  * `company.set_brand` and `apps.request_access` are offered to every session: a media seat has no app
  * to request and no business changing the company's clock, logo or brand, so each is denied by name —
- * as are `mobile`, `data_run`, `create_character`, `data_search` and `data_describe`. `edit_video` is
+ * as are `mobile`, `data_run`, `create_character` (except where a template grants it: the
+ * `ai-influencer` producer asks for it), `data_search` and `data_describe`. `edit_video` is
  * not a built-in: it follows `generate_video` unless named (`FOLLOWS_TOOL`), so a seat with
  * `generate_video` asks for it.
  */

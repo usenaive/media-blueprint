@@ -6,6 +6,7 @@
  * crons. Retire one on purpose by naming it under `removed.agents` in `naive.config.ts` — and never
  * name an app there: `removed.apps: ["channel"]` would delete a 1.x install's store (README).
  */
+import { AI_INFLUENCER } from "./ai-influencer.ts";
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
@@ -113,7 +114,7 @@ export const ROADSTER = niche(FACELESS, {
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) reuse their crews.
+ * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) and `ai-influencer` (ADR-1281) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -130,6 +131,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "cartoons-irl": CARTOONS_IRL,
   "dancing-animals": DANCING_ANIMALS,
   roadster: ROADSTER,
+  "ai-influencer": AI_INFLUENCER,
 };
 
 /**

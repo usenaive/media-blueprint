@@ -185,10 +185,13 @@ a cron fire is not.
 - `view_image` at `allow` on every seat that judges a picture (all but the analyst);
 - `channel-manager`: `social.accounts`, `social.status`, `social.post_metrics` `allow`, `social.post` `ask`;
 - `analyst`: `social.post_metrics` `allow`;
-- `company.set_timezone`, `company.set_logo`, `apps.request_access`: `deny` on every seat;
+- `company.set_timezone`, `company.set_logo`, `company.set_brand`, `apps.request_access`, `mobile`,
+  `data_run`: `deny` on every seat; `create_character` too, except `ask` on the `ai-influencer`
+  producer, which also holds `get_character` and `list_characters` (its scriptwriter `get_character`);
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first; on the generated niche producers,
-  `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first. Every generated short renders 5–15 second scenes;
+  `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first; on the `ai-influencer` producer,
+  `AI_INFLUENCER_VIDEO_MODELS` (Hailuo 3, then Wan 3.0 image-to-video — measured keeping a face). Every generated short renders 5–15 second scenes;
 - `generate_speech`, shell and file tools on every generated-short producer; `transcribe_audio` on
   their scriptwriters.
 
@@ -199,7 +202,9 @@ The studio asks at most three questions, never where to post; the answers land o
 so both are dropped and a generative niche asks only the cadence (ADR-1143). The engine prepends its own
 "read the project context first" preamble to every template agent, and our `CONTEXT_PREAMBLE` adds that
 the answers are the operator's. On a niche, every seat also reads that the niche is fixed by the
-template and its pinned skill, never asked (`nicheFixed`). A template built from reference videos has its skill pinned to every seat; users never name skills in an answer.
+template and its pinned skill, never asked (`nicheFixed`). A template built from reference videos has its skill pinned to every seat; users never name skills in an answer. `ai-influencer` asks its own four instead:
+who the influencer is (a prebuilt creator, or upload your own photos), the photos (optional), the
+looks, and what it is for. It asks no cadence, so its manager and scout read daily.
 
 ## 9. What the platform cannot express yet
 

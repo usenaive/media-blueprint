@@ -17,7 +17,7 @@ There is no hosted app. The crew runs on the platform's own screens:
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three base templates**, plus eleven niche channel templates that reuse them (below).
+The repo carries **three base templates**, plus eleven niche channel templates and the AI Influencer template, which reuse them (below).
 A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
@@ -64,6 +64,22 @@ scene grammar.
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
 the first session. It publishes, installs and switches through the exact paths the base three do.
+
+### AI Influencer
+
+`ai-influencer` (shown as **AI Influencer**, ADR-1281) is the `faceless` crew with the segmented
+seats, pinning `naive/channel-template-ai-influencer`, for one photoreal creator who posts every day
+in a few chosen looks ([`templates/ai-influencer.ts`](templates/ai-influencer.ts)). The character is
+a setup answer, not a niche: one of four prebuilt creators, ready at once, or a face trained from the
+operator's own photos ($3.25, about 20 minutes, approved first). Every still of the influencer is
+`generate_image` with their character and a look, and every video is `generate_video` with the
+character and such a still as its first frame, so the face never changes. Day one's `look` card
+becomes **Meet the influencer** (same key): the producer resolves the character, trains it if photos
+were uploaded, and renders one still per picked look as the channel's look sheet. The producer holds
+`get_character` and `list_characters`, and `create_character` at `ask`; the scriptwriter reads
+`get_character`. It renders on `minimax/hailuo-3` first, `alibaba/wan-3.0/image-to-video` allowed —
+the two measured keeping a face from a still. It asks no cadence: the manager and the scout read it
+as daily.
 
 ## 🚀 Get started
 
@@ -220,6 +236,7 @@ exception: in place of the dropped niche it keeps a single question, the channel
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
 | `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster` | Posting cadence |
 | `channel-cloning` | Channel to clone · Posting cadence |
+| `ai-influencer` | Who is your influencer? · Photos of your character (optional) · Pick the looks · What is your influencer for? |
 | `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
@@ -267,7 +284,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
   or context explicitly ask for another. The generated short-form niches (`ufc`, `history`,
   `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`)
-  pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed.
+  pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed; `ai-influencer` pins
+  `minimax/hailuo-3` first with `alibaba/wan-3.0/image-to-video` allowed.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions
