@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_VIDEO_MODELS, INFLUENCER_CADENCE } from "./ai-influencer.ts";
+import { AI_INFLUENCER_VIDEO_MODELS, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, PREBUILT_CREATORS } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -194,7 +194,8 @@ describe("the toolsets", () => {
    */
   it("denies every other publish, pay or file tool to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
-      // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an edit.
+      // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an
+      // edit — except on ai-influencer, where an edit could change the face (asserted there).
       for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post" && name !== "edit_video")) {
         const asks = id === "ai-influencer/producer" && tool === "create_character";
         expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe(asks ? "ask" : "deny");
@@ -1129,7 +1130,7 @@ describe("the built-in tool list", () => {
 });
 
 /**
- * AI INFLUENCER (ADR-1281). One photoreal creator on the faceless crew: the character is a setup
+ * AI INFLUENCER (ADR-1321). One photoreal creator on the faceless crew: the character is a setup
  * answer, every still of them is rendered with their character and a look, and every video starts
  * from such a still. Its form is the four approved questions, with pictures that are the dashboard's
  * own files (vetta-mono `apps/web/public/setup/`).
@@ -1188,6 +1189,8 @@ describe("the AI Influencer template", () => {
       const id = `ai-influencer/${agent.name}`;
       expect(permissionFor(AI, agent.name, "create_character"), id).toBe(agent.name === "producer" ? "ask" : "deny");
       expect(permissionFor(AI, agent.name, "delete_character"), id).toBe("deny");
+      // A video edit can change the face: denied by name, not left to follow generate_video.
+      expect(agent.tools?.configs["edit_video"], id).toEqual({ enabled: false, permission: "deny" });
       expect(permissionFor(AI, agent.name, "get_character"), id).toBe(["producer", "scriptwriter"].includes(agent.name) ? "allow" : "deny");
       expect(permissionFor(AI, agent.name, "list_characters"), id).toBe(agent.name === "producer" ? "allow" : "deny");
       expect(agent.skills, id).toContain("naive/channel-template-ai-influencer");
@@ -1212,11 +1215,17 @@ describe("the AI Influencer template", () => {
   it("meets the influencer on the look card's key, and tells the first piece who it is about", () => {
     const meet = AI.tasks.find((one) => one.key === "look")!;
     expect([meet.title, meet.assignee, meet.blocked_by]).toEqual(["Meet the influencer", "producer", ["reference-study"]]);
-    expect(meet.body).toMatch(/get_character\{character:<that name>\}/);
-    expect(meet.body).toMatch(/create_character\{name, image_urls, style_pack:<the picked looks>\}/);
+    expect(meet.body).toMatch(/get_character\{character:<its id>\}/);
+    // By fixed id, never by name: an org's own character of the same name would win a lookup by name.
+    for (const creator of PREBUILT_CREATORS) expect(meet.body).toContain(`${creator.name} = ${creator.id}`);
+    // "Their usual looks" is no look name: a trained face gets the picked looks without it, or the defaults.
+    expect(meet.body).toContain(`style_pack:<the picked looks without "Their usual looks"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>`);
     expect(meet.body).toMatch(/generate_image\{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"\}/);
     expect(meet.body).toMatch(/generate_video\{character, image_urls:\[the still\]\}/);
     expect(AI.tasks.find((one) => one.key === "first-briefs")!.body).toMatch(/This channel is one person/);
+    // No niche question: every card and seat that looks for "the niche" is told it is the influencer's.
+    for (const key of ["reference-study", "first-briefs"]) expect(AI.tasks.find((one) => one.key === key)!.body, key).toContain(INFLUENCER_NICHE);
+    expect(seat(AI, "trend-scout").system).toContain(INFLUENCER_NICHE);
     // The faceless template keeps its own look card.
     expect(TEMPLATES.faceless.tasks.find((one) => one.key === "look")!.title).toBe("Choose the look this channel renders in");
   });

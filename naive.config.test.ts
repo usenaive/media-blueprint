@@ -40,7 +40,7 @@ describe("naive.config", () => {
     expect(declaration.description).toBe(ACTIVE.description);
     expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
     expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual([
-      // The base three, the eleven niche channel templates (ADR-1115, ADR-1174, ADR-1314) and AI Influencer (ADR-1281), sorted.
+      // The base three, the eleven niche channel templates (ADR-1115, ADR-1174, ADR-1314) and AI Influencer (ADR-1321), sorted.
       "AI Cartoons IRL Channel",
       "AI Channel Cloning",
       "AI Comics Channel",

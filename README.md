@@ -67,7 +67,7 @@ the first session. It publishes, installs and switches through the exact paths t
 
 ### AI Influencer
 
-`ai-influencer` (shown as **AI Influencer**, ADR-1281) is the `faceless` crew with the segmented
+`ai-influencer` (shown as **AI Influencer**, ADR-1321) is the `faceless` crew with the segmented
 seats, pinning `naive/channel-template-ai-influencer`, for one photoreal creator who posts every day
 in a few chosen looks ([`templates/ai-influencer.ts`](templates/ai-influencer.ts)). The character is
 a setup answer, not a niche: one of four prebuilt creators, ready at once, or a face trained from the
@@ -78,7 +78,7 @@ becomes **Meet the influencer** (same key): the producer resolves the character,
 were uploaded (waiting on an `ask_operator` reply, since nothing wakes a seat when training ends),
 and renders one still per picked look as the channel's look sheet. The producer holds
 `get_character` and `list_characters`, and `create_character` at `ask`; the scriptwriter reads
-`get_character`. It renders on `minimax/hailuo-3` first, `alibaba/wan-3.0/image-to-video` allowed —
+`get_character`. Every seat denies `edit_video` by name (an edit can change the face). It renders on `minimax/hailuo-3` first, `alibaba/wan-3.0/image-to-video` allowed —
 the two measured keeping a face from a still. It asks no cadence: the manager and the scout read it
 as daily.
 

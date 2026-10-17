@@ -188,6 +188,9 @@ a cron fire is not.
 - `company.set_timezone`, `company.set_logo`, `company.set_brand`, `apps.request_access`, `mobile`,
   `data_run`: `deny` on every seat; `create_character` too, except `ask` on the `ai-influencer`
   producer, which also holds `get_character` and `list_characters` (its scriptwriter `get_character`);
+- `edit_video` (Mira) is no built-in: it follows `generate_video` unless named (core ADR-1309), so a
+  producer that renders video asks for it; `ai-influencer` denies it by name on every seat, since an
+  edit can change the face;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first; on the generated niche producers,
   `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first; on the `ai-influencer` producer,
