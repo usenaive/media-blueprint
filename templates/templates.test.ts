@@ -100,20 +100,34 @@ const withNicheIds = (ids: readonly string[]): Set<string> => {
   return out;
 };
 
-/** The platform's own rule for one tool (`permissionOf`, core `schema/agent.ts`), written out. */
-const permissionFor = (template: MediaTemplate, agent: string, tool: string): string => {
-  const toolset = seat(template, agent).tools!;
+/** Core's `ALWAYS_ASKS` (`schema/agent.ts`): never `allow`, whatever the policy says. */
+const ALWAYS_ASKS = ["apps.request_access", "company.set_logo", "company.set_brand"];
+
+type Toolset = NonNullable<MediaTemplate["agents"][number]["tools"]>;
+
+/**
+ * The platform's own rule for one tool (`permissionOf`, core `schema/agent.ts` on vetta-mono main),
+ * written out. An unnamed ask-by-default tool asks only under a default that is not `deny`: "asking
+ * is never wider than what the agent was given".
+ */
+const resolve = (toolset: Toolset, tool: string): string => {
   const config = toolset.configs[tool];
   if (config?.enabled === false) return "deny";
-  if (["ask_operator", "request_tools"].includes(tool)) return (config?.permission ?? toolset.default_config.permission) === "deny" ? "deny" : "ask";
   const leader = FOLLOWS_TOOL[tool];
   // An unnamed follower takes its leader's policy (core ADR-1309), and an ask-by-default one asks for an allow.
   if (!config && leader) {
-    const led = permissionFor(template, agent, leader);
+    const led = resolve(toolset, leader);
     return led === "allow" && ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : led;
   }
-  return config?.permission ?? (ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : toolset.default_config.permission);
+  if (["ask_operator", "request_tools", ...ALWAYS_ASKS].includes(tool)) {
+    return (config?.permission ?? toolset.default_config.permission) === "deny" ? "deny" : "ask";
+  }
+  if (config?.permission) return config.permission;
+  const fallback = toolset.default_config.permission;
+  return fallback !== "deny" && ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : fallback;
 };
+
+const permissionFor = (template: MediaTemplate, agent: string, tool: string): string => resolve(seat(template, agent).tools!, tool);
 
 /** Every word a template puts in front of its crew: the briefs, the fires and the cards. */
 const everyPrompt = (template: MediaTemplate) => [
@@ -1130,6 +1144,25 @@ describe("the built-in tool list", () => {
 
   it("matches the platform's own namespaced list, name for name", () => {
     expect(drift(PLATFORM_TOOLS, CORE_PLATFORM_TOOLS), `templates/template.ts PLATFORM_TOOLS ${HOW}`).toEqual({ missing: [], extra: [] });
+  });
+
+  /**
+   * Naming a tool denied is the pin, not the policy: under a `deny` default an unnamed tool already
+   * resolves `deny` on the platform, ask-by-default or not. So re-copying core's lists (a tool added
+   * to them is denied by name on every seat not granted it) changes no seat's resolved permission —
+   * this holds every seat to that, so a re-copy can never quietly tighten or widen another template.
+   */
+  it("resolves every seat the same with or without its by-name denials", () => {
+    const pinned: readonly string[] = [...BUILTIN_TOOLS, ...PLATFORM_TOOLS];
+    const names = [...pinned, ...Object.keys(FOLLOWS_TOOL)];
+    for (const { agent, id } of everySeat) {
+      const tools = agent.tools!;
+      expect(tools.default_config.permission, id).toBe("deny");
+      // Only the pinned lists' denials; a follower a template denies by name (`edit_video`) is its own policy.
+      const kept = Object.entries(tools.configs).filter(([name, c]) => c.enabled !== false || !pinned.includes(name));
+      const unnamed = { ...tools, configs: Object.fromEntries(kept) };
+      for (const tool of names) expect(resolve(unnamed, tool), `${id}/${tool}`).toBe(resolve(tools, tool));
+    }
   });
 
   /** Core's `ASK_BY_DEFAULT_TOOLS`, pinned: each falls to `ask` unless a toolset names it. */

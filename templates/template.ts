@@ -427,8 +427,9 @@ export const PLATFORM_TOOLS = [
 
 /**
  * The platform tools that publish, pay, file or change the company's settings — core's
- * `ASK_BY_DEFAULT_TOOLS`, pinned. A toolset that does not name one gets `ask`, whatever its default
- * says, so every seat names each of them. `company.set_timezone`, `company.set_logo`,
+ * `ASK_BY_DEFAULT_TOOLS`, pinned. Under a `deny` default an unnamed one is already `deny` on the
+ * platform ("asking is never wider than what the agent was given"); every seat still names each of
+ * them, so the policy reads off the toolset and does not lean on that rule. `company.set_timezone`, `company.set_logo`,
  * `company.set_brand` and `apps.request_access` are offered to every session: a media seat has no app
  * to request and no business changing the company's clock, logo or brand, so each is denied by name —
  * as are `mobile`, `data_run`, `create_character` (except where a template grants it: the
