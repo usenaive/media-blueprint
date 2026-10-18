@@ -1,5 +1,5 @@
 /**
- * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1334).
+ * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1335).
  *
  * It is the faceless crew with the segmented short-form seats (`SEGMENTED_SHORT_FORM`), like the
  * generative niches, and one load-bearing difference: the face. Every image of the influencer is
@@ -59,7 +59,7 @@ const CREATOR_IDS = PREBUILT_CREATORS.map((one) => `${one.name} = ${one.id}`).jo
 /** The looks a trained face gets when the operator picked only "Their usual looks" (it has none of its own). */
 export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Phone snap", "Realistic", "Everyday"];
 
-/** Where the niche comes from: this template asks no niche question (ADR-1334). */
+/** Where the niche comes from: this template asks no niche question (ADR-1335). */
 export const INFLUENCER_NICHE =
   "THE NICHE IS THE INFLUENCER'S: the picked creator's niche in naive/channel-template-ai-influencer §4, or, for a face the operator trained, what the purpose answer says they are for.";
 
@@ -159,7 +159,7 @@ export const ONE_OUTFIT =
   "Name the piece's ONE look, outfit and setting once.";
 
 /**
- * One set per piece (H1, vetta-mono ADR-1334): segment 1's still is rendered with the character and the
+ * One set per piece (H1, vetta-mono ADR-1335): segment 1's still is rendered with the character and the
  * look; every later segment opens on an edit of THAT still (generate_image with character and
  * image_urls), which keeps its room, props and outfit and is still the character's, so it may open a
  * character video. On staging (round 3) a fresh still per segment turned the mug into a glass and moved
@@ -177,7 +177,7 @@ export const ONE_SET =
  */
 export const PRODUCER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "call generate_video once", "One render per card", "each with its on-screen text" AND THE REFERENCE FRAME ABOVE. ${ONE_SET} Then generate_video for every segment in one turn: character, its seconds, image_urls its still, one model — never a frame cut from a clip. ${NO_DRAWN_WORDS} Render only segments not yet in the card's comments, commenting each fil_ id and index; re-render a failed one alone. Join and finish per \`naive/video-assembly\` — the label a disclosure only, a call to action in the last segment only — then publish_file it for the Publish card.`;
 
-const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "ONE video" ABOVE: get_character first (voice, wardrobe, looks). ${ONE_OUTFIT} Segments in order: one still of the set, re-posed for each later segment — never a URL or a last frame — prompted with action and framing only, never their face or words; ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds each, cut on shot changes, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
+const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "ONE video" ABOVE: get_character first (voice, wardrobe, looks). ${ONE_OUTFIT} Segments in order: one still of the set, re-posed for each later segment, never a URL or last frame, prompted with action, setting and framing only, never gender, age, face, hair, build or words; ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds each, cut on shot changes, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
 
 /** The `look` card's replacement: same key, so the day-one chain and its re-apply guard are unchanged. */
 const characterCard = (look: Task): Task =>
@@ -294,7 +294,7 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
         edit_video: { enabled: false, permission: "deny" as const },
         ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const } } : {}),
         // Every post is the influencer, so every post is labelled AI-generated: the network's own label
-        // and an #AIgenerated caption line, added by the publish path (vetta-mono ADR-1334 (i)).
+        // and an #AIgenerated caption line, added by the publish path (vetta-mono ADR-1335 (i)).
         ...(seat.tools!.configs["social.post"]?.enabled
           ? { "social.post": { ...seat.tools!.configs["social.post"], config: { ai_generated: true } } }
           : {}),

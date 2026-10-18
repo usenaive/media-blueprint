@@ -114,7 +114,7 @@ export const ROADSTER = niche(FACELESS, {
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) and `ai-influencer` (ADR-1334) reuse their crews.
+ * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) and `ai-influencer` (ADR-1335) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
