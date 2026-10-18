@@ -78,12 +78,16 @@ A card is woken at most three times. After that it is parked for the CEO.
 - **producer**: preflight stops only on objective gaps; judgement calls become one PREFLIGHT
   WARNING. For each scene, `generate_image` (skipped for a named OPENING FRAME), inspect it, then
   `generate_video` with `image_urls: ["<fil_ id>"]` as its first frame. It records every id on the
-  card so a wake resumes rather than buys work twice, and retries a failed scene once. A Render card
-  without the bible sections predates them and is rendered as planned. After all scenes land it transcribes their audio and chooses one dialogue source
-  for the whole piece: keep usable native character performances, or strip every source audio track
-  and generate exact replacement speech. It never mixes both. It then normalizes and joins with
-  ffmpeg, burns in text, verifies with ffprobe, one frame per scene and a per-scene transcript, and
-  publishes one final `fil_`.
+  card so a wake resumes rather than buys work twice, and retries a failed scene once. After all
+  scenes land it transcribes their audio and chooses one dialogue source for the whole piece: keep
+  usable native character performances, or strip every source audio track and generate exact
+  replacement speech. It never mixes both. It then normalizes and joins with ffmpeg, burns in text,
+  verifies with ffprobe, one frame per scene and a transcript of the finished file checked scene by
+  scene, and publishes one final `fil_`.
+- **Cards planned before the bible**: a Plan card read with no bible note yet is planned the old way
+  (one take, or 5–15 second segments where the pinned skill segments). A Render card without the
+  bible sections is rendered as planned, resumably and with one retry, then finished per
+  `naive/video-assembly` (hook and label text, a voiced silent join) and verified the same way.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
 
@@ -116,11 +120,11 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
 ### Day one
 
 Each template seeds its set-up cards first — the channel plan, reference study, look, voice, report
-skeleton and, for generated shorts, the character bible (closed on a draft, approved later) — then one piece card for the head of the chain
-(`first-briefs`, `first-topic` or `first-moments`: the key 1.x already seeded, so a re-apply to an
-existing org seeds nothing and starts no paid piece). That piece runs its full chain to the
-approval card. The reference study never asks the operator: a blank reference answer means go and
-find two or three real videos in the niche.
+skeleton and, for generated shorts, the character bible (closed on a draft, approved later) — then
+one piece card for the head of the chain (`first-briefs`, `first-topic` or `first-moments`: the
+key 1.x already seeded, so a re-apply to an existing org seeds nothing and starts no paid piece).
+That piece runs its full chain to the approval card. The reference study never asks the operator: a
+blank reference answer means go and find two or three real videos in the niche.
 
 ## 5. Publishing
 
