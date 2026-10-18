@@ -127,7 +127,7 @@ describe("the crews", () => {
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
         : false;
-      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 620 : 360);
+      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 700 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
@@ -928,9 +928,20 @@ describe("the generated short-form scene pipeline", () => {
       const legacy = producer.indexOf("no CONTINUITY CONTRACT or STORY LOGIC section was planned before the bible");
       expect(legacy, name).toBeGreaterThan(-1);
       expect(legacy, name).toBeLessThan(producer.indexOf("PREFLIGHT"));
-      expect(producer, name).toMatch(/one generate_video call for its shots as one take/);
+      const clause = producer.slice(legacy, producer.indexOf("PREFLIGHT"));
+      expect(clause, name).toMatch(/one generate_video call for its shots as one take/);
+      // A re-woken legacy card never buys a take or a segment twice.
+      expect(clause, name).toMatch(/[Rr]ender only what the card's comments do not yet record/);
+      expect(clause, name).toMatch(/comment each render's fil_ id and segment index/);
+      expect(clause, name).toMatch(/a failed render is re-rendered once; a second failure means STOPPED/);
+      // A legacy segmented piece still gets its text and voice before it ships.
+      expect(clause, name).toMatch(/finish per `naive\/video-assembly`: burn in the plan's hook and label text, and voice a silent take or join with generate_speech/);
+      expect(clause, name).toMatch(/Publish card omits scene ids and AUDIO MODE/);
       const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system!;
       expect(scriptwriter, name).toMatch(/With no bible note yet, write the plan as before/);
+      // Hailuo caps a call at SEGMENT_MAX_SECONDS, so a segmenting skill's legacy plan stays segmented.
+      expect(scriptwriter, name).toContain(`or, where the pinned skill segments, segments of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds each naming its opening frame`);
+      expect(scriptwriter, name).toMatch(/create the Render card, titled and linked as below, with only those sections — no SOURCE PROVENANCE, CONTINUITY CONTRACT, STORY LOGIC, SCENES IN ORDER or CUT MAP/);
       expect(scriptwriter, name).not.toMatch(/without an approved bible, stop/);
     }
   });
@@ -981,7 +992,7 @@ describe("the generated short-form scene pipeline", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
       const producer = seat(TEMPLATES[name], "producer").system!;
       expect(producer, name).not.toMatch(/Watch it|normal speed|listen/i);
-      expect(producer, name).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(TEMPLATES[name].length)}, view_image one frame per scene, and transcribe_audio each scene's span`);
+      expect(producer, name).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(TEMPLATES[name].length)}, view_image one frame per scene, and transcribe_audio it, checking each scene's planned lines`);
     }
   });
 
