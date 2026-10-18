@@ -194,7 +194,8 @@ a cron fire is not.
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first; on the generated niche producers,
   `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first; on the `ai-influencer` producer,
-  `AI_INFLUENCER_VIDEO_MODELS` (Hailuo 3, then Wan 3.0 image-to-video — measured keeping a face). Every generated short renders 5–15 second scenes;
+  `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
+  Every generated short renders 5–15 second scenes;
 - `generate_speech`, shell and file tools on every generated-short producer; `transcribe_audio` on
   their scriptwriters.
 

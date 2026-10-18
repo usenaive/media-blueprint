@@ -100,8 +100,11 @@ const withNicheIds = (ids: readonly string[]): Set<string> => {
   return out;
 };
 
-/** Core's `ALWAYS_ASKS` (`schema/agent.ts`): never `allow`, whatever the policy says. */
-const ALWAYS_ASKS = ["apps.request_access", "company.set_logo", "company.set_brand"];
+/**
+ * Core's `NEVER_ALLOWED` (`schema/agent.ts`): `ALWAYS_ASKS` plus `create_character`, whose consent
+ * is a person's yes on its card (ADR-1334). Never `allow`, whatever the policy says.
+ */
+const NEVER_ALLOWED = ["apps.request_access", "company.set_logo", "company.set_brand", "create_character"];
 
 type Toolset = NonNullable<MediaTemplate["agents"][number]["tools"]>;
 
@@ -119,7 +122,7 @@ const resolve = (toolset: Toolset, tool: string): string => {
     const led = resolve(toolset, leader);
     return led === "allow" && ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : led;
   }
-  if (["ask_operator", "request_tools", ...ALWAYS_ASKS].includes(tool)) {
+  if (["ask_operator", "request_tools", ...NEVER_ALLOWED].includes(tool)) {
     return (config?.permission ?? toolset.default_config.permission) === "deny" ? "deny" : "ask";
   }
   if (config?.permission) return config.permission;

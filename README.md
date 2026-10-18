@@ -78,8 +78,8 @@ becomes **Meet the influencer** (same key): the producer resolves the character,
 were uploaded (waiting on an `ask_operator` reply, since nothing wakes a seat when training ends),
 and renders one still per picked look as the channel's look sheet. The producer holds
 `get_character` and `list_characters`, and `create_character` at `ask`; the scriptwriter reads
-`get_character`. Every seat denies `edit_video` by name (an edit can change the face). It renders on `minimax/hailuo-3` first, `alibaba/wan-3.0/image-to-video` allowed —
-the two measured keeping a face from a still. It asks no cadence: the manager and the scout read it
+`get_character`. Every seat denies `edit_video` by name (an edit can change the face). It renders on
+`AI_INFLUENCER_VIDEO_MODELS`, the two image-to-video models measured keeping a face from a still. It asks no cadence: the manager and the scout read it
 as daily.
 
 A piece keeps one set: segment 1 opens on a character still in the plan's look, and every later
@@ -295,7 +295,7 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   or context explicitly ask for another. The generated short-form niches (`ufc`, `history`,
   `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`)
   pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed; `ai-influencer` pins
-  `minimax/hailuo-3` first with `alibaba/wan-3.0/image-to-video` allowed.
+  `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions
