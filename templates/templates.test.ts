@@ -875,7 +875,11 @@ describe("the generated short-form scene pipeline", () => {
       expect(scriptwriter, name).toMatch(/cold-viewer check/);
       expect(scriptwriter, name).toMatch(/incoming state, outgoing state/);
       expect(scriptwriter, name).toMatch(/THEME\/PROMISE/);
-      expect(scriptwriter, name).toMatch(/first 2–3 seconds must introduce the protagonist, setting, immediate situation, goal and stakes/);
+      // Item 5: the hook skill owns the opening seconds; hook plus setup carry the introduction.
+      expect(scriptwriter, name).toMatch(/hook and setup beat together must introduce the protagonist, setting, immediate situation, goal and stakes/);
+      expect(scriptwriter, name).not.toMatch(/first 2–3 seconds/);
+      expect(scriptwriter, name).toMatch(/Revise at most twice; then proceed, listing any remaining gap in STORY LOGIC/);
+      expect(scriptwriter, name).not.toMatch(/Rewrite until/);
       expect(scriptwriter, name).toMatch(/CUT MAP/);
       expect(scriptwriter, name).toMatch(/0\.25 seconds of dialogue-free stable picture/);
       expect(scriptwriter, name).toMatch(/match on action, eyeline, prop, composition or continuous ambience/);
