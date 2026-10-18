@@ -49,7 +49,7 @@ export const CONTINUITY_RULE =
  */
 export const SEGMENTED_SHORT_FORM: Record<string, SeatOverride> = {
   scriptwriter: {
-    brief: "Use your pinned skills' scene grammar (the channel template's or the operator's own) without weakening the character bible, source provenance or scene contract above.",
+    brief: "Use your pinned skills' scene grammar (the channel template's, or the one built from this channel's reference videos) without weakening the character bible, source provenance or scene contract above.",
   },
   producer: {
     videoModels: SEGMENT_VIDEO_MODELS,
