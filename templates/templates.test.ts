@@ -859,7 +859,9 @@ describe("the generated short-form scene pipeline", () => {
         ...(name === "faceless" ? [] : [`naive/channel-template-${name}`]),
       ]);
       expect(producer.system, name).toMatch(/script -> images -> video -> editing/);
-      expect(producer.system, name).toMatch(/image_file_ids containing that scene's accepted image/);
+      // Item 1: the platform drops unknown args, so the first frame must ride in image_urls.
+      expect(producer.system, name).toMatch(/image_urls: \["<fil_ id>"\]/);
+      expect(producer.system, name).not.toMatch(/image_file_ids/);
       expect(producer.system, name).toMatch(/SCENE <index> IMAGE <fil_ id>/);
       expect(producer.system, name).toMatch(/SCENE <index> VIDEO <fil_ id>/);
       expect(producer.system, name).toContain(RENDER_MODEL_RULE);
@@ -878,15 +880,50 @@ describe("the generated short-form scene pipeline", () => {
       expect(scriptwriter, name).toMatch(/0\.25 seconds of dialogue-free stable picture/);
       expect(scriptwriter, name).toMatch(/match on action, eyeline, prop, composition or continuous ambience/);
       expect(scriptwriter, name).toMatch(/Never use a cut merely because a segment ended/);
-      expect(producer.system, name).toMatch(/opening state does not follow the preceding scene's outgoing state/);
       expect(producer.system, name).toMatch(/never cut mid-word, mid-gesture or before the reaction lands/);
-      expect(producer.system, name).toMatch(/Watch it once at normal speed/);
     }
     expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(SEGMENT_MAX_SECONDS).toBe(15);
     expect(SEGMENT_MIN_SECONDS).toBe(5);
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
+  });
+
+  /** Paid scenes are kept: one failure is retried, and a completed scene is never bought twice. */
+  it("retries a failed scene render once and never re-renders a completed one", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).toMatch(/SCENE <index> VIDEO FAILED/);
+      expect(producer, name).toMatch(/re-render it once; a second failure means STOPPED/);
+      expect(producer, name).toMatch(/Never re-render a completed scene/);
+      expect(producer, name).not.toMatch(/comment a failure and stop/);
+    }
+  });
+
+  /** Only objective gaps stop a piece before spend; a judgement call is flagged and the work goes on. */
+  it("stops preflight only on objective gaps and turns subjective findings into one warning", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      const stops = producer.slice(producer.indexOf("PREFLIGHT"), producer.indexOf("PREFLIGHT WARNING"));
+      expect(stops, name).toMatch(/STOPPED only if/);
+      expect(stops, name).toMatch(/lacks one of those sections/);
+      expect(stops, name).toMatch(/cites no bible note/);
+      expect(stops, name).toContain(`does not total ${lengthPhrase(TEMPLATES[name].length)}`);
+      expect(stops, name).toMatch(/has no scenes or a scene without its video_prompt/);
+      for (const subjective of [/undefined canonical character/, /invariant/, /introduc/, /outgoing state/]) {
+        expect(stops, `${name} ${subjective}`).not.toMatch(subjective);
+      }
+      expect(producer, name).toMatch(/PREFLIGHT WARNING: .*undefined canonical character.*then proceed/s);
+    }
+  });
+
+  /** The producer cannot watch or listen; it verifies with a probe, frames and transcripts. */
+  it("verifies the finished cut with tools the producer holds", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).not.toMatch(/Watch it|normal speed|listen/i);
+      expect(producer, name).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(TEMPLATES[name].length)}, view_image one frame per scene, and transcribe_audio each scene's span`);
+    }
   });
 
   it("chooses one dialogue source, burns text, joins and probes before publishing", () => {
