@@ -200,10 +200,10 @@ const characterCard = (look: Task): Task =>
  * for a prebuilt creator.
  */
 export const DAY_ONE_PIECE =
-  "TODAY'S PIECE IS DAY ONE'S, so keep it lean: it runs 15 to 20 seconds in three segments, and one exemplar is enough. Say both in the brief, and that the reference teardown is not filed yet: the piece is planned and rendered from the hook-style note and the exemplar, and nobody waits for the study.";
+  "TODAY'S PIECE IS DAY ONE'S, so keep it lean: it runs 15 to 20 seconds in three segments, and one exemplar is enough — at most three searches to find it, and none is fine. Say in the brief that the reference teardown is not filed yet, that the piece is planned from the hook-style note and the exemplar, that nobody waits for the study, and that today the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research.";
 
 /** The study's own cap, said on its card; the analyst's per-task ceiling is the hard stop under it. */
-export const STUDY_SPEND_MICRO_USD = 600_000;
+export const STUDY_SPEND_MICRO_USD = 400_000;
 
 /**
  * Each seat's ceilings on this template, the platform's hard stops (per task, per day). Sized to this
@@ -219,7 +219,7 @@ export const AI_INFLUENCER_BUDGETS: Readonly<Record<string, Budget>> = {
   scriptwriter: budgetOf(3_000_000, 9_000_000),
   "trend-scout": budgetOf(3_000_000, 9_000_000),
   "channel-manager": budgetOf(3_000_000, 9_000_000),
-  analyst: budgetOf(1_500_000, 4_000_000),
+  analyst: budgetOf(1_000_000, 4_000_000),
 };
 
 /** The hook style, from the influencer: it waits on nothing, so the first piece never waits on the study. */

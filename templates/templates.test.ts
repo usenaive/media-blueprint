@@ -1326,7 +1326,9 @@ describe("the AI Influencer template", () => {
     const card = (key: string) => AI.tasks.find((one) => one.key === key)!;
     expect([card("hook-style").blocked_by, card("hook-style").body]).toEqual([[], expect.stringMatching(/do not wait for the reference-study card/)]);
     expect([card("reference-study").assignee, card("reference-study").blocked_by]).toEqual(["analyst", ["first-briefs"]]);
-    expect(card("reference-study").body).toMatch(/At most two videos .* download nothing and sample no frames\. Stop once session_spend reads past \$0\.60/);
+    expect(card("reference-study").body).toMatch(/At most two videos .* download nothing and sample no frames\. Stop once session_spend reads past \$0\.40/);
+    // Day one's first piece is lean end to end (fix r1: 33.9 min and $6.42 with the scriptwriter sampling exemplar frames).
+    expect(card("first-briefs").body).toMatch(/at most three searches to find it, and none is fine.*the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research/);
     expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
     expect(DAY_ONE_PIECE).toMatch(/15 to 20 seconds in three segments/);
     // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.
