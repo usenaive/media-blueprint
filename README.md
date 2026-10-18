@@ -41,10 +41,12 @@ platform catalogue, not this repo.
 
 Where a niche's playbook needs a seat to do more than its base seat, `niche()` takes `seats`, which
 **extends** that seat: tools added at `allow`, skills appended, and a brief clause before the crew's
-rules. Every generated short uses the base scene pipeline: script, one generated opening image per
-scene, one image-to-video render per scene, then speech, text and an ffmpeg join. Scenes run 5 to 15
-seconds and total 15–30. The seven niche templates use `SEGMENTED_SHORT_FORM` only to pin Hailuo 3
-first with Seedance 2.5 allowed; their pinned skill supplies the genre-specific scene grammar.
+rules. Every generated short uses the base scene pipeline: script, one opening image per scene, one
+image-to-video render per scene, then speech, text and an ffmpeg join. A scene opens on a generated
+image unless a pinned skill names its opener — a shipped frame, or the previous take's last frame.
+Scenes run 5 to 15 seconds and total 15–30. The seven niche templates use `SEGMENTED_SHORT_FORM`
+only to pin Hailuo 3 first with Seedance 2.5 allowed; their pinned skill supplies the genre-specific
+scene grammar.
 
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
@@ -112,14 +114,17 @@ Step by step, on `faceless`:
 1. **The trend-scout** fires Monday and Thursday. For each slot the cadence needs, it finds a topic
    and one to three real videos doing it well. It creates a **Plan** card for the scriptwriter.
    The card's body is the brief.
-2. **The scriptwriter** reads the approved character bible, looks inside the exemplars, researches,
+2. **The scriptwriter** reads the character bible (approved, else the draft), looks inside the exemplars, researches,
    and writes the whole scene plan: provenance, continuity contract, image and motion prompts,
    exact dialogue, edit instructions, sources and caption. It creates the **Render** card.
-3. **The producer** generates and checks each scene's opening image, passes that stored `fil_` image
-   to `generate_video`, records every image and segment on the card, then transcribes the renders and
-   chooses one dialogue source for the whole piece. It either keeps native character performances or
-   strips source audio and adds generated speech—never both—then adds on-screen text, joins and probes
-   the result, listens for doubled voices, and creates the **Publish** card.
+3. **The producer** stops before spend only on an objective gap (a missing section or bible note,
+   the wrong total length, no scenes) and posts one warning for judgement calls. It generates and
+   checks each scene's opening image, passes it to `generate_video` as `image_urls: ["fil_…"]`,
+   records every image and segment on the card, and retries a failed scene once. It transcribes the
+   renders and chooses one dialogue source for the whole piece: native character performances or
+   generated speech over stripped audio, never both. It adds on-screen text, joins, then verifies with
+   ffprobe, one frame per scene and a per-scene transcript, and creates the **Publish** card. A
+   Render card planned before the bible existed is rendered as planned, single-pass.
 4. **The channel manager** is woken on the Publish card. It checks the caption and calls
    `social.post`. The post waits on the approval card.
 5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
@@ -169,7 +174,7 @@ woken by its cards.
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
 | `producer` | Video production | — | `look` | Generates scene images and videos, edits the final piece, creates the Publish card |
 | `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
-| `scriptwriter` | Hooks & scripts | — | `reference-study`, `character-bible`, `hook-style` | Gets the continuity bible approved; writes every scene and prompt |
+| `scriptwriter` | Hooks & scripts | — | `reference-study`, `character-bible`, `hook-style` | Drafts the continuity bible and asks for approval; writes every scene and prompt |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
 ### `longform`
@@ -240,7 +245,7 @@ The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-t
 `first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board
 holds, so updating an existing channel to 2.0 does not start a new paid piece.
 
-Day one sets up the plan, reference, look, voice and operator-approved continuity bible, then starts **one** piece. That
+Day one sets up the plan, reference, look, voice and a draft continuity bible, then starts **one** piece. That
 piece runs its full chain to your approval card. The timers start the rest.
 
 A card carries no budget of its own: a woken seat runs on its per-task ceiling. So day one is

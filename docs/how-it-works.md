@@ -63,19 +63,27 @@ A card is woken at most three times. After that it is parked for the CEO.
 ### `faceless` — Faceless channel, 15–30 seconds
 
 - **trend-scout** (Mon & Thu 06:00): reads the teardown and the newest weekly report. For each slot
-  the cadence needs, picks a topic within the approved bible, opens one to three real videos doing
+  the cadence needs, picks a topic within the bible, opens one to three real videos doing
   it well, and creates a Plan card whose body names its theme, narrative pattern and cast.
-- **scriptwriter**: first creates the character bible from the creator's exact words and timestamped
-  reference evidence, and waits for the operator to approve it. For a piece it samples the opening
+- **scriptwriter**: first creates the character bible from the creator's exact words, every pinned
+  skill (`naive/channel-template-*`, `c-*` creator templates and `media-*` skills built from reel
+  links, whose bible sections are primary evidence and whose source links it re-opens) and
+  timestamped reference evidence. It closes the card on the DRAFT, then asks the operator; the crew
+  works from the draft until an APPROVED comment replaces it. For a piece it samples the opening
   and later scene changes, then writes source provenance, a continuity contract and 5–15 second
   scenes. Every scene has an opening-image prompt, an image-to-video motion prompt, exact dialogue,
-  on-screen text and editing instructions; all scenes total 15–30 seconds.
-- **producer**: for each scene, `generate_image`, inspect it, then `generate_video` with the accepted
-  image's `fil_` id as its first frame. It records every id on the card so a wake resumes rather than
-  buys work twice. After all scenes land it transcribes their audio and chooses one dialogue source
+  on-screen text and editing instructions; all scenes total 15–30 seconds. The hook and setup beat
+  carry the introduction, and the cold-viewer check gets at most two revisions. A scene the pinned
+  skill opens on a shipped frame or the previous take's last frame names that OPENING FRAME instead.
+- **producer**: preflight stops only on objective gaps; judgement calls become one PREFLIGHT
+  WARNING. For each scene, `generate_image` (skipped for a named OPENING FRAME), inspect it, then
+  `generate_video` with `image_urls: ["<fil_ id>"]` as its first frame. It records every id on the
+  card so a wake resumes rather than buys work twice, and retries a failed scene once. A Render card
+  without the bible sections predates them and is rendered as planned. After all scenes land it transcribes their audio and chooses one dialogue source
   for the whole piece: keep usable native character performances, or strip every source audio track
   and generate exact replacement speech. It never mixes both. It then normalizes and joins with
-  ffmpeg, burns in text, listens for doubled voices, checks frames and publishes one final `fil_`.
+  ffmpeg, burns in text, verifies with ffprobe, one frame per scene and a per-scene transcript, and
+  publishes one final `fil_`.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
 
@@ -108,7 +116,7 @@ piece is up to six segments, rendered separately and joined with ffmpeg.
 ### Day one
 
 Each template seeds its set-up cards first — the channel plan, reference study, look, voice, report
-skeleton and, for generated shorts, the approved character bible — then one piece card for the head of the chain
+skeleton and, for generated shorts, the character bible (closed on a draft, approved later) — then one piece card for the head of the chain
 (`first-briefs`, `first-topic` or `first-moments`: the key 1.x already seeded, so a re-apply to an
 existing org seeds nothing and starts no paid piece). That piece runs its full chain to the
 approval card. The reference study never asks the operator: a blank reference answer means go and
