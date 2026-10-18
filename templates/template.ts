@@ -33,7 +33,7 @@ export type TemplateName =
   | "dancing-animals"
   // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
   | "roadster"
-  // One photoreal creator on the faceless crew (ADR-1335): the character is a setup answer, not a niche.
+  // One photoreal creator on the faceless crew (ADR-1360): the character is a setup answer, not a niche.
   | "ai-influencer";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */

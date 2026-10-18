@@ -1,5 +1,5 @@
 /**
- * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1335).
+ * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1360).
  *
  * It is the faceless crew with the segmented short-form seats (`SEGMENTED_SHORT_FORM`), like the
  * generative niches, and one load-bearing difference: the face. Every image of the influencer is
@@ -59,7 +59,7 @@ const CREATOR_IDS = PREBUILT_CREATORS.map((one) => `${one.name} = ${one.id}`).jo
 /** The looks a trained face gets when the operator picked only "Their usual looks" (it has none of its own). */
 export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Phone snap", "Realistic", "Everyday"];
 
-/** Where the niche comes from: this template asks no niche question (ADR-1335). */
+/** Where the niche comes from: this template asks no niche question (ADR-1360). */
 export const INFLUENCER_NICHE =
   "THE NICHE IS THE INFLUENCER'S: the picked creator's niche in naive/channel-template-ai-influencer §4, or, for a face the operator trained, what the purpose answer says they are for.";
 
@@ -157,13 +157,13 @@ export const NO_DRAWN_WORDS =
 /**
  * One outfit and one place per piece: on staging (round 2) each segment's new still changed both; now every later segment re-poses segment 1's still (`ONE_SET`).
  * Fix r2 (H1): a later segment's prompt named "a kitchen nook" and the edit moved there from segment 1's bedroom, so later
- * segments name no place at all (the platform also checks the edit's place against segment 1's still, ADR-1335 (jj)).
+ * segments name no place at all (the platform also checks the edit's place against segment 1's still, ADR-1360 (jj)).
  */
 export const ONE_OUTFIT =
   "Name the piece's ONE look, outfit and setting once.";
 
 /**
- * One set per piece (H1, vetta-mono ADR-1335): segment 1's still is rendered with the character and the
+ * One set per piece (H1, vetta-mono ADR-1360): segment 1's still is rendered with the character and the
  * look; every later segment opens on an edit of THAT still (generate_image with character and
  * image_urls), which keeps its room, props and outfit and is still the character's, so it may open a
  * character video. On staging (round 3) a fresh still per segment turned the mug into a glass and moved
@@ -298,7 +298,7 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
         edit_video: { enabled: false, permission: "deny" as const },
         ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const } } : {}),
         // Every post is the influencer, so every post is labelled AI-generated: the network's own label
-        // and an #AIgenerated caption line, added by the publish path (vetta-mono ADR-1335 (i)).
+        // and an #AIgenerated caption line, added by the publish path (vetta-mono ADR-1360 (i)).
         ...(seat.tools!.configs["social.post"]?.enabled
           ? { "social.post": { ...seat.tools!.configs["social.post"], config: { ai_generated: true } } }
           : {}),

@@ -102,7 +102,7 @@ const withNicheIds = (ids: readonly string[]): Set<string> => {
 
 /**
  * Core's `NEVER_ALLOWED` (`schema/agent.ts`): `ALWAYS_ASKS` plus `create_character`, whose consent
- * is a person's yes on its card (ADR-1335). Never `allow`, whatever the policy says.
+ * is a person's yes on its card (ADR-1360). Never `allow`, whatever the policy says.
  */
 const NEVER_ALLOWED = ["apps.request_access", "company.set_logo", "company.set_brand", "create_character"];
 
@@ -198,7 +198,7 @@ describe("the toolsets", () => {
    */
   it("lets the publisher post, only with the operator's yes, and denies every other seat", () => {
     for (const { template, agent, id } of everySeat) {
-      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1335 (i)).
+      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1360 (i)).
       const publishes = template.name === "ai-influencer" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
       expect(agent.tools?.configs["social.post"], id).toEqual(agent.name === PUBLISHER ? publishes : { enabled: false, permission: "deny" });
       expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
@@ -1179,7 +1179,7 @@ describe("the built-in tool list", () => {
 });
 
 /**
- * AI INFLUENCER (ADR-1335). One photoreal creator on the faceless crew: the character is a setup
+ * AI INFLUENCER (ADR-1360). One photoreal creator on the faceless crew: the character is a setup
  * answer, every still of them is rendered with their character and a look, and every video starts
  * from such a still. Its form is the four approved questions, with pictures that are the dashboard's
  * own files (vetta-mono `apps/web/public/setup/`).
@@ -1285,7 +1285,7 @@ describe("the AI Influencer template", () => {
     expect(producer).toMatch(/in the piece's one outfit and setting/);
     const scriptwriter = seat(AI, "scriptwriter").system!;
     expect(scriptwriter).toContain(ONE_OUTFIT);
-    // Never who they are (ADR-1335 (cc)): a plan that said "athletic woman" drew a trained bearded man as a woman.
+    // Never who they are (ADR-1360 (cc)): a plan that said "athletic woman" drew a trained bearded man as a woman.
     expect(scriptwriter).toMatch(/never gender, age, face, hair, build or words/);
   });
 
