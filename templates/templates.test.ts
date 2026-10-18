@@ -1270,7 +1270,10 @@ describe("the AI Influencer template", () => {
     expect(producer.system).toMatch(/generate_video for every segment in one turn: character, its seconds, image_urls its still/);
     expect(producer.system).toMatch(/never a frame cut from a clip/);
     expect(producer.system).toContain(RENDER_MODEL_RULE);
-    expect(seat(AI, "scriptwriter").system).toMatch(/one still of the set, re-posed for each later segment, never a URL or last frame/);
+    expect(seat(AI, "scriptwriter").system).toMatch(/one still of the set, re-posed for each later segment \(action and framing only, no new place\), never a URL or last frame/);
+    // Fix r2 (H1): a later segment named "a kitchen nook" and its edit left segment 1's bedroom.
+    expect(seat(AI, "scriptwriter").system).not.toMatch(/prompted with action, setting and framing/);
+    expect(AI.tasks.find((card) => card.key === "look")?.body).toMatch(/paused on the platform.s side.*never call create_character again/);
   });
 
   it("draws no words into a render, and keeps one outfit and setting across a piece's segments", () => {
