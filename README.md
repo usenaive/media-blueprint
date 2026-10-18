@@ -88,7 +88,7 @@ edit that keeps the room, props and outfit and is still the character's). The bu
 disclosure only; a call to action shows in the last segment only. Day one starts the first piece from
 the face, the persona and a hook style that waits on nothing; the reference study runs after the
 first piece starts, on the analyst, capped at about $0.40 and by the analyst's $1 per-task ceiling.
-The first piece runs 15 to 20 seconds, and every seat has a ceiling sized to this template's render
+The first piece runs 15 seconds (three 5-second segments), and every seat has a ceiling sized to this template's render
 (`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, the analyst $1.50).
 
 ## 🚀 Get started

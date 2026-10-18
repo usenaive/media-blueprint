@@ -1330,7 +1330,7 @@ describe("the AI Influencer template", () => {
     // Day one's first piece is lean end to end (fix r1: 33.9 min and $6.42 with the scriptwriter sampling exemplar frames).
     expect(card("first-briefs").body).toMatch(/at most three searches to find it, and none is fine.*the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research/);
     expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
-    expect(DAY_ONE_PIECE).toMatch(/15 to 20 seconds in three segments/);
+    expect(DAY_ONE_PIECE).toMatch(/15 seconds in three 5-second segments/);
     // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.
     for (const agent of AI.agents) {
       expect(agent.budget, agent.name).toEqual(AI_INFLUENCER_BUDGETS[agent.name]);

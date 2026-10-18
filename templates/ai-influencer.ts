@@ -200,7 +200,7 @@ const characterCard = (look: Task): Task =>
  * for a prebuilt creator.
  */
 export const DAY_ONE_PIECE =
-  "TODAY'S PIECE IS DAY ONE'S, so keep it lean: it runs 15 to 20 seconds in three segments, and one exemplar is enough — at most three searches to find it, and none is fine. Say in the brief that the reference teardown is not filed yet, that the piece is planned from the hook-style note and the exemplar, that nobody waits for the study, and that today the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research.";
+  "TODAY'S PIECE IS DAY ONE'S, so keep it lean: it runs 15 seconds in three 5-second segments, and one exemplar is enough — at most three searches to find it, and none is fine. Say in the brief that the reference teardown is not filed yet, that the piece is planned from the hook-style note and the exemplar, that nobody waits for the study, and that today the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research.";
 
 /** The study's own cap, said on its card; the analyst's per-task ceiling is the hard stop under it. */
 export const STUDY_SPEND_MICRO_USD = 400_000;
