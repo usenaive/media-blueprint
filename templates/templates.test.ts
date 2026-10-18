@@ -951,6 +951,17 @@ describe("the generated short-form scene pipeline", () => {
     }
   });
 
+  /** A pinned skill's shipped frame or last-frame chain is the scene's image; nothing overrides it. */
+  it("treats a skill's shipped opener or the previous take's last frame as the accepted image", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).toMatch(/OPENING FRAME is a pinned skill's shipped frame or the previous take's last frame already has its accepted image/);
+      expect(producer, name).toMatch(/pull its last frame with ffmpeg and publish_file it/);
+      expect(producer.indexOf("OPENING FRAME is"), name).toBeLessThan(producer.indexOf("call generate_image"));
+      expect(seat(TEMPLATES[name], "scriptwriter").system, name).toMatch(/name it as the scene's OPENING FRAME instead of an image_prompt/);
+    }
+  });
+
   /** The producer cannot watch or listen; it verifies with a probe, frames and transcripts. */
   it("verifies the finished cut with tools the producer holds", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
