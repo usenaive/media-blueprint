@@ -117,7 +117,7 @@ export const AI_INFLUENCER_QUESTIONS: SetupQuestion[] = [
     type: "media",
     optional: true,
     placeholder: "Or paste a link to a photo",
-    help: "Only if you picked Upload your own photos. Up to 12 clear photos of one person (the crew asks in chat for more, 10 to 16 in all): face visible, different angles, light and outfits. Only photos of you, or of someone who agreed.",
+    help: "Only if you picked Upload your own photos. Up to 12 clear photos of one person (the crew asks in chat for more, 10 to 16 in all): face visible, different angles, light and outfits. Only photos of you, or of someone who agreed: approving the training confirms it, and photos of a public figure are refused.",
   },
   {
     key: "looks",
@@ -175,7 +175,7 @@ const characterCard = (look: Task): Task =>
     assignee: look.assignee!,
     // Waits on nothing: it needs only the setup answers, so the face is met even while the study runs.
     blocked_by: [],
-    body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": look at the photos answer with view_image; fewer than 10 usable photos of one clear face, ask_operator once for 10 to 16. Then create_character{name, image_urls, style_pack:<the picked looks without "${USUAL_LOOKS}"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>} — it waits for the operator's yes and costs $3.25 — and wait until get_character says ready. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks), with generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}, and look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
+    body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": look at the photos answer with view_image; fewer than 10 usable photos of one clear face, ask_operator once for 10 to 16. Then create_character{name, image_urls, style_pack:<the picked looks without "${USUAL_LOOKS}"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>, consent:{attested:true}} — it waits for the operator's yes, which is their confirmation that the person in the photos is them or agreed to it and is not a public figure, and costs $3.25 — and wait until get_character says ready. Refused as a public figure: say so on the card, ask_operator once for photos of themselves or of someone who agreed, and stop. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks), with generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}, and look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
   });
 
 /** What every piece is: said on the first-piece card, in words its seat (which renders nothing) can act on. */
@@ -220,6 +220,7 @@ const base = niche(FACELESS, {
 export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   ...base,
   // Training a face is paid, so the producer asks first; every other seat keeps it denied by name.
+  // The publisher's posts are labelled AI-generated (`social.post` config).
   // A video edit (`edit_video`, which follows `generate_video` unless named) can change the face, so
   // every seat denies it by name.
   agents: base.agents.map((seat) => ({
@@ -230,6 +231,11 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
         ...seat.tools!.configs,
         edit_video: { enabled: false, permission: "deny" as const },
         ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const } } : {}),
+        // Every post is the influencer, so every post is labelled AI-generated: the network's own label
+        // and an #AIgenerated caption line, added by the publish path (vetta-mono ADR-1334 (i)).
+        ...(seat.tools!.configs["social.post"]?.enabled
+          ? { "social.post": { ...seat.tools!.configs["social.post"], config: { ai_generated: true } } }
+          : {}),
       },
     },
   })),

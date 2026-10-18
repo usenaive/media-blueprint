@@ -181,9 +181,9 @@ describe("the toolsets", () => {
    */
   it("lets the publisher post, only with the operator's yes, and denies every other seat", () => {
     for (const { template, agent, id } of everySeat) {
-      expect(agent.tools?.configs["social.post"], id).toEqual(
-        agent.name === PUBLISHER ? { enabled: true, permission: "ask" } : { enabled: false, permission: "deny" },
-      );
+      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1334 (i)).
+      const publishes = template.name === "ai-influencer" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
+      expect(agent.tools?.configs["social.post"], id).toEqual(agent.name === PUBLISHER ? publishes : { enabled: false, permission: "deny" });
       expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
     }
   });
@@ -1205,6 +1205,18 @@ describe("the AI Influencer template", () => {
     }
     for (const template of all.filter((one) => one !== AI)) {
       for (const agent of template.agents) expect(permissionFor(template, agent.name, "create_character"), `${template.name}/${agent.name}`).toBe("deny");
+    }
+  });
+
+  it("trains an uploaded face only with consent on the operator's yes, and labels every post AI-generated", () => {
+    const meet = AI.tasks.find((card) => card.title === "Meet the influencer")!;
+    expect(meet.body).toMatch(/create_character\{name, image_urls, style_pack:.*consent:\{attested:true\}\}/);
+    expect(meet.body).toMatch(/operator's yes, which is their confirmation that the person in the photos is them or agreed to it/);
+    expect(meet.body).toMatch(/Refused as a public figure/);
+    expect(AI.questions.find((q) => q.key === "photos")?.help).toMatch(/approving the training confirms it/);
+    for (const agent of AI.agents) {
+      const post = agent.tools?.configs["social.post"];
+      if (post?.enabled) expect(post.config, agent.name).toEqual({ ai_generated: true });
     }
   });
 
