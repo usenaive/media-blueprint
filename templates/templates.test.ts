@@ -1331,7 +1331,8 @@ describe("the AI Influencer template", () => {
     expect([card("reference-study").assignee, card("reference-study").blocked_by]).toEqual(["analyst", ["first-briefs"]]);
     expect(card("reference-study").body).toMatch(/At most two videos .* download nothing and sample no frames\. Stop once session_spend reads past \$0\.40/);
     // Day one's first piece is lean end to end (fix r1: 33.9 min and $6.42 with the scriptwriter sampling exemplar frames).
-    expect(card("first-briefs").body).toMatch(/at most three searches to find it, and none is fine.*the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research/);
+    // r3 verify: 36 min with the scout and scriptwriter still browsing, so day one's piece uses no web at all.
+    expect(card("first-briefs").body).toMatch(/no web_search, browser or web_fetch for it.*the scriptwriter does no research, browsing, download or frame sampling/);
     expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
     expect(DAY_ONE_PIECE).toMatch(/15 seconds in three 5-second segments/);
     // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.

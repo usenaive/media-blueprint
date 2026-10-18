@@ -200,11 +200,13 @@ const characterCard = (look: Task): Task =>
  * card behind it waited. So for an influencer the face, the persona and the hook style start the first
  * piece, and the study runs after it starts, on the analyst (idle on day one), capped by that seat's
  * per-task ceiling (`AI_INFLUENCER_BUDGETS`). The first piece is short (15–20 seconds, three segments,
- * one exemplar). Target, measured on staging: first finished video ≤ 30 minutes, day one ≤ $6 billed
- * for a prebuilt creator.
+ * one exemplar). r3 verify: the scout still browsed 14-20 pages and the scriptwriter 13 — 10 to 14
+ * of the ~20 minutes before the producer started — so day one's piece now uses no web at all (fix r1).
+ * Target, measured on staging: first finished video ≤ 30 minutes, day one ≤ $6 billed for a prebuilt
+ * creator.
  */
 export const DAY_ONE_PIECE =
-  "TODAY'S PIECE IS DAY ONE'S, so keep it lean: it runs 15 seconds in three 5-second segments, and one exemplar is enough — at most three searches to find it, and none is fine. Say in the brief that the reference teardown is not filed yet, that the piece is planned from the hook-style note and the exemplar, that nobody waits for the study, and that today the scriptwriter reads the exemplar's page only: no download, no frame sampling, no research.";
+  "TODAY'S PIECE IS DAY ONE'S, AND THIS OVERRIDES FINDING A TOPIC AND EXEMPLARS ABOVE: no web_search, browser or web_fetch for it. Take the topic from the influencer's persona and the hook-style note, one of their everyday moments, and file the Plan card at once. It runs 15 seconds in three 5-second segments. Say in the brief that it is planned from the hook-style note and the persona with no exemplar, that the reference teardown is not filed yet and nobody waits for the study, and that today the scriptwriter does no research, browsing, download or frame sampling: it writes the plan from the brief and the hook-style note.";
 
 /** The study's own cap, said on its card; the analyst's per-task ceiling is the hard stop under it. */
 export const STUDY_SPEND_MICRO_USD = 400_000;
