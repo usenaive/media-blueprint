@@ -34,6 +34,7 @@ import {
   task,
   type MediaTemplate,
   type SeatOverride,
+  type SetupQuestion,
 } from "./template.ts";
 
 const LENGTH = lengthPhrase(SHORT_FORM_LENGTH);
@@ -49,12 +50,22 @@ export const CONTINUITY_RULE =
  */
 export const SEGMENTED_SHORT_FORM: Record<string, SeatOverride> = {
   scriptwriter: {
-    brief: "Use the pinned channel-template skill's scene grammar without weakening the character bible, source provenance or scene contract above.",
+    brief: "Use your pinned skills' scene grammar (the channel template's or the operator's own) without weakening the character bible, source provenance or scene contract above.",
   },
   producer: {
     videoModels: SEGMENT_VIDEO_MODELS,
-    brief: "Follow the pinned skill's scene grammar within the pipeline above; every scene uses one video model.",
+    brief: "Follow your pinned skills' scene grammar within the pipeline above; every scene uses one video model.",
   },
+};
+
+/** The org's own skills (a link-built `media-*` or a creator `c-*`); the platform pins them in every seat at apply time. */
+export const SKILLS_QUESTION: SetupQuestion = {
+  key: "skills",
+  label: "Your own skills",
+  type: "text",
+  optional: true,
+  placeholder: "media-my-channel, c-my-style",
+  help: "Optional: names of skills you already have for this channel, separated by commas, for example one built from reference videos. Every seat reads them.",
 };
 
 export const FACELESS: MediaTemplate = {
@@ -176,5 +187,6 @@ Close this card with the complete bible as its note, beginning "DRAFT CHARACTER 
     },
       REFERENCE_QUESTION,
     CADENCE_QUESTION,
+    SKILLS_QUESTION,
   ],
 };

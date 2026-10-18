@@ -665,12 +665,33 @@ describe("the channel's clock", () => {
 describe("the setup questions", () => {
   const BASES: TemplateName[] = ["faceless", "longform", "clipping"];
 
-  it("asks two per base template, and a third that is optional", () => {
+  it("asks two per base template, and optional ones after (faceless adds its own skills)", () => {
     for (const name of BASES) {
       const template = TEMPLATES[name];
       expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(2);
-      expect(template.questions.length, name).toBe(3);
+      expect(template.questions.length, name).toBe(name === "faceless" ? 4 : 3);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
+    }
+  });
+
+  /** The engine accepts an answer only for a declared key, so base faceless declares `skills`: optional free text. */
+  it("lets base faceless name the org's own skills, optionally, and no other template", () => {
+    const q = TEMPLATES.faceless.questions.find((x) => x.key === "skills");
+    expect(q).toMatchObject({ type: "text", optional: true });
+    expect(TEMPLATES.faceless.questions.map((x) => x.key)).toEqual(["niche", "reference", "cadence", "skills"]);
+    for (const name of Object.keys(TEMPLATES) as TemplateName[]) {
+      if (name !== "faceless") expect(TEMPLATES[name].questions.map((x) => x.key), name).not.toContain("skills");
+    }
+  });
+
+  /** Any skill pinned to a seat counts, the channel template's or the operator's own. */
+  it("tells the scene seats to follow any pinned skill, not only the channel template", () => {
+    for (const name of SEGMENTED) {
+      for (const seat of ["scriptwriter", "producer"]) {
+        const system = TEMPLATES[name].agents.find((a) => a.name === seat)!.system!;
+        expect(system, `${name}/${seat}`).toMatch(/pinned skills' scene grammar/);
+        expect(system, `${name}/${seat}`).not.toMatch(/pinned channel-template skill/);
+      }
     }
   });
 

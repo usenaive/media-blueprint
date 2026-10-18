@@ -245,12 +245,13 @@ export interface SeatOverride {
 /**
  * The setup questions a niche no longer asks. A niche IS its niche, and its look is the niche skill's
  * playbook rather than a reference the operator models it on, so neither the `niche` choice nor the
- * `reference` question is relevant to a niche template (ADR-1143). `niche()` drops both by key: a
+ * `reference` question is relevant to a niche template (ADR-1143), and the optional `skills` question
+ * (the org's own skills, base faceless only) is dropped too, so a niche stays its template's. `niche()` drops them by key: a
  * generative niche (`ufc`/`history`/`animal-feast`) is left asking only the cadence, and a clipping
  * niche keeps the `sources` it cannot cut without. The dropped reference becomes the crew's, found and
  * studied on day one exactly as it is when the operator leaves the question blank.
  */
-const NICHE_ANSWERED: ReadonlySet<string> = new Set(["niche", REFERENCE_ANSWER_KEY]);
+const NICHE_ANSWERED: ReadonlySet<string> = new Set(["niche", REFERENCE_ANSWER_KEY, "skills"]);
 
 /**
  * A niche channel template (ADR-1115), derived from a base crew. It IS the base template — the same
