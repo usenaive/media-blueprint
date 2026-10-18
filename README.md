@@ -207,16 +207,15 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks at most four before anything is provisioned; the engine refuses a fifth. A niche
+The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
 template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
-niche and the reference questions are dropped (ADR-1143), as is `faceless`'s optional own-skills question. A generative niche is then left asking only
+niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking only
 the cadence; a clipping niche keeps the sources it cannot cut without. `channel-cloning` is the one
 exception: in place of the dropped niche it keeps a single question, the channel it clones.
 
 | Template | Questions |
 |---|---|
-| `faceless` | Niche · Reference (optional) · Posting cadence · Your own skills (optional) |
-| `longform` | Niche · Reference (optional) · Posting cadence |
+| `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
 | `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals` | Posting cadence |
 | `channel-cloning` | Channel to clone · Posting cadence |

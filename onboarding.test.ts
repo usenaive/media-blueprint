@@ -69,7 +69,7 @@ describe("the question that asks what to model the channel on", () => {
 
   /** Second, so the form reads as what the channel is, what it is like, how often. */
   it("is asked after the niche and before the cadence", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence", "skills"]);
+    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
     expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
   });
 });
