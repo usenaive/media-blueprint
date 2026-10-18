@@ -921,6 +921,36 @@ describe("the generated short-form scene pipeline", () => {
     }
   });
 
+  /** A card planned before the bible existed is finished the way it was planned, not refused. */
+  it("finishes legacy Plan and Render cards single-pass instead of stopping them", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      const legacy = producer.indexOf("no CONTINUITY CONTRACT or STORY LOGIC section was planned before the bible");
+      expect(legacy, name).toBeGreaterThan(-1);
+      expect(legacy, name).toBeLessThan(producer.indexOf("PREFLIGHT"));
+      expect(producer, name).toMatch(/one generate_video call for its shots as one take/);
+      const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system!;
+      expect(scriptwriter, name).toMatch(/With no bible note yet, write the plan as before/);
+      expect(scriptwriter, name).not.toMatch(/without an approved bible, stop/);
+    }
+  });
+
+  /** An unanswered approval question never parks the channel: the crew works from the draft. */
+  it("closes the bible card on a draft before asking, and lets the crew work from it", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const template = TEMPLATES[name];
+      const body = template.tasks.find((task) => task.key === "character-bible")!.body!;
+      expect(body, name).toMatch(/beginning "DRAFT CHARACTER BIBLE"/);
+      expect(body.indexOf("Close this card"), name).toBeLessThan(body.indexOf("ask_operator"));
+      expect(body, name).not.toMatch(/Wait for the answer/);
+      expect(CONTINUITY_RULE).toMatch(/newest APPROVED CHARACTER BIBLE comment, else its DRAFT CHARACTER BIBLE note/);
+      const scout = seat(template, "trend-scout");
+      expect(scout.system, name).not.toMatch(/not approved|unapproved/);
+      expect(scout.schedules?.[0]?.input, name).not.toMatch(/not approved|unapproved/);
+      expect(scout.system, name).toMatch(/With no bible note yet, start nothing/);
+    }
+  });
+
   /** The producer cannot watch or listen; it verifies with a probe, frames and transcripts. */
   it("verifies the finished cut with tools the producer holds", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
