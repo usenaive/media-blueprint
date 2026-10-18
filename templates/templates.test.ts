@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_VIDEO_MODELS, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, PREBUILT_CREATORS } from "./ai-influencer.ts";
+import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -378,13 +378,14 @@ describe("the board", () => {
         "report-frame": ["channel-plan"],
         "first-briefs": ["look", "hook-style", "character-bible"],
       },
+      // H5: the face and the persona start the first piece; the study runs after it starts.
       "ai-influencer": {
         "channel-plan": [],
-        "reference-study": [],
         look: [],
-        "hook-style": ["reference-study"],
+        "hook-style": [],
         "report-frame": ["channel-plan"],
         "first-briefs": ["look", "hook-style"],
+        "reference-study": ["first-briefs"],
       },
       longform: {
         "channel-plan": [],
@@ -410,8 +411,8 @@ describe("the board", () => {
         for (const blocker of task.blocked_by ?? []) expect(seen, `${template.name}/${task.key}`).toContain(blocker);
         seen.add(task.key);
       }
-      // The piece is started by the head of the pipeline, and it is last.
-      expect(template.tasks.at(-1)?.assignee, template.name).toBe(template.pipeline[0]);
+      // The piece is started by the head of the pipeline, and it is last (the influencer's study follows it, H5).
+      expect((template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1))?.assignee, template.name).toBe(template.pipeline[0]);
     }
   });
 
@@ -425,7 +426,9 @@ describe("the board", () => {
     expect(TEMPLATES.longform.tasks.at(-1)?.key).toBe("first-topic");
     expect(TEMPLATES.clipping.tasks.at(-1)?.key).toBe("first-moments");
     for (const template of all) {
-      expect(template.tasks.at(-1)?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
+      // The influencer's study waits on its first piece, so it is declared after it (H5).
+      const piece = template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1);
+      expect(piece?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
       expect(template.tasks.map((task) => task.key), template.name).not.toContain("first-piece");
     }
   });
@@ -820,6 +823,8 @@ describe("the length each template makes, and the money that follows from it", (
   /** A seat whose ceiling cannot pay for the piece it renders parks mid-turn with the video bought. */
   it("gives every seat a ceiling that clears a render, and the renderer a whole piece", () => {
     for (const { template, agent, id } of everySeat) {
+      // The influencer's seats are sized to its own render (H5): checked in its own block below.
+      if (template.name === "ai-influencer") continue;
       expect(agent.budget.max_task_micro_usd, id).toBeGreaterThan(ONE_RENDER_MICRO_USD);
       if (agent.tools?.configs["generate_video"]?.enabled === true) {
         expect(agent.budget.max_task_micro_usd, id).toBeGreaterThan(renderMicroUsd(template.length));
@@ -1147,7 +1152,7 @@ describe("the AI Influencer template", () => {
   const AI = TEMPLATES["ai-influencer"];
   const LOOK_SLUGS = [
     "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
-    "foggy-morning", "rainy-day", "digital-cam", "90s-editorial", "wide-angle-outfit", "elevator-mirror", "escalator", "tokyo-street-style",
+    "foggy-morning", "rainy-day", "90s-editorial", "wide-angle-outfit", "elevator-mirror", "escalator", "tokyo-street-style",
   ];
   /** The first-party pictures vetta-mono ships for the form (canonical-spec §33.6, SPEC §4.6). */
   const ASSETS = new Set([
@@ -1226,10 +1231,10 @@ describe("the AI Influencer template", () => {
     expect(AI_INFLUENCER_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(producer.skills).toEqual(["naive/video-assembly", "naive/channel-template-ai-influencer"]);
     expect(producer.system).toMatch(/generate_image with character and style/);
-    expect(producer.system).toMatch(/generate_video with character, its seconds and image_urls that still/);
+    expect(producer.system).toMatch(/generate_video for every segment in one turn: character, its seconds, image_urls its still/);
     expect(producer.system).toMatch(/never a frame cut from a clip/);
     expect(producer.system).toContain(RENDER_MODEL_RULE);
-    expect(seat(AI, "scriptwriter").system).toMatch(/each opening on a new still — never a URL or a last frame/);
+    expect(seat(AI, "scriptwriter").system).toMatch(/one still of the set, re-posed for each later segment — never a URL or a last frame/);
   });
 
   it("draws no words into a render, and keeps one outfit and setting across a piece's segments", () => {
@@ -1266,6 +1271,35 @@ describe("the AI Influencer template", () => {
     expect(INFLUENCER_PAGES).toMatch(/Never sign up or log in/);
     // The faceless template keeps its own look card.
     expect(TEMPLATES.faceless.tasks.find((one) => one.key === "look")!.title).toBe("Choose the look this channel renders in");
+  });
+
+  it("keeps one set across a piece: later segments open on segment 1's still re-posed (H1)", () => {
+    const producer = seat(AI, "producer").system!;
+    expect(producer).toContain(ONE_SET);
+    expect(ONE_SET).toMatch(/generate_image with character, image_urls \[segment 1's still\]/);
+  });
+
+  it("shows a call to action only in the last segment; the label stays a disclosure (H2)", () => {
+    expect(seat(AI, "producer").system).toMatch(/the label a disclosure only, a call to action in the last segment only/);
+    // The plan's beats already end on the cta (the scriptwriter's base brief); the producer burns it in last.
+    expect(seat(AI, "scriptwriter").system).toMatch(/hook, setup, turn, payoff, cta/);
+  });
+
+  it("starts the first piece without the study, and caps the study and every seat (H5)", () => {
+    const card = (key: string) => AI.tasks.find((one) => one.key === key)!;
+    expect([card("hook-style").blocked_by, card("hook-style").body]).toEqual([[], expect.stringMatching(/do not wait for the reference-study card/)]);
+    expect([card("reference-study").assignee, card("reference-study").blocked_by]).toEqual(["analyst", ["first-briefs"]]);
+    expect(card("reference-study").body).toMatch(/At most two videos .* download nothing and sample no frames\. Stop once session_spend reads past \$0\.60/);
+    expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
+    expect(DAY_ONE_PIECE).toMatch(/15 to 20 seconds in three segments/);
+    // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.
+    for (const agent of AI.agents) {
+      expect(agent.budget, agent.name).toEqual(AI_INFLUENCER_BUDGETS[agent.name]);
+      for (const fire of agent.schedules ?? []) expect(fire.budget_micro_usd, agent.name).toBeLessThanOrEqual(agent.budget.max_task_micro_usd);
+    }
+    expect(STUDY_SPEND_MICRO_USD).toBeLessThan(AI_INFLUENCER_BUDGETS["analyst"]!.max_task_micro_usd);
+    // The producer clears a whole 30-second piece on this template's own render price.
+    expect(AI_INFLUENCER_BUDGETS["producer"]!.max_task_micro_usd).toBeGreaterThan(AI.length.max * AI_INFLUENCER_MICRO_USD_PER_SECOND);
   });
 
   it("names no vendor anywhere a person or a seat reads it", () => {

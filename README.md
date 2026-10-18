@@ -82,6 +82,15 @@ and renders one still per picked look as the channel's look sheet. The producer 
 the two measured keeping a face from a still. It asks no cadence: the manager and the scout read it
 as daily.
 
+A piece keeps one set: segment 1 opens on a character still in the plan's look, and every later
+segment on that still re-posed (`generate_image` with the character and the still in `image_urls`, an
+edit that keeps the room, props and outfit and is still the character's). The burned-in label is a
+disclosure only; a call to action shows in the last segment only. Day one starts the first piece from
+the face, the persona and a hook style that waits on nothing; the reference study runs after the
+first piece starts, on the analyst, capped at about $0.60 and by the analyst's $1.50 per-task ceiling.
+The first piece runs 15 to 20 seconds, and every seat has a ceiling sized to this template's render
+(`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, the analyst $1.50).
+
 ## 🚀 Get started
 
 ```sh

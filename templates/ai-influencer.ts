@@ -18,12 +18,14 @@
  */
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import {
+  budgetOf,
   lengthPhrase,
   niche,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
   SHORT_FORM_LENGTH,
   task,
+  type Budget,
   type MediaTemplate,
   type SetupQuestion,
   type Task,
@@ -74,7 +76,7 @@ export const UPLOAD_OWN = "Upload your own photos";
 export const USUAL_LOOKS = "Their usual looks";
 
 /**
- * The looks setup offers (eleven of the platform's seventeen, plus the character's own), each with its
+ * The looks setup offers (eleven of the platform's sixteen, plus the character's own), each with its
  * first-party preview and our one-line description. The names are the platform's look names exactly:
  * the answer is passed as `generate_image{style}` word for word. vetta-mono `packages/core/src/schema/looks.test.ts`
  * pins this list against the catalogue: change both together.
@@ -152,9 +154,19 @@ export const INFLUENCER_CADENCE =
 export const NO_DRAWN_WORDS =
   "NO RENDER PROMPT HOLDS WORDS: not the on-screen text, a caption or a sign; words go on once, at step 5b.";
 
-/** One outfit and one place per piece: on staging (round 2) each segment's new still changed both. */
+/** One outfit and one place per piece: on staging (round 2) each segment's new still changed both; now every later segment re-poses segment 1's still (`ONE_SET`). */
 export const ONE_OUTFIT =
-  "Name the piece's ONE look, outfit and setting once; every segment's still repeats them verbatim.";
+  "Name the piece's ONE look, outfit and setting once.";
+
+/**
+ * One set per piece (H1, vetta-mono ADR-1334): segment 1's still is rendered with the character and the
+ * look; every later segment opens on an edit of THAT still (generate_image with character and
+ * image_urls), which keeps its room, props and outfit and is still the character's, so it may open a
+ * character video. On staging (round 3) a fresh still per segment turned the mug into a glass and moved
+ * the wall; the 18 Oct probe kept room, props, outfit and face on every edit.
+ */
+export const ONE_SET =
+  "Segment 1 opens on a still: generate_image with character and style (the plan's look), aspect_ratio 9:16, in the piece's one outfit and setting. Each later segment opens on that still re-posed: generate_image with character, image_urls [segment 1's still], only the new action and framing.";
 
 /**
  * The producer's and the scriptwriter's override. It REPLACES the segmented one rather than following
@@ -163,9 +175,9 @@ export const ONE_OUTFIT =
  * from any other first frame. Each seat's own brief stays within the 360 words a person will read, so
  * the detail is the pinned skill's and the "Meet the influencer" card's.
  */
-export const PRODUCER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "call generate_video once", "One render per card", "each with its on-screen text" AND THE REFERENCE FRAME ABOVE. Per segment: an opening still, generate_image with character and style (the plan's look), aspect_ratio 9:16, in the piece's one outfit and setting; then generate_video with character, its seconds and image_urls that still, one model — never a frame cut from a clip. ${NO_DRAWN_WORDS} Render only segments not in the Render card's comments, commenting each fil_ id and index; re-render a failed one alone. Then fetch_file and ffprobe every segment, join them in order (ffmpeg concat demuxer) and probe the join's length. Finish per \`naive/video-assembly\` step 5b — hook and label burned in, a silent join voiced with generate_speech, one frame checked — then publish_file it for the Publish card. No ffmpeg: stop the card, naming the segments.`;
+export const PRODUCER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "call generate_video once", "One render per card", "each with its on-screen text" AND THE REFERENCE FRAME ABOVE. ${ONE_SET} Then generate_video for every segment in one turn: character, its seconds, image_urls its still, one model — never a frame cut from a clip. ${NO_DRAWN_WORDS} Render only segments not yet in the card's comments, commenting each fil_ id and index; re-render a failed one alone. Join and finish per \`naive/video-assembly\` — the label a disclosure only, a call to action in the last segment only — then publish_file it for the Publish card.`;
 
-const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "ONE video" ABOVE: get_character first (voice, wardrobe, looks). ${ONE_OUTFIT} Segments in order, each opening on a new still — never a URL or a last frame — prompted with action and framing only, never their face or words; ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds each, cut on shot changes, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
+const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "ONE video" ABOVE: get_character first (voice, wardrobe, looks). ${ONE_OUTFIT} Segments in order: one still of the set, re-posed for each later segment — never a URL or a last frame — prompted with action and framing only, never their face or words; ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds each, cut on shot changes, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
 
 /** The `look` card's replacement: same key, so the day-one chain and its re-apply guard are unchanged. */
 const characterCard = (look: Task): Task =>
@@ -178,6 +190,45 @@ const characterCard = (look: Task): Task =>
     body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": look at the photos answer with view_image; fewer than 10 usable photos of one clear face, ask_operator once for 10 to 16. Then create_character{name, image_urls, style_pack:<the picked looks without "${USUAL_LOOKS}"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>, consent:{attested:true}} — it waits for the operator's yes, which is their confirmation that the person in the photos is them or agreed to it and is not a public figure, and costs $3.25 — and wait until get_character says ready. Refused as a public figure: say so on the card, ask_operator once for photos of themselves or of someone who agreed, and stop. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks), with generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}, and look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
   });
 
+/**
+ * DAY ONE (H5). Round 3 measured the first video 61 minutes after install and day one billed $12.05,
+ * $7.17 of it model use; the reference study looped on the same frames for about 15 minutes and every
+ * card behind it waited. So for an influencer the face, the persona and the hook style start the first
+ * piece, and the study runs after it starts, on the analyst (idle on day one), capped by that seat's
+ * per-task ceiling (`AI_INFLUENCER_BUDGETS`). The first piece is short (15–20 seconds, three segments,
+ * one exemplar). Target, measured on staging: first finished video ≤ 30 minutes, day one ≤ $6 billed
+ * for a prebuilt creator.
+ */
+export const DAY_ONE_PIECE =
+  "TODAY'S PIECE IS DAY ONE'S, so keep it lean: it runs 15 to 20 seconds in three segments, and one exemplar is enough. Say both in the brief, and that the reference teardown is not filed yet: the piece is planned and rendered from the hook-style note and the exemplar, and nobody waits for the study.";
+
+/** The study's own cap, said on its card; the analyst's per-task ceiling is the hard stop under it. */
+export const STUDY_SPEND_MICRO_USD = 600_000;
+
+/**
+ * Each seat's ceilings on this template, the platform's hard stops (per task, per day). Sized to this
+ * template's own render: Hailuo 3 bills 169,000 µUSD a second (845,000 for 5 s on staging), so a 30-second
+ * piece is about $5.07 and the producer's $8 per task clears it with its stills and turns. The seats that
+ * render nothing get $3 a task, which a looping session hits in minutes rather than an hour; the analyst
+ * gets $1.50, the study's hard cap. A training ($3.25) is a price the operator approved, held past the
+ * per-task ceiling, so the producer's day clears a training and a piece.
+ */
+export const AI_INFLUENCER_MICRO_USD_PER_SECOND = 169_000;
+export const AI_INFLUENCER_BUDGETS: Readonly<Record<string, Budget>> = {
+  producer: budgetOf(8_000_000, 16_000_000),
+  scriptwriter: budgetOf(3_000_000, 9_000_000),
+  "trend-scout": budgetOf(3_000_000, 9_000_000),
+  "channel-manager": budgetOf(3_000_000, 9_000_000),
+  analyst: budgetOf(1_500_000, 4_000_000),
+};
+
+/** The hook style, from the influencer: it waits on nothing, so the first piece never waits on the study. */
+const HOOK_STYLE_BODY =
+  "Day one is set-up, not scripts. Read project_context and naive/channel-template-ai-influencer: the picked creator's voice and hooks in §4, or for a face the operator trained, what the purpose answer says they are for. Write the channel's hook style as this card's note, in five lines: the openings this audience stops for, the shape of a piece in beats, the voice, the caption shape, and what never to say. Say it is drawn from the influencer's persona; the reference teardown comes later and refines it — do not wait for the reference-study card. Every plan this channel files is written to this note.";
+
+/** The study, off the critical path and capped: no downloads, no frame sampling, two videos at most. */
+const STUDY_BODY = `Run after the first piece has started — it never waits on you. Find two real short videos (15 to 30 seconds) that creators like this influencer post and that do well, and study them with the browser and web_fetch: how they open and their first three seconds, where they turn, how fast they cut, the shot grammar, the caption shape, what they never do. At most two videos and about eight page views in all; never open the same page twice; download nothing and sample no frames. Stop once session_spend reads past $${(STUDY_SPEND_MICRO_USD / 1_000_000).toFixed(2)} and file what you have. Write the teardown as this card's note, specific enough to plan from, with every video by URL and what you inferred marked apart from what you saw; say in its first line that these are the crew's picks. Write no hooks, scripts or briefs here.`;
+
 /** What every piece is: said on the first-piece card, in words its seat (which renders nothing) can act on. */
 const FIRST_PIECE_INFLUENCER =
   "This channel is one person, the influencer on the Meet the influencer card's note: every piece is them, in one of the looks on that note, written in their voice — never a stranger, and never a description of them in place of their character.";
@@ -187,10 +238,15 @@ const withInfluencerCards = (template: MediaTemplate): MediaTemplate => ({
   ...template,
   tasks: template.tasks.map((card) => {
     if (card.key === "look") return characterCard(card);
-    if (card.key === "reference-study") return { ...card, body: `${INFLUENCER_NICHE} ${INFLUENCER_PAGES} ${card.body ?? ""}` };
-    if (card.key === "first-briefs") return { ...card, body: (card.body ?? "").replace(/ How this card works\./, ` ${FIRST_PIECE_INFLUENCER} ${INFLUENCER_NICHE} ${INFLUENCER_PAGES} How this card works.`) };
+    if (card.key === "reference-study") {
+      return task({ key: card.key, title: card.title, assignee: "analyst", blocked_by: ["first-briefs"], body: `${INFLUENCER_NICHE} ${INFLUENCER_PAGES} ${STUDY_BODY}` });
+    }
+    if (card.key === "hook-style") return task({ key: card.key, title: card.title, assignee: card.assignee!, blocked_by: [], body: HOOK_STYLE_BODY });
+    if (card.key === "first-briefs") return { ...card, body: (card.body ?? "").replace(/ How this card works\./, ` ${FIRST_PIECE_INFLUENCER} ${DAY_ONE_PIECE} ${INFLUENCER_NICHE} ${INFLUENCER_PAGES} How this card works.`) };
     return card;
-  }),
+  })
+    // The study now waits on the first piece's card, and a blocker is declared before the card it blocks.
+    .sort((a, b) => Number(a.key === "reference-study") - Number(b.key === "reference-study")),
 });
 
 const base = niche(FACELESS, {
@@ -225,6 +281,12 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   // every seat denies it by name.
   agents: base.agents.map((seat) => ({
     ...seat,
+    // Day one's hard stops (H5): each seat's ceiling, and every fire inside it.
+    budget: AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget,
+    schedules: (seat.schedules ?? []).map((fire) => ({
+      ...fire,
+      budget_micro_usd: Math.min(fire.budget_micro_usd, (AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget).max_task_micro_usd),
+    })),
     tools: {
       ...seat.tools!,
       configs: {
