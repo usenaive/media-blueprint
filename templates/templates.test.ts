@@ -1138,7 +1138,7 @@ describe("the built-in tool list", () => {
 });
 
 /**
- * AI INFLUENCER (ADR-1321). One photoreal creator on the faceless crew: the character is a setup
+ * AI INFLUENCER (ADR-1334). One photoreal creator on the faceless crew: the character is a setup
  * answer, every still of them is rendered with their character and a look, and every video starts
  * from such a still. Its form is the four approved questions, with pictures that are the dashboard's
  * own files (vetta-mono `apps/web/public/setup/`).

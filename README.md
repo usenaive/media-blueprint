@@ -67,7 +67,7 @@ the first session. It publishes, installs and switches through the exact paths t
 
 ### AI Influencer
 
-`ai-influencer` (shown as **AI Influencer**, ADR-1321) is the `faceless` crew with the segmented
+`ai-influencer` (shown as **AI Influencer**, ADR-1334) is the `faceless` crew with the segmented
 seats, pinning `naive/channel-template-ai-influencer`, for one photoreal creator who posts every day
 in a few chosen looks ([`templates/ai-influencer.ts`](templates/ai-influencer.ts)). The character is
 a setup answer, not a niche: one of four prebuilt creators, ready at once, or a face trained from the

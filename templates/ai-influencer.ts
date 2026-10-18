@@ -1,5 +1,5 @@
 /**
- * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1321).
+ * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1334).
  *
  * It is the faceless crew with the segmented short-form seats (`SEGMENTED_SHORT_FORM`), like the
  * generative niches, and one load-bearing difference: the face. Every image of the influencer is
@@ -57,7 +57,7 @@ const CREATOR_IDS = PREBUILT_CREATORS.map((one) => `${one.name} = ${one.id}`).jo
 /** The looks a trained face gets when the operator picked only "Their usual looks" (it has none of its own). */
 export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Phone snap", "Realistic", "Everyday"];
 
-/** Where the niche comes from: this template asks no niche question (ADR-1321). */
+/** Where the niche comes from: this template asks no niche question (ADR-1334). */
 export const INFLUENCER_NICHE =
   "THE NICHE IS THE INFLUENCER'S: the picked creator's niche in naive/channel-template-ai-influencer §4, or, for a face the operator trained, what the purpose answer says they are for.";
 
