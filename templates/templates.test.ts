@@ -962,6 +962,20 @@ describe("the generated short-form scene pipeline", () => {
     }
   });
 
+  /** Skills built from reel links and creator templates carry the bible's best evidence. */
+  it("builds the bible from every pinned skill, link-built and creator ones first", () => {
+    const SECTIONS = ["Character bible", "World and themes", "Story patterns", "Dialogue and voice", "Scene grammar", "Look", "Must not change", "Allowed variation"];
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const body = TEMPLATES[name].tasks.find((task) => task.key === "character-bible")!.body!;
+      expect(body, name).toMatch(/EVERY skill pinned to you — naive\/channel-template-\*, c-\* creator templates and media-\* skills built from reel links/);
+      for (const section of SECTIONS) expect(body, `${name} ${section}`).toContain(section);
+      expect(body, name).toMatch(/primary evidence at CREATOR DIRECTIVE level/);
+      expect(body, name).toMatch(/re-open its Source links for timestamps/);
+      expect(body, name).toMatch(/no source links .* shipped frames and cast blocks/);
+    }
+    expect(CONTINUITY_RULE).toMatch(/a pinned skill outranks/);
+  });
+
   /** The producer cannot watch or listen; it verifies with a probe, frames and transcripts. */
   it("verifies the finished cut with tools the producer holds", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
