@@ -194,7 +194,7 @@ a cron fire is not.
 
 ## 8. Setup questions and `project_context`
 
-The studio asks at most three questions, never where to post; the answers land on the install; every seat reads them with
+The studio asks at most four questions, never where to post (base faceless has an optional `skills` one: the org's own skills, pinned in every seat by the platform); the answers land on the install; every seat reads them with
 `project_context`. A niche template asks fewer — it is its niche, and its reference is the niche skill's,
 so both are dropped and a generative niche asks only the cadence (ADR-1143). The engine prepends its own
 "read the project context first" preamble to every template agent, and our `CONTEXT_PREAMBLE` adds that
