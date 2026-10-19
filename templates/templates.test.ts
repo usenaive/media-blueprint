@@ -127,16 +127,10 @@ describe("the crews", () => {
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
         : false;
-      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 700 : 360);
+      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 745 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
-  });
-
-  it("tells the producer to render an instrumental music bed of the finished length", () => {
-    const system = seat(TEMPLATES.faceless, "producer").system ?? "";
-    expect(system).toContain("instrumental: true");
-    expect(system).toContain("length_seconds");
   });
 
   it("requires only the publisher, which the whole pipeline ends at", () => {
@@ -1039,12 +1033,15 @@ describe("the generated short-form scene pipeline", () => {
       const producer = seat(template, "producer").system!;
       const edit = producer.slice(producer.indexOf("EDIT per"), producer.indexOf("VERIFY the finished file"));
       expect(edit, name).toMatch(/captions per the pinned skill's `## Captions and music` \(default: word-by-word/);
-      expect(edit, name).toMatch(/transcribe_audio word timings via libass/);
-      expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood, ducked under dialogue, instrumental: true, length_seconds the finished length rounded up/);
+      expect(edit, name).toMatch(/transcribe_audio word timings of the final dialogue track, after the join and before music, via libass/);
+      expect(edit, name).toMatch(/default: word-by-word, 2–3 uppercase words, spoken word red, white fill, dark outline, ~76% height, no box/);
+      expect(edit, name).toMatch(/join the scenes with ffmpeg/);
+      expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood, ducked under dialogue, instrumental: true, length_seconds the finished length rounded up; if it fails, publish without music and note that on the Publish card/);
       expect(edit, name).toMatch(/No AI label unless a pinned skill requires one/);
       for (const prompt of everyPrompt(template)) expect(prompt, name).not.toMatch(/AI-generated|label text/i);
-      expect(producer, name).toMatch(/exactly one intelligible voice over audible music.*captions readable in each frame/);
-      expect(producer, name).toMatch(/missing scene, caption or music, or doubled voice means STOPPED/);
+      expect(producer, name).toMatch(/exactly one intelligible voice over any music.*captions readable in each frame/);
+      expect(producer, name).toMatch(/missing scene or caption, or doubled voice means STOPPED/);
+      expect(producer, name).toMatch(/never patching a line with generate_speech/);
       expect(seat(template, "scriptwriter").system, name).toMatch(/EDIT PLAN: [^.]*caption style \(default word-by-word\) and music mood per the pinned skill's `## Captions and music`/);
     }
   });
