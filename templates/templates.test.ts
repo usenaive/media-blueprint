@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
+import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
@@ -118,9 +119,15 @@ describe("the crews", () => {
       const system = unniched(template, agent.system ?? "");
       expect(system.startsWith(CONTEXT_PREAMBLE), id).toBe(true);
       expect(system.endsWith(CREW_RULES), id).toBe(true);
-      const own = system.slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length).replace(REFERENCE_RULE, "");
+      const own = system
+        .slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length)
+        .replace(REFERENCE_RULE, "")
+        .replace(CONTINUITY_RULE, "");
       expect(words(own), id).toBeGreaterThanOrEqual(80);
-      expect(words(own), id).toBeLessThanOrEqual(360);
+      const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
+        ? ["scriptwriter", "producer"].includes(agent.name)
+        : false;
+      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 700 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
@@ -201,12 +208,13 @@ describe("the toolsets", () => {
     }
   });
 
-  /** Speech only where a silent join needs a voiceover (the segmented producers); transcription nowhere. */
-  it("grants speech to the segmented producers only, and transcription to no seat", () => {
-    const SPEAKERS = new Set(SEGMENTED.map((name) => `${name}/producer`));
+  /** Generated shorts can replace dialogue; their writers and producers inspect spoken audio. */
+  it("grants speech to generated-short producers and transcription to their writers and producers", () => {
+    const SPEAKERS = withNicheIds(["faceless/producer"]);
+    const TRANSCRIBERS = withNicheIds(["faceless/scriptwriter", "faceless/producer"]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "generate_speech"), id).toBe(SPEAKERS.has(id) ? "allow" : "deny");
-      expect(permissionFor(template, agent.name, "transcribe_audio"), id).toBe("deny");
+      expect(permissionFor(template, agent.name, "transcribe_audio"), id).toBe(TRANSCRIBERS.has(id) ? "allow" : "deny");
     }
   });
 
@@ -251,8 +259,7 @@ describe("the toolsets", () => {
 
   /** A shell provisions and bills a machine; each seat that holds one is a decision written here. */
   it("gives a shell only to the seats that sample frames or join segments", () => {
-    // The segmented short-form niches extend the producer with a shell to join their segments.
-    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "longform/writer", "longform/producer", ...SEGMENTED.map((name) => `${name}/producer`)]);
+    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "faceless/producer", "longform/writer", "longform/producer"]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "bash"), id).toBe(SHELL_SEATS.has(id) ? "allow" : "deny");
       for (const sandbox of ["read", "write", "edit", "ls", "find"]) expect(permissionFor(template, agent.name, sandbox), id).toBe("deny");
@@ -338,9 +345,10 @@ describe("the board", () => {
         "channel-plan": [],
         "reference-study": [],
         look: ["reference-study"],
+        "character-bible": ["reference-study"],
         "hook-style": ["reference-study"],
         "report-frame": ["channel-plan"],
-        "first-briefs": ["look", "hook-style"],
+        "first-briefs": ["look", "hook-style", "character-bible"],
       },
       longform: {
         "channel-plan": [],
@@ -666,6 +674,17 @@ describe("the setup questions", () => {
     }
   });
 
+  /** A template-bound skill is read as every pinned skill, not only the channel template. */
+  it("tells the scene seats to follow any pinned skill, not only the channel template", () => {
+    for (const name of SEGMENTED) {
+      for (const seat of ["scriptwriter", "producer"]) {
+        const system = TEMPLATES[name].agents.find((a) => a.name === seat)!.system!;
+        expect(system, `${name}/${seat}`).toMatch(/pinned skills' scene grammar/);
+        expect(system, `${name}/${seat}`).not.toMatch(/pinned channel-template skill/);
+      }
+    }
+  });
+
   /**
    * A NICHE ASKS NEITHER THE NICHE NOR THE REFERENCE (ADR-1143): the template IS the niche, and the
    * reference is the niche skill's playbook, not something the operator models the channel on.
@@ -834,50 +853,185 @@ describe("the long-form crew", () => {
   });
 });
 
-/**
- * The short-form niches whose playbook is a start, a middle and an end. Image-to-video cannot cut, so
- * each beat is its own render and the producer joins them: it needs the shell and file tools the
- * base faceless producer does not hold, and a brief that lifts "call generate_video once".
- */
-describe("the segmented short-form niches", () => {
-  it("give the producer a shell, the file tools and the assembly skill, and leave the faceless producer as it was", () => {
-    for (const name of SEGMENTED) {
-      const producer = seat(TEMPLATES[name], "producer");
-      for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill"]) {
-        expect(permissionFor(TEMPLATES[name], "producer", tool), `${name}/${tool}`).toBe("allow");
+/** Every generated short is now a resumable script -> images -> videos -> edit pipeline. */
+describe("the generated short-form scene pipeline", () => {
+  it("gives every producer image-to-video and assembly tools, with the niche model preference intact", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const template = TEMPLATES[name];
+      const producer = seat(template, "producer");
+      for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill", "transcribe_audio"]) {
+        expect(permissionFor(template, "producer", tool), `${name}/${tool}`).toBe("allow");
       }
-      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: SEGMENT_VIDEO_MODELS });
-      expect(producer.skills, name).toEqual(["naive/video-assembly", `naive/channel-template-${name}`]);
-      expect(producer.system, name).toMatch(/OVERRIDES "call generate_video once" AND "One render per card"/);
-      expect(producer.system, name).toMatch(/concat demuxer/);
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({
+        models: name === "faceless" ? VIDEO_MODELS : SEGMENT_VIDEO_MODELS,
+      });
+      expect(producer.skills, name).toEqual([
+        "naive/video-assembly",
+        ...(name === "faceless" ? [] : [`naive/channel-template-${name}`]),
+      ]);
+      expect(producer.system, name).toMatch(/script -> images -> video -> editing/);
+      // Item 1: the platform drops unknown args, so the first frame must ride in image_urls.
+      expect(producer.system, name).toMatch(/image_urls: \["<fil_ id>"\]/);
+      expect(producer.system, name).not.toMatch(/image_file_ids/);
+      expect(producer.system, name).toMatch(/SCENE <index> IMAGE <fil_ id>/);
+      expect(producer.system, name).toMatch(/SCENE <index> VIDEO <fil_ id>/);
       expect(producer.system, name).toContain(RENDER_MODEL_RULE);
-      const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system;
-      expect(scriptwriter, name).toContain(`No segment runs over ${SEGMENT_MAX_SECONDS} seconds or under ${SEGMENT_MIN_SECONDS}`);
-      expect(scriptwriter, name).toMatch(/all on the same model/);
+      const scriptwriter = seat(template, "scriptwriter").system;
+      expect(scriptwriter, name).toContain(`scenes of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds`);
+      expect(scriptwriter, name).toMatch(/SOURCE PROVENANCE/);
+      expect(scriptwriter, name).toMatch(/CONTINUITY CONTRACT/);
+      expect(scriptwriter, name).toMatch(/STORY LOGIC/);
+      expect(scriptwriter, name).toMatch(/BECAUSE\/BUT\/THEREFORE\/SO spine/);
+      expect(scriptwriter, name).toMatch(/transition ledger/);
+      expect(scriptwriter, name).toMatch(/cold-viewer check/);
+      expect(scriptwriter, name).toMatch(/incoming state, outgoing state/);
+      expect(scriptwriter, name).toMatch(/THEME\/PROMISE/);
+      // Item 5: the hook skill owns the opening seconds; hook plus setup carry the introduction.
+      expect(scriptwriter, name).toMatch(/hook and setup beat together must introduce the protagonist, setting, immediate situation, goal and stakes/);
+      expect(scriptwriter, name).not.toMatch(/first 2–3 seconds/);
+      expect(scriptwriter, name).toMatch(/Revise at most twice; then proceed, listing any remaining gap in STORY LOGIC/);
+      expect(scriptwriter, name).not.toMatch(/Rewrite until/);
+      expect(scriptwriter, name).toMatch(/CUT MAP/);
+      expect(scriptwriter, name).toMatch(/0\.25 seconds of dialogue-free stable picture/);
+      expect(scriptwriter, name).toMatch(/match on action, eyeline, prop, composition or continuous ambience/);
+      expect(scriptwriter, name).toMatch(/Never use a cut merely because a segment ended/);
+      expect(producer.system, name).toMatch(/never cut mid-word, mid-gesture or before the reaction lands/);
     }
     expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(SEGMENT_MAX_SECONDS).toBe(15);
     expect(SEGMENT_MIN_SECONDS).toBe(5);
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
-    const base = seat(TEMPLATES.faceless, "producer");
-    for (const tool of ["bash", "fetch_file", "publish_file", "read_skill"]) expect(permissionFor(TEMPLATES.faceless, "producer", tool), tool).toBe("deny");
-    expect(base.skills).toEqual([]);
-    expect(base.system).not.toMatch(/SEGMENTS JOINED/);
-    expect(seat(TEMPLATES.faceless, "scriptwriter").system).not.toMatch(/SEGMENTS JOINED/);
   });
 
-  /** A render carries no legible text, so the join is finished — hook and label burned in — before it ships. */
-  it("burn the plan's text in after the join, as video-assembly step 5b says, and voice a silent join", () => {
-    for (const name of SEGMENTED) {
+  /** Paid scenes are kept: one failure is retried, and a completed scene is never bought twice. */
+  it("retries a failed scene render once and never re-renders a completed one", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).toMatch(/SCENE <index> VIDEO FAILED/);
+      expect(producer, name).toMatch(/re-render it once; a second failure means STOPPED/);
+      expect(producer, name).toMatch(/Never re-render a completed scene/);
+      expect(producer, name).not.toMatch(/comment a failure and stop/);
+    }
+  });
+
+  /** Only objective gaps stop a piece before spend; a judgement call is flagged and the work goes on. */
+  it("stops preflight only on objective gaps and turns subjective findings into one warning", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      const stops = producer.slice(producer.indexOf("PREFLIGHT"), producer.indexOf("PREFLIGHT WARNING"));
+      expect(stops, name).toMatch(/STOPPED only if/);
+      expect(stops, name).toMatch(/lacks one of those sections/);
+      expect(stops, name).toMatch(/cites no bible note/);
+      expect(stops, name).toContain(`does not total ${lengthPhrase(TEMPLATES[name].length)}`);
+      expect(stops, name).toMatch(/has no scenes or a scene without its video_prompt/);
+      for (const subjective of [/undefined canonical character/, /invariant/, /introduc/, /outgoing state/]) {
+        expect(stops, `${name} ${subjective}`).not.toMatch(subjective);
+      }
+      expect(producer, name).toMatch(/PREFLIGHT WARNING: .*undefined canonical character.*then proceed/s);
+    }
+  });
+
+  /** A card planned before the bible existed is finished the way it was planned, not refused. */
+  it("finishes legacy Plan and Render cards single-pass instead of stopping them", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      const legacy = producer.indexOf("no CONTINUITY CONTRACT or STORY LOGIC section was planned before the bible");
+      expect(legacy, name).toBeGreaterThan(-1);
+      expect(legacy, name).toBeLessThan(producer.indexOf("PREFLIGHT"));
+      const clause = producer.slice(legacy, producer.indexOf("PREFLIGHT"));
+      expect(clause, name).toMatch(/one generate_video call for its shots as one take/);
+      // A re-woken legacy card never buys a take or a segment twice.
+      expect(clause, name).toMatch(/[Rr]ender only what the card's comments do not yet record/);
+      expect(clause, name).toMatch(/comment each render's fil_ id and segment index/);
+      expect(clause, name).toMatch(/a failed render is re-rendered once; a second failure means STOPPED/);
+      // A legacy segmented piece still gets its text and voice before it ships.
+      expect(clause, name).toMatch(/finish per `naive\/video-assembly`: burn in the plan's hook and label text, and voice a silent take or join with generate_speech/);
+      expect(clause, name).toMatch(/Publish card omits scene ids and AUDIO MODE/);
+      const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system!;
+      expect(scriptwriter, name).toMatch(/With no bible note yet, write the plan as before/);
+      // Hailuo caps a call at SEGMENT_MAX_SECONDS, so a segmenting skill's legacy plan stays segmented.
+      expect(scriptwriter, name).toContain(`or, where the pinned skill segments, segments of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds each naming its opening frame`);
+      expect(scriptwriter, name).toMatch(/create the Render card, titled and linked as below, with only those sections — no SOURCE PROVENANCE, CONTINUITY CONTRACT, STORY LOGIC, SCENES IN ORDER or CUT MAP/);
+      expect(scriptwriter, name).not.toMatch(/without an approved bible, stop/);
+    }
+  });
+
+  /** An unanswered approval question never parks the channel: the crew works from the draft. */
+  it("closes the bible card on a draft before asking, and lets the crew work from it", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const template = TEMPLATES[name];
+      const body = template.tasks.find((task) => task.key === "character-bible")!.body!;
+      expect(body, name).toMatch(/beginning "DRAFT CHARACTER BIBLE"/);
+      expect(body.indexOf("Close this card"), name).toBeLessThan(body.indexOf("ask_operator"));
+      expect(body, name).not.toMatch(/Wait for the answer/);
+      expect(CONTINUITY_RULE).toMatch(/newest APPROVED CHARACTER BIBLE comment, else its DRAFT CHARACTER BIBLE note/);
+      const scout = seat(template, "trend-scout");
+      expect(scout.system, name).not.toMatch(/not approved|unapproved/);
+      expect(scout.schedules?.[0]?.input, name).not.toMatch(/not approved|unapproved/);
+      expect(scout.system, name).toMatch(/With no bible note yet, start nothing/);
+    }
+  });
+
+  /** A pinned skill's shipped frame or last-frame chain is the scene's image; nothing overrides it. */
+  it("treats a skill's shipped opener or the previous take's last frame as the accepted image", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).toMatch(/OPENING FRAME is a pinned skill's shipped frame or the previous take's last frame already has its accepted image/);
+      expect(producer, name).toMatch(/pull its last frame with ffmpeg and publish_file it/);
+      expect(producer.indexOf("OPENING FRAME is"), name).toBeLessThan(producer.indexOf("call generate_image"));
+      expect(seat(TEMPLATES[name], "scriptwriter").system, name).toMatch(/name it as the scene's OPENING FRAME instead of an image_prompt/);
+    }
+  });
+
+  /** Skills built from reel links and creator templates carry the bible's best evidence. */
+  it("builds the bible from every pinned skill, link-built and creator ones first", () => {
+    const SECTIONS = ["Character bible", "World and themes", "Story patterns", "Dialogue and voice", "Scene grammar", "Look", "Must not change", "Allowed variation"];
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const body = TEMPLATES[name].tasks.find((task) => task.key === "character-bible")!.body!;
+      expect(body, name).toMatch(/EVERY skill pinned to you — naive\/channel-template-\*, c-\* creator templates and media-\* skills built from reel links/);
+      for (const section of SECTIONS) expect(body, `${name} ${section}`).toContain(section);
+      expect(body, name).toMatch(/primary evidence at CREATOR DIRECTIVE level/);
+      expect(body, name).toMatch(/re-open its Source links for timestamps/);
+      expect(body, name).toMatch(/no source links .* shipped frames and cast blocks/);
+    }
+    expect(CONTINUITY_RULE).toMatch(/a pinned skill outranks/);
+  });
+
+  /** The producer cannot watch or listen; it verifies with a probe, frames and transcripts. */
+  it("verifies the finished cut with tools the producer holds", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).not.toMatch(/Watch it|normal speed|listen/i);
+      expect(producer, name).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(TEMPLATES[name].length)}, view_image one frame per scene, and transcribe_audio it, checking each scene's planned lines`);
+    }
+  });
+
+  it("chooses one dialogue source, burns text, joins and probes before publishing", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
       const producer = seat(TEMPLATES[name], "producer").system;
       expect(producer, name).toMatch(/drawtext|on-screen text/);
-      expect(producer, name).toMatch(/step 5b/);
       expect(producer, name).toMatch(/generate_speech/);
-      expect(producer, name).toMatch(/concat demuxer/);
-      expect(producer, name).toMatch(/all on one model/);
+      expect(producer, name).toMatch(/AUDIO MODE: NATIVE/);
+      expect(producer, name).toMatch(/AUDIO MODE: GENERATED/);
+      expect(producer, name).toMatch(/Never use amix/);
+      expect(producer, name).toMatch(/exactly one intelligible voice/);
+      expect(producer, name).toMatch(/do not substitute an undeclared local or system voice/i);
+      expect(producer, name).toMatch(/ffmpeg/);
+      expect(producer, name).toMatch(/ffprobe/);
+      expect(producer, name).toMatch(/publish_file the one finished video/);
     }
-    expect(seat(TEMPLATES.faceless, "producer").system).not.toMatch(/step 5b/);
+  });
+
+  it("creates an approved character bible before the first piece and makes both seats enforce it", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const template = TEMPLATES[name];
+      const bible = template.tasks.find((task) => task.key === "character-bible");
+      expect(bible?.body, name).toMatch(/APPROVED CHARACTER BIBLE/);
+      expect(bible?.body, name).toMatch(/ask_operator/);
+      expect(seat(template, "scriptwriter").system, name).toContain(CONTINUITY_RULE);
+      expect(seat(template, "producer").system, name).toContain(CONTINUITY_RULE);
+    }
   });
 
   it("refuses to extend a seat the base crew does not have, or pin models on one that does not render", () => {
