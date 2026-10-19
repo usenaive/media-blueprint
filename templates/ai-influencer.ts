@@ -202,11 +202,13 @@ const characterCard = (look: Task): Task =>
  * per-task ceiling (`AI_INFLUENCER_BUDGETS`). The first piece is short (15–20 seconds, three segments,
  * one exemplar). r3 verify: the scout still browsed 14-20 pages and the scriptwriter 13 — 10 to 14
  * of the ~20 minutes before the producer started — so day one's piece now uses no web at all (fix r1).
+ * r3 verify 2: Hank's plan gave each 5-second segment a 9-11 second line, and his producer spent five
+ * minutes stretching them to fit (31 min to the first video), so the line length is said here (fix r2).
  * Target, measured on staging: first finished video ≤ 30 minutes, day one ≤ $6 billed for a prebuilt
  * creator.
  */
 export const DAY_ONE_PIECE =
-  "TODAY'S PIECE IS DAY ONE'S, AND THIS OVERRIDES FINDING A TOPIC AND EXEMPLARS ABOVE: no web_search, browser or web_fetch for it. Take the topic from the influencer's persona and the hook-style note, one of their everyday moments, and file the Plan card at once. It runs 15 seconds in three 5-second segments. Say in the brief that it is planned from the hook-style note and the persona with no exemplar, that the reference teardown is not filed yet and nobody waits for the study, and that today the scriptwriter does no research, browsing, download or frame sampling: it writes the plan from the brief and the hook-style note.";
+  "TODAY'S PIECE IS DAY ONE'S, AND THIS OVERRIDES FINDING A TOPIC AND EXEMPLARS ABOVE: no web_search, browser or web_fetch for it. Take the topic from the influencer's persona and the hook-style note, one of their everyday moments, and file the Plan card at once. It runs 15 seconds in three 5-second segments, and each segment's voiceover is one line of at most 12 words, so it fits its 5 seconds as spoken. Say in the brief that it is planned from the hook-style note and the persona with no exemplar, that the reference teardown is not filed yet and nobody waits for the study, and that today the scriptwriter does no research, browsing, download or frame sampling: it writes the plan from the brief and the hook-style note.";
 
 /** The study's own cap, said on its card; the analyst's per-task ceiling is the hard stop under it. */
 export const STUDY_SPEND_MICRO_USD = 400_000;

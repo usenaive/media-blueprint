@@ -1335,6 +1335,7 @@ describe("the AI Influencer template", () => {
     expect(card("first-briefs").body).toMatch(/no web_search, browser or web_fetch for it.*the scriptwriter does no research, browsing, download or frame sampling/);
     expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
     expect(DAY_ONE_PIECE).toMatch(/15 seconds in three 5-second segments/);
+    expect(DAY_ONE_PIECE).toMatch(/voiceover is one line of at most 12 words/);
     // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.
     for (const agent of AI.agents) {
       expect(agent.budget, agent.name).toEqual(AI_INFLUENCER_BUDGETS[agent.name]);
