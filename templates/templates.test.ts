@@ -133,6 +133,12 @@ describe("the crews", () => {
     }
   });
 
+  it("tells the producer to render an instrumental music bed of the finished length", () => {
+    const system = seat(TEMPLATES.faceless, "producer").system ?? "";
+    expect(system).toContain("instrumental: true");
+    expect(system).toContain("length_seconds");
+  });
+
   it("requires only the publisher, which the whole pipeline ends at", () => {
     for (const template of all) {
       expect(template.agents.filter((agent) => agent.required === true).map((agent) => agent.name)).toEqual([PUBLISHER]);
@@ -1034,8 +1040,8 @@ describe("the generated short-form scene pipeline", () => {
       const edit = producer.slice(producer.indexOf("EDIT per"), producer.indexOf("VERIFY the finished file"));
       expect(edit, name).toMatch(/captions per the pinned skill's `## Captions and music` \(default: word-by-word/);
       expect(edit, name).toMatch(/transcribe_audio word timings via libass/);
-      expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood for the piece's length, ducked under dialogue/);
-      expect(edit, name).toMatch(/No generic AI label; only a disclosure a pinned skill requires/);
+      expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood, ducked under dialogue, instrumental: true, length_seconds the finished length rounded up/);
+      expect(edit, name).toMatch(/No AI label unless a pinned skill requires one/);
       for (const prompt of everyPrompt(template)) expect(prompt, name).not.toMatch(/AI-generated|label text/i);
       expect(producer, name).toMatch(/exactly one intelligible voice over audible music.*captions readable in each frame/);
       expect(producer, name).toMatch(/missing scene, caption or music, or doubled voice means STOPPED/);
