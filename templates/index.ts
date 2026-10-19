@@ -102,11 +102,18 @@ export const DANCING_ANIMALS = niche(FACELESS, {
   skill: "channel-template-dancing-animals",
   seats: SEGMENTED_SHORT_FORM,
 });
+export const ROADSTER = niche(FACELESS, {
+  name: "roadster",
+  title: "AI Impossible Roadster Channel",
+  description: "AI Impossible Roadster Channel is a template that builds an agent team that manages an entire social media account for you, producing phone-shot videos of a white roadster doing impossible things, like driving up a skyscraper. These are going really viral right now.",
+  skill: "channel-template-roadster",
+  seats: SEGMENTED_SHORT_FORM,
+});
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * ten niche templates (ADR-1115, ADR-1119, ADR-1174) reuse their crews.
+ * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -122,6 +129,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   comics: COMICS,
   "cartoons-irl": CARTOONS_IRL,
   "dancing-animals": DANCING_ANIMALS,
+  roadster: ROADSTER,
 };
 
 /**

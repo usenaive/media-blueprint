@@ -12,8 +12,8 @@ importers:
         specifier: ^22.20.1
         version: 22.20.1
       '@usenaive-sdk/blueprints':
-        specifier: ^0.11.1
-        version: 0.11.1
+        specifier: ^0.11.2
+        version: 0.11.2
       '@usenaive-sdk/vetta-cli':
         specifier: ^0.6.0
         version: 0.6.0
@@ -385,8 +385,8 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
-  '@usenaive-sdk/blueprints@0.11.1':
-    resolution: {integrity: sha512-esFjLSGsp/R9zlBOtSt99IOOz5ZChJU1ePrGrJIznk01U2NnFn+g2JyltOl8CLZMXVCxCFBzvnvVM/iOnWlpVg==}
+  '@usenaive-sdk/blueprints@0.11.2':
+    resolution: {integrity: sha512-SWbRc+bY8v9cANDGPcp9A895G35xBnbv2vWr8I4mFz3ydXcOdwNGGkOvW+8loeI6rg1dltCo8/SCiCOMqaY5tg==}
     engines: {node: '>=20'}
 
   '@usenaive-sdk/vetta-cli@0.6.0':
@@ -394,8 +394,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@usenaive-sdk/vetta@0.7.0':
-    resolution: {integrity: sha512-OT8pNdOIMfUoquWLofnmlEdKpkp36+WVZm3WKyjmNLfhlRaL43aZEAMV59b4ggNjOX4Q0HChgDAOVSoeS7pzAg==}
+  '@usenaive-sdk/vetta@0.9.0':
+    resolution: {integrity: sha512-ce+5HNybLs7N6ZvouStD7ZHtnMZWCb8k+6Xp7mRfi7/3LmzZWYfvX5CBW5onUFjU7+H4xC3v4TmEEqzzJdZZ3Q==}
     engines: {node: '>=20'}
 
   '@vitest/expect@3.2.7':
@@ -1063,9 +1063,9 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@usenaive-sdk/blueprints@0.11.1':
+  '@usenaive-sdk/blueprints@0.11.2':
     dependencies:
-      '@usenaive-sdk/vetta': 0.7.0
+      '@usenaive-sdk/vetta': 0.9.0
       jiti: 2.7.0
       zod: 4.5.4
 
@@ -1073,7 +1073,7 @@ snapshots:
     dependencies:
       jiti: 2.7.0
 
-  '@usenaive-sdk/vetta@0.7.0':
+  '@usenaive-sdk/vetta@0.9.0':
     dependencies:
       zod: 4.5.4
 

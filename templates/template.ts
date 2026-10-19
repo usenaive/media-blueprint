@@ -30,7 +30,9 @@ export type TemplateName =
   | "channel-cloning"
   | "comics"
   | "cartoons-irl"
-  | "dancing-animals";
+  | "dancing-animals"
+  // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
+  | "roadster";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -162,6 +164,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   comics: "first-briefs",
   "cartoons-irl": "first-briefs",
   "dancing-animals": "first-briefs",
+  roadster: "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -657,5 +660,5 @@ export const referenceStudyCard = (assignee: string, length: Length): Task =>
     key: "reference-study",
     title: "Study the reference this channel is modelled on, and file the teardown",
     assignee,
-    body: `Read project_context, then read_skill \`naive/reference-teardown\` and work its procedure: which tool opens which kind of reference, how to sample frames with bash, what to record, and marking what you inferred apart from what you saw. Where the context names a reference, study what it names. Where it names none, do not stop and do not ask — the question was optional, and blank is an answer: invent no reference, but find two or three real videos in this niche that already make pieces ${lengthPhrase(length)} well, study those, and say in your first line that they are the crew's pick and not the operator's. Write the teardown as this card's note, specific enough to plan a render from: what these pieces are in one line, how they open and their first three seconds, where they turn, how fast they cut, the shot grammar, the narration and caption shape, the formats they repeat, what they never do, and every piece you studied by URL. Where you were given still URLs, copy them into the note exactly as written: a plan may pass one to the render as its opening frame, and a retyped URL is a render that fails. A fil_ still is one you looked at, never a frame to render from. The look and the voice are chosen from your note by the two cards waiting on this one; write no hooks, scripts or briefs here.`,
+    body: `Read project_context, then read_skill \`naive/reference-teardown\` and work its procedure: which tool opens which kind of reference, how to sample frames with bash, what to record, and marking what you inferred apart from what you saw. Where the context names a reference, study what it names. Where it names none, do not stop and do not ask — the question was optional, and blank is an answer: invent no reference, but find two or three real videos in this niche that already make pieces ${lengthPhrase(length)} well, study those, and say in your first line that they are the crew's pick and not the operator's. Inspect beyond the opening: sample the first three seconds densely, then scene changes, story turns, recurring character appearances and the ending. Write the teardown as this card's note, specific enough to plan a render from: what these pieces are in one line; their themes and content pillars; how they open, turn and end; their narrative pattern; recurring characters or archetypes, relationships, locations and props; how fast they cut; shot grammar, camera, lighting and palette; narration, dialogue and caption shape; the formats they repeat; what they never do; and every piece by URL with timestamps for each observed claim. Label inference separately from observation. Where you were given still URLs, copy them into the note exactly as written. A fil_ still is evidence you looked at and may become a stored reference only when a later plan names that exact id. The look, voice and character bible are chosen from your note by the cards waiting on this one; write no hooks, scripts or briefs here.`,
   });
