@@ -2,17 +2,20 @@
  * `ai-influencer` — one photoreal creator who posts short videos in a few chosen looks (ADR-1360).
  *
  * It is the faceless crew with the segmented short-form seats (`SEGMENTED_SHORT_FORM`), like the
- * generative niches, and one load-bearing difference: the face. Every image of the influencer is
+ * generative niches, on the same scene pipeline (script -> images -> video -> edit, a character bible
+ * on day one), and one load-bearing difference: the face. Every image of the influencer is
  * rendered with their character and a look, and every video is animated from such a still, so the
  * person never changes. The character is a setup answer, not a niche: one engine id serves the four
  * prebuilt creators and a face trained from the operator's own photos.
  *
  * What it changes on the faceless crew:
  *   · the questions — who, their photos, the looks, what for (no niche, reference or cadence);
- *   · the producer — reads and trains characters (`create_character` held for the operator's yes),
- *     renders every segment from a still of the character, on the models measured to keep a face;
- *   · the scriptwriter — reads the character's persona and looks, and plans each segment's still;
+ *   · the producer — reads and trains characters (`create_character` held for the operator's yes); its
+ *     scene step is replaced: every scene's image is a still of the character, every video animates
+ *     one, on the models measured to keep a face;
+ *   · the scriptwriter — reads the character's persona and looks, and plans each scene's still;
  *   · the `look` day-one card — becomes "Meet the influencer" (same key, so the chain is unchanged);
+ *   · the `character-bible` day-one card — the influencer's bible, from the persona, not from a study;
  *   · the first-piece card — every piece is the influencer;
  *   · the cadence — not asked; the manager and the scout read it as daily.
  */
@@ -148,40 +151,74 @@ export const INFLUENCER_CADENCE =
   "THIS CHANNEL POSTS DAILY: its setup asks no cadence, so wherever this brief says the cadence answer, read daily, and never ask for one.";
 
 /**
- * No render draws words. The faceless producer puts each shot's on-screen text in the prompt, and step 5b
- * burns the same words in after the join: on staging (round 2) every caption showed twice.
+ * No render draws words. On staging (round 2) a shot's on-screen text went into the clip's prompt and
+ * step 5b burned the same words in after the join, so every caption showed twice; a quoted line drew
+ * itself the same way (round 3). The scene pipeline keeps dialogue in the video prompt, so for an
+ * influencer the line stays in the plan and is voiced in the edit.
  */
 export const NO_DRAWN_WORDS =
-  "NO RENDER PROMPT HOLDS WORDS: not the on-screen text, a caption or a sign; words go on once, at step 5b.";
+  "NO RENDER PROMPT HOLDS WORDS: not a spoken line, the on-screen text, a caption or a sign; lines are voiced and words burned in once, in the edit.";
 
 /**
- * One outfit and one place per piece: on staging (round 2) each segment's new still changed both; now every later segment re-poses segment 1's still (`ONE_SET`).
+ * One outfit and one place per piece: on staging (round 2) each segment's new still changed both; now every later scene re-poses scene 1's still (`ONE_SET`).
  * Fix r2 (H1): a later segment's prompt named "a kitchen nook" and the edit moved there from segment 1's bedroom, so later
- * segments name no place at all (the platform also checks the edit's place against segment 1's still, ADR-1360 (jj)).
+ * scenes name no place at all (the platform also checks the edit's place against scene 1's still, ADR-1360 (jj)).
  */
 export const ONE_OUTFIT =
-  "Name the piece's ONE look, outfit and setting once.";
+  "Name the piece's ONE look, outfit and setting once, in scene 1's image_prompt.";
 
 /**
- * One set per piece (H1, vetta-mono ADR-1360): segment 1's still is rendered with the character and the
- * look; every later segment opens on an edit of THAT still (generate_image with character and
+ * One set per piece (H1, vetta-mono ADR-1360): scene 1's image is rendered with the character and the
+ * look; every later scene opens on an edit of THAT still (generate_image with character and
  * image_urls), which keeps its room, props and outfit and is still the character's, so it may open a
  * character video. On staging (round 3) a fresh still per segment turned the mug into a glass and moved
  * the wall; the 18 Oct probe kept room, props, outfit and face on every edit.
  */
 export const ONE_SET =
-  "Segment 1 opens on a still: generate_image with character and style (the plan's look), aspect_ratio 9:16, in the piece's one outfit and setting. Each later segment opens on that still re-posed: generate_image with character, image_urls [segment 1's still], only the new action and framing.";
+  "Scene 1's image: generate_image with character (the chr_ id on the Meet the influencer note) and style (the plan's look), aspect_ratio 9:16, exactly its image_prompt, in the piece's one outfit and setting. Each later scene's image is that still re-posed: generate_image with character, image_urls [scene 1's accepted image], exactly its image_prompt — only the new action and framing.";
 
 /**
- * The producer's and the scriptwriter's override. It REPLACES the segmented one rather than following
- * it: the segmented seats open a segment on a reference URL or the previous one's last frame, and an
- * influencer's segment opens on a still of the character — the platform refuses a character video
- * from any other first frame. Each seat's own brief stays within the 360 words a person will read, so
- * the detail is the pinned skill's and the "Meet the influencer" card's.
+ * The scene pipeline (media-blueprint #55) opens a scene on a generated image, a pinned skill's shipped
+ * frame or the previous take's last frame, and keeps each line in the video prompt. An influencer's
+ * scene opens only on a still of the character — the platform refuses a character video from any
+ * other first frame — and a quoted line draws itself into the clip. So the producer's scene step is
+ * REPLACED, not appended to (`SCENE_STEP` is the base text it stands in for; `replaceSpan` throws
+ * if the base ever stops carrying it, so a base rewrite cannot leave both in one brief), and the
+ * scriptwriter's opening-frame and video-prompt rules are replaced the same way. The rest of the
+ * pipeline — preflight, the bible, AUDIO MODE, the edit, VERIFY — is the base's, word for word.
  */
-export const PRODUCER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "call generate_video once", "One render per card", "each with its on-screen text" AND THE REFERENCE FRAME ABOVE. ${ONE_SET} Then generate_video for every segment in one turn: character, its seconds, image_urls its still, one model — never a frame cut from a clip. ${NO_DRAWN_WORDS} Render only segments not yet in the card's comments, commenting each fil_ id and index; re-render a failed one alone. Join and finish per \`naive/video-assembly\` — the label a disclosure only, a call to action in the last segment only — then publish_file it for the Publish card.`;
+export const PRODUCER_SCENE_STEP = `Work resumably from the Render card's comments. EVERY SCENE IS THE INFLUENCER, so none opens on a shipped frame or a last frame. For each scene: (1) a scene without an accepted image gets one. ${ONE_SET} Comment "SCENE <index> IMAGE <fil_ id>", inspect it against the bible, and allow ONE corrected replacement for a visible mismatch; a second miss stops before video spend. (2) Once every scene has its image, call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: ["<fil_ id>"] holding that scene's accepted image — never a frame cut from a clip. ${NO_DRAWN_WORDS} They render in the background: end your turn, and never sleep or poll. On completion comment "SCENE <index> VIDEO <fil_ id>". Never re-render a completed scene. A failed render: comment "SCENE <index> VIDEO FAILED <error>" and re-render it once; a second failure means STOPPED. On screen, the label is a disclosure only and a call to action sits in the last scene only.`;
 
-const SCRIPTWRITER_INFLUENCER_BRIEF = `THIS CHANNEL'S PIECES ARE SEGMENTS OF ONE INFLUENCER, OVERRIDING "ONE video" ABOVE: get_character first (voice, wardrobe, looks). ${ONE_OUTFIT} Segments in order: one still of the set, re-posed for each later segment (action and framing only, no new place), never a URL or last frame; never gender, age, face, hair, build or words; ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds each, cut on shot changes, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
+/** The base producer's scene step, from its first words to the paragraph after it. */
+const SCENE_STEP = { from: "Work resumably from the Render card's comments.", to: "\n\nAfter all videos exist" };
+
+/**
+ * The base seats' legacy path, for a card planned before the bible existed. An influencer's bible is a
+ * day-one card the first piece waits on, and the scout starts nothing without one, so no influencer
+ * plan is ever written without it: both seats drop the path (a card that somehow lacks the sections is
+ * refused by the producer's preflight before any spend).
+ */
+const PRODUCER_LEGACY = { from: "A card with no CONTINUITY CONTRACT or STORY LOGIC section", to: "must hold source provenance" };
+const SCRIPTWRITER_LEGACY = { from: "With no bible note yet, write the plan as before", to: "State one THEME/PROMISE" };
+
+/** The scriptwriter's opening-frame rule and its video-prompt carry list, each replaced whole. */
+const OPENING_FRAME_RULE = { from: "The image_prompt makes one opening frame", to: " The video_prompt begins there" };
+export const SCRIPTWRITER_IMAGE_RULE = `The image_prompt makes one opening frame of the influencer matching the incoming state. ${ONE_OUTFIT} Each later scene's image_prompt re-poses that still: action and framing only, no new place; never a shipped frame, URL or last frame.`;
+const VIDEO_CARRIES = { from: "carries canonical blocks, action, expression, camera, ambience and exact dialogue,", to: " and reaches the outgoing state" };
+export const SCRIPTWRITER_VIDEO_CARRIES = "carries one gentle action, expression, camera, ambience and who is speaking — never the line itself —";
+
+/** Replace `[from, to)` in a composed system, or throw: the base text it stands in for has moved. */
+export const replaceSpan = (system: string, span: { from: string; to: string }, replacement: string, seat: string): string => {
+  const at = system.indexOf(span.from);
+  const end = at < 0 ? -1 : system.indexOf(span.to, at);
+  if (at < 0 || end < 0 || system.indexOf(span.from, at + 1) >= 0) throw new Error(`ai-influencer ${seat}: the base brief no longer carries "${span.from}"`);
+  return `${system.slice(0, at)}${replacement}${system.slice(end)}`;
+};
+
+/** The producer's own line, after the base pipeline: the tools that read the face. */
+export const PRODUCER_INFLUENCER_BRIEF = "Every image and video of this channel is the influencer, by the character id on the Meet the influencer note, and every scene of a piece uses one video model.";
+
+const SCRIPTWRITER_INFLUENCER_BRIEF = `EVERY SCENE IS THE ONE INFLUENCER: get_character first (voice, wardrobe, looks). No image_prompt or video_prompt says gender, age, face, hair, build or any words: the character carries who they are, and lines are voiced in the edit. ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds a scene, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
 
 /** The `look` card's replacement: same key, so the day-one chain and its re-apply guard are unchanged. */
 const characterCard = (look: Task): Task =>
@@ -208,7 +245,7 @@ const characterCard = (look: Task): Task =>
  * creator.
  */
 export const DAY_ONE_PIECE =
-  "TODAY'S PIECE IS DAY ONE'S, AND THIS OVERRIDES FINDING A TOPIC AND EXEMPLARS ABOVE: no web_search, browser or web_fetch for it. Take the topic from the influencer's persona and the hook-style note, one of their everyday moments, and file the Plan card at once. It runs 15 seconds in three 5-second segments, and each segment's voiceover is one line of at most 12 words, so it fits its 5 seconds as spoken. Say in the brief that it is planned from the hook-style note and the persona with no exemplar, that the reference teardown is not filed yet and nobody waits for the study, and that today the scriptwriter does no research, browsing, download or frame sampling: it writes the plan from the brief and the hook-style note.";
+  "TODAY'S PIECE IS DAY ONE'S, AND THIS OVERRIDES FINDING A TOPIC AND EXEMPLARS ABOVE: no web_search, browser or web_fetch for it. Take the topic from the influencer's persona and the hook-style note, one of their everyday moments, and file the Plan card at once. It runs 15 seconds in three 5-second scenes, and each scene's voiceover is one line of at most 12 words, so it fits its 5 seconds as spoken. Say in the brief that it is planned from the hook-style note and the persona with no exemplar, that the reference teardown is not filed yet and nobody waits for the study, and that today the scriptwriter does no research, browsing, download or frame sampling: it writes the plan from the brief and the hook-style note.";
 
 /** The study's own cap, said on its card; the analyst's per-task ceiling is the hard stop under it. */
 export const STUDY_SPEND_MICRO_USD = 400_000;
@@ -237,6 +274,19 @@ const HOOK_STYLE_BODY =
 /** The study, off the critical path and capped: no downloads, no frame sampling, two videos at most. */
 const STUDY_BODY = `Run after the first piece has started — it never waits on you. Find two real short videos (15 to 30 seconds) that creators like this influencer post and that do well, and study them with the browser and web_fetch: how they open and their first three seconds, where they turn, how fast they cut, the shot grammar, the caption shape, what they never do. At most two videos and about eight page views in all; never open the same page twice; download nothing and sample no frames. Stop once session_spend reads past $${(STUDY_SPEND_MICRO_USD / 1_000_000).toFixed(2)} and file what you have. Write the teardown as this card's note, specific enough to plan from, with every video by URL and what you inferred marked apart from what you saw; say in its first line that these are the crew's picks. Write no hooks, scripts or briefs here.`;
 
+/**
+ * The influencer's character bible (the scene pipeline's day-one card, same key). The base card studies
+ * the reference videos for a recurring cast; here the cast is fixed by setup — one person, whose face is
+ * the character — so the bible is drawn from the persona, the purpose answer and the picked looks, waits
+ * on nothing, and opens no page: the first piece waits on it, and the study runs after the first piece.
+ * Its close-then-ask order is the base card's, so an unanswered question never parks the channel.
+ */
+const BIBLE_BODY = `Day one is set-up, not a script: this is the influencer's character bible, and the first piece waits on it. Read project_context and, with read_skill, naive/channel-template-ai-influencer and every other skill pinned to you. Resolve the influencer as the Meet the influencer card does: a creator's name is its fixed id (${CREATOR_IDS}) — get_character it for voice, wardrobe and looks; "${UPLOAD_OWN}" is the face that card trains, described by the purpose answer. Copy the purpose answer verbatim, labelled CREATOR DIRECTIVE. Open no page and sample no video: the reference study runs after the first piece.
+
+Write a complete draft with: CHARACTER MODE (recurring cast: the influencer alone); CONTENT THEMES and NARRATIVE PATTERNS from the persona and purpose; CANONICAL CAST (the influencer: chr_ id, or "the face the Meet the influencer card trains", role, wardrobe and palette in each picked look, personality, expressions and movement, voice, and a reusable prompt block of action, setting and framing only — never gender, age, face, hair or build, which the character carries); ONE-OFF CHARACTER RULE (nobody else is a named character); WORLD (their everyday places and props); VISUAL LANGUAGE (the picked looks); DIALOGUE/VOICE; MUST NOT CHANGE (the face comes from the character; one look, outfit and setting per piece); ALLOWED VARIATION; NEGATIVE CONSTRAINTS (no words drawn into a render, no text-only render of them); and REFERENCES. Mark what you inferred.
+
+Close this card with the complete bible as its note, beginning "DRAFT CHARACTER BIBLE": the first piece works from the draft, so never hold it open for an answer. THEN, once it is closed and not before, ask the operator once with ask_operator to approve the draft or state corrections. When they answer, apply stated corrections without overriding them and comment on this card "APPROVED CHARACTER BIBLE" followed by the entire approved bible; approved unchanged, copy the entire draft. That comment replaces the draft for every later piece. Generate nothing on this card.`;
+
 /** What every piece is: said on the first-piece card, in words its seat (which renders nothing) can act on. */
 const FIRST_PIECE_INFLUENCER =
   "This channel is one person, the influencer on the Meet the influencer card's note: every piece is them, in one of the looks on that note, written in their voice — never a stranger, and never a description of them in place of their character.";
@@ -250,6 +300,7 @@ const withInfluencerCards = (template: MediaTemplate): MediaTemplate => ({
       return task({ key: card.key, title: card.title, assignee: "analyst", blocked_by: ["first-briefs"], body: `${INFLUENCER_NICHE} ${INFLUENCER_PAGES} ${STUDY_BODY}` });
     }
     if (card.key === "hook-style") return task({ key: card.key, title: card.title, assignee: card.assignee!, blocked_by: [], body: HOOK_STYLE_BODY });
+    if (card.key === "character-bible") return task({ key: card.key, title: "Write the influencer's character bible, then get the operator's approval", assignee: card.assignee!, blocked_by: [], body: BIBLE_BODY });
     if (card.key === "first-briefs") return { ...card, body: (card.body ?? "").replace(/ How this card works\./, ` ${FIRST_PIECE_INFLUENCER} ${DAY_ONE_PIECE} ${INFLUENCER_NICHE} ${INFLUENCER_PAGES} How this card works.`) };
     return card;
   })
@@ -265,6 +316,8 @@ const base = niche(FACELESS, {
   skill: AI_INFLUENCER_SKILL,
   seats: {
     ...SEGMENTED_SHORT_FORM,
+    // Replaces the segmented seats' "pinned skills' scene grammar" line: an influencer's scene grammar
+    // is the character still (below), never a shipped frame or a last frame.
     producer: {
       ...SEGMENTED_SHORT_FORM.producer,
       tools: [...(SEGMENTED_SHORT_FORM.producer?.tools ?? []), "get_character", "list_characters"],
@@ -289,6 +342,17 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   // every seat denies it by name.
   agents: base.agents.map((seat) => ({
     ...seat,
+    // The scene steps an influencer replaces (see `PRODUCER_SCENE_STEP`), in place, so no brief holds both.
+    system:
+      seat.name === "producer"
+        ? replaceSpan(replaceSpan(seat.system!, PRODUCER_LEGACY, "Every Render card ", seat.name), SCENE_STEP, PRODUCER_SCENE_STEP, seat.name)
+        : seat.name === "scriptwriter"
+          ? [
+              [SCRIPTWRITER_LEGACY, ""],
+              [OPENING_FRAME_RULE, SCRIPTWRITER_IMAGE_RULE],
+              [VIDEO_CARRIES, SCRIPTWRITER_VIDEO_CARRIES],
+            ].reduce((system, [span, text]) => replaceSpan(system, span as typeof SCENE_STEP, text as string, seat.name), seat.system!)
+          : seat.system,
     // Day one's hard stops (H5): each seat's ceiling, and every fire inside it.
     budget: AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget,
     schedules: (seat.schedules ?? []).map((fire) => ({

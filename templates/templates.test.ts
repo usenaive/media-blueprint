@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
+import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -396,12 +396,14 @@ describe("the board", () => {
         "first-briefs": ["look", "hook-style", "character-bible"],
       },
       // H5: the face and the persona start the first piece; the study runs after it starts.
+      // The influencer's bible is drawn from the persona, so it waits on nothing either.
       "ai-influencer": {
         "channel-plan": [],
         look: [],
+        "character-bible": [],
         "hook-style": [],
         "report-frame": ["channel-plan"],
-        "first-briefs": ["look", "hook-style"],
+        "first-briefs": ["look", "hook-style", "character-bible"],
         "reference-study": ["first-briefs"],
       },
       longform: {
@@ -1266,11 +1268,17 @@ describe("the AI Influencer template", () => {
     expect(producer.tools?.configs["generate_video"]?.config).toEqual({ models: AI_INFLUENCER_VIDEO_MODELS });
     expect(AI_INFLUENCER_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(producer.skills).toEqual(["naive/video-assembly", "naive/channel-template-ai-influencer"]);
-    expect(producer.system).toMatch(/generate_image with character and style/);
-    expect(producer.system).toMatch(/generate_video for every segment in one turn: character, its seconds, image_urls its still/);
+    expect(producer.system).toMatch(/generate_image with character \(the chr_ id on the Meet the influencer note\) and style/);
+    expect(producer.system).toMatch(/call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: \["<fil_ id>"\] holding that scene's accepted image/);
     expect(producer.system).toMatch(/never a frame cut from a clip/);
     expect(producer.system).toContain(RENDER_MODEL_RULE);
-    expect(seat(AI, "scriptwriter").system).toMatch(/one still of the set, re-posed for each later segment \(action and framing only, no new place\), never a URL or last frame/);
+    // The scene pipeline's shipped-frame and last-frame openers are replaced, not left beside the influencer's.
+    expect(producer.system).toContain(PRODUCER_SCENE_STEP);
+    expect(producer.system).not.toMatch(/OPENING FRAME is a pinned skill's shipped frame|pull its last frame with ffmpeg|Keep exact dialogue in the prompt/);
+    const scriptwriter = seat(AI, "scriptwriter").system!;
+    expect(scriptwriter).toContain(SCRIPTWRITER_IMAGE_RULE);
+    expect(scriptwriter).toMatch(/re-poses that still: action and framing only, no new place; never a shipped frame, URL or last frame/);
+    expect(scriptwriter).not.toMatch(/name it as the scene's OPENING FRAME|ambience and exact dialogue/);
     // Fix r2 (H1): a later segment named "a kitchen nook" and its edit left segment 1's bedroom.
     expect(seat(AI, "scriptwriter").system).not.toMatch(/prompted with action, setting and framing/);
     expect(AI.tasks.find((card) => card.key === "look")?.body).toMatch(/paused on the platform.s side.*never call create_character again/);
@@ -1281,12 +1289,15 @@ describe("the AI Influencer template", () => {
     // at step 5b, so every caption showed twice; and each segment's still changed clothes and room.
     const producer = seat(AI, "producer").system!;
     expect(producer).toContain(NO_DRAWN_WORDS);
-    expect(producer).toMatch(/OVERRIDING .*"each with its on-screen text"/);
+    expect(NO_DRAWN_WORDS).toMatch(/not a spoken line, the on-screen text, a caption or a sign/);
     expect(producer).toMatch(/in the piece's one outfit and setting/);
     const scriptwriter = seat(AI, "scriptwriter").system!;
     expect(scriptwriter).toContain(ONE_OUTFIT);
+    // A quoted line draws itself into the clip (round 3): the line stays in the plan and is voiced in the edit.
+    expect(scriptwriter).toContain(SCRIPTWRITER_VIDEO_CARRIES);
+    expect(SCRIPTWRITER_VIDEO_CARRIES).toMatch(/never the line itself/);
     // Never who they are (ADR-1360 (cc)): a plan that said "athletic woman" drew a trained bearded man as a woman.
-    expect(scriptwriter).toMatch(/never gender, age, face, hair, build or words/);
+    expect(scriptwriter).toMatch(/No image_prompt or video_prompt says gender, age, face, hair, build or any words/);
   });
 
   it("meets the influencer on the look card's key, and tells the first piece who it is about", () => {
@@ -1313,14 +1324,14 @@ describe("the AI Influencer template", () => {
     expect(TEMPLATES.faceless.tasks.find((one) => one.key === "look")!.title).toBe("Choose the look this channel renders in");
   });
 
-  it("keeps one set across a piece: later segments open on segment 1's still re-posed (H1)", () => {
+  it("keeps one set across a piece: later scenes open on scene 1's still re-posed (H1)", () => {
     const producer = seat(AI, "producer").system!;
     expect(producer).toContain(ONE_SET);
-    expect(ONE_SET).toMatch(/generate_image with character, image_urls \[segment 1's still\]/);
+    expect(ONE_SET).toMatch(/generate_image with character, image_urls \[scene 1's accepted image\]/);
   });
 
-  it("shows a call to action only in the last segment; the label stays a disclosure (H2)", () => {
-    expect(seat(AI, "producer").system).toMatch(/the label a disclosure only, a call to action in the last segment only/);
+  it("shows a call to action only in the last scene; the label stays a disclosure (H2)", () => {
+    expect(seat(AI, "producer").system).toMatch(/the label is a disclosure only and a call to action sits in the last scene only/);
     // The plan's beats already end on the cta (the scriptwriter's base brief); the producer burns it in last.
     expect(seat(AI, "scriptwriter").system).toMatch(/hook, setup, turn, payoff, cta/);
   });
@@ -1334,7 +1345,7 @@ describe("the AI Influencer template", () => {
     // r3 verify: 36 min with the scout and scriptwriter still browsing, so day one's piece uses no web at all.
     expect(card("first-briefs").body).toMatch(/no web_search, browser or web_fetch for it.*the scriptwriter does no research, browsing, download or frame sampling/);
     expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
-    expect(DAY_ONE_PIECE).toMatch(/15 seconds in three 5-second segments/);
+    expect(DAY_ONE_PIECE).toMatch(/15 seconds in three 5-second scenes/);
     expect(DAY_ONE_PIECE).toMatch(/voiceover is one line of at most 12 words/);
     // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.
     for (const agent of AI.agents) {
@@ -1344,6 +1355,42 @@ describe("the AI Influencer template", () => {
     expect(STUDY_SPEND_MICRO_USD).toBeLessThan(AI_INFLUENCER_BUDGETS["analyst"]!.max_task_micro_usd);
     // The producer clears a whole 30-second piece on this template's own render price.
     expect(AI_INFLUENCER_BUDGETS["producer"]!.max_task_micro_usd).toBeGreaterThan(AI.length.max * AI_INFLUENCER_MICRO_USD_PER_SECOND);
+  });
+
+  /**
+   * The scene pipeline (#55) on an influencer: the base's preflight, bible, AUDIO MODE, edit and VERIFY
+   * are kept word for word; its scene step and opening-frame rules are replaced; and the legacy
+   * pre-bible path is dropped, because no influencer plan is written before the day-one bible.
+   */
+  it("runs the scene pipeline with the influencer's scene step, and its own bible on day one", () => {
+    const producer = seat(AI, "producer").system!;
+    for (const kept of [/script -> images -> video -> editing/, /PREFLIGHT BEFORE SPEND/, /cites no bible note/, /SCENE <index> IMAGE <fil_ id>/, /SCENE <index> VIDEO FAILED/, /re-render it once; a second failure means STOPPED/, /Never re-render a completed scene/, /AUDIO MODE: NATIVE/, /AUDIO MODE: GENERATED/, /Never use amix/, /never cut mid-word, mid-gesture or before the reaction lands/, /publish_file the one finished video/]) {
+      expect(producer, String(kept)).toMatch(kept);
+    }
+    expect(producer).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(AI.length)}, view_image one frame per scene, and transcribe_audio it`);
+    expect(producer).toContain(CONTINUITY_RULE);
+    expect(producer).not.toMatch(/planned before the bible/);
+    expect(producer).toMatch(/Every Render card must hold source provenance/);
+    expect(producer.split("Work resumably from the Render card's comments.").length).toBe(2);
+    const scriptwriter = seat(AI, "scriptwriter").system!;
+    for (const kept of [/SOURCE PROVENANCE/, /CONTINUITY CONTRACT/, /STORY LOGIC/, /CUT MAP/, /cold-viewer check/, /hook, setup, turn, payoff, cta/]) expect(scriptwriter, String(kept)).toMatch(kept);
+    expect(scriptwriter).not.toMatch(/With no bible note yet/);
+    expect(scriptwriter).toContain(CONTINUITY_RULE);
+    // The scout starts nothing without a bible, so the dropped path is never reached.
+    expect(seat(AI, "trend-scout").system).toMatch(/With no bible note yet, start nothing/);
+    const bible = AI.tasks.find((card) => card.key === "character-bible")!;
+    expect([bible.assignee, bible.blocked_by]).toEqual(["scriptwriter", []]);
+    expect(bible.body).toMatch(/beginning "DRAFT CHARACTER BIBLE"/);
+    expect(bible.body!.indexOf("Close this card")).toBeLessThan(bible.body!.indexOf("ask_operator"));
+    expect(bible.body).toMatch(/APPROVED CHARACTER BIBLE/);
+    expect(bible.body).toMatch(/Open no page and sample no video/);
+    for (const creator of PREBUILT_CREATORS) expect(bible.body).toContain(`${creator.name} = ${creator.id}`);
+    expect(bible.body).toMatch(/never gender, age, face, hair or build/);
+  });
+
+  it("refuses to build when the base no longer carries a span it replaces", () => {
+    expect(() => replaceSpan("no such text", { from: "Work resumably", to: "After" }, "x", "producer")).toThrow(/no longer carries/);
+    expect(replaceSpan("a FROM b TO c", { from: "FROM", to: " TO" }, "X", "p")).toBe("a X TO c");
   });
 
   it("names no vendor anywhere a person or a seat reads it", () => {

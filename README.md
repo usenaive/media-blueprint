@@ -82,14 +82,23 @@ and renders one still per picked look as the channel's look sheet. The producer 
 `AI_INFLUENCER_VIDEO_MODELS`, the two image-to-video models measured keeping a face from a still. It asks no cadence: the manager and the scout read it
 as daily.
 
-A piece keeps one set: segment 1 opens on a character still in the plan's look, and every later
-segment on that still re-posed (`generate_image` with the character and the still in `image_urls`, an
-edit that keeps the room, props and outfit and is still the character's). The burned-in label is a
-disclosure only; a call to action shows in the last segment only. Day one starts the first piece from
-the face, the persona and a hook style that waits on nothing; the reference study runs after the
-first piece starts, on the analyst, capped at about $0.40 and by the analyst's $1 per-task ceiling.
-The first piece runs 15 seconds (three 5-second segments), and every seat has a ceiling sized to this template's render
-(`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, the analyst $1.50).
+It runs on the short-form scene pipeline (script -> images -> video -> edit, with a character bible),
+with the parts that would change the face replaced rather than added to. The producer's scene step is
+the influencer's (`PRODUCER_SCENE_STEP`): scene 1's image is a character still in the plan's look, and
+every later scene's image is that still re-posed (`generate_image` with the character and the still in
+`image_urls`, an edit that keeps the room, props and outfit and is still the character's); no scene
+opens on a skill's shipped frame or a previous take's last frame, and every scene's clip animates its
+still with the character, all submitted in one turn. No render prompt holds words, not even a spoken
+line: the line stays in the plan and is voiced in the edit (AUDIO MODE GENERATED, since the clips are
+silent). The burned-in label is a disclosure only; a call to action shows in the last scene only.
+Preflight, AUDIO MODE, the edit and VERIFY are the base producer's, word for word. Both seats drop
+the base's pre-bible (legacy) path: the day-one `character-bible` card is the influencer's own, drawn
+from the persona, the purpose answer and the picked looks (no page, no video), waits on nothing, and
+the first piece waits on it. Day one starts the first piece from the face, that bible and a hook
+style that waits on nothing; the reference study runs after the first piece starts, on the analyst,
+capped at about $0.40 and by the analyst's $1 per-task ceiling. The first piece runs 15 seconds (three
+5-second scenes, a line of at most 12 words each), and every seat has a ceiling sized to this
+template's render (`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, the analyst $1).
 
 ## 🚀 Get started
 
