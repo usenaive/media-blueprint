@@ -945,8 +945,9 @@ describe("the generated short-form scene pipeline", () => {
       expect(clause, name).toMatch(/[Rr]ender only what the card's comments do not yet record/);
       expect(clause, name).toMatch(/comment each render's fil_ id and segment index/);
       expect(clause, name).toMatch(/a failed render is re-rendered once; a second failure means STOPPED/);
-      // A legacy segmented piece still gets its text and voice before it ships.
-      expect(clause, name).toMatch(/finish per `naive\/video-assembly`: burn in the plan's hook and label text, and voice a silent take or join with generate_speech/);
+      // A legacy segmented piece still gets its voice, then the same captioned, scored edit, before it ships.
+      expect(clause, name).toMatch(/voice a silent take or join with generate_speech, then EDIT, VERIFY and publish as below/);
+      expect(clause, name).not.toMatch(/label text/);
       expect(clause, name).toMatch(/Publish card omits scene ids and AUDIO MODE/);
       const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system!;
       expect(scriptwriter, name).toMatch(/With no bible note yet, write the plan as before/);
@@ -1014,12 +1015,31 @@ describe("the generated short-form scene pipeline", () => {
       expect(producer, name).toMatch(/generate_speech/);
       expect(producer, name).toMatch(/AUDIO MODE: NATIVE/);
       expect(producer, name).toMatch(/AUDIO MODE: GENERATED/);
-      expect(producer, name).toMatch(/Never use amix/);
+      expect(producer, name).toMatch(/REMOVE all original audio first/);
       expect(producer, name).toMatch(/exactly one intelligible voice/);
       expect(producer, name).toMatch(/do not substitute an undeclared local or system voice/i);
       expect(producer, name).toMatch(/ffmpeg/);
       expect(producer, name).toMatch(/ffprobe/);
       expect(producer, name).toMatch(/publish_file the one finished video/);
+    }
+  });
+
+  /** Owner feedback: captions in the creator's own style, a music bed, and no burned-in generic AI tag. */
+  it("captions in the pinned skill's style and scores a ducked music bed, with no generic AI label", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const template = TEMPLATES[name];
+      expect(permissionFor(template, "producer", "generate_music"), name).toBe("allow");
+      expect(permissionFor(template, "scriptwriter", "generate_music"), name).toBe("deny");
+      const producer = seat(template, "producer").system!;
+      const edit = producer.slice(producer.indexOf("EDIT per"), producer.indexOf("VERIFY the finished file"));
+      expect(edit, name).toMatch(/captions per the pinned skill's `## Captions and music` \(default: word-by-word/);
+      expect(edit, name).toMatch(/transcribe_audio word timings via libass/);
+      expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood for the piece's length, ducked under dialogue/);
+      expect(edit, name).toMatch(/No generic AI label; only a disclosure a pinned skill requires/);
+      for (const prompt of everyPrompt(template)) expect(prompt, name).not.toMatch(/AI-generated|label text/i);
+      expect(producer, name).toMatch(/exactly one intelligible voice over audible music.*captions readable in each frame/);
+      expect(producer, name).toMatch(/missing scene, caption or music, or doubled voice means STOPPED/);
+      expect(seat(template, "scriptwriter").system, name).toMatch(/EDIT PLAN: [^.]*caption style \(default word-by-word\) and music mood per the pinned skill's `## Captions and music`/);
     }
   });
 
@@ -1045,13 +1065,13 @@ describe("the generated short-form scene pipeline", () => {
  * tool no seat can be granted or denied, so it is held to a pinned copy of the platform's list.
  */
 describe("the built-in tool list", () => {
-  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at fc7923648 (2026-09-27). */
+  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at fc7923648 (2026-09-27), plus `generate_music` (b100c0be5). */
   const CORE_BUILTIN_TOOLS = [
     "bash", "read", "write", "edit", "ls", "find",
     "browser", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video", "apps",
     "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
     "ask_operator", "request_tools", "project_context",
-    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+    "transcribe_audio", "generate_speech", "generate_music", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
     "show", "compose", "write_plan", "propose_plan",
   ];
   /** The same file's `PLATFORM_TOOLS`, at the same commit. */

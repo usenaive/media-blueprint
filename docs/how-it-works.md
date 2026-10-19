@@ -72,8 +72,8 @@ A card is woken at most three times. After that it is parked for the CEO.
   works from the draft until an APPROVED comment replaces it. For a piece it samples the opening
   and later scene changes, then writes source provenance, a continuity contract and 5–15 second
   scenes. Every scene has an opening-image prompt, an image-to-video motion prompt, exact dialogue,
-  on-screen text and editing instructions; all scenes total 15–30 seconds. The hook and setup beat
-  carry the introduction, and the cold-viewer check gets at most two revisions. A scene the pinned
+  on-screen text and editing instructions, with an EDIT PLAN naming the caption style and music
+  mood; all scenes total 15–30 seconds. The hook and setup beat carry the introduction, and the cold-viewer check gets at most two revisions. A scene the pinned
   skill opens on a shipped frame or the previous take's last frame names that OPENING FRAME instead.
 - **producer**: preflight stops only on objective gaps; judgement calls become one PREFLIGHT
   WARNING. For each scene, `generate_image` (skipped for a named OPENING FRAME), inspect it, then
@@ -81,13 +81,16 @@ A card is woken at most three times. After that it is parked for the CEO.
   card so a wake resumes rather than buys work twice, and retries a failed scene once. After all
   scenes land it transcribes their audio and chooses one dialogue source for the whole piece: keep
   usable native character performances, or strip every source audio track and generate exact
-  replacement speech. It never mixes both. It then normalizes and joins with ffmpeg, burns in text,
-  verifies with ffprobe, one frame per scene and a transcript of the finished file checked scene by
-  scene, and publishes one final `fil_`.
+  replacement speech. It never mixes both. It then normalizes and joins with ffmpeg, burns in text
+  and captions in the pinned skill's `## Captions and music` style (word-by-word by default, timed
+  from `transcribe_audio` word timings, rendered with libass), adds a `generate_music` bed ducked
+  under dialogue and no generic AI label (only a disclosure a pinned skill requires), verifies with
+  ffprobe, one frame per scene (captions readable) and a transcript of the finished file checked
+  scene by scene (music audible, dialogue clear), and publishes one final `fil_`.
 - **Cards planned before the bible**: a Plan card read with no bible note yet is planned the old way
   (one take, or 5–15 second segments where the pinned skill segments). A Render card without the
-  bible sections is rendered as planned, resumably and with one retry, then finished per
-  `naive/video-assembly` (hook and label text, a voiced silent join) and verified the same way.
+  bible sections is rendered as planned, resumably and with one retry, then voiced (a silent take
+  or a join) and given the same captioned, scored edit and verification.
 - **channel-manager**: publishes (section 5).
 - **analyst**: the numbers daily, the report weekly (section 6).
 
@@ -189,7 +192,7 @@ a cron fire is not.
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - `generate_video` carries `config.models`, Seedance 2.5 first; on the generated niche producers,
   `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first. Every generated short renders 5–15 second scenes;
-- `generate_speech`, shell and file tools on every generated-short producer; `transcribe_audio` on
+- `generate_speech`, `generate_music`, shell and file tools on every generated-short producer; `transcribe_audio` on
   their scriptwriters.
 
 ## 8. Setup questions and `project_context`

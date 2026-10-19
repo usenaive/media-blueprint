@@ -391,7 +391,8 @@ const SLOTS = `${Object.entries(CADENCE_SLOTS).map(([answer, days]) => `${answer
 /**
  * Every built-in tool the platform publishes, pinned: a blueprint imports no workspace package, and
  * `toolset` denies by name every one a seat is not granted. `templates.test.ts` holds it to a copy
- * of core's `BUILTIN_TOOLS` (vetta-mono `packages/core/src/schema/agent.ts` at fc7923648).
+ * of core's `BUILTIN_TOOLS` (vetta-mono `packages/core/src/schema/agent.ts` at fc7923648, plus
+ * `generate_music` from b100c0be5).
  */
 export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
@@ -399,7 +400,7 @@ export const BUILTIN_TOOLS = [
   "generate_image", "generate_video", "clip_video", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "project_context",
-  "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+  "transcribe_audio", "generate_speech", "generate_music", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
   "show", "compose", "write_plan", "propose_plan",
 ] as const;
 
