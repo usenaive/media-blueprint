@@ -6,7 +6,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
+import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -1332,6 +1332,9 @@ describe("the AI Influencer template", () => {
 
   it("shows a call to action only in the last scene; the label stays a disclosure (H2)", () => {
     expect(seat(AI, "producer").system).toMatch(/the label is a disclosure only and a call to action sits in the last scene only/);
+    // Owner, 2026-10-20: a realistic face, so the burned-in AI label is required on every frame, in the producer's own appended line.
+    expect(seat(AI, "producer").system).toContain(INFLUENCER_AI_LABEL);
+    expect(INFLUENCER_AI_LABEL).toMatch(/Every frame of every finished piece carries a burned-in on-screen "AI-generated" label/);
     // The plan's beats already end on the cta (the scriptwriter's base brief); the producer burns it in last.
     expect(seat(AI, "scriptwriter").system).toMatch(/hook, setup, turn, payoff, cta/);
   });
