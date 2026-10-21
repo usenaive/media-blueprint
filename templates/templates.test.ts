@@ -49,13 +49,14 @@ const CATALOGUE = [
   "naive/channel-template-channel-cloning", "naive/channel-template-comics", "naive/channel-template-cartoons-irl",
   "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-ai-influencer",
   "naive/channel-template-cat-stories",
+  "naive/channel-template-food-slime",
 ];
 
 const all = Object.values(TEMPLATES);
 /** The short-form niches whose playbook renders segments and joins them (`SEGMENTED_SHORT_FORM`). */
 const SEGMENTED: TemplateName[] = [
   "ufc", "history", "animal-feast",
-  "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories",
+  "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories", "food-slime",
 ];
 /**
  * Every template whose producer renders segments and joins them: the segmented niches and
@@ -77,7 +78,7 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "gaming-clips": "clipping", news: "clipping", sports: "clipping", ufc: "faceless", history: "faceless",
   "animal-feast": "faceless",
   "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
-  "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless",
+  "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless", "food-slime": "faceless",
   "ai-influencer": "faceless",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {

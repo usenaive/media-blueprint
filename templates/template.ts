@@ -37,6 +37,8 @@ export type TemplateName =
   | "ai-influencer"
   // ADR-1286: the cat-stories niche, same segmented `faceless` crew.
   | "cat-stories";
+  // ADR-1289: the food-slime niche, same segmented `faceless` crew.
+  | "food-slime";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -171,6 +173,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   roadster: "first-briefs",
   "ai-influencer": "first-briefs",
   "cat-stories": "first-briefs",
+  "food-slime": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
