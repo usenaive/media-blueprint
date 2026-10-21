@@ -33,6 +33,8 @@ export type TemplateName =
   | "dancing-animals"
   // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
   | "roadster"
+  // ADR-1287: the "which one would you choose" format, same segmented `faceless` crew.
+  | "would-you-choose"
   // One photoreal creator on the faceless crew (ADR-1360): the character is a setup answer, not a niche.
   | "ai-influencer"
   // ADR-1286: the cat-stories niche, same segmented `faceless` crew.
@@ -173,6 +175,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "cartoons-irl": "first-briefs",
   "dancing-animals": "first-briefs",
   roadster: "first-briefs",
+  "would-you-choose": "first-briefs",
   "ai-influencer": "first-briefs",
   "cat-stories": "first-briefs",
   "food-slime": "first-briefs",

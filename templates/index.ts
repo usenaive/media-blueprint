@@ -135,11 +135,18 @@ export const GLASS_FOOD = niche(FACELESS, {
   skill: "channel-template-glass-food",
   seats: SEGMENTED_SHORT_FORM,
 });
+export const WOULD_YOU_CHOOSE = niche(FACELESS, {
+  name: "would-you-choose",
+  title: "AI Would You Choose Channel",
+  description: "AI Would You Choose Channel is a template that builds an agent team that manages an entire social media account for you, producing \"which one would you choose\" videos of absurd options. This lets you create the would-you-choose videos that are going really viral right now.",
+  skill: "channel-template-would-you-choose",
+  seats: SEGMENTED_SHORT_FORM,
+});
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * fourteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314, ADR-1286, ADR-1289, ADR-1288) and `ai-influencer` (ADR-1360) reuse their crews.
+ * fifteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -160,6 +167,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "cat-stories": CAT_STORIES,
   "food-slime": FOOD_SLIME,
   "glass-food": GLASS_FOOD,
+  "would-you-choose": WOULD_YOU_CHOOSE,
 };
 
 /**
