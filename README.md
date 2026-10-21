@@ -17,7 +17,7 @@ There is no hosted app. The crew runs on the platform's own screens:
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three base templates**, plus eleven niche channel templates and the AI Influencer template, which reuse them (below).
+The repo carries **three base templates**, plus twelve niche channel templates and the AI Influencer template, which reuse them (below).
 A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
@@ -31,7 +31,7 @@ title, the one-line description, and the networks each template is made for (`PL
 
 ### Niche channel templates
 
-On top of the base three, the repo carries **eleven niche channel templates**. Each is its base crew
+On top of the base three, the repo carries **twelve niche channel templates**. Each is its base crew
 with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
 pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
 [`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card
@@ -45,7 +45,7 @@ rules. Every generated short uses the base scene pipeline: script, one opening i
 image-to-video render per scene, then speech, creator-style captions, a ducked music bed and an
 ffmpeg join. A scene opens on a generated
 image unless a pinned skill names its opener — a shipped frame, or the previous take's last frame.
-Scenes run 5 to 15 seconds and total 15–30. The eight niche templates use `SEGMENTED_SHORT_FORM`
+Scenes run 5 to 15 seconds and total 15–30. The nine niche templates use `SEGMENTED_SHORT_FORM`
 only to pin Hailuo 3 first with Seedance 2.5 allowed; their pinned skill supplies the genre-specific
 scene grammar.
 
@@ -62,6 +62,7 @@ scene grammar.
 | `cartoons-irl` | AI Cartoons IRL Channel | `faceless` | `naive/channel-template-cartoons-irl` |
 | `dancing-animals` | AI Dancing Animals Channel | `faceless` | `naive/channel-template-dancing-animals` |
 | `roadster` | AI Impossible Roadster Channel | `faceless` | `naive/channel-template-roadster` |
+| `fruit-drama` | AI Fruit Drama Channel | `faceless` | `naive/channel-template-fruit-drama` |
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
 the first session. It publishes, installs and switches through the exact paths the base three do.
@@ -258,7 +259,7 @@ exception: in place of the dropped niche it keeps a single question, the channel
 |---|---|
 | `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster` | Posting cadence |
+| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `fruit-drama` | Posting cadence |
 | `channel-cloning` | Channel to clone · Posting cadence |
 | `ai-influencer` | Who is your influencer? · Photos of your character (optional) · Pick the looks · What is your influencer for? |
 | `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
@@ -307,7 +308,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
   allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
   or context explicitly ask for another. The generated short-form niches (`ufc`, `history`,
-  `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`)
+  `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`,
+  `fruit-drama`)
   pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed; `ai-influencer` pins
   `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
   `generate_image` is left unpinned, so it takes the cheapest priced model.
