@@ -110,11 +110,19 @@ export const ROADSTER = niche(FACELESS, {
   skill: "channel-template-roadster",
   seats: SEGMENTED_SHORT_FORM,
 });
+/** ADR-1286: photoreal cats living human lives, a recurring invented cat family, told in a few scenes. */
+export const CAT_STORIES = niche(FACELESS, {
+  name: "cat-stories",
+  title: "AI Cat Stories Channel",
+  description: "AI Cat Stories Channel is a template that builds an agent team that manages an entire social media account for you, producing short stories of cats living human lives. This lets you create the AI cat story videos that are going really viral right now.",
+  skill: "channel-template-cat-stories",
+  seats: SEGMENTED_SHORT_FORM,
+});
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) and `ai-influencer` (ADR-1360) reuse their crews.
+ * twelve niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314, ADR-1286) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -132,6 +140,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "dancing-animals": DANCING_ANIMALS,
   roadster: ROADSTER,
   "ai-influencer": AI_INFLUENCER,
+  "cat-stories": CAT_STORIES,
 };
 
 /**
