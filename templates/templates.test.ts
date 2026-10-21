@@ -6,11 +6,13 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
+import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
+  FOLLOWS_TOOL,
   PLATFORM_TOOLS,
   CADENCE_QUESTION,
   CADENCE_SLOTS,
@@ -45,7 +47,7 @@ const CATALOGUE = [
   "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
   "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
   "naive/channel-template-channel-cloning", "naive/channel-template-comics", "naive/channel-template-cartoons-irl",
-  "naive/channel-template-dancing-animals", "naive/channel-template-roadster",
+  "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-ai-influencer",
 ];
 
 const all = Object.values(TEMPLATES);
@@ -54,6 +56,11 @@ const SEGMENTED: TemplateName[] = [
   "ufc", "history", "animal-feast",
   "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster",
 ];
+/**
+ * Every template whose producer renders segments and joins them: the segmented niches and
+ * `ai-influencer`, which takes the same seats but its own models, questions and opening frames.
+ */
+const JOINS_SEGMENTS: TemplateName[] = [...SEGMENTED, "ai-influencer"];
 /** Segmented niches whose form is cadence-only; `channel-cloning` adds a `clone` question, so it is apart. */
 const CADENCE_ONLY_NICHES: TemplateName[] = SEGMENTED.filter((name) => name !== "channel-cloning");
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
@@ -70,15 +77,22 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "animal-feast": "faceless",
   "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
   "dancing-animals": "faceless", roadster: "faceless",
+  "ai-influencer": "faceless",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
   const out = { ...base } as Record<TemplateName, T>;
-  for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] = base[from]!;
+  for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] ??= base[from]!;
   return out;
 };
-/** A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base. */
+/**
+ * A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base
+ * — and, on `ai-influencer`, without the daily-cadence line its manager and scout are told instead of a
+ * cadence question.
+ */
 const unniched = (template: MediaTemplate, system: string): string =>
-  BASE_OF[template.name] === undefined ? system : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "");
+  BASE_OF[template.name] === undefined
+    ? system
+    : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "").replace(`${INFLUENCER_CADENCE} `, "");
 /** Expand a set of `template/seat` ids to include the same seats on each niche that mirrors the base. */
 const withNicheIds = (ids: readonly string[]): Set<string> => {
   const out = new Set(ids);
@@ -86,14 +100,37 @@ const withNicheIds = (ids: readonly string[]): Set<string> => {
   return out;
 };
 
-/** The platform's own rule for one tool (`permissionOf`, core `schema/agent.ts`), written out. */
-const permissionFor = (template: MediaTemplate, agent: string, tool: string): string => {
-  const toolset = seat(template, agent).tools!;
+/**
+ * Core's `NEVER_ALLOWED` (`schema/agent.ts`): `ALWAYS_ASKS` plus `create_character`, whose consent
+ * is a person's yes on its card (ADR-1360). Never `allow`, whatever the policy says.
+ */
+const NEVER_ALLOWED = ["apps.request_access", "company.set_logo", "company.set_brand", "create_character"];
+
+type Toolset = NonNullable<MediaTemplate["agents"][number]["tools"]>;
+
+/**
+ * The platform's own rule for one tool (`permissionOf`, core `schema/agent.ts` on vetta-mono main),
+ * written out. An unnamed ask-by-default tool asks only under a default that is not `deny`: "asking
+ * is never wider than what the agent was given".
+ */
+const resolve = (toolset: Toolset, tool: string): string => {
   const config = toolset.configs[tool];
   if (config?.enabled === false) return "deny";
-  if (["ask_operator", "request_tools"].includes(tool)) return (config?.permission ?? toolset.default_config.permission) === "deny" ? "deny" : "ask";
-  return config?.permission ?? (ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : toolset.default_config.permission);
+  const leader = FOLLOWS_TOOL[tool];
+  // An unnamed follower takes its leader's policy (core ADR-1309), and an ask-by-default one asks for an allow.
+  if (!config && leader) {
+    const led = resolve(toolset, leader);
+    return led === "allow" && ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : led;
+  }
+  if (["ask_operator", "request_tools", ...NEVER_ALLOWED].includes(tool)) {
+    return (config?.permission ?? toolset.default_config.permission) === "deny" ? "deny" : "ask";
+  }
+  if (config?.permission) return config.permission;
+  const fallback = toolset.default_config.permission;
+  return fallback !== "deny" && ASK_BY_DEFAULT_TOOLS.includes(tool) ? "ask" : fallback;
 };
+
+const permissionFor = (template: MediaTemplate, agent: string, tool: string): string => resolve(seat(template, agent).tools!, tool);
 
 /** Every word a template puts in front of its crew: the briefs, the fires and the cards. */
 const everyPrompt = (template: MediaTemplate) => [
@@ -161,18 +198,24 @@ describe("the toolsets", () => {
    */
   it("lets the publisher post, only with the operator's yes, and denies every other seat", () => {
     for (const { template, agent, id } of everySeat) {
-      expect(agent.tools?.configs["social.post"], id).toEqual(
-        agent.name === PUBLISHER ? { enabled: true, permission: "ask" } : { enabled: false, permission: "deny" },
-      );
+      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1360 (i)).
+      const publishes = template.name === "ai-influencer" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
+      expect(agent.tools?.configs["social.post"], id).toEqual(agent.name === PUBLISHER ? publishes : { enabled: false, permission: "deny" });
       expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
     }
   });
 
-  /** The other tools the platform holds for approval — email, legal, wallet, card — no seat needs. */
+  /**
+   * The other tools the platform holds for approval — email, legal, wallet, card — no seat needs. The
+   * one paid tool a seat may ask for is training a face, on the `ai-influencer` producer.
+   */
   it("denies every other publish, pay or file tool to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
-      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post")) {
-        expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
+      // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an
+      // edit — except on ai-influencer, where an edit could change the face (asserted there).
+      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post" && name !== "edit_video")) {
+        const asks = id === "ai-influencer/producer" && tool === "create_character";
+        expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe(asks ? "ask" : "deny");
       }
     }
   });
@@ -187,9 +230,9 @@ describe("the toolsets", () => {
   });
 
   /** Offered to every session and asking by default; a media seat has no app and no say over the company. */
-  it("denies the company's timezone and logo and an app's key to every seat by name", () => {
+  it("denies the company's timezone, logo and brand and an app's key to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
-      for (const tool of ["company.set_timezone", "company.set_logo", "apps.request_access"]) {
+      for (const tool of ["company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access"]) {
         expect(agent.tools?.configs[tool], `${id}/${tool}`).toEqual({ enabled: false, permission: "deny" });
         expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe("deny");
       }
@@ -285,8 +328,10 @@ describe("the toolsets", () => {
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`); every other renderer the base's.
-      expect(video.config, id).toEqual({ models: SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS });
+      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`), the influencer the ones
+      // measured keeping a face; every other renderer the base's.
+      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS;
+      expect(video.config, id).toEqual({ models });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
@@ -350,6 +395,17 @@ describe("the board", () => {
         "report-frame": ["channel-plan"],
         "first-briefs": ["look", "hook-style", "character-bible"],
       },
+      // H5: the face and the persona start the first piece; the study runs after it starts.
+      // The influencer's bible is drawn from the persona, so it waits on nothing either.
+      "ai-influencer": {
+        "channel-plan": [],
+        look: [],
+        "character-bible": [],
+        "hook-style": [],
+        "report-frame": ["channel-plan"],
+        "first-briefs": ["look", "hook-style", "character-bible"],
+        "reference-study": ["first-briefs"],
+      },
       longform: {
         "channel-plan": [],
         "reference-study": [],
@@ -374,8 +430,8 @@ describe("the board", () => {
         for (const blocker of task.blocked_by ?? []) expect(seen, `${template.name}/${task.key}`).toContain(blocker);
         seen.add(task.key);
       }
-      // The piece is started by the head of the pipeline, and it is last.
-      expect(template.tasks.at(-1)?.assignee, template.name).toBe(template.pipeline[0]);
+      // The piece is started by the head of the pipeline, and it is last (the influencer's study follows it, H5).
+      expect((template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1))?.assignee, template.name).toBe(template.pipeline[0]);
     }
   });
 
@@ -389,7 +445,9 @@ describe("the board", () => {
     expect(TEMPLATES.longform.tasks.at(-1)?.key).toBe("first-topic");
     expect(TEMPLATES.clipping.tasks.at(-1)?.key).toBe("first-moments");
     for (const template of all) {
-      expect(template.tasks.at(-1)?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
+      // The influencer's study waits on its first piece, so it is declared after it (H5).
+      const piece = template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1);
+      expect(piece?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
       expect(template.tasks.map((task) => task.key), template.name).not.toContain("first-piece");
     }
   });
@@ -585,12 +643,12 @@ describe("analytics", () => {
 describe("the prompts", () => {
   /** A render lands on its own; a seat that sleeps between polls pays for every second of it. */
   it("has the short-form producer end its turn while a render runs, never sleep or poll", () => {
-    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) expect(seat(TEMPLATES[name], "producer").system, name).toMatch(/end your turn, and never sleep or poll/);
+    for (const name of ["faceless", ...JOINS_SEGMENTS] as TemplateName[]) expect(seat(TEMPLATES[name], "producer").system, name).toMatch(/end your turn, and never sleep or poll/);
   });
 
   /** Research is the scriptwriter's open-ended spend: it starts from the teardown and has a stop. */
   it("has the scriptwriter read the teardown first and stop researching past $1 of session_spend", () => {
-    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+    for (const name of ["faceless", ...JOINS_SEGMENTS] as TemplateName[]) {
       const brief = seat(TEMPLATES[name], "scriptwriter").system ?? "";
       expect(brief, name).toMatch(/FIRST read the teardown/);
       expect(brief, name).toMatch(/Then open the exemplars the brief names/);
@@ -740,9 +798,16 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The cadence is one question, spelled once, on every template. */
+  /**
+   * The cadence is one question, spelled once, on every template but `ai-influencer`: its four are
+   * who, their photos, the looks and what for, so it posts daily and tells the two seats that read a
+   * cadence so.
+   */
   it("asks the cadence on every template, the same question object", () => {
-    for (const template of all) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
+    for (const template of all.filter((one) => one.name !== "ai-influencer")) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
+    const influencer = TEMPLATES["ai-influencer"];
+    expect(influencer.questions.map((q) => q.key)).not.toContain("cadence");
+    for (const name of [PUBLISHER, "trend-scout"]) expect(seat(influencer, name).system, name).toContain(INFLUENCER_CADENCE);
   });
 
   it("is keyed by the name `defineProject({ template })` uses, and one of them is running", () => {
@@ -777,6 +842,8 @@ describe("the length each template makes, and the money that follows from it", (
   /** A seat whose ceiling cannot pay for the piece it renders parks mid-turn with the video bought. */
   it("gives every seat a ceiling that clears a render, and the renderer a whole piece", () => {
     for (const { template, agent, id } of everySeat) {
+      // The influencer's seats are sized to its own render (H5): checked in its own block below.
+      if (template.name === "ai-influencer") continue;
       expect(agent.budget.max_task_micro_usd, id).toBeGreaterThan(ONE_RENDER_MICRO_USD);
       if (agent.tools?.configs["generate_video"]?.enabled === true) {
         expect(agent.budget.max_task_micro_usd, id).toBeGreaterThan(renderMicroUsd(template.length));
@@ -1045,13 +1112,15 @@ describe("the generated short-form scene pipeline", () => {
  * tool no seat can be granted or denied, so it is held to a pinned copy of the platform's list.
  */
 describe("the built-in tool list", () => {
-  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at fc7923648 (2026-09-27). */
+  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at 15bef0ee0 (2026-10-17). */
   const CORE_BUILTIN_TOOLS = [
     "bash", "read", "write", "edit", "ls", "find",
-    "browser", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video", "apps",
+    "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video",
+    "create_character", "get_character", "list_characters", "delete_character", "apps",
     "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
     "ask_operator", "request_tools", "project_context",
-    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo",
+    "data_search", "data_describe", "data_run", "session_spend",
     "show", "compose", "write_plan", "propose_plan",
   ];
   /** The same file's `PLATFORM_TOOLS`, at the same commit. */
@@ -1063,7 +1132,7 @@ describe("the built-in tool list", () => {
     "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
     "wallet.balance", "wallet.transactions", "wallet.receipts", "wallet.quote", "wallet.pay", "wallet.transfer",
     "card.list", "card.show", "card.quote", "card.transactions", "card.spend", "card.issue", "card.credentials", "card.cancel",
-    "company.set_timezone", "company.set_logo", "apps.request_access",
+    "company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access",
   ];
   const drift = (ours: readonly string[], core: string[]) => ({
     missing: core.filter((name) => !ours.includes(name)),
@@ -1082,11 +1151,252 @@ describe("the built-in tool list", () => {
     expect(drift(PLATFORM_TOOLS, CORE_PLATFORM_TOOLS), `templates/template.ts PLATFORM_TOOLS ${HOW}`).toEqual({ missing: [], extra: [] });
   });
 
+  /**
+   * Naming a tool denied is the pin, not the policy: under a `deny` default an unnamed tool already
+   * resolves `deny` on the platform, ask-by-default or not. So re-copying core's lists (a tool added
+   * to them is denied by name on every seat not granted it) changes no seat's resolved permission —
+   * this holds every seat to that, so a re-copy can never quietly tighten or widen another template.
+   */
+  it("resolves every seat the same with or without its by-name denials", () => {
+    const pinned: readonly string[] = [...BUILTIN_TOOLS, ...PLATFORM_TOOLS];
+    const names = [...pinned, ...Object.keys(FOLLOWS_TOOL)];
+    for (const { agent, id } of everySeat) {
+      const tools = agent.tools!;
+      expect(tools.default_config.permission, id).toBe("deny");
+      // Only the pinned lists' denials; a follower a template denies by name (`edit_video`) is its own policy.
+      const kept = Object.entries(tools.configs).filter(([name, c]) => c.enabled !== false || !pinned.includes(name));
+      const unnamed = { ...tools, configs: Object.fromEntries(kept) };
+      for (const tool of names) expect(resolve(unnamed, tool), `${id}/${tool}`).toBe(resolve(tools, tool));
+    }
+  });
+
   /** Core's `ASK_BY_DEFAULT_TOOLS`, pinned: each falls to `ask` unless a toolset names it. */
   it("pins the platform's ask-by-default list", () => {
     expect([...ASK_BY_DEFAULT_TOOLS].sort()).toEqual([
-      "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_logo", "company.set_timezone",
-      "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "social.post", "wallet.pay", "wallet.transfer",
+      "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_brand", "company.set_logo", "company.set_timezone",
+      "create_character", "data_run", "edit_video", "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
+      "social.post", "wallet.pay", "wallet.transfer",
     ]);
+  });
+});
+
+/**
+ * AI INFLUENCER (ADR-1360). One photoreal creator on the faceless crew: the character is a setup
+ * answer, every still of them is rendered with their character and a look, and every video starts
+ * from such a still. Its form is the four approved questions, with pictures that are the dashboard's
+ * own files (vetta-mono `apps/web/public/setup/`).
+ */
+describe("the AI Influencer template", () => {
+  const AI = TEMPLATES["ai-influencer"];
+  const LOOK_SLUGS = [
+    "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
+    "foggy-morning", "rainy-day", "90s-editorial", "wide-angle-outfit", "elevator-mirror", "escalator", "tokyo-street-style",
+  ];
+  /** The first-party pictures vetta-mono ships for the form (canonical-spec §33.6, SPEC §4.6). */
+  const ASSETS = new Set([
+    ...["priya-raman", "maya-elusing", "hank-delgado", "ava-lindqvist"].map((slug) => `/setup/characters/${slug}.jpg`),
+    "/setup/characters/upload.svg",
+    "/setup/looks/usual.jpg",
+    ...LOOK_SLUGS.map((slug) => `/setup/looks/${slug}.jpg`),
+  ]);
+
+  it("asks who, their photos, the looks and what for — four, in that order, three required", () => {
+    expect(AI.questions.map((q) => [q.key, q.type, q.optional === true])).toEqual([
+      ["character", "choice", false],
+      ["photos", "media", true],
+      ["looks", "choice", false],
+      ["purpose", "text", false],
+    ]);
+    const [who, , looks] = [AI.questions[0]!, AI.questions[1]!, AI.questions[2]!];
+    expect(who.type === "choice" && [who.options, who.multiple, who.other]).toEqual([
+      ["Priya Raman", "Maya Elusing", "Hank Delgado", "Ava Lindqvist", "Upload your own photos"],
+      false,
+      false,
+    ]);
+    expect(looks.type === "choice" && [looks.options.length, looks.options[0], looks.multiple, looks.other]).toEqual([12, "Their usual looks", true, false]);
+  });
+
+  it("pictures every option with a file on the dashboard itself, and every option has one", () => {
+    for (const question of AI.questions) {
+      if (question.type !== "choice") continue;
+      expect(question.details?.map((one) => one.option), question.key).toEqual(question.options);
+      for (const detail of question.details ?? []) {
+        expect(detail.image, detail.option).toMatch(/^\/(?!\/)/);
+        expect(ASSETS.has(detail.image!), `${detail.option} → ${detail.image}`).toBe(true);
+        expect((detail.note ?? "").length, detail.option).toBeLessThanOrEqual(120);
+      }
+    }
+  });
+
+  it("is a form and a crew the engine will install", async () => {
+    const { defineProject } = await import("@usenaive-sdk/blueprints");
+    const { declaration } = await import("../naive.config.ts");
+    const project = defineProject({ ...declaration, template: "ai-influencer", title: AI.title, description: AI.description, questions: AI.questions, tasks: AI.tasks });
+    expect(project.template).toBe("ai-influencer");
+  });
+
+  it("lets the producer read characters and train one only with the operator's yes; no other seat trains or deletes", () => {
+    for (const agent of AI.agents) {
+      const id = `ai-influencer/${agent.name}`;
+      expect(permissionFor(AI, agent.name, "create_character"), id).toBe(agent.name === "producer" ? "ask" : "deny");
+      expect(permissionFor(AI, agent.name, "delete_character"), id).toBe("deny");
+      // A video edit can change the face: denied by name, not left to follow generate_video.
+      expect(agent.tools?.configs["edit_video"], id).toEqual({ enabled: false, permission: "deny" });
+      expect(permissionFor(AI, agent.name, "get_character"), id).toBe(["producer", "scriptwriter"].includes(agent.name) ? "allow" : "deny");
+      expect(permissionFor(AI, agent.name, "list_characters"), id).toBe(agent.name === "producer" ? "allow" : "deny");
+      expect(agent.skills, id).toContain("naive/channel-template-ai-influencer");
+    }
+    for (const template of all.filter((one) => one !== AI)) {
+      for (const agent of template.agents) expect(permissionFor(template, agent.name, "create_character"), `${template.name}/${agent.name}`).toBe("deny");
+    }
+  });
+
+  it("trains an uploaded face only with consent on the operator's yes, and labels every post AI-generated", () => {
+    const meet = AI.tasks.find((card) => card.title === "Meet the influencer")!;
+    expect(meet.body).toMatch(/create_character\{name, image_urls, style_pack:.*consent:\{attested:true\}\}/);
+    expect(meet.body).toMatch(/operator's yes, which is their confirmation that the person in the photos is them or agreed to it/);
+    expect(meet.body).toMatch(/Refused as a public figure/);
+    expect(AI.questions.find((q) => q.key === "photos")?.help).toMatch(/approving the training confirms it/);
+    for (const agent of AI.agents) {
+      const post = agent.tools?.configs["social.post"];
+      if (post?.enabled) expect(post.config, agent.name).toEqual({ ai_generated: true });
+    }
+  });
+
+  it("animates a still of the character on the models measured keeping a face, and never opens on another frame", () => {
+    const producer = seat(AI, "producer");
+    expect(producer.tools?.configs["generate_video"]?.config).toEqual({ models: AI_INFLUENCER_VIDEO_MODELS });
+    expect(AI_INFLUENCER_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
+    expect(producer.skills).toEqual(["naive/video-assembly", "naive/channel-template-ai-influencer"]);
+    expect(producer.system).toMatch(/generate_image with character \(the chr_ id on the Meet the influencer note\) and style/);
+    expect(producer.system).toMatch(/call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: \["<fil_ id>"\] holding that scene's accepted image/);
+    expect(producer.system).toMatch(/never a frame cut from a clip/);
+    expect(producer.system).toContain(RENDER_MODEL_RULE);
+    // The scene pipeline's shipped-frame and last-frame openers are replaced, not left beside the influencer's.
+    expect(producer.system).toContain(PRODUCER_SCENE_STEP);
+    expect(producer.system).not.toMatch(/OPENING FRAME is a pinned skill's shipped frame|pull its last frame with ffmpeg|Keep exact dialogue in the prompt/);
+    const scriptwriter = seat(AI, "scriptwriter").system!;
+    expect(scriptwriter).toContain(SCRIPTWRITER_IMAGE_RULE);
+    expect(scriptwriter).toMatch(/re-poses that still: action and framing only, no new place; never a shipped frame, URL or last frame/);
+    expect(scriptwriter).not.toMatch(/name it as the scene's OPENING FRAME|ambience and exact dialogue/);
+    // Fix r2 (H1): a later segment named "a kitchen nook" and its edit left segment 1's bedroom.
+    expect(seat(AI, "scriptwriter").system).not.toMatch(/prompted with action, setting and framing/);
+    expect(AI.tasks.find((card) => card.key === "look")?.body).toMatch(/paused on the platform.s side.*never call create_character again/);
+  });
+
+  it("draws no words into a render, and keeps one outfit and setting across a piece's segments", () => {
+    // Staging round 2: the plan's on-screen text went into the clip's prompt and was burned in again
+    // at step 5b, so every caption showed twice; and each segment's still changed clothes and room.
+    const producer = seat(AI, "producer").system!;
+    expect(producer).toContain(NO_DRAWN_WORDS);
+    expect(NO_DRAWN_WORDS).toMatch(/not a spoken line, the on-screen text, a caption or a sign/);
+    expect(producer).toMatch(/in the piece's one outfit and setting/);
+    const scriptwriter = seat(AI, "scriptwriter").system!;
+    expect(scriptwriter).toContain(ONE_OUTFIT);
+    // A quoted line draws itself into the clip (round 3): the line stays in the plan and is voiced in the edit.
+    expect(scriptwriter).toContain(SCRIPTWRITER_VIDEO_CARRIES);
+    expect(SCRIPTWRITER_VIDEO_CARRIES).toMatch(/never the line itself/);
+    // Never who they are (ADR-1360 (cc)): a plan that said "athletic woman" drew a trained bearded man as a woman.
+    expect(scriptwriter).toMatch(/No image_prompt or video_prompt says gender, age, face, hair, build or any words/);
+  });
+
+  it("meets the influencer on the look card's key, and tells the first piece who it is about", () => {
+    const meet = AI.tasks.find((one) => one.key === "look")!;
+    // Waits on nothing: the study opening pages (staging round 1 stalled there) never holds the face up.
+    expect([meet.title, meet.assignee, meet.blocked_by]).toEqual(["Meet the influencer", "producer", []]);
+    expect(meet.body).toMatch(/get_character\{character:<its id>\}/);
+    // By fixed id, never by name: an org's own character of the same name would win a lookup by name.
+    for (const creator of PREBUILT_CREATORS) expect(meet.body).toContain(`${creator.name} = ${creator.id}`);
+    // "Their usual looks" is no look name: a trained face gets the picked looks without it, or the defaults.
+    expect(meet.body).toContain(`style_pack:<the picked looks without "Their usual looks"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>`);
+    expect(meet.body).toMatch(/generate_image\{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"\}/);
+    expect(meet.body).toMatch(/generate_video\{character, image_urls:\[the still\]\}/);
+    expect(AI.tasks.find((one) => one.key === "first-briefs")!.body).toMatch(/This channel is one person/);
+    // No niche question: every card and seat that looks for "the niche" is told it is the influencer's.
+    for (const key of ["reference-study", "first-briefs"]) expect(AI.tasks.find((one) => one.key === key)!.body, key).toContain(INFLUENCER_NICHE);
+    expect(seat(AI, "trend-scout").system).toContain(INFLUENCER_NICHE);
+    // A page the browser will not open is worked around on every card and seat that opens pages.
+    for (const key of ["reference-study", "first-briefs"]) expect(AI.tasks.find((one) => one.key === key)!.body, key).toContain(INFLUENCER_PAGES);
+    // The scriptwriter's brief is at its word cap: its pinned skill says the same (vetta-mono SKILL.md §pages).
+    expect(seat(AI, "trend-scout").system).toContain(INFLUENCER_PAGES);
+    expect(INFLUENCER_PAGES).toMatch(/Never sign up or log in/);
+    // The faceless template keeps its own look card.
+    expect(TEMPLATES.faceless.tasks.find((one) => one.key === "look")!.title).toBe("Choose the look this channel renders in");
+  });
+
+  it("keeps one set across a piece: later scenes open on scene 1's still re-posed (H1)", () => {
+    const producer = seat(AI, "producer").system!;
+    expect(producer).toContain(ONE_SET);
+    expect(ONE_SET).toMatch(/generate_image with character, image_urls \[scene 1's accepted image\]/);
+  });
+
+  it("shows a call to action only in the last scene; the label stays a disclosure (H2)", () => {
+    expect(seat(AI, "producer").system).toMatch(/the label is a disclosure only and a call to action sits in the last scene only/);
+    // Owner, 2026-10-20: a realistic face, so the burned-in AI label is required on every frame, in the producer's own appended line.
+    expect(seat(AI, "producer").system).toContain(INFLUENCER_AI_LABEL);
+    expect(INFLUENCER_AI_LABEL).toMatch(/Every frame of every finished piece carries a burned-in on-screen "AI-generated" label/);
+    // The plan's beats already end on the cta (the scriptwriter's base brief); the producer burns it in last.
+    expect(seat(AI, "scriptwriter").system).toMatch(/hook, setup, turn, payoff, cta/);
+  });
+
+  it("starts the first piece without the study, and caps the study and every seat (H5)", () => {
+    const card = (key: string) => AI.tasks.find((one) => one.key === key)!;
+    expect([card("hook-style").blocked_by, card("hook-style").body]).toEqual([[], expect.stringMatching(/do not wait for the reference-study card/)]);
+    expect([card("reference-study").assignee, card("reference-study").blocked_by]).toEqual(["analyst", ["first-briefs"]]);
+    expect(card("reference-study").body).toMatch(/At most two videos .* download nothing and sample no frames\. Stop once session_spend reads past \$0\.40/);
+    // Day one's first piece is lean end to end (fix r1: 33.9 min and $6.42 with the scriptwriter sampling exemplar frames).
+    // r3 verify: 36 min with the scout and scriptwriter still browsing, so day one's piece uses no web at all.
+    expect(card("first-briefs").body).toMatch(/no web_search, browser or web_fetch for it.*the scriptwriter does no research, browsing, download or frame sampling/);
+    expect(card("first-briefs").body).toContain(DAY_ONE_PIECE);
+    expect(DAY_ONE_PIECE).toMatch(/15 seconds in three 5-second scenes/);
+    expect(DAY_ONE_PIECE).toMatch(/voiceover is one line of at most 12 words/);
+    // The hard stops: each seat's ceiling, every fire inside it, and the study's cap under the analyst's.
+    for (const agent of AI.agents) {
+      expect(agent.budget, agent.name).toEqual(AI_INFLUENCER_BUDGETS[agent.name]);
+      for (const fire of agent.schedules ?? []) expect(fire.budget_micro_usd, agent.name).toBeLessThanOrEqual(agent.budget.max_task_micro_usd);
+    }
+    expect(STUDY_SPEND_MICRO_USD).toBeLessThan(AI_INFLUENCER_BUDGETS["analyst"]!.max_task_micro_usd);
+    // The producer clears a whole 30-second piece on this template's own render price.
+    expect(AI_INFLUENCER_BUDGETS["producer"]!.max_task_micro_usd).toBeGreaterThan(AI.length.max * AI_INFLUENCER_MICRO_USD_PER_SECOND);
+  });
+
+  /**
+   * The scene pipeline (#55) on an influencer: the base's preflight, bible, AUDIO MODE, edit and VERIFY
+   * are kept word for word; its scene step and opening-frame rules are replaced; and the legacy
+   * pre-bible path is dropped, because no influencer plan is written before the day-one bible.
+   */
+  it("runs the scene pipeline with the influencer's scene step, and its own bible on day one", () => {
+    const producer = seat(AI, "producer").system!;
+    for (const kept of [/script -> images -> video -> editing/, /PREFLIGHT BEFORE SPEND/, /cites no bible note/, /SCENE <index> IMAGE <fil_ id>/, /SCENE <index> VIDEO FAILED/, /re-render it once; a second failure means STOPPED/, /Never re-render a completed scene/, /AUDIO MODE: NATIVE/, /AUDIO MODE: GENERATED/, /Never use amix/, /never cut mid-word, mid-gesture or before the reaction lands/, /publish_file the one finished video/]) {
+      expect(producer, String(kept)).toMatch(kept);
+    }
+    expect(producer).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(AI.length)}, view_image one frame per scene, and transcribe_audio it`);
+    expect(producer).toContain(CONTINUITY_RULE);
+    expect(producer).not.toMatch(/planned before the bible/);
+    expect(producer).toMatch(/Every Render card must hold source provenance/);
+    expect(producer.split("Work resumably from the Render card's comments.").length).toBe(2);
+    const scriptwriter = seat(AI, "scriptwriter").system!;
+    for (const kept of [/SOURCE PROVENANCE/, /CONTINUITY CONTRACT/, /STORY LOGIC/, /CUT MAP/, /cold-viewer check/, /hook, setup, turn, payoff, cta/]) expect(scriptwriter, String(kept)).toMatch(kept);
+    expect(scriptwriter).not.toMatch(/With no bible note yet/);
+    expect(scriptwriter).toContain(CONTINUITY_RULE);
+    // The scout starts nothing without a bible, so the dropped path is never reached.
+    expect(seat(AI, "trend-scout").system).toMatch(/With no bible note yet, start nothing/);
+    const bible = AI.tasks.find((card) => card.key === "character-bible")!;
+    expect([bible.assignee, bible.blocked_by]).toEqual(["scriptwriter", []]);
+    expect(bible.body).toMatch(/beginning "DRAFT CHARACTER BIBLE"/);
+    expect(bible.body!.indexOf("Close this card")).toBeLessThan(bible.body!.indexOf("ask_operator"));
+    expect(bible.body).toMatch(/APPROVED CHARACTER BIBLE/);
+    expect(bible.body).toMatch(/Open no page and sample no video/);
+    for (const creator of PREBUILT_CREATORS) expect(bible.body).toContain(`${creator.name} = ${creator.id}`);
+    expect(bible.body).toMatch(/never gender, age, face, hair or build/);
+  });
+
+  it("refuses to build when the base no longer carries a span it replaces", () => {
+    expect(() => replaceSpan("no such text", { from: "Work resumably", to: "After" }, "x", "producer")).toThrow(/no longer carries/);
+    expect(replaceSpan("a FROM b TO c", { from: "FROM", to: " TO" }, "X", "p")).toBe("a X TO c");
+  });
+
+  it("names no vendor anywhere a person or a seat reads it", () => {
+    expect(JSON.stringify(AI)).not.toMatch(/higgsfield|\bsoul\b/i);
   });
 });

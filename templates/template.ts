@@ -32,7 +32,9 @@ export type TemplateName =
   | "cartoons-irl"
   | "dancing-animals"
   // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
-  | "roadster";
+  | "roadster"
+  // One photoreal creator on the faceless crew (ADR-1360): the character is a setup answer, not a niche.
+  | "ai-influencer";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -165,6 +167,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "cartoons-irl": "first-briefs",
   "dancing-animals": "first-briefs",
   roadster: "first-briefs",
+  "ai-influencer": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -391,15 +394,17 @@ const SLOTS = `${Object.entries(CADENCE_SLOTS).map(([answer, days]) => `${answer
 /**
  * Every built-in tool the platform publishes, pinned: a blueprint imports no workspace package, and
  * `toolset` denies by name every one a seat is not granted. `templates.test.ts` holds it to a copy
- * of core's `BUILTIN_TOOLS` (vetta-mono `packages/core/src/schema/agent.ts` at fc7923648).
+ * of core's `BUILTIN_TOOLS` (vetta-mono `packages/core/src/schema/agent.ts` at 15bef0ee0).
  */
 export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
-  "browser", "read_skill", "publish_file", "web_search", "web_fetch",
-  "generate_image", "generate_video", "clip_video", "apps",
+  "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch",
+  "generate_image", "generate_video", "clip_video",
+  "create_character", "get_character", "list_characters", "delete_character", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "project_context",
-  "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo", "session_spend",
+  "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo",
+  "data_search", "data_describe", "data_run", "session_spend",
   "show", "compose", "write_plan", "propose_plan",
 ] as const;
 
@@ -417,21 +422,30 @@ export const PLATFORM_TOOLS = [
   "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
   "wallet.balance", "wallet.transactions", "wallet.receipts", "wallet.quote", "wallet.pay", "wallet.transfer",
   "card.list", "card.show", "card.quote", "card.transactions", "card.spend", "card.issue", "card.credentials", "card.cancel",
-  "company.set_timezone", "company.set_logo", "apps.request_access",
+  "company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access",
 ] as const;
 
 /**
  * The platform tools that publish, pay, file or change the company's settings — core's
- * `ASK_BY_DEFAULT_TOOLS`, pinned. A toolset that does not name one gets `ask`, whatever its default
- * says, so every seat names each of them. `company.set_timezone`, `company.set_logo` and
- * `apps.request_access` are offered to every session: a media seat has no app to request and no
- * business changing the company's clock or logo, so each is denied by name.
+ * `ASK_BY_DEFAULT_TOOLS`, pinned. Under a `deny` default an unnamed one is already `deny` on the
+ * platform ("asking is never wider than what the agent was given"); every seat still names each of
+ * them, so the policy reads off the toolset and does not lean on that rule. `company.set_timezone`, `company.set_logo`,
+ * `company.set_brand` and `apps.request_access` are offered to every session: a media seat has no app
+ * to request and no business changing the company's clock, logo or brand, so each is denied by name —
+ * as are `mobile`, `data_run`, `create_character` (except where a template grants it: the
+ * `ai-influencer` producer asks for it), `data_search` and `data_describe`. `edit_video` is
+ * not a built-in: it follows `generate_video` unless named (`FOLLOWS_TOOL`), so a seat with
+ * `generate_video` asks for it.
  */
 export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
+  "mobile", "data_run", "edit_video", "create_character",
   "social.post", "email.send", "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
   "wallet.pay", "wallet.transfer", "card.issue", "card.credentials", "card.cancel",
-  "company.set_timezone", "company.set_logo", "apps.request_access",
+  "company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access",
 ];
+
+/** Core's `FOLLOWS_TOOL`, pinned (ADR-1309): a follower takes its leader's policy unless a toolset names it. */
+export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "generate_video" };
 
 /**
  * The video models a seat may render with, first is the default. `generate_video` derives no
