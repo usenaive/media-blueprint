@@ -341,6 +341,9 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and Long Form writer sample
   frames; Short Form and Long Form producers assemble segments.
+- When the platform applies a template (vetta-mono ADR-1484) every seat also gets `apps` at `ask`
+  and `read`, `write`, `edit`, `ls`, `find`, `bash` at `allow`, so the crew can pull, change and
+  deploy Media manager or build an app of its own. Each app action waits on an approval card.
 
 ## 🔁 Switching template
 

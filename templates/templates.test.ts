@@ -3,7 +3,8 @@
  *
  * The crew works on the platform's primitives: a chain of cards on the company board per piece,
  * renders in the Media gallery, and every post on the platform's approval card. The blueprint carries
- * one hosted app, Media manager, whose source is in `apps/media-manager`; no seat's tools are its.
+ * one hosted app, Media manager, whose source is in `apps/media-manager`; the engine, not this data,
+ * gives every seat `apps` and the file tools (vetta-mono ADR-1484).
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";

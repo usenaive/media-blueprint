@@ -493,7 +493,10 @@ const EVERY_SEAT: readonly string[] = [
  * A seat's toolset: the named tools allowed, the `ask` ones held for the operator, and everything
  * else denied — every built-in and every platform tool (social, publish, pay, settings) by name, and the
  * rest by the default. `deny` is the default because a connected account adds tools no blueprint
- * can name; the publisher's `social.post` is the one way out.
+ * can name; the publisher's `social.post` is the one way out. The engine (vetta-mono ADR-1484, engine
+ * 0.12.0) then gives every template seat `apps` at `ask` and `read`, `write`, `edit`, `ls`, `find`,
+ * `bash` at `allow` over this by-name deny, so the crew can pull, edit and deploy Media manager or an
+ * app of its own with a person approving each app action. What this returns is the declaration only.
  */
 export const toolset = (allow: readonly string[], ask: readonly string[] = []) => {
   const named = new Set([...allow, ...ask, ...ALWAYS]);

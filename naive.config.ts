@@ -47,7 +47,8 @@ export const declaration = {
    * One hosted app, Media manager: the channel's posts and numbers on one page (vetta-mono ADR-1482).
    * Its SOURCE ships in `apps/media-manager` and the host builds it, so the crew's agents can pull,
    * change and deploy it like an app they made. It replaces the 2.x mini app. `NAIVE_API_KEY` is the
-   * read key the platform mints a template app (§29.7); `DASHBOARD_TOKEN` gates it behind Naive's
+   * read key the platform mints a template app (§29.7); it is only ever minted, so a laptop `naive up`
+   * skips it rather than copy your shell key into the app (ADR-1484); `DASHBOARD_TOKEN` gates it behind Naive's
    * sign-in. Not `required`: an install may leave it out.
    */
   apps: [
