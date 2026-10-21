@@ -164,7 +164,7 @@ describe("the crews", () => {
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
         : false;
-      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 700 : 360);
+      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 745 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
@@ -1011,8 +1011,9 @@ describe("the generated short-form scene pipeline", () => {
       expect(clause, name).toMatch(/[Rr]ender only what the card's comments do not yet record/);
       expect(clause, name).toMatch(/comment each render's fil_ id and segment index/);
       expect(clause, name).toMatch(/a failed render is re-rendered once; a second failure means STOPPED/);
-      // A legacy segmented piece still gets its text and voice before it ships.
-      expect(clause, name).toMatch(/finish per `naive\/video-assembly`: burn in the plan's hook and label text, and voice a silent take or join with generate_speech/);
+      // A legacy segmented piece still gets its voice, then the same captioned, scored edit, before it ships.
+      expect(clause, name).toMatch(/voice a silent take or join with generate_speech, then EDIT, VERIFY and publish as below/);
+      expect(clause, name).not.toMatch(/label text/);
       expect(clause, name).toMatch(/Publish card omits scene ids and AUDIO MODE/);
       const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system!;
       expect(scriptwriter, name).toMatch(/With no bible note yet, write the plan as before/);
@@ -1080,12 +1081,34 @@ describe("the generated short-form scene pipeline", () => {
       expect(producer, name).toMatch(/generate_speech/);
       expect(producer, name).toMatch(/AUDIO MODE: NATIVE/);
       expect(producer, name).toMatch(/AUDIO MODE: GENERATED/);
-      expect(producer, name).toMatch(/Never use amix/);
+      expect(producer, name).toMatch(/REMOVE all original audio first/);
       expect(producer, name).toMatch(/exactly one intelligible voice/);
       expect(producer, name).toMatch(/do not substitute an undeclared local or system voice/i);
       expect(producer, name).toMatch(/ffmpeg/);
       expect(producer, name).toMatch(/ffprobe/);
       expect(producer, name).toMatch(/publish_file the one finished video/);
+    }
+  });
+
+  /** Owner feedback: captions in the creator's own style, a music bed, and no burned-in generic AI tag. */
+  it("captions in the pinned skill's style and scores a ducked music bed, with no generic AI label", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const template = TEMPLATES[name];
+      expect(permissionFor(template, "producer", "generate_music"), name).toBe("allow");
+      expect(permissionFor(template, "scriptwriter", "generate_music"), name).toBe("deny");
+      const producer = seat(template, "producer").system!;
+      const edit = producer.slice(producer.indexOf("EDIT per"), producer.indexOf("VERIFY the finished file"));
+      expect(edit, name).toMatch(/captions per the pinned skill's `## Captions and music` \(default: word-by-word/);
+      expect(edit, name).toMatch(/transcribe_audio word timings of the final dialogue track, after the join and before music, via libass/);
+      expect(edit, name).toMatch(/default: word-by-word, 2–3 uppercase words, spoken word red, white fill, dark outline, ~76% height, no box/);
+      expect(edit, name).toMatch(/join the scenes with ffmpeg/);
+      expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood, ducked under dialogue, instrumental: true, length_seconds the finished length rounded up; if it fails, publish without music and note that on the Publish card/);
+      expect(edit, name).toMatch(/No AI label unless a pinned skill requires one/);
+      for (const prompt of everyPrompt(template)) expect(prompt, name).not.toMatch(/AI-generated|label text/i);
+      expect(producer, name).toMatch(/exactly one intelligible voice over any music.*captions readable in each frame/);
+      expect(producer, name).toMatch(/missing scene or caption, or doubled voice means STOPPED/);
+      expect(producer, name).toMatch(/never patching a line with generate_speech/);
+      expect(seat(template, "scriptwriter").system, name).toMatch(/EDIT PLAN: [^.]*caption style \(default word-by-word\) and music mood per the pinned skill's `## Captions and music`/);
     }
   });
 
@@ -1111,14 +1134,14 @@ describe("the generated short-form scene pipeline", () => {
  * tool no seat can be granted or denied, so it is held to a pinned copy of the platform's list.
  */
 describe("the built-in tool list", () => {
-  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at 15bef0ee0 (2026-10-17). */
+  /** vetta-mono `packages/core/src/schema/agent.ts` `BUILTIN_TOOLS`, at 15bef0ee0 (2026-10-17), plus `generate_music` (b100c0be5). */
   const CORE_BUILTIN_TOOLS = [
     "bash", "read", "write", "edit", "ls", "find",
     "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video",
     "create_character", "get_character", "list_characters", "delete_character", "apps",
     "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
     "ask_operator", "request_tools", "project_context",
-    "transcribe_audio", "generate_speech", "find_files", "view_image", "fetch_file", "find_stock_photo",
+    "transcribe_audio", "generate_speech", "generate_music", "find_files", "view_image", "fetch_file", "find_stock_photo",
     "data_search", "data_describe", "data_run", "session_spend",
     "show", "compose", "write_plan", "propose_plan",
   ];
@@ -1365,7 +1388,7 @@ describe("the AI Influencer template", () => {
    */
   it("runs the scene pipeline with the influencer's scene step, and its own bible on day one", () => {
     const producer = seat(AI, "producer").system!;
-    for (const kept of [/script -> images -> video -> editing/, /PREFLIGHT BEFORE SPEND/, /cites no bible note/, /SCENE <index> IMAGE <fil_ id>/, /SCENE <index> VIDEO FAILED/, /re-render it once; a second failure means STOPPED/, /Never re-render a completed scene/, /AUDIO MODE: NATIVE/, /AUDIO MODE: GENERATED/, /Never use amix/, /never cut mid-word, mid-gesture or before the reaction lands/, /publish_file the one finished video/]) {
+    for (const kept of [/script -> images -> video -> editing/, /PREFLIGHT BEFORE SPEND/, /cites no bible note/, /SCENE <index> IMAGE <fil_ id>/, /SCENE <index> VIDEO FAILED/, /re-render it once; a second failure means STOPPED/, /Never re-render a completed scene/, /AUDIO MODE: NATIVE/, /AUDIO MODE: GENERATED/, /REMOVE all original audio first/, /never cut mid-word, mid-gesture or before the reaction lands/, /publish_file the one finished video/]) {
       expect(producer, String(kept)).toMatch(kept);
     }
     expect(producer).toContain(`VERIFY the finished file: ffprobe that it runs ${lengthPhrase(AI.length)}, view_image one frame per scene, and transcribe_audio it`);
