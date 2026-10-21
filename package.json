@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Media channel — a company blueprint on the Vetta platform, in three templates: Naive Short Form v1 (`faceless`), Naive Long Form v1 (`longform`) and Naive Clipping v1 (`clipping`). Data only: the crew runs on the platform's board, media gallery and approval card.",
+  "description": "Media channel — a company blueprint on the Vetta platform, in three templates: Naive Short Form v1 (`faceless`), Naive Long Form v1 (`longform`) and Naive Clipping v1 (`clipping`). The crew runs on the platform's board, media gallery and approval card; Media manager is a hosted app whose source agents can pull, change and deploy.",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

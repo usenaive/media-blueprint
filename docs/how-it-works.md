@@ -1,7 +1,8 @@
 # How the media blueprint works
 
-This repo is data. It declares a crew, its tools, its timers, its setup questions and its first
-day of cards. The platform runs all of it. There is no app of our own.
+This repo declares a crew, its tools, its timers, its setup questions and its first day of cards,
+and it carries one hosted app, Media manager, whose source is in `apps/media-manager`. The platform
+runs all of it. Agents can pull, change and deploy Media manager like any app.
 
 ## 1. What a template is
 
@@ -19,8 +20,11 @@ channel manager, the analyst's crons, the tool rules, the crew rules every promp
 - **The day-one cards** on the company board, keyed `media:<key>`. A re-apply answers the card it
   already wrote.
 - **The setup questions**, which the studio asks before anything is provisioned.
+- **Media manager**, a `fullstack` app deployed from its source in `apps/media-manager`. It is
+  signed in through Naive and reads posts, spend and the setup's cadence with the read key the
+  platform gives a template app. An install may leave it out.
 
-No app, no database, no deploy, no secret beyond your own `NAIVE_API_KEY`.
+No secret beyond your own `NAIVE_API_KEY`.
 
 ## 3. The board is the pipeline
 
