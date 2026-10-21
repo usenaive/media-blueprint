@@ -40,9 +40,9 @@ export type TemplateName =
   // One photoreal creator on the faceless crew (ADR-1360): the character is a setup answer, not a niche.
   | "ai-influencer"
   // ADR-1286: the cat-stories niche, same segmented `faceless` crew.
-  | "cat-stories";
+  | "cat-stories"
   // ADR-1289: the food-slime niche, same segmented `faceless` crew.
-  | "food-slime";
+  | "food-slime"
   // ADR-1288: the AI glass-food cutting ASMR format, on `faceless` (segmented).
   | "glass-food";
 
