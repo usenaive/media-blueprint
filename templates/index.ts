@@ -127,10 +127,19 @@ export const FOOD_SLIME = niche(FACELESS, {
   seats: SEGMENTED_SHORT_FORM,
 });
 
+/** ADR-1288: a food made of glass sliced slowly on a board — glass-cutting ASMR, three foods. */
+export const GLASS_FOOD = niche(FACELESS, {
+  name: "glass-food",
+  title: "AI Glass Food Channel",
+  description: "AI Glass Food Channel is a template that builds an agent team that manages an entire social media account for you, producing videos of foods made of glass being sliced with a knife. This lets you create the glass fruit cutting ASMR videos that are going really viral right now.",
+  skill: "channel-template-glass-food",
+  seats: SEGMENTED_SHORT_FORM,
+});
+
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * thirteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314, ADR-1286, ADR-1289) and `ai-influencer` (ADR-1360) reuse their crews.
+ * fourteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314, ADR-1286, ADR-1289, ADR-1288) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -150,6 +159,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "ai-influencer": AI_INFLUENCER,
   "cat-stories": CAT_STORIES,
   "food-slime": FOOD_SLIME,
+  "glass-food": GLASS_FOOD,
 };
 
 /**
