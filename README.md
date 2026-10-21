@@ -42,7 +42,8 @@ platform catalogue, not this repo.
 Where a niche's playbook needs a seat to do more than its base seat, `niche()` takes `seats`, which
 **extends** that seat: tools added at `allow`, skills appended, and a brief clause before the crew's
 rules. Every generated short uses the base scene pipeline: script, one opening image per scene, one
-image-to-video render per scene, then speech, text and an ffmpeg join. A scene opens on a generated
+image-to-video render per scene, then speech, creator-style captions, a ducked music bed and an
+ffmpeg join. A scene opens on a generated
 image unless a pinned skill names its opener — a shipped frame, or the previous take's last frame.
 Scenes run 5 to 15 seconds and total 15–30. The eight niche templates use `SEGMENTED_SHORT_FORM`
 only to pin Hailuo 3 first with Seedance 2.5 allowed; their pinned skill supplies the genre-specific
@@ -152,18 +153,22 @@ Step by step, on `faceless`:
    The card's body is the brief.
 2. **The scriptwriter** reads the character bible (approved, else the draft), looks inside the
    exemplars, researches, and writes the whole scene plan: provenance, continuity contract, image
-   and motion prompts, exact dialogue, edit instructions, sources and caption. It creates the
+   and motion prompts, exact dialogue, an edit plan naming the caption style and music mood, sources
+   and caption. It creates the
    **Render** card.
 3. **The producer** stops before spend only on an objective gap (a missing section or bible note,
    the wrong total length, no scenes) and posts one warning for judgement calls. It generates and
    checks each scene's opening image, passes it to `generate_video` as `image_urls: ["fil_…"]`,
    records every image and segment on the card, and retries a failed scene once. It transcribes the
    renders and chooses one dialogue source for the whole piece: native character performances or
-   generated speech over stripped audio, never both. It adds on-screen text, joins, then verifies
-   with ffprobe, one frame per scene and a transcript of the finished file, and creates the
+   generated speech over stripped audio, never both. It adds on-screen text, captions in the pinned
+   skill's style (word-by-word by default) timed from word timings, and a `generate_music` bed ducked
+   under dialogue — never a generic AI label — joins, then verifies with ffprobe, one frame per
+   scene (captions readable) and a transcript of the finished file (music audible, dialogue clear),
+   and creates the
    **Publish** card. A
    Render card planned before the bible existed is rendered as planned, resumably, then finished
-   with its text and voice.
+   with its voice and the same captioned, scored edit.
 4. **The channel manager** is woken on the Publish card. It checks the caption and calls
    `social.post`. The post waits on the approval card.
 5. **You** press Allow, or Don't allow with what to change. Allowed, it goes out at its slot.
@@ -320,7 +325,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - `social.post_metrics`: `allow` on `analyst` and `channel-manager`.
 - `company.set_timezone`, `company.set_logo` and `apps.request_access` are denied on every seat.
 - Every other built-in and platform tool (email, legal, wallet, card, connections) is denied by
-  name. `generate_speech` is on generated-short producers for exact dialogue;
+  name. `generate_speech` and `generate_music` are on generated-short producers for exact dialogue
+  and the music bed;
   `transcribe_audio` is on their scriptwriters for dialogue references.
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and Long Form writer sample
