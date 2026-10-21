@@ -1,8 +1,9 @@
 /**
  * The three templates this blueprint carries, as data.
  *
- * There is no app. The crew works on the platform's primitives: a chain of cards on the company
- * board per piece, renders in the Media gallery, and every post on the platform's approval card.
+ * The crew works on the platform's primitives: a chain of cards on the company board per piece,
+ * renders in the Media gallery, and every post on the platform's approval card. The blueprint carries
+ * one hosted app, Media manager, whose source is in `apps/media-manager`; no seat's tools are its.
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
@@ -187,7 +188,7 @@ describe("the crews", () => {
 });
 
 describe("the toolsets", () => {
-  it("names no channel.* tool anywhere: there is no app to serve one", () => {
+  it("names no channel.* tool anywhere: Media manager serves no tool", () => {
     for (const { agent, id } of everySeat) {
       expect(Object.keys(agent.tools?.configs ?? {}).filter((name) => name.startsWith("channel.")), id).toEqual([]);
     }
@@ -231,7 +232,7 @@ describe("the toolsets", () => {
     }
   });
 
-  /** Offered to every session and asking by default; a media seat has no app and no say over the company. */
+  /** Offered to every session and asking by default; a media seat has no say over an app's key or the company. */
   it("denies the company's timezone, logo and brand and an app's key to every seat by name", () => {
     for (const { template, agent, id } of everySeat) {
       for (const tool of ["company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access"]) {

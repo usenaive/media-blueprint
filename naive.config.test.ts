@@ -1,12 +1,15 @@
-/** The blueprint as `naive up` would read it: it parses, it names its template, and it declares no app. */
-import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
+/**
+ * The blueprint as `naive up` would read it: it parses, it names its template, and it declares one
+ * hosted app, Media manager, whose source is in `apps/media-manager`.
+ */
+import { readFileSync } from "node:fs";
+import { BLUEPRINTS, collectFiles, defineProject } from "@usenaive-sdk/blueprints";
 import { describe, expect, it } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, ROADMAP, TEMPLATES } from "./templates/index.ts";
-import { MEDIA_MANAGER } from "./templates/media-manager.ts";
 
-/** A block's props, read loosely: the engine types each block's props exactly, the checks here read any. */
-const propsOf = (element: { props: object }) => element.props as Record<string, unknown>;
+/** The app's directory, as the declaration names it, from this file. */
+const APP_DIR = new URL("./apps/media-manager/", import.meta.url);
 
 describe("naive.config", () => {
   it("declares the machine it runs and the template that crews it", () => {
@@ -32,7 +35,7 @@ describe("naive.config", () => {
 
   /**
    * canonical-spec §31.5 (ADR-0921): the studio names the template in words and draws the networks
-   * it is made for. Read off `declaration` here; the test after the mini app's reads the same fields back off
+   * it is made for. Read off `declaration` here; the round-trip test below reads the same fields back off
    * `defineProject`, which engines before 0.9.0 stripped.
    */
   it("names the running template for the studio, with the networks it is made for", () => {
@@ -69,53 +72,43 @@ describe("naive.config", () => {
   });
 
   /**
-   * canonical-spec §50: the channel's pages are one mini app the platform draws (ADR-0988, ADR-1023).
-   * Read off `declaration`; engine 0.9.0 (the pin) types and parses every block, and the platform
-   * checks it against its catalog when it is read.
+   * vetta-mono ADR-1482: Media manager is a hosted app like any app an agent makes, so the crew can
+   * pull, change and deploy it. Its source ships as the deployment; the host builds it.
    */
-  it("declares one mini app, Media manager: one page and no panel", () => {
-    const [manager, ...rest] = declaration.mini_apps;
+  it("declares one hosted app, media-manager, shipped from its source in apps/media-manager, and no mini app", () => {
+    expect(declaration).not.toHaveProperty("mini_apps");
+    expect(project.mini_apps).toBeUndefined();
+    const [app, ...rest] = project.apps;
     expect(rest).toEqual([]);
-    expect([manager!.slug, manager!.name, manager!.icon]).toEqual(["media-manager", "Media manager", "play"]);
-    // One page: the platform draws no tabs for it. No panel: the platform has none (ADR-1022).
-    expect(manager!.pages.map((one) => one.slug)).toEqual(["overview"]);
-    expect(manager).not.toHaveProperty("panels");
-    // Words only: a digit in a title would be refused, since the platform writes every number.
-    const words = manager!.pages.flatMap((one) => [one.title, ...Object.values(one.spec.elements).map((element) => String(propsOf(element)["title"] ?? propsOf(element)["label"] ?? ""))]);
-    expect(words.join(" ")).not.toMatch(/[0-9]/);
+    expect([app!.name, app!.type, app!.deploy_dir]).toEqual(["media-manager", "fullstack", "apps/media-manager"]);
+    expect(app!.description).toBe("The channel's posts and numbers: what waits on you, what is scheduled, and what went out.");
+    // An install may leave it out: the crew runs on the board without it.
+    expect(app!.required).not.toBe(true);
+    expect(JSON.parse(readFileSync(new URL("package.json", APP_DIR), "utf8")).name).toBe("media-manager");
   });
 
   /**
-   * ADR-1023: the numbers first, then posts in the order a person acts on them, each its own section —
-   * what waits on them (rows, only while something does), what goes out next (a sideways row of
-   * cards, only while something is), what went out (a picture grid, always, with its views).
+   * §29.7: a template app is minted a read key on a hosted apply, and `DASHBOARD_TOKEN` gates it
+   * behind Naive's sign-in. Neither is the operator's to answer.
    */
-  it("lays the page out as three numbers, then Waiting on you, Scheduled as a row and Posted as a grid", () => {
-    const { elements } = MEDIA_MANAGER.pages[0]!.spec;
-    const top = elements["page"]!.children!.map((key) => elements[key]!);
-    expect(top.map((one) => one.type)).toEqual(["Grid", "Section", "Section", "Section"]);
-    expect(top[0]!.children!.map((key) => elements[key]!.type)).toEqual(["Metric", "Progress", "Metric"]);
-    const sections = top.slice(1).map((section) => {
-      const [only, ...more] = section.children!.map((key) => elements[key]!);
-      expect(more).toEqual([]);
-      expect(only!.type).toBe("Posts");
-      const { status } = propsOf(only!)["posts"] as { status: string };
-      return [propsOf(section)["title"], propsOf(section)["hide_empty"] ?? false, status, propsOf(only!)["layout"] ?? "list"];
-    });
-    expect(sections).toEqual([
-      ["Waiting on you", true, "waiting", "list"],
-      ["Scheduled", true, "scheduled", "row"],
-      ["Posted", false, "posted", "grid"],
-    ]);
-    const types = Object.values(elements).map((element) => element.type);
-    for (const gone of ["BarList", "Accounts", "Answers", "Media", "MediaLibrary"]) expect(types).not.toContain(gone);
+  it("gives the app the platform's read key and a generated gate, and asks the operator for none of it", () => {
+    expect(project.apps[0]!.env).toEqual({ NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" }, DASHBOARD_TOKEN: { generate: true } });
+    const asked = project.questions.map((q) => q.key);
+    for (const key of Object.keys(project.apps[0]!.env ?? {})) expect(asked).not.toContain(key);
+  });
+
+  /** The tree the publisher collects is what deploys: source only, no build output, no test. */
+  it("ships source and no build output: package.json, vercel.json and api/ only", () => {
+    const paths = Object.keys(collectFiles(APP_DIR.pathname)).sort();
+    expect(paths).toEqual(["api/enter.ts", "api/index.ts", "package.json", "vercel.json"]);
+    for (const path of paths) expect(path).not.toMatch(/(^|\/)(dist|node_modules)\/|\.test\./);
   });
 
   /**
    * The same four fields, read back off what `defineProject` RETURNS, for every template the INSTALLED
    * engine admits. Engines before 0.9.0 parse the declaration through a schema that does not know
-   * `mini_apps`, `title`, `description` or `platforms` and strip them silently — so a raw-object check
-   * passes while the published artifact carries no Media manager and no label. This is the check that
+   * `title`, `description` or `platforms` and strip them silently — so a raw-object check passes
+   * while the published artifact carries no label. This is the check that
    * the installed engine really keeps them.
    *
    * Gated on `BLUEPRINTS.media.templates` (the installed engine's allow-list) exactly as `naive.config.ts`
@@ -140,45 +133,14 @@ describe("naive.config", () => {
         questions: one.questions,
         tasks: one.tasks,
       });
-      expect(parsed.mini_apps?.[0]?.slug).toBe("media-manager");
-      expect(parsed.mini_apps).toHaveLength(1);
+      expect(parsed.apps.map((app) => app.name)).toEqual(["media-manager"]);
+      expect(parsed.mini_apps).toBeUndefined();
       expect(parsed.title).toBe(one.title);
       expect(parsed.description).toBe(one.description);
       expect(parsed.platforms).toEqual(["youtube", "tiktok", "instagram"]);
       expect(parsed.template).toBe(one.name);
     },
   );
-
-  /** Each page is a tree the platform accepts: every child exists, has one parent, and hangs off the root. */
-  it("lays each page out as one tree under its Page, of the platform's blocks only", () => {
-    const BLOCKS = new Set(["Page", "Section", "Stack", "Grid", "Metric", "LineChart", "BarList", "Progress", "Roadmap", "Schedule", "Media", "Text", "Needs", "Activity", "Accounts", "Posts", "Answers", "MediaLibrary"]);
-    for (const one of MEDIA_MANAGER.pages) {
-      const { root, elements } = one.spec;
-      expect(elements[root]!.type, one.slug).toBe("Page");
-      const reached = new Set([root]);
-      for (const key of reached) for (const child of elements[key]!.children ?? []) {
-        expect(elements, `${one.slug}: ${child}`).toHaveProperty(child);
-        expect(reached.has(child), `${one.slug}: ${child} twice`).toBe(false);
-        reached.add(child);
-      }
-      expect([...reached].sort(), one.slug).toEqual(Object.keys(elements).sort());
-      for (const element of Object.values(elements)) expect(BLOCKS.has(element.type), element.type).toBe(true);
-    }
-  });
-
-  /** The old dashboard's Posts and Analytics, read by the platform's own sources (the legacy table is ADR-0993). */
-  it("covers what the old dashboard showed: each post by what it waits on, views, posts against the cadence and spend", () => {
-    const sources = JSON.stringify(MEDIA_MANAGER.pages.map((one) => one.spec));
-    for (const source of ["posts", "posts_this_week", "views_total", "views_change", "spend_total"]) {
-      expect(sources).toContain(`"$source":"${source}"`);
-    }
-  });
-
-  it("declares no app: the crew runs on the platform's own board, media gallery and approval card", () => {
-    expect(project.apps).toEqual([]);
-    expect(declaration).not.toHaveProperty("apps");
-    expect(project.agents.map((agent) => agent.name)).toEqual(ACTIVE.agents.map((agent) => agent.name));
-  });
 
   /**
    * The crons, as the engine actually accepted them.

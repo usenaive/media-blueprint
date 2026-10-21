@@ -2,7 +2,7 @@
  * What a template of the `media` blueprint is, and the pieces every one of them shares.
  *
  * A template is data: a crew, its prompts and tool lists, its setup questions and its day-one
- * cards. There is no app. The crew works on the platform's primitives:
+ * cards. The crew's one app, Media manager, is source in `apps/media-manager`. The crew works on the platform's primitives:
  *
  *   · the company board — every piece is a chain of cards, one seat each, and each card's body is
  *     the brief for the seat it is assigned to;
@@ -440,8 +440,8 @@ export const PLATFORM_TOOLS = [
  * `ASK_BY_DEFAULT_TOOLS`, pinned. Under a `deny` default an unnamed one is already `deny` on the
  * platform ("asking is never wider than what the agent was given"); every seat still names each of
  * them, so the policy reads off the toolset and does not lean on that rule. `company.set_timezone`, `company.set_logo`,
- * `company.set_brand` and `apps.request_access` are offered to every session: a media seat has no app
- * to request and no business changing the company's clock, logo or brand, so each is denied by name —
+ * `company.set_brand` and `apps.request_access` are offered to every session: a media seat has no key
+ * to request (Media manager is given its own) and no business changing the company's clock, logo or brand, so each is denied by name —
  * as are `mobile`, `data_run`, `create_character` (except where a template grants it: the
  * `ai-influencer` producer asks for it), `data_search` and `data_describe`. `edit_video` is
  * not a built-in: it follows `generate_video` unless named (`FOLLOWS_TOOL`), so a seat with
