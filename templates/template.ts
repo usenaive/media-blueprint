@@ -34,7 +34,9 @@ export type TemplateName =
   // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
   | "roadster"
   // One photoreal creator on the faceless crew (ADR-1360): the character is a setup answer, not a niche.
-  | "ai-influencer";
+  | "ai-influencer"
+  // ADR-1289: the food-slime niche, same segmented `faceless` crew.
+  | "food-slime";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -168,6 +170,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "dancing-animals": "first-briefs",
   roadster: "first-briefs",
   "ai-influencer": "first-briefs",
+  "food-slime": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
