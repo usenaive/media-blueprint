@@ -142,11 +142,19 @@ export const WOULD_YOU_CHOOSE = niche(FACELESS, {
   skill: "channel-template-would-you-choose",
   seats: SEGMENTED_SHORT_FORM,
 });
+/** ADR-1290: photoreal fruit characters in reality-show dramas, a recurring invented cast, three scenes to a cliffhanger. */
+export const FRUIT_DRAMA = niche(FACELESS, {
+  name: "fruit-drama",
+  title: "AI Fruit Drama Channel",
+  description: "AI Fruit Drama Channel is a template that builds an agent team that manages an entire social media account for you, producing reality-show style dramas starring fruit characters. This lets you create the AI fruit drama videos that are going really viral right now.",
+  skill: "channel-template-fruit-drama",
+  seats: SEGMENTED_SHORT_FORM,
+});
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * fifteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288) and `ai-influencer` (ADR-1360) reuse their crews.
+ * sixteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -163,6 +171,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "cartoons-irl": CARTOONS_IRL,
   "dancing-animals": DANCING_ANIMALS,
   roadster: ROADSTER,
+  "fruit-drama": FRUIT_DRAMA,
   "ai-influencer": AI_INFLUENCER,
   "cat-stories": CAT_STORIES,
   "food-slime": FOOD_SLIME,
