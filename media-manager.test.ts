@@ -212,6 +212,36 @@ describe("Media manager", () => {
     expect(waiting.match(/Decide in Naive/g)).toHaveLength(1);
   });
 
+  it("reads every debit up to 20 pages, and says \"at least\" when the week has more", async () => {
+    const pageOf = (after: string | null) => (after === null ? 0 : Number(after.slice(4)));
+    const stub = (pages: number) => {
+      const seen = api();
+      const posts = globalThis.fetch;
+      vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(new Request(input, init).url);
+        if (url.pathname !== "/v1/credits/ledger") return posts(input, init);
+        seen.push(new Request(input, init));
+        const n = pageOf(url.searchParams.get("after"));
+        return list([debit(1_000_000)], n + 1 < pages ? `cur_${n + 1}` : null);
+      });
+      return seen;
+    };
+    const ledgerReads = (seen: Request[]) => seen.filter((one) => new URL(one.url).pathname === "/v1/credits/ledger").length;
+    const spentTile = (page: string) => page.split('<span class="label">Spent</span>')[1]!.split("</div>")[0]!;
+
+    // A busy week that ends on page 12: all of it is summed, with no "at least".
+    let seen = stub(12);
+    let tile = spentTile(await html(await overview(await signedIn(), ENV, NOW)));
+    expect(tile).toBe("<strong>$12.00</strong>");
+    expect(ledgerReads(seen)).toBe(12);
+
+    // More than 20 pages: the 20 read are summed and the tile says the real figure is higher.
+    seen = stub(25);
+    tile = spentTile(await html(await overview(await signedIn(), ENV, NOW)));
+    expect(tile).toBe('<span class="muted">at least</span><strong>$20.00</strong>');
+    expect(ledgerReads(seen)).toBe(20);
+  });
+
   it("says which read failed in its place and still draws the rest", async () => {
     api(CHANNEL, { cadence: "daily" }, "/v1/credits/ledger");
     const page = await html(await overview(await signedIn(), ENV, NOW));

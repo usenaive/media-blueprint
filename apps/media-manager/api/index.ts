@@ -22,7 +22,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
 /** The cadence a company that never said one runs at (`@vetta/core` `DEFAULT_CADENCE`). */
 const DEFAULT_CADENCE = "3× a week";
-const LEDGER_PAGES = 5;
+/** Ledger pages of 100 debits read for "Spent"; past this the tile says "at least". */
+const LEDGER_PAGES = 20;
 
 export const GET = (request: Request) => overview(request, process.env, Date.now());
 
@@ -56,18 +57,20 @@ async function read<T>(what: string, run: () => Promise<T>): Promise<Read<T>> {
 const posts = (env: AppEnv, status: Post["status"]) =>
   read(`${status} posts`, async () => (await naive(env).social.listPosts({ status, limit: 50, reconcile: false })).data);
 
-/** Debits are negative on the ledger; spend is their size. */
-async function spentSince(env: AppEnv, from: string): Promise<number> {
+type Spent = { micro: number; complete: boolean };
+
+/** Debits are negative on the ledger; spend is their size. `complete` is false when debits were left unread. */
+async function spentSince(env: AppEnv, from: string): Promise<Spent> {
   const client = naive(env);
-  let total = 0;
+  let micro = 0;
   let after: string | undefined;
   for (let pages = 0; pages < LEDGER_PAGES; pages += 1) {
     const { data, next_cursor } = await client.credits.ledger({ type: "debit", from, limit: 100, ...(after === undefined ? {} : { after }) });
-    for (const entry of data) total += Math.abs(entry.amount_micro_usd);
-    if (next_cursor === null) break;
+    for (const entry of data) micro += Math.abs(entry.amount_micro_usd);
+    if (next_cursor === null) return { micro, complete: true };
     after = next_cursor;
   }
-  return total;
+  return { micro, complete: false };
 }
 
 async function cadenceOf(env: AppEnv): Promise<string> {
@@ -104,7 +107,7 @@ function decideLink(post: Post, env: AppEnv): string {
   return `<a href="${escape(href)}" target="_blank" rel="noopener">Decide in Naive ↗</a>`;
 }
 
-function numbers(posted: Read<Post[]>, spent: Read<number>, cadence: Read<string>, now: number): string {
+function numbers(posted: Read<Post[]>, spent: Read<Spent>, cadence: Read<string>, now: number): string {
   let views = failed(posted);
   let week = failed(posted);
   if (posted.ok) {
@@ -125,7 +128,9 @@ function numbers(posted: Read<Post[]>, spent: Read<number>, cadence: Read<string
     const goal = cadence.ok ? perWeek(cadence.value) : null;
     week = `<strong>${count}</strong>${goal === null ? "" : `<span class="muted">of ${goal}</span>`}${failed(cadence)}`;
   }
-  const money = spent.ok ? `<strong>$${(spent.value / 1e6).toFixed(2)}</strong>` : failed(spent);
+  const money = spent.ok
+    ? `${spent.value.complete ? "" : `<span class="muted">at least</span>`}<strong>$${(spent.value.micro / 1e6).toFixed(2)}</strong>`
+    : failed(spent);
   const tile = (label: string, body: string) => `<div class="tile"><span class="label">${label}</span>${body}</div>`;
   return `<section class="numbers">${tile("Views", views)}${tile("Posts this week", week)}${tile("Spent", money)}</section>`;
 }
