@@ -24,7 +24,9 @@ channel manager, the analyst's crons, the tool rules, the crew rules every promp
   signed in through Naive and reads posts, spend and the setup's cadence with the read key the
   platform gives a template app. An install may leave it out.
 
-No secret beyond your own `NAIVE_API_KEY`.
+No secret beyond your own `NAIVE_API_KEY`, and that one never reaches Media manager: the apply mints
+the app its own read key (from a clone, `naive up` needs an admin key to do it, or it refuses the app
+by name).
 
 ## 3. The board is the pipeline
 
@@ -201,7 +203,8 @@ a cron fire is not.
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - over all of that, the platform (vetta-mono ADR-1484) gives every seat `apps` at `ask` and `read`,
   `write`, `edit`, `ls`, `find`, `bash` at `allow` when it applies the template, so any seat can pull,
-  edit and deploy Media manager or build a new app, with each app action on an approval card;
+  edit and deploy Media manager or build a new app, with each app action on an approval card; `apps`
+  reaches only this channel's own apps, never another project's in the same organization;
 - `generate_video` carries `config.models`: `VIDEO_MODELS`, Hailuo 3 first with Seedance 2.5
   allowed; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).

@@ -112,7 +112,7 @@ template's render (`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, t
 ```sh
 git clone https://github.com/usenaive/media-blueprint && cd media-blueprint
 pnpm install
-export NAIVE_API_KEY=…        # your organization key; never commit it
+export NAIVE_API_KEY=…        # an admin key; never commit it. Media manager gets its own read key, not this one
 pnpm test && naive up
 ```
 
@@ -343,7 +343,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   frames; Short Form and Long Form producers assemble segments.
 - When the platform applies a template (vetta-mono ADR-1484) every seat also gets `apps` at `ask`
   and `read`, `write`, `edit`, `ls`, `find`, `bash` at `allow`, so the crew can pull, change and
-  deploy Media manager or build an app of its own. Each app action waits on an approval card.
+  deploy Media manager or build an app of its own. Each app action waits on an approval card, and
+  `apps` reaches only this channel's own apps.
 
 ## 🔁 Switching template
 
