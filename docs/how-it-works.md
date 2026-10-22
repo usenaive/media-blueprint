@@ -195,8 +195,8 @@ a cron fire is not.
   producer that renders video asks for it; `ai-influencer` denies it by name on every seat, since an
   edit can change the face;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
-- `generate_video` carries `config.models`: `VIDEO_MODELS`, Hailuo 3 first with Seedance 2.5
-  allowed; on the `ai-influencer` producer,
+- `generate_video` carries `config.models`: `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3,
+  with Seedance 2.5 allowed; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
   Every generated short renders 5–15 second scenes;
 - `generate_speech`, `generate_music`, shell and file tools on every generated-short producer; `transcribe_audio` on
