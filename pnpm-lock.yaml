@@ -12,8 +12,8 @@ importers:
         specifier: ^22.20.1
         version: 22.20.1
       '@usenaive-sdk/blueprints':
-        specifier: ^0.11.3
-        version: 0.11.3
+        specifier: ^0.11.4
+        version: 0.11.4
       '@usenaive-sdk/vetta-cli':
         specifier: ^0.6.0
         version: 0.6.0
@@ -385,8 +385,8 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
-  '@usenaive-sdk/blueprints@0.11.3':
-    resolution: {integrity: sha512-RueJPfGdMXPli7Utbi6zWYE7ecKpVsGMP9o6J2dQ44Ol5ceW8jO81Ct7WLJ9fqDpUs7TD0agH9qCSU4Nw+zDpA==}
+  '@usenaive-sdk/blueprints@0.11.4':
+    resolution: {integrity: sha512-O5FCdtci5Hn6Swob4tvMS5VR/TEy1+l6hQbyY9R2MMHJzEIZ9euunWZHFps4UjMKc0yJZfUiFQrKxSDAetHGzQ==}
     engines: {node: '>=20'}
 
   '@usenaive-sdk/vetta-cli@0.6.0':
@@ -1063,7 +1063,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@usenaive-sdk/blueprints@0.11.3':
+  '@usenaive-sdk/blueprints@0.11.4':
     dependencies:
       '@usenaive-sdk/vetta': 0.10.0
       jiti: 2.7.0

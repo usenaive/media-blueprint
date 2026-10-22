@@ -110,11 +110,51 @@ export const ROADSTER = niche(FACELESS, {
   skill: "channel-template-roadster",
   seats: SEGMENTED_SHORT_FORM,
 });
+/** ADR-1286: photoreal cats living human lives, a recurring invented cat family, told in a few scenes. */
+export const CAT_STORIES = niche(FACELESS, {
+  name: "cat-stories",
+  title: "AI Cat Stories Channel",
+  description: "AI Cat Stories Channel is a template that builds an agent team that manages an entire social media account for you, producing short stories of cats living human lives. This lets you create the AI cat story videos that are going really viral right now.",
+  skill: "channel-template-cat-stories",
+  seats: SEGMENTED_SHORT_FORM,
+});
+/** ADR-1289: real-looking food kneaded into glossy slime, ASMR, one continuous transformation. */
+export const FOOD_SLIME = niche(FACELESS, {
+  name: "food-slime",
+  title: "AI Food Slime Channel",
+  description: "AI Food Slime Channel is a template that builds an agent team that manages an entire social media account for you, producing ASMR videos of real-looking food being kneaded into slime. This lets you create the food-to-slime videos that are going really viral right now.",
+  skill: "channel-template-food-slime",
+  seats: SEGMENTED_SHORT_FORM,
+});
+
+/** ADR-1288: a food made of glass sliced slowly on a board — glass-cutting ASMR, three foods. */
+export const GLASS_FOOD = niche(FACELESS, {
+  name: "glass-food",
+  title: "AI Glass Food Channel",
+  description: "AI Glass Food Channel is a template that builds an agent team that manages an entire social media account for you, producing videos of foods made of glass being sliced with a knife. This lets you create the glass fruit cutting ASMR videos that are going really viral right now.",
+  skill: "channel-template-glass-food",
+  seats: SEGMENTED_SHORT_FORM,
+});
+export const WOULD_YOU_CHOOSE = niche(FACELESS, {
+  name: "would-you-choose",
+  title: "AI Would You Choose Channel",
+  description: "AI Would You Choose Channel is a template that builds an agent team that manages an entire social media account for you, producing \"which one would you choose\" videos of absurd options. This lets you create the would-you-choose videos that are going really viral right now.",
+  skill: "channel-template-would-you-choose",
+  seats: SEGMENTED_SHORT_FORM,
+});
+/** ADR-1290: photoreal fruit characters in reality-show dramas, a recurring invented cast, three scenes to a cliffhanger. */
+export const FRUIT_DRAMA = niche(FACELESS, {
+  name: "fruit-drama",
+  title: "AI Fruit Drama Channel",
+  description: "AI Fruit Drama Channel is a template that builds an agent team that manages an entire social media account for you, producing reality-show style dramas starring fruit characters. This lets you create the AI fruit drama videos that are going really viral right now.",
+  skill: "channel-template-fruit-drama",
+  seats: SEGMENTED_SHORT_FORM,
+});
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * eleven niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1314) and `ai-influencer` (ADR-1360) reuse their crews.
+ * sixteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -131,7 +171,12 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "cartoons-irl": CARTOONS_IRL,
   "dancing-animals": DANCING_ANIMALS,
   roadster: ROADSTER,
+  "fruit-drama": FRUIT_DRAMA,
   "ai-influencer": AI_INFLUENCER,
+  "cat-stories": CAT_STORIES,
+  "food-slime": FOOD_SLIME,
+  "glass-food": GLASS_FOOD,
+  "would-you-choose": WOULD_YOU_CHOOSE,
 };
 
 /**

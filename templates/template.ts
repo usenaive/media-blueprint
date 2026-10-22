@@ -33,8 +33,18 @@ export type TemplateName =
   | "dancing-animals"
   // ADR-1314: the impossible-roadster niche, same segmented `faceless` crew.
   | "roadster"
+  // ADR-1287: the "which one would you choose" format, same segmented `faceless` crew.
+  | "would-you-choose"
+  // ADR-1290: the AI fruit-drama reality-show micro-soap format, on `faceless` (segmented).
+  | "fruit-drama"
   // One photoreal creator on the faceless crew (ADR-1360): the character is a setup answer, not a niche.
-  | "ai-influencer";
+  | "ai-influencer"
+  // ADR-1286: the cat-stories niche, same segmented `faceless` crew.
+  | "cat-stories"
+  // ADR-1289: the food-slime niche, same segmented `faceless` crew.
+  | "food-slime"
+  // ADR-1288: the AI glass-food cutting ASMR format, on `faceless` (segmented).
+  | "glass-food";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -167,7 +177,12 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "cartoons-irl": "first-briefs",
   "dancing-animals": "first-briefs",
   roadster: "first-briefs",
+  "would-you-choose": "first-briefs",
+  "fruit-drama": "first-briefs",
   "ai-influencer": "first-briefs",
+  "cat-stories": "first-briefs",
+  "food-slime": "first-briefs",
+  "glass-food": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
