@@ -311,7 +311,7 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - Each fire has its own budget, inside its seat's ceiling.
 - `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
   on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
-  (which renders where FLUX 3 Max is not served) and `bytedance/seedance-2.5`, and no brief names a
+  (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
   model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
   seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins
   `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
