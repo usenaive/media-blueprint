@@ -21,7 +21,6 @@ import {
   CREW_RULES,
   FIRST_PIECE_KEY,
   lengthPhrase,
-  MAX_RENDER_SECONDS,
   nicheFixed,
   ONE_RENDER_MICRO_USD,
   PLAN_MODEL_RULE,
@@ -32,7 +31,6 @@ import {
   renderMicroUsd,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
-  SEGMENT_VIDEO_MODELS,
   segmentsOf,
   VIDEO_MODELS,
   words,
@@ -328,13 +326,12 @@ describe("the toolsets", () => {
    * `generate_image` is left unpinned on purpose: the platform then takes the cheapest priced model.
    */
   it("pins the video models on every seat that renders, cheapest measured first, and on no other", () => {
-    expect(VIDEO_MODELS[0]).toBe("bytedance/seedance-2.5");
+    expect(VIDEO_MODELS).toEqual(["minimax/hailuo-3", "bytedance/seedance-2.5"]);
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      // The segmented short-form niches pin their own (`SEGMENT_VIDEO_MODELS`), the influencer the ones
-      // measured keeping a face; every other renderer the base's.
-      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : SEGMENTED.includes(template.name) ? SEGMENT_VIDEO_MODELS : VIDEO_MODELS;
+      // The influencer pins the ones measured keeping a face; every other renderer the base's.
+      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : VIDEO_MODELS;
       expect(video.config, id).toEqual({ models });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
@@ -346,13 +343,13 @@ describe("the toolsets", () => {
 
   /**
    * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
-   * Seedance 2.5 on the base crews — and no brief, card or fire names, chooses or compares a model.
+   * Hailuo 3 on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
   it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
       const producer = seat(template, "producer");
-      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("bytedance/seedance-2.5");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("minimax/hailuo-3");
       expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
@@ -826,10 +823,10 @@ describe("the length each template makes, and the money that follows from it", (
     // `clip_video`'s own default cut band.
     expect(TEMPLATES.clipping.length).toEqual({ min: 15, max: 60 });
     expect(TEMPLATES.longform.length).toEqual({ min: 60, max: 180 });
-    // The model refuses more than 30 seconds a call (measured), so long form renders six segments.
-    expect(MAX_RENDER_SECONDS).toBe(30);
-    expect(segmentsOf(TEMPLATES.faceless.length)).toBe(1);
-    expect(segmentsOf(TEMPLATES.longform.length)).toBe(6);
+    // The default model renders 5 to 15 seconds a call, so long form renders up to twelve segments.
+    expect(SEGMENT_MAX_SECONDS).toBe(15);
+    expect(segmentsOf(TEMPLATES.faceless.length)).toBe(2);
+    expect(segmentsOf(TEMPLATES.longform.length)).toBe(12);
   });
 
   it("quotes its own range in its own prompts, and never a sibling's", () => {
@@ -899,7 +896,7 @@ describe("the long-form crew", () => {
   /** Two segments never match mid-shot, so every seam must land on a shot change. */
   it("plans the seams before anything renders", () => {
     expect(briefOf("writer")).toMatch(/AT ITS CHAPTER BOUNDARIES/);
-    expect(briefOf("writer")).toContain(`NO SEGMENT MAY RUN OVER ${MAX_RENDER_SECONDS} SECONDS`);
+    expect(briefOf("writer")).toContain(`NO SEGMENT MAY RUN UNDER ${SEGMENT_MIN_SECONDS} OR OVER ${SEGMENT_MAX_SECONDS} SECONDS`);
     expect(briefOf("writer")).toMatch(/EVERY SEGMENT BOUNDARY MUST LAND ON A SHOT CHANGE/);
   });
 
@@ -926,16 +923,14 @@ describe("the long-form crew", () => {
 
 /** Every generated short is now a resumable script -> images -> videos -> edit pipeline. */
 describe("the generated short-form scene pipeline", () => {
-  it("gives every producer image-to-video and assembly tools, with the niche model preference intact", () => {
+  it("gives every producer image-to-video and assembly tools, on the default video models", () => {
     for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
       const template = TEMPLATES[name];
       const producer = seat(template, "producer");
       for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill", "transcribe_audio"]) {
         expect(permissionFor(template, "producer", tool), `${name}/${tool}`).toBe("allow");
       }
-      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({
-        models: name === "faceless" ? VIDEO_MODELS : SEGMENT_VIDEO_MODELS,
-      });
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: VIDEO_MODELS });
       expect(producer.skills, name).toEqual([
         "naive/video-assembly",
         ...(name === "faceless" ? [] : [`naive/channel-template-${name}`]),
@@ -968,7 +963,6 @@ describe("the generated short-form scene pipeline", () => {
       expect(scriptwriter, name).toMatch(/Never use a cut merely because a segment ended/);
       expect(producer.system, name).toMatch(/never cut mid-word, mid-gesture or before the reaction lands/);
     }
-    expect(SEGMENT_VIDEO_MODELS[0]).toBe("minimax/hailuo-3");
     expect(SEGMENT_MAX_SECONDS).toBe(15);
     expect(SEGMENT_MIN_SECONDS).toBe(5);
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.config).toEqual({ models: VIDEO_MODELS });
@@ -1011,7 +1005,7 @@ describe("the generated short-form scene pipeline", () => {
       expect(legacy, name).toBeGreaterThan(-1);
       expect(legacy, name).toBeLessThan(producer.indexOf("PREFLIGHT"));
       const clause = producer.slice(legacy, producer.indexOf("PREFLIGHT"));
-      expect(clause, name).toMatch(/one generate_video call for its shots as one take/);
+      expect(clause, name).toMatch(/one generate_video call per planned segment/);
       // A re-woken legacy card never buys a take or a segment twice.
       expect(clause, name).toMatch(/[Rr]ender only what the card's comments do not yet record/);
       expect(clause, name).toMatch(/comment each render's fil_ id and segment index/);
@@ -1022,8 +1016,8 @@ describe("the generated short-form scene pipeline", () => {
       expect(clause, name).toMatch(/Publish card omits scene ids and AUDIO MODE/);
       const scriptwriter = seat(TEMPLATES[name], "scriptwriter").system!;
       expect(scriptwriter, name).toMatch(/With no bible note yet, write the plan as before/);
-      // Hailuo caps a call at SEGMENT_MAX_SECONDS, so a segmenting skill's legacy plan stays segmented.
-      expect(scriptwriter, name).toContain(`or, where the pinned skill segments, segments of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds each naming its opening frame`);
+      // The default model caps a call at SEGMENT_MAX_SECONDS, so a legacy plan is segmented too.
+      expect(scriptwriter, name).toContain(`the shots in order as segments of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds`);
       expect(scriptwriter, name).toMatch(/create the Render card, titled and linked as below, with only those sections — no SOURCE PROVENANCE, CONTINUITY CONTRACT, STORY LOGIC, SCENES IN ORDER or CUT MAP/);
       expect(scriptwriter, name).not.toMatch(/without an approved bible, stop/);
     }

@@ -46,8 +46,7 @@ image-to-video render per scene, then speech, creator-style captions, a ducked m
 ffmpeg join. A scene opens on a generated
 image unless a pinned skill names its opener — a shipped frame, or the previous take's last frame.
 Scenes run 5 to 15 seconds and total 15–30. The thirteen niche templates use `SEGMENTED_SHORT_FORM`
-only to pin Hailuo 3 first with Seedance 2.5 allowed; their pinned skill supplies the genre-specific
-scene grammar.
+only to point each seat at their pinned skill, which supplies the genre-specific scene grammar.
 
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
@@ -233,7 +232,7 @@ woken by its cards.
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
 | `researcher` | Research & briefs | Mon, Wed & Fri 05:00 ($10) | `first-topic` | Starts one sourced subject a fire, with exemplars of this length |
 | `writer` | Structure & scripts | — | `reference-study`, `arc-style` | Samples exemplar frames at chapter boundaries; plans every seam on a shot change |
-| `producer` | Render & assembly | — | `look` | Renders up to six segments, joins them with ffmpeg, probes the file |
+| `producer` | Render & assembly | — | `look` | Renders up to twelve segments, joins them with ffmpeg, probes the file |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports where the audience left each piece |
 
 ### `clipping`
@@ -304,17 +303,15 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 ## 💰 Money
 
-- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second render (~$9.00 as the ledger
-  bills it) and the turns around it.
-- The `longform` producer: **$75 per task, $150 per day.** One piece is up to six segments,
-  ~$53.97 of video, in one session.
+- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$5.07 as the
+  ledger bills Hailuo 3, 169,000 µUSD a second; ~$9.00 on Seedance 2.5) and the turns around it.
+- The `longform` producer: **$75 per task, $150 per day.** One piece is up to twelve segments,
+  ~$30.42 of video (~$53.97 on Seedance 2.5), in one session.
 - Each fire has its own budget, inside its seat's ceiling.
-- `generate_video` renders with `bytedance/seedance-2.5` by default: it is first in the pinned
-  allow-list (`google/veo-3.1` is allowed too), and no brief names a model unless your setup answers
-  or context explicitly ask for another. The generated short-form niches (`ufc`, `history`,
-  `animal-feast`, `channel-cloning`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`,
-  `fruit-drama`)
-  pin `minimax/hailuo-3` first instead, with `bytedance/seedance-2.5` allowed; `ai-influencer` pins
+- `generate_video` renders with `minimax/hailuo-3` by default on every template: it is first in the
+  pinned allow-list `VIDEO_MODELS` (`bytedance/seedance-2.5` is allowed too), and no brief names a
+  model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
+  seconds a call, so every segment and scene keeps to that. `ai-influencer` pins
   `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 

@@ -88,7 +88,7 @@ A card is woken at most three times. After that it is parked for the CEO.
   ffprobe, one frame per scene (captions readable) and a transcript of the finished file checked
   scene by scene (music audible, dialogue clear), and publishes one final `fil_`.
 - **Cards planned before the bible**: a Plan card read with no bible note yet is planned the old way
-  (one take, or 5–15 second segments where the pinned skill segments). A Render card without the
+  (5–15 second segments). A Render card without the
   bible sections is rendered as planned, resumably and with one retry, then voiced (a silent take
   or a join) and given the same captioned, scored edit and verification.
 - **channel-manager**: publishes (section 5).
@@ -96,13 +96,13 @@ A card is woken at most three times. After that it is parked for the CEO.
 
 ### `longform` — Long-form channel, 60–180 seconds
 
-`generate_video` renders at most 30 seconds a call (measured: the model refuses 59 and 60). So a
-piece is up to six segments, rendered separately and joined with ffmpeg.
+`generate_video` renders 5 to 15 seconds a call on the default model (Hailuo 3). So a piece is up
+to twelve segments, rendered separately and joined with ffmpeg.
 
 - **researcher** (Mon, Wed & Fri 05:00): one subject a fire, four or five sourced claims, one or two
   exemplars of this length — never shorts — with where each opens and turns.
-- **writer**: samples exemplar frames at their chapter boundaries, then plans acts and shots. No
-  segment runs over 30 seconds; every segment boundary lands on a shot change, because two
+- **writer**: samples exemplar frames at their chapter boundaries, then plans acts and shots. Every
+  segment runs 5 to 15 seconds; every segment boundary lands on a shot change, because two
   independently rendered segments never match mid-shot.
 - **producer** ($75/task): comments each segment's `fil_` id on the Render card the moment it
   lands, so a re-woken session renders only what is missing. `generate_video` takes no file name,
@@ -195,8 +195,8 @@ a cron fire is not.
   producer that renders video asks for it; `ai-influencer` denies it by name on every seat, since an
   edit can change the face;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
-- `generate_video` carries `config.models`, Seedance 2.5 first; on the generated niche producers,
-  `SEGMENT_VIDEO_MODELS` puts Hailuo 3 first; on the `ai-influencer` producer,
+- `generate_video` carries `config.models`: `VIDEO_MODELS`, Hailuo 3 first with Seedance 2.5
+  allowed; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
   Every generated short renders 5–15 second scenes;
 - `generate_speech`, `generate_music`, shell and file tools on every generated-short producer; `transcribe_audio` on
