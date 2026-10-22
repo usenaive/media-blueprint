@@ -191,7 +191,7 @@ export interface Length {
   max: number;
 }
 
-/** Short Form: 15–30 seconds, one `generate_video` call. */
+/** Short Form: 15–30 seconds, in scenes of `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS`, one call each. */
 export const SHORT_FORM_LENGTH: Length = { min: 15, max: 30 };
 
 /** Clipping: 15–60 seconds — `clip_video`'s own default cut band, the one thing that enforces a length. */
@@ -201,22 +201,15 @@ export const CLIPPING_LENGTH: Length = { min: 15, max: 60 };
 export const LONG_FORM_LENGTH: Length = { min: 60, max: 180 };
 
 /**
- * The longest one `generate_video` call may be asked for. The wire takes 60, but
- * `bytedance/seedance-2.5` answered HTTP 400 at 59 and 60 and rendered every request at 30 or
- * below (measured 2026-09-24). Re-measure when the default model changes.
- */
-export const MAX_RENDER_SECONDS = 30;
-
-/**
- * The longest and shortest one segment of a segmented short-form piece may run: `minimax/hailuo-3`,
- * the segmented niches' default (`SEGMENT_VIDEO_MODELS`), renders 5 to 15 seconds a call and refuses
- * any other length.
+ * The longest and shortest one `generate_video` call may be asked for: `minimax/hailuo-3`, the
+ * default video model (`VIDEO_MODELS`), renders 5 to 15 seconds a call and refuses any other length.
+ * A segment, a scene and a long-form segment are each one call. Re-measure when the default changes.
  */
 export const SEGMENT_MAX_SECONDS = 15;
 export const SEGMENT_MIN_SECONDS = 5;
 
 /** How many `generate_video` calls a piece of this length is, at worst. */
-export const segmentsOf = (length: Length): number => Math.ceil(length.max / MAX_RENDER_SECONDS);
+export const segmentsOf = (length: Length): number => Math.ceil(length.max / SEGMENT_MAX_SECONDS);
 
 /** "between 15 and 30 seconds" — the range as every prompt of that template says it. */
 export const lengthPhrase = (length: Length): string => `between ${length.min} and ${length.max} seconds`;
@@ -323,17 +316,18 @@ export function niche(
 }
 
 /**
- * What one second of rendered video costs the org, as the ledger bills it: a 15.07-second
- * `bytedance/seedance-2.5` render settled at 4,519,359 µUSD (`med_16gdmhzkv0zwaw4afgxf6x7dh1`,
- * measured 2026-09-22 through the platform). The provider's own invoice is ~30% lower; the ledger
- * is what a ceiling is checked against.
+ * What one second of rendered video costs the org, as the ledger bills it: `minimax/hailuo-3`
+ * settles at 169,000 µUSD a second (845,000 for a 5-second render on staging, 2026-10-17 — the
+ * same measure as `AI_INFLUENCER_MICRO_USD_PER_SECOND`). The ledger is what a ceiling is checked
+ * against. Seedance 2.5, the allowed fallback, bills ~299,851 a second, so a piece the operator
+ * explicitly moves to it can cost ~1.8× this estimate; every ceiling below still clears that.
  */
-export const MICRO_USD_PER_SECOND = 299_851;
+export const MICRO_USD_PER_SECOND = 169_000;
 
 /** What rendering a whole piece of this length costs, at its longest. */
 export const renderMicroUsd = (length: Length): number => length.max * MICRO_USD_PER_SECOND;
 
-/** One Short Form render, ~$9.00 — the floor every seat's per-task ceiling clears. */
+/** One Short Form render, ~$5.07 — the floor every seat's per-task ceiling clears. */
 export const ONE_RENDER_MICRO_USD = renderMicroUsd(SHORT_FORM_LENGTH);
 
 export interface Budget {
@@ -350,7 +344,7 @@ export const budgetOf = (max_task_micro_usd: number, cap_micro_usd: number): Bud
 });
 
 /**
- * The default: $20/task clears one Short Form render (~$9.00) and the turns around it; $60/day is
+ * The default: $20/task clears one Short Form render (~$5.07) and the turns around it; $60/day is
  * per agent. A seat that renders more in one session states its own, sized from `renderMicroUsd`.
  */
 const budget = budgetOf(20_000_000, 60_000_000);
@@ -466,21 +460,16 @@ export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "gen
 /**
  * The video models a seat may render with, first is the default. `generate_video` derives no
  * default for video (no video model publishes a price), so without this pin every call refuses.
- * Seedance 2.5 is first: it is the one measured working at 30 seconds, and the one the render price
- * above was measured on. `generate_image` is left unpinned, so it takes the cheapest priced model.
+ * Hailuo 3 is first (owner decision, 2026-10-22): ~0.56× Seedance 2.5's price a second, and it
+ * renders the restyled frames Seedance refuses (ADR-1120); Seedance 2.5 stays allowed. Hailuo takes
+ * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS` a call, which every plan's segments and scenes keep to.
+ * `generate_image` is left unpinned, so it takes the cheapest priced model.
  */
-export const VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5", "google/veo-3.1"];
-
-/**
- * The segmented short-form niches' video models (ADR-1120): Hailuo 3 first — it renders the
- * restyled fight frames Seedance refuses, at about 0.6× Seedance's price — and Seedance 2.5 allowed.
- * Hailuo takes at most `SEGMENT_MAX_SECONDS` a call, which the segmented scriptwriter's brief caps.
- */
-export const SEGMENT_VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "bytedance/seedance-2.5"];
+export const VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "bytedance/seedance-2.5"];
 
 /**
  * How a plan and a render treat the video model. The default path names none: `generate_video`
- * then renders with the first of the seat's pinned models — `VIDEO_MODELS`, or a niche's own — so
+ * then renders with the first of the seat's pinned models — `VIDEO_MODELS`, or a template's own — so
  * the rules name no model. A seat names another only when the operator's setup or context
  * explicitly asks for it, so no seat chooses, compares or shops for a model on its own.
  */
