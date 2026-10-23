@@ -1,0 +1,8 @@
+{
+  "name": "media-manager",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@usenaive-sdk/app": "^0.1.0"
+  }
+}

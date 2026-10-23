@@ -1,17 +1,19 @@
 # 🎬 Media Blueprint
 
-**An autonomous video channel as data. Clone it, run `naive up`, and the Naive platform provisions
+**An autonomous video channel, declared. Clone it, run `naive up`, and the Naive platform provisions
 the crew, its timers and its first day of work into your organization.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![engine: @usenaive-sdk/blueprints](https://img.shields.io/npm/v/@usenaive-sdk/blueprints?label=engine%3A%20%40usenaive-sdk%2Fblueprints&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/blueprints)
 [![CLI: @usenaive-sdk/vetta-cli](https://img.shields.io/npm/v/@usenaive-sdk/vetta-cli?label=cli%3A%20naive&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/vetta-cli)
 
-There is no hosted app. The crew runs on the platform's own screens:
+Media manager is a hosted app whose source is in [`apps/media-manager`](apps/media-manager); agents
+can pull, change and deploy it like any app. The crew runs on it and on the platform's own screens:
 
-- **Media manager.** One mini app under Apps, declared as data in `templates/`: one page with the
-  week's numbers on top, then what waits on you, what is scheduled (a row of cards), and what went
-  out (a picture grid with each post's views). The platform draws it and reads every number.
+- **Media manager.** One page under Apps, signed in through Naive: the week's numbers on top, then
+  what waits on you (each with a link to its chat, where you decide it), what is scheduled (a row of
+  cards), and what went out (a picture grid with each post's views). It reads the platform with the
+  read key Naive gives it; you set nothing up.
 - **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
 - **The Media gallery.** Every render and every cut lands there on its own.
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
@@ -110,7 +112,7 @@ template's render (`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, t
 ```sh
 git clone https://github.com/usenaive/media-blueprint && cd media-blueprint
 pnpm install
-export NAIVE_API_KEY=…        # your organization key; never commit it
+export NAIVE_API_KEY=…        # an admin key; never commit it. Media manager gets its own read key, not this one
 pnpm test && naive up
 ```
 
@@ -118,8 +120,8 @@ pnpm test && naive up
 again changes only what changed. Pick the template in [`templates/index.ts`](templates/index.ts)
 (`ACTIVE`).
 
-From 2.0.0 the studio's catalog publishes this data-only blueprint too (no built app, zero
-trees), so a new channel can also be installed from the studio.
+The studio's catalog publishes this blueprint too, so a new channel can also be installed from the
+studio. From 3.0.0 the published tree of Media manager is its source; the platform builds it.
 
 ### ⚠️ Known limit
 
@@ -128,9 +130,14 @@ trees), so a new channel can also be installed from the studio.
   [docs/how-it-works.md](docs/how-it-works.md#9-what-the-platform-cannot-express-yet). That is a
   platform change, not a change to this repo.
 
+### ⬆️ Coming from 2.x
+
+2.x drew Media manager as a mini app, declared as data. 3.0.0 declares it as a hosted app instead.
+A company on 2.x keeps its mini app until it applies 3.0.0; that apply creates the hosted app.
+
 ### ⬆️ Coming from 1.x
 
-1.x ran a hosted `channel` app with its own store of posts. 2.0.0 declares no app, and it does
+1.x ran a hosted `channel` app with its own store of posts. 2.0.0 declared no app, and it does
 **not** remove the old one: an install on 1.x keeps its app and its store until an operator
 retires them, after the store is exported.
 
@@ -334,6 +341,10 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - Nobody messages another seat. The board wakes the next one.
 - `bash` only where a shell is the job: the Short Form scriptwriter and Long Form writer sample
   frames; Short Form and Long Form producers assemble segments.
+- When the platform applies a template (vetta-mono ADR-1484) every seat also gets `apps` at `ask`
+  and `read`, `write`, `edit`, `ls`, `find`, `bash` at `allow`, so the crew can pull, change and
+  deploy Media manager or build an app of its own. Each app action waits on an approval card, and
+  `apps` reaches only this channel's own apps.
 
 ## 🔁 Switching template
 

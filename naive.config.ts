@@ -1,14 +1,14 @@
 /**
  * The `media` blueprint, declared. This is the file `naive up` reads.
  *
- * It is data only. There is no app: the crew works on the platform's own primitives — cards on the
- * company board, renders in the Media gallery, and each post on the platform's approval card.
+ * The crew works on the platform's own primitives — cards on the company board, renders in the Media
+ * gallery, and each post on the platform's approval card — and it carries one hosted app, Media
+ * manager, whose source is in `apps/media-manager`: agents can pull, change and deploy it like any app.
  * `templates/` holds the three crews; `ACTIVE` in `templates/index.ts` picks the one that runs.
  * Re-running `naive up` is idempotent — every resource is keyed by name.
  */
 import { BLUEPRINTS, defineProject } from "@usenaive-sdk/blueprints";
 import { ACTIVE, CHANNEL_IDENTITY, PROJECT_NAME, ROADMAP, TEMPLATES } from "./templates/index.ts";
-import { MEDIA_MANAGER } from "./templates/media-manager.ts";
 
 /**
  * Every template this repo carries that the installed engine admits. The engine refuses a repo
@@ -44,11 +44,22 @@ export const declaration = {
   roadmap: ROADMAP,
 
   /**
-   * The channel's mini app (`canonical-spec §50`): "Media manager", one page of numbers and posts,
-   * as data. It replaces the old hosted dashboard. The platform lists it under Apps, draws it with its
-   * own blocks and reads every number.
+   * One hosted app, Media manager: the channel's posts and numbers on one page (vetta-mono ADR-1482).
+   * Its SOURCE ships in `apps/media-manager` and the host builds it, so the crew's agents can pull,
+   * change and deploy it like an app they made. It replaces the 2.x mini app. `NAIVE_API_KEY` is the
+   * read key the platform mints a template app (§29.7); it is only ever minted, never your shell key: a
+   * laptop `naive up` mints the app its own read key with your admin key (ADR-1484); `DASHBOARD_TOKEN` gates it behind Naive's
+   * sign-in. Not `required`: an install may leave it out.
    */
-  mini_apps: [MEDIA_MANAGER],
+  apps: [
+    {
+      name: "media-manager",
+      type: "fullstack" as const,
+      description: "The channel's posts and numbers: what waits on you, what is scheduled, and what went out.",
+      deploy_dir: "apps/media-manager",
+      env: { NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" }, DASHBOARD_TOKEN: { generate: true as const } },
+    },
+  ],
 
   /**
    * What the studio asks before anything is provisioned (`canonical-spec §31.2`). The answers land
