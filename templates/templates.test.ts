@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, niche, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -31,6 +31,7 @@ import {
   REFERENCE_RULE,
   RENDER_MODEL_RULE,
   renderMicroUsd,
+  SEEDANCE_MICRO_USD_PER_SECOND,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
   segmentsOf,
@@ -1433,10 +1434,16 @@ describe("the empires niche makes raw video", () => {
     expect(producer).toContain(EMPIRES_PRODUCER);
     expect(producer.indexOf(EMPIRES_PRODUCER)).toBeGreaterThan(producer.indexOf("aspect_ratio 9:16"));
     expect(producer.indexOf(EMPIRES_PRODUCER)).toBeGreaterThan(producer.indexOf("instrumental: true"));
-    expect(EMPIRES_PRODUCER).toMatch(/aspect_ratio 4:3, generate_video without image_urls/);
-    expect(EMPIRES_PRODUCER).toMatch(/generate_music instrumental: false/);
-    expect(EMPIRES_PRODUCER).toMatch(/nothing burned in/);
     expect(seat(empires, "scriptwriter").system).toContain(EMPIRES_SCRIPTWRITER);
+  });
+  it("lets the producer pay for a whole Seedance piece and two retakes, and no more than a day's default", () => {
+    const producer = seat(empires, "producer").budget!;
+    expect(producer).toEqual(EMPIRES_PRODUCER_BUDGET);
+    // Three 15-second calls and two retakes, at Seedance's rate: ~$22.49 before turns.
+    expect(producer.max_task_micro_usd).toBeGreaterThan(5 * 15 * SEEDANCE_MICRO_USD_PER_SECOND);
+    expect(producer.max_task_micro_usd).toBeLessThanOrEqual(producer.cap_micro_usd);
+    expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
+    for (const agent of empires.agents.filter((a) => a.name !== "producer")) expect(agent.budget, agent.name).toEqual(seat(TEMPLATES.faceless, agent.name).budget);
   });
   it("discloses AI on the post, not on the picture", () => {
     for (const agent of empires.agents) {

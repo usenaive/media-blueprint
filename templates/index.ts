@@ -10,7 +10,7 @@ import { AI_INFLUENCER } from "./ai-influencer.ts";
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
-import { CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche } from "./template.ts";
+import { budgetOf, CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche, renderMicroUsd, SEEDANCE_MICRO_USD_PER_SECOND, SEGMENT_MAX_SECONDS } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
@@ -161,6 +161,16 @@ export const EMPIRES_SCRIPTWRITER =
   "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 7 to 8 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is a rapped song with the lyrics you write.";
 export const EMPIRES_PRODUCER =
   "Follow your pinned skills' scene grammar, which overrides the pipeline above: aspect_ratio 4:3, generate_video without image_urls, generate_music instrumental: false, nothing burned in.";
+/**
+ * The empires producer's ceiling. A piece is up to three 15-second Seedance calls, and the skill
+ * retakes a call for a logo or a gesture: the task clears five calls (~$22.49) and $5 of turns
+ * around them. The day stays the default $60, two such pieces.
+ */
+export const EMPIRES_RENDER_SECONDS = 5 * SEGMENT_MAX_SECONDS;
+export const EMPIRES_PRODUCER_BUDGET = budgetOf(
+  renderMicroUsd({ min: EMPIRES_RENDER_SECONDS, max: EMPIRES_RENDER_SECONDS }, SEEDANCE_MICRO_USD_PER_SECOND) + 5_000_000,
+  60_000_000,
+);
 const empires = niche(FACELESS, {
   name: "empires",
   title: "AI Empires Channel",
@@ -174,9 +184,10 @@ const empires = niche(FACELESS, {
 export const EMPIRES: MediaTemplate = {
   ...empires,
   agents: empires.agents.map((seat) => {
-    const post = seat.tools!.configs["social.post"];
-    if (post?.enabled !== true) return seat;
-    return { ...seat, tools: { ...seat.tools!, configs: { ...seat.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
+    const sized = seat.name === "producer" ? { ...seat, budget: EMPIRES_PRODUCER_BUDGET } : seat;
+    const post = sized.tools!.configs["social.post"];
+    if (post?.enabled !== true) return sized;
+    return { ...sized, tools: { ...sized.tools!, configs: { ...sized.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
   }),
 };
 
