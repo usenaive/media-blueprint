@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -202,8 +202,8 @@ describe("the toolsets", () => {
    */
   it("lets the publisher post, only with the operator's yes, and denies every other seat", () => {
     for (const { template, agent, id } of everySeat) {
-      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1360 (i)).
-      const publishes = template.name === "ai-influencer" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
+      // The AI Influencer's and Empires' publishers also label every post AI-generated (vetta-mono ADR-1360 (i), ADR-1580).
+      const publishes = template.name === "ai-influencer" || template.name === "empires" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
       expect(agent.tools?.configs["social.post"], id).toEqual(agent.name === PUBLISHER ? publishes : { enabled: false, permission: "deny" });
       expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
     }
@@ -332,8 +332,8 @@ describe("the toolsets", () => {
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      // The influencer pins the ones measured keeping a face; every other renderer the base's.
-      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : VIDEO_MODELS;
+      // The influencer pins the ones measured keeping a face, empires Seedance; every other renderer the base's.
+      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : template.name === "empires" ? EMPIRES_VIDEO_MODELS : VIDEO_MODELS;
       expect(video.config, id).toEqual({ models });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
@@ -932,7 +932,7 @@ describe("the generated short-form scene pipeline", () => {
       for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill", "transcribe_audio"]) {
         expect(permissionFor(template, "producer", tool), `${name}/${tool}`).toBe("allow");
       }
-      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: VIDEO_MODELS });
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: name === "empires" ? EMPIRES_VIDEO_MODELS : VIDEO_MODELS });
       expect(producer.skills, name).toEqual([
         "naive/video-assembly",
         ...(name === "faceless" ? [] : [`naive/channel-template-${name}`]),
@@ -1421,5 +1421,28 @@ describe("the AI Influencer template", () => {
 
   it("names no vendor anywhere a person or a seat reads it", () => {
     expect(JSON.stringify(AI)).not.toMatch(/higgsfield|\bsoul\b/i);
+  });
+});
+
+/** ADR-1580: the empires reels are raw 4:3 film from text, cut to a rapped song, with nothing burned in. */
+describe("the empires niche makes raw video", () => {
+  const empires = TEMPLATES.empires;
+  it("renders 4:3 from text on Seedance, with a sung track and no text, after the base pipeline", () => {
+    const producer = seat(empires, "producer").system!;
+    expect(EMPIRES_VIDEO_MODELS).toEqual(["bytedance/seedance-2.5"]);
+    expect(producer).toContain(EMPIRES_PRODUCER);
+    expect(producer.indexOf(EMPIRES_PRODUCER)).toBeGreaterThan(producer.indexOf("aspect_ratio 9:16"));
+    expect(producer.indexOf(EMPIRES_PRODUCER)).toBeGreaterThan(producer.indexOf("instrumental: true"));
+    expect(EMPIRES_PRODUCER).toMatch(/aspect_ratio 4:3, generate_video without image_urls/);
+    expect(EMPIRES_PRODUCER).toMatch(/generate_music instrumental: false/);
+    expect(EMPIRES_PRODUCER).toMatch(/nothing burned in/);
+    expect(seat(empires, "scriptwriter").system).toContain(EMPIRES_SCRIPTWRITER);
+  });
+  it("discloses AI on the post, not on the picture", () => {
+    for (const agent of empires.agents) {
+      const post = agent.tools?.configs["social.post"];
+      if (post?.enabled) expect(post.config, agent.name).toEqual({ ai_generated: true });
+    }
+    expect(seat(TEMPLATES.history, PUBLISHER).tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
   });
 });

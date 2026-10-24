@@ -150,14 +150,35 @@ export const FRUIT_DRAMA = niche(FACELESS, {
   skill: "channel-template-fruit-drama",
   seats: SEGMENTED_SHORT_FORM,
 });
-/** ADR-1580: one empire at one moment, each documented event restaged with one modern object, cut to a beat. */
-export const EMPIRES = niche(FACELESS, {
+/**
+ * ADR-1580: one empire at one moment as raw 4:3 film, one modern flex per shot, cut to a rapped song.
+ * The reference reels are rendered from text by Seedance and carry no text at all (owner, 2026-10-24),
+ * so these lines follow the base pipeline and win where it says 9:16, an opening image or an
+ * instrumental bed. The disclosure is the post's `ai_generated` setting, never pixels.
+ */
+export const EMPIRES_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5"];
+export const EMPIRES_SCRIPTWRITER =
+  "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 7 to 8 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is a rapped song with the lyrics you write.";
+export const EMPIRES_PRODUCER =
+  "Follow your pinned skills' scene grammar, which overrides the pipeline above: aspect_ratio 4:3, generate_video without image_urls, generate_music instrumental: false, nothing burned in.";
+const empires = niche(FACELESS, {
   name: "empires",
   title: "AI Empires Channel",
   description: "AI Empires Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos of one empire at one moment in history, with one modern object in every shot. These history videos are going really viral right now.",
   skill: "channel-template-empires",
-  seats: SEGMENTED_SHORT_FORM,
+  seats: {
+    scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${EMPIRES_SCRIPTWRITER}` },
+    producer: { brief: EMPIRES_PRODUCER, videoModels: EMPIRES_VIDEO_MODELS },
+  },
 });
+export const EMPIRES: MediaTemplate = {
+  ...empires,
+  agents: empires.agents.map((seat) => {
+    const post = seat.tools!.configs["social.post"];
+    if (post?.enabled !== true) return seat;
+    return { ...seat, tools: { ...seat.tools!, configs: { ...seat.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
+  }),
+};
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
