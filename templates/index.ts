@@ -150,11 +150,19 @@ export const FRUIT_DRAMA = niche(FACELESS, {
   skill: "channel-template-fruit-drama",
   seats: SEGMENTED_SHORT_FORM,
 });
+/** ADR-1580: one empire at one moment, each documented event restaged with one modern object, cut to a beat. */
+export const EMPIRES = niche(FACELESS, {
+  name: "empires",
+  title: "AI Empires Channel",
+  description: "AI Empires Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos of one empire at one moment in history, with one modern object in every shot. These history videos are going really viral right now.",
+  skill: "channel-template-empires",
+  seats: SEGMENTED_SHORT_FORM,
+});
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * sixteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290) and `ai-influencer` (ADR-1360) reuse their crews.
+ * seventeen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -177,6 +185,7 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "food-slime": FOOD_SLIME,
   "glass-food": GLASS_FOOD,
   "would-you-choose": WOULD_YOU_CHOOSE,
+  empires: EMPIRES,
 };
 
 /**
