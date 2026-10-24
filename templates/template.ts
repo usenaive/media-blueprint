@@ -44,7 +44,9 @@ export type TemplateName =
   // ADR-1289: the food-slime niche, same segmented `faceless` crew.
   | "food-slime"
   // ADR-1288: the AI glass-food cutting ASMR format, on `faceless` (segmented).
-  | "glass-food";
+  | "glass-food"
+  // ADR-1580: one empire at one moment, a modern object in every shot, on `faceless` (segmented).
+  | "empires";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -183,6 +185,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "cat-stories": "first-briefs",
   "food-slime": "first-briefs",
   "glass-food": "first-briefs",
+  empires: "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
