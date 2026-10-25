@@ -33,6 +33,7 @@ import {
   renderMicroUsd,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
+  SEAT_MODEL,
   segmentsOf,
   VIDEO_MODELS,
   words,
@@ -321,6 +322,13 @@ describe("the toolsets", () => {
         expect(agent.tools?.configs[mailbox], id).toEqual({ enabled: false, permission: "deny" });
       }
     }
+  });
+
+  /** One thinking model for every seat of every template, the influencer's included (owner decision 2026-10-25). */
+  it("seats every agent on GLM 5.3 Flash", () => {
+    expect(SEAT_MODEL).toBe("z-ai/glm-5.3-flash");
+    for (const { agent, id } of everySeat) expect(agent.model, id).toBe(SEAT_MODEL);
+    expect(TEMPLATES["ai-influencer"].agents.length).toBeGreaterThan(0);
   });
 
   /**

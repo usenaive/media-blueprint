@@ -200,6 +200,8 @@ a cron fire is not.
 - `edit_video` (Mira) is no built-in: it follows `generate_video` unless named (core ADR-1309), so a
   producer that renders video asks for it; `ai-influencer` denies it by name on every seat, since an
   edit can change the face;
+- every seat's `model` is `SEAT_MODEL`, `z-ai/glm-5.3-flash` (tool calling, reasoning, 1M context),
+  on every template including `ai-influencer`;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - over all of that, the platform (vetta-mono ADR-1484) gives every seat `apps` at `ask` and `read`,
   `write`, `edit`, `ls`, `find`, `bash` at `allow` when it applies the template, so any seat can pull,
