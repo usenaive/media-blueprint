@@ -443,12 +443,13 @@ export const PLATFORM_TOOLS = [
  * `company.set_brand` and `apps.request_access` are offered to every session: a media seat has no key
  * to request (Media manager is given its own) and no business changing the company's clock, logo or brand, so each is denied by name —
  * as are `mobile`, `data_run`, `create_character` (except where a template grants it: the
- * `ai-influencer` producer asks for it), `data_search` and `data_describe`. `edit_video` is
- * not a built-in: it follows `generate_video` unless named (`FOLLOWS_TOOL`), so a seat with
- * `generate_video` asks for it.
+ * `ai-influencer` producer asks for it), `data_search` and `data_describe`. A video asks by default
+ * (vetta-mono ADR-1611), so every seat that renders names `generate_video: allow` and every other
+ * seat denies it by name. `edit_video` is not a built-in: it follows `generate_video` unless named
+ * (`FOLLOWS_TOOL`), so a seat with `generate_video` asks for it.
  */
 export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
-  "mobile", "data_run", "edit_video", "create_character",
+  "mobile", "data_run", "generate_video", "edit_video", "create_character",
   "social.post", "email.send", "legal.verify", "legal.resend_link", "legal.form", "legal.submit",
   "wallet.pay", "wallet.transfer", "card.issue", "card.credentials", "card.cancel",
   "company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access",

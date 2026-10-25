@@ -217,7 +217,8 @@ describe("the toolsets", () => {
     for (const { template, agent, id } of everySeat) {
       // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an
       // edit — except on ai-influencer, where an edit could change the face (asserted there).
-      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post" && name !== "edit_video")) {
+      // A seat's video is its own allow or deny (asserted with the renders).
+      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => !["social.post", "generate_video", "edit_video"].includes(name))) {
         const asks = id === "ai-influencer/producer" && tool === "create_character";
         expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe(asks ? "ask" : "deny");
       }
@@ -1193,11 +1194,20 @@ describe("the built-in tool list", () => {
     }
   });
 
+  /** A video asks by default (vetta-mono ADR-1611): every seat names it, so no crew waits on a card. */
+  it("names generate_video on every seat, allowed where it renders and denied elsewhere", () => {
+    for (const { agent, id } of everySeat) {
+      const video = agent.tools?.configs["generate_video"];
+      expect(video, id).toBeDefined();
+      expect(video?.enabled ? video.permission : "deny", id).toMatch(/^(allow|deny)$/);
+    }
+  });
+
   /** Core's `ASK_BY_DEFAULT_TOOLS`, pinned: each falls to `ask` unless a toolset names it. */
   it("pins the platform's ask-by-default list", () => {
     expect([...ASK_BY_DEFAULT_TOOLS].sort()).toEqual([
       "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_brand", "company.set_logo", "company.set_timezone",
-      "create_character", "data_run", "edit_video", "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
+      "create_character", "data_run", "edit_video", "email.send", "generate_video", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
       "social.post", "wallet.pay", "wallet.transfer",
     ]);
   });
