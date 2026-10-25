@@ -1,7 +1,8 @@
 # How the media blueprint works
 
-This repo is data. It declares a crew, its tools, its timers, its setup questions and its first
-day of cards. The platform runs all of it. There is no app of our own.
+This repo declares a crew, its tools, its timers, its setup questions and its first day of cards,
+and it carries one hosted app, Media manager, whose source is in `apps/media-manager`. The platform
+runs all of it. Agents can pull, change and deploy Media manager like any app.
 
 ## 1. What a template is
 
@@ -19,8 +20,13 @@ channel manager, the analyst's crons, the tool rules, the crew rules every promp
 - **The day-one cards** on the company board, keyed `media:<key>`. A re-apply answers the card it
   already wrote.
 - **The setup questions**, which the studio asks before anything is provisioned.
+- **Media manager**, a `fullstack` app deployed from its source in `apps/media-manager`. It is
+  signed in through Naive and reads posts, spend and the setup's cadence with the read key the
+  platform gives a template app. An install may leave it out.
 
-No app, no database, no deploy, no secret beyond your own `NAIVE_API_KEY`.
+No secret beyond your own `NAIVE_API_KEY`, and that one never reaches Media manager: the apply mints
+the app its own read key (from a clone, `naive up` needs an admin key to do it, or it refuses the app
+by name).
 
 ## 3. The board is the pipeline
 
@@ -195,6 +201,10 @@ a cron fire is not.
   producer that renders video asks for it; `ai-influencer` denies it by name on every seat, since an
   edit can change the face;
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
+- over all of that, the platform (vetta-mono ADR-1484) gives every seat `apps` at `ask` and `read`,
+  `write`, `edit`, `ls`, `find`, `bash` at `allow` when it applies the template, so any seat can pull,
+  edit and deploy Media manager or build a new app, with each app action on an approval card; `apps`
+  reaches only this channel's own apps, never another project's in the same organization;
 - `generate_video` carries `config.models`: `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3,
   with Seedance 2.5 allowed; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
