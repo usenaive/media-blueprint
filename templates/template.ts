@@ -46,7 +46,11 @@ export type TemplateName =
   // ADR-1288: the AI glass-food cutting ASMR format, on `faceless` (segmented).
   | "glass-food"
   // ADR-1580: one empire at one moment, a modern object in every shot, on `faceless` (segmented).
-  | "empires";
+  | "empires"
+  // ADR-1640: a legend's famous signs as 1990s rap-video flexes, raw 4:3 film, on `faceless` (segmented).
+  | "legend-flex"
+  // ADR-1640: a city where people's heads show what they really are, raw 4:3 film, on `faceless` (segmented).
+  | "surreal-satire";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -186,6 +190,8 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "food-slime": "first-briefs",
   "glass-food": "first-briefs",
   empires: "first-briefs",
+  "legend-flex": "first-briefs",
+  "surreal-satire": "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -329,7 +335,7 @@ export const MICRO_USD_PER_SECOND = 169_000;
 /**
  * Seedance 2.5, the allowed fallback, bills ~299,851 µUSD a second, ~1.8× Hailuo. The default
  * $20 task ceiling clears one 30-second piece on it (~$9) but not the retakes around it, so a
- * niche that renders on Seedance sizes its producer's ceiling from this rate (empires).
+ * niche that renders on Seedance sizes its producer's ceiling from this rate (the raw-film niches).
  */
 export const SEEDANCE_MICRO_USD_PER_SECOND = 299_851;
 

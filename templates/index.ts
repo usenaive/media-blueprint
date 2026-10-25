@@ -11,7 +11,7 @@ import { CLIPPING } from "./clipping.ts";
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
 import { budgetOf, CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche, renderMicroUsd, SEEDANCE_MICRO_USD_PER_SECOND, SEGMENT_MAX_SECONDS } from "./template.ts";
-import type { MediaTemplate, TemplateName } from "./template.ts";
+import type { Budget, MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
 export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, ROADMAP, lengthPhrase, niche, segmentsOf } from "./template.ts";
@@ -151,50 +151,102 @@ export const FRUIT_DRAMA = niche(FACELESS, {
   seats: SEGMENTED_SHORT_FORM,
 });
 /**
- * ADR-1580: one empire at one moment as raw 4:3 film, one modern flex per shot, cut to a rapped song.
- * The reference reels are rendered from text by Seedance and carry no text at all (owner, 2026-10-24),
- * so these lines follow the base pipeline and win where it says 9:16, an opening image or an
- * instrumental bed. The disclosure is the post's `ai_generated` setting, never pixels.
+ * The raw-film niches (ADR-1580 empires, ADR-1640 legend-flex and surreal-satire) copy reels that are
+ * rendered from text and carry no text at all (owner, 2026-10-24), so their lines follow the base
+ * pipeline and win where it says 9:16 or an opening image. The disclosure is the post's
+ * `ai_generated` setting, never pixels.
  */
-export const EMPIRES_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5"];
-export const EMPIRES_SCRIPTWRITER =
-  "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 7 to 8 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is a rapped song with the lyrics you write.";
-export const EMPIRES_PRODUCER =
+export const RAW_FILM_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5"];
+/** The raw-film producer whose piece is cut to a rapped song (empires, legend-flex). */
+export const RAW_FILM_PRODUCER =
   "Follow your pinned skills' scene grammar, which overrides the pipeline above: aspect_ratio 4:3, generate_video without image_urls, generate_music instrumental: false, nothing burned in.";
+
+/** A raw-film niche: its producer's ceiling is sized for its Seedance calls, and its publisher labels every post AI-generated. */
+function rawFilm(template: MediaTemplate, producerBudget: Budget): MediaTemplate {
+  return {
+    ...template,
+    agents: template.agents.map((seat) => {
+      const sized = seat.name === "producer" ? { ...seat, budget: producerBudget } : seat;
+      const post = sized.tools!.configs["social.post"];
+      if (post?.enabled !== true) return sized;
+      return { ...sized, tools: { ...sized.tools!, configs: { ...sized.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
+    }),
+  };
+}
+
+/** A producer ceiling that clears `calls` 15-second Seedance calls and $5 of turns around them. The day stays the default $60. */
+const seedanceCeiling = (calls: number): Budget =>
+  budgetOf(renderMicroUsd({ min: calls * SEGMENT_MAX_SECONDS, max: calls * SEGMENT_MAX_SECONDS }, SEEDANCE_MICRO_USD_PER_SECOND) + 5_000_000, 60_000_000);
+
+/** The raw-film scriptwriter whose piece is cut to a rapped song (empires, legend-flex). */
+export const RAW_FILM_SCRIPTWRITER =
+  "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 7 to 8 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is a rapped song with the lyrics you write.";
 /**
- * The empires producer's ceiling. A piece is up to three 15-second Seedance calls, and the skill
- * retakes a call for a logo or a gesture: the task clears five calls (~$22.49) and $5 of turns
- * around them. The day stays the default $60, two such pieces.
+ * ADR-1580: one empire at one moment as raw 4:3 film, one modern flex per shot, cut to a rapped song.
+ * Up to three 15-second calls a piece, and two retakes for a logo or a gesture: five calls (~$22.49).
  */
-export const EMPIRES_RENDER_SECONDS = 5 * SEGMENT_MAX_SECONDS;
-export const EMPIRES_PRODUCER_BUDGET = budgetOf(
-  renderMicroUsd({ min: EMPIRES_RENDER_SECONDS, max: EMPIRES_RENDER_SECONDS }, SEEDANCE_MICRO_USD_PER_SECOND) + 5_000_000,
-  60_000_000,
-);
-const empires = niche(FACELESS, {
-  name: "empires",
-  title: "AI Empires Channel",
-  description: "AI Empires Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos of one empire at one moment in history, with one modern object in every shot. These history videos are going really viral right now.",
-  skill: "channel-template-empires",
-  seats: {
-    scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${EMPIRES_SCRIPTWRITER}` },
-    producer: { brief: EMPIRES_PRODUCER, videoModels: EMPIRES_VIDEO_MODELS },
-  },
-});
-export const EMPIRES: MediaTemplate = {
-  ...empires,
-  agents: empires.agents.map((seat) => {
-    const sized = seat.name === "producer" ? { ...seat, budget: EMPIRES_PRODUCER_BUDGET } : seat;
-    const post = sized.tools!.configs["social.post"];
-    if (post?.enabled !== true) return sized;
-    return { ...sized, tools: { ...sized.tools!, configs: { ...sized.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
+export const EMPIRES_PRODUCER_BUDGET = seedanceCeiling(5);
+export const EMPIRES = rawFilm(
+  niche(FACELESS, {
+    name: "empires",
+    title: "AI Empires Channel",
+    description: "AI Empires Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos of one empire at one moment in history, with one modern object in every shot. These history videos are going really viral right now.",
+    skill: "channel-template-empires",
+    seats: {
+      scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${RAW_FILM_SCRIPTWRITER}` },
+      producer: { brief: RAW_FILM_PRODUCER, videoModels: RAW_FILM_VIDEO_MODELS },
+    },
   }),
-};
+  EMPIRES_PRODUCER_BUDGET,
+);
+
+/** A legend-flex or surreal-satire piece is two 15-second calls; two retakes make four calls (~$17.99). */
+export const TWO_CALL_PIECE_BUDGET = seedanceCeiling(4);
+
+/**
+ * ADR-1640: one legendary figure's famous signs as late-1990s rap-video flexes, shot like a
+ * direct-flash 35 mm roll, ~1-second cuts on a rapped trap song. Its scenes are written as empires' are.
+ */
+export const LEGEND_FLEX = rawFilm(
+  niche(FACELESS, {
+    name: "legend-flex",
+    title: "AI Legend Flex Channel",
+    description: "AI Legend Flex Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos where a legend's famous signs become 1990s rap-video flexes, shot like a flash photo roll. These videos are going really viral right now.",
+    skill: "channel-template-legend-flex",
+    seats: {
+      scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${RAW_FILM_SCRIPTWRITER}` },
+      producer: { brief: RAW_FILM_PRODUCER, videoModels: RAW_FILM_VIDEO_MODELS },
+    },
+  }),
+  TWO_CALL_PIECE_BUDGET,
+);
+
+/**
+ * ADR-1640: an ordinary sunlit city where people's heads show what they really are (rat-headed
+ * commuters, a peacock-headed show-off), six deadpan setups on an instrumental hip-hop groove.
+ */
+export const SURREAL_SATIRE_SCRIPTWRITER =
+  "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 3 to 4 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is an instrumental bed.";
+export const SURREAL_SATIRE_PRODUCER =
+  "Follow your pinned skills' scene grammar, which overrides the pipeline above: aspect_ratio 4:3, generate_video without image_urls, nothing burned in.";
+export const SURREAL_SATIRE = rawFilm(
+  niche(FACELESS, {
+    name: "surreal-satire",
+    title: "AI Surreal Satire Channel",
+    description: "AI Surreal Satire Channel is a template that builds an agent team that manages an entire social media account for you, producing deadpan films where people's heads show what they really are, like rat-headed commuters. These surreal videos are going really viral right now.",
+    skill: "channel-template-surreal-satire",
+    seats: {
+      scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${SURREAL_SATIRE_SCRIPTWRITER}` },
+      producer: { brief: SURREAL_SATIRE_PRODUCER, videoModels: RAW_FILM_VIDEO_MODELS },
+    },
+  }),
+  TWO_CALL_PIECE_BUDGET,
+);
 
 /**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
- * seventeen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580) and `ai-influencer` (ADR-1360) reuse their crews.
+ * nineteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580, ADR-1640) and `ai-influencer` (ADR-1360) reuse their crews.
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -218,6 +270,8 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   "glass-food": GLASS_FOOD,
   "would-you-choose": WOULD_YOU_CHOOSE,
   empires: EMPIRES,
+  "legend-flex": LEGEND_FLEX,
+  "surreal-satire": SURREAL_SATIRE,
 };
 
 /**
