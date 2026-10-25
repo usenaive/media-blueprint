@@ -310,11 +310,11 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 ## 💰 Money
 
-- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$6.63 at
-  FLUX 3 Max's standard 720p rate, 221,000 µUSD a second — a quarter of that during its launch promo,
-  until 2026-11-07; ~$5.07 on Hailuo 3; ~$9.00 on Seedance 2.5) and the turns around it.
+- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$5.10 at
+  FLUX 3 Max's standard 720p rate, 170,000 µUSD a second at cost — about a quarter of that during its
+  launch promo, until 2026-11-07; ~$3.90 on Hailuo 3; ~$7.01 on Seedance 2.5) and the turns around it.
 - The `longform` producer: **$75 per task, $150 per day.** One piece is up to twelve segments,
-  ~$39.78 of video (~$53.97 on Seedance 2.5), in one session.
+  ~$30.60 of video (~$42.04 on Seedance 2.5), in one session.
 - Each fire has its own budget, inside its seat's ceiling.
 - `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
   on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`

@@ -318,18 +318,18 @@ export function niche(
 
 /**
  * What one second of rendered video costs the org, as the ledger bills it: FLUX 3 Max, the default,
- * at its STANDARD 720p rate — $0.17 a second upstream × 1.3 = 221,000 µUSD (platform ADR-1638). Until
- * 2026-11-07 its launch promo bills a quarter of that (55,250), so this over-budgets until then, on
- * purpose: a ceiling sized to the promo would refuse the same piece the day it ends. Hailuo 3, next in
- * line, settles at 169,000 a second (staging, 2026-10-17); Seedance 2.5, the last, ~299,851 — ~1.36×
- * this estimate, which every ceiling below still clears.
+ * at its STANDARD 720p rate, $0.17 a second — 170,000 µUSD, at cost since the platform dropped its
+ * markup (platform ADR-1592, ADR-1638). Until 2026-11-07 its launch promo bills about a quarter of
+ * that (42,500), so this over-budgets until then, on purpose: a ceiling sized to the promo would
+ * refuse the same piece the day it ends. Hailuo 3, next in line, is 130,000 a second; Seedance 2.5,
+ * the last, ~233,530 — ~1.37× this estimate, which every ceiling below still clears.
  */
-export const MICRO_USD_PER_SECOND = 221_000;
+export const MICRO_USD_PER_SECOND = 170_000;
 
 /** What rendering a whole piece of this length costs, at its longest. */
 export const renderMicroUsd = (length: Length): number => length.max * MICRO_USD_PER_SECOND;
 
-/** One Short Form render, ~$6.63 — the floor every seat's per-task ceiling clears. */
+/** One Short Form render, ~$5.10 — the floor every seat's per-task ceiling clears. */
 export const ONE_RENDER_MICRO_USD = renderMicroUsd(SHORT_FORM_LENGTH);
 
 export interface Budget {
@@ -346,7 +346,7 @@ export const budgetOf = (max_task_micro_usd: number, cap_micro_usd: number): Bud
 });
 
 /**
- * The default: $20/task clears one Short Form render (~$6.63) and the turns around it; $60/day is
+ * The default: $20/task clears one Short Form render (~$5.10) and the turns around it; $60/day is
  * per agent. A seat that renders more in one session states its own, sized from `renderMicroUsd`.
  */
 const budget = budgetOf(20_000_000, 60_000_000);
