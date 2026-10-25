@@ -44,7 +44,9 @@ export type TemplateName =
   // ADR-1289: the food-slime niche, same segmented `faceless` crew.
   | "food-slime"
   // ADR-1288: the AI glass-food cutting ASMR format, on `faceless` (segmented).
-  | "glass-food";
+  | "glass-food"
+  // ADR-1580: one empire at one moment, a modern object in every shot, on `faceless` (segmented).
+  | "empires";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -183,6 +185,7 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "cat-stories": "first-briefs",
   "food-slime": "first-briefs",
   "glass-food": "first-briefs",
+  empires: "first-briefs",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -319,13 +322,19 @@ export function niche(
  * What one second of rendered video costs the org, as the ledger bills it: `minimax/hailuo-3`
  * settles at 169,000 µUSD a second (845,000 for a 5-second render on staging, 2026-10-17 — the
  * same measure as `AI_INFLUENCER_MICRO_USD_PER_SECOND`). The ledger is what a ceiling is checked
- * against. Seedance 2.5, the allowed fallback, bills ~299,851 a second, so a piece the operator
- * explicitly moves to it can cost ~1.8× this estimate; every ceiling below still clears that.
+ * against.
  */
 export const MICRO_USD_PER_SECOND = 169_000;
 
-/** What rendering a whole piece of this length costs, at its longest. */
-export const renderMicroUsd = (length: Length): number => length.max * MICRO_USD_PER_SECOND;
+/**
+ * Seedance 2.5, the allowed fallback, bills ~299,851 µUSD a second, ~1.8× Hailuo. The default
+ * $20 task ceiling clears one 30-second piece on it (~$9) but not the retakes around it, so a
+ * niche that renders on Seedance sizes its producer's ceiling from this rate (empires).
+ */
+export const SEEDANCE_MICRO_USD_PER_SECOND = 299_851;
+
+/** What rendering a whole piece of this length costs, at its longest, at a model's rate. */
+export const renderMicroUsd = (length: Length, perSecond: number = MICRO_USD_PER_SECOND): number => length.max * perSecond;
 
 /** One Short Form render, ~$5.07 — the floor every seat's per-task ceiling clears. */
 export const ONE_RENDER_MICRO_USD = renderMicroUsd(SHORT_FORM_LENGTH);
