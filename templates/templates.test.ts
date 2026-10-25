@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER_BUDGET, niche, RAW_FILM_PRODUCER, RAW_FILM_SCRIPTWRITER, RAW_FILM_VIDEO_MODELS, SURREAL_SATIRE_PRODUCER, SURREAL_SATIRE_SCRIPTWRITER, TEMPLATES, TWO_CALL_PIECE_BUDGET } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -31,6 +31,7 @@ import {
   REFERENCE_RULE,
   RENDER_MODEL_RULE,
   renderMicroUsd,
+  SEEDANCE_MICRO_USD_PER_SECOND,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
   segmentsOf,
@@ -47,7 +48,8 @@ const CATALOGUE = [
   "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
   "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
   "naive/channel-template-channel-cloning", "naive/channel-template-comics", "naive/channel-template-cartoons-irl",
-  "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-fruit-drama", "naive/channel-template-ai-influencer",
+  "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-fruit-drama", "naive/channel-template-ai-influencer", "naive/channel-template-empires",
+  "naive/channel-template-legend-flex", "naive/channel-template-surreal-satire",
   "naive/channel-template-cat-stories",
   "naive/channel-template-food-slime",
   "naive/channel-template-glass-food",
@@ -58,7 +60,7 @@ const all = Object.values(TEMPLATES);
 /** The short-form niches whose playbook renders segments and joins them (`SEGMENTED_SHORT_FORM`). */
 const SEGMENTED: TemplateName[] = [
   "ufc", "history", "animal-feast",
-  "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories", "food-slime", "glass-food", "would-you-choose", "fruit-drama",
+  "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories", "food-slime", "glass-food", "would-you-choose", "fruit-drama", "empires", "legend-flex", "surreal-satire",
 ];
 /**
  * Every template whose producer renders segments and joins them: the segmented niches and
@@ -69,6 +71,8 @@ const JOINS_SEGMENTS: TemplateName[] = [...SEGMENTED, "ai-influencer"];
 const CADENCE_ONLY_NICHES: TemplateName[] = SEGMENTED.filter((name) => name !== "channel-cloning");
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
+/** The niches that render raw 4:3 film from text on Seedance and label the post, not the picture (ADR-1580, ADR-1640). */
+const RAW_FILM: TemplateName[] = ["empires", "legend-flex", "surreal-satire"];
 const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ template, agent, id: `${template.name}/${agent.name}` })));
 
 /**
@@ -80,7 +84,7 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "gaming-clips": "clipping", news: "clipping", sports: "clipping", ufc: "faceless", history: "faceless",
   "animal-feast": "faceless",
   "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
-  "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless", "food-slime": "faceless", "glass-food": "faceless", "would-you-choose": "faceless", "fruit-drama": "faceless",
+  "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless", "food-slime": "faceless", "glass-food": "faceless", "would-you-choose": "faceless", "fruit-drama": "faceless", empires: "faceless", "legend-flex": "faceless", "surreal-satire": "faceless",
   "ai-influencer": "faceless",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
@@ -202,8 +206,8 @@ describe("the toolsets", () => {
    */
   it("lets the publisher post, only with the operator's yes, and denies every other seat", () => {
     for (const { template, agent, id } of everySeat) {
-      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1360 (i)).
-      const publishes = template.name === "ai-influencer" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
+      // The AI Influencer's and the raw-film niches' publishers also label every post AI-generated (vetta-mono ADR-1360 (i), ADR-1580, ADR-1640).
+      const publishes = template.name === "ai-influencer" || RAW_FILM.includes(template.name) ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
       expect(agent.tools?.configs["social.post"], id).toEqual(agent.name === PUBLISHER ? publishes : { enabled: false, permission: "deny" });
       expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
     }
@@ -333,8 +337,8 @@ describe("the toolsets", () => {
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      // The influencer pins the ones measured keeping a face; every other renderer the base's.
-      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : VIDEO_MODELS;
+      // The influencer pins the ones measured keeping a face, the raw-film niches Seedance; every other renderer the base's.
+      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : RAW_FILM.includes(template.name) ? RAW_FILM_VIDEO_MODELS : VIDEO_MODELS;
       expect(video.config, id).toEqual({ models });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
@@ -933,7 +937,7 @@ describe("the generated short-form scene pipeline", () => {
       for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill", "transcribe_audio"]) {
         expect(permissionFor(template, "producer", tool), `${name}/${tool}`).toBe("allow");
       }
-      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: VIDEO_MODELS });
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: RAW_FILM.includes(name) ? RAW_FILM_VIDEO_MODELS : VIDEO_MODELS });
       expect(producer.skills, name).toEqual([
         "naive/video-assembly",
         ...(name === "faceless" ? [] : [`naive/channel-template-${name}`]),
@@ -1432,4 +1436,76 @@ describe("the AI Influencer template", () => {
   it("names no vendor anywhere a person or a seat reads it", () => {
     expect(JSON.stringify(AI)).not.toMatch(/higgsfield|\bsoul\b/i);
   });
+});
+
+/** ADR-1580: the empires reels are raw 4:3 film from text, cut to a rapped song, with nothing burned in. */
+describe("the empires niche makes raw video", () => {
+  const empires = TEMPLATES.empires;
+  it("renders 4:3 from text on Seedance, with a sung track and no text, after the base pipeline", () => {
+    const producer = seat(empires, "producer").system!;
+    expect(RAW_FILM_VIDEO_MODELS).toEqual(["bytedance/seedance-2.5"]);
+    expect(producer).toContain(RAW_FILM_PRODUCER);
+    expect(producer.indexOf(RAW_FILM_PRODUCER)).toBeGreaterThan(producer.indexOf("aspect_ratio 9:16"));
+    expect(producer.indexOf(RAW_FILM_PRODUCER)).toBeGreaterThan(producer.indexOf("instrumental: true"));
+    expect(seat(empires, "scriptwriter").system).toContain(RAW_FILM_SCRIPTWRITER);
+  });
+  it("lets the producer pay for a whole Seedance piece and two retakes, and no more than a day's default", () => {
+    const producer = seat(empires, "producer").budget!;
+    expect(producer).toEqual(EMPIRES_PRODUCER_BUDGET);
+    // Three 15-second calls and two retakes, at Seedance's rate: ~$22.49 before turns.
+    expect(producer.max_task_micro_usd).toBeGreaterThan(5 * 15 * SEEDANCE_MICRO_USD_PER_SECOND);
+    expect(producer.max_task_micro_usd).toBeLessThanOrEqual(producer.cap_micro_usd);
+    expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
+    for (const agent of empires.agents.filter((a) => a.name !== "producer")) expect(agent.budget, agent.name).toEqual(seat(TEMPLATES.faceless, agent.name).budget);
+  });
+  it("discloses AI on the post, not on the picture", () => {
+    for (const agent of empires.agents) {
+      const post = agent.tools?.configs["social.post"];
+      if (post?.enabled) expect(post.config, agent.name).toEqual({ ai_generated: true });
+    }
+    expect(seat(TEMPLATES.history, PUBLISHER).tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
+  });
+});
+
+/**
+ * ADR-1640: two more raw-film niches from the owner's reels. Legend Flex is cut to a rapped song like
+ * empires; Surreal Satire keeps the crew's instrumental bed. Both render a piece in two Seedance calls.
+ */
+describe("the legend-flex and surreal-satire niches make raw video", () => {
+  const legend = TEMPLATES["legend-flex"];
+  const satire = TEMPLATES["surreal-satire"];
+  it("renders 4:3 from text on Seedance with a sung track, after the base pipeline (legend-flex)", () => {
+    const producer = seat(legend, "producer").system!;
+    expect(producer).toContain(RAW_FILM_PRODUCER);
+    expect(producer.indexOf(RAW_FILM_PRODUCER)).toBeGreaterThan(producer.indexOf("aspect_ratio 9:16"));
+    expect(producer.indexOf(RAW_FILM_PRODUCER)).toBeGreaterThan(producer.indexOf("instrumental: true"));
+    expect(seat(legend, "scriptwriter").system).toContain(RAW_FILM_SCRIPTWRITER);
+  });
+  it("renders 4:3 from text on Seedance and keeps the instrumental bed (surreal-satire)", () => {
+    const producer = seat(satire, "producer").system!;
+    expect(producer).toContain(SURREAL_SATIRE_PRODUCER);
+    expect(producer.indexOf(SURREAL_SATIRE_PRODUCER)).toBeGreaterThan(producer.indexOf("aspect_ratio 9:16"));
+    expect(producer).not.toContain("instrumental: false");
+    expect(seat(satire, "scriptwriter").system).toContain(SURREAL_SATIRE_SCRIPTWRITER);
+  });
+  for (const template of [legend, satire]) {
+    it(`pins Seedance on the one seat that renders, and names generate_video on every seat (${template.name})`, () => {
+      for (const agent of template.agents) {
+        const video = agent.tools?.configs["generate_video"];
+        expect(video, agent.name).toEqual(agent.name === "producer" ? { enabled: true, permission: "allow", config: { models: RAW_FILM_VIDEO_MODELS } } : { enabled: false, permission: "deny" });
+      }
+    });
+    it(`lets the producer pay for two Seedance calls and two retakes, and no more than a day's default (${template.name})`, () => {
+      const producer = seat(template, "producer").budget!;
+      expect(producer).toEqual(TWO_CALL_PIECE_BUDGET);
+      // Two 15-second calls and two retakes, at Seedance's rate: ~$17.99 before turns.
+      expect(producer.max_task_micro_usd).toBeGreaterThan(4 * 15 * SEEDANCE_MICRO_USD_PER_SECOND);
+      expect(producer.max_task_micro_usd).toBeLessThanOrEqual(producer.cap_micro_usd);
+      expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
+      for (const agent of template.agents.filter((a) => a.name !== "producer")) expect(agent.budget, agent.name).toEqual(seat(TEMPLATES.faceless, agent.name).budget);
+    });
+    it(`discloses AI on the post, not on the picture (${template.name})`, () => {
+      expect(seat(template, PUBLISHER).tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask", config: { ai_generated: true } });
+    });
+  }
 });
