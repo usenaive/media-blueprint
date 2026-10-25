@@ -318,7 +318,7 @@ export function niche(
 
 /**
  * What one second of rendered video costs the org, as the ledger bills it: FLUX 3 Max, the default,
- * at its STANDARD 720p rate — $0.17 a second upstream × 1.3 = 221,000 µUSD (platform ADR-1514). Until
+ * at its STANDARD 720p rate — $0.17 a second upstream × 1.3 = 221,000 µUSD (platform ADR-1638). Until
  * 2026-11-07 its launch promo bills a quarter of that (55,250), so this over-budgets until then, on
  * purpose: a ceiling sized to the promo would refuse the same piece the day it ends. Hailuo 3, next in
  * line, settles at 169,000 a second (staging, 2026-10-17); Seedance 2.5, the last, ~299,851 — ~1.36×
@@ -461,7 +461,7 @@ export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "gen
 
 /**
  * The video models a seat may render with, in order: the platform tries each pin in turn when the
- * one before it is refused or unavailable (platform ADR-1514), never a model outside them, and a
+ * one before it is refused or unavailable (platform ADR-1638), never a model outside them, and a
  * deploy that does not publish a pin passes over it. The pin keeps the channel off any model the
  * platform's own default order might add. FLUX 3 Max is first (owner decision, 2026-10-22: native
  * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. Hailuo 3 is
