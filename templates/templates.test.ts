@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
-import { CONTINUITY_RULE } from "./faceless.ts";
+import { ANCHOR_RULE, CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
@@ -163,7 +163,8 @@ describe("the crews", () => {
       const own = system
         .slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length)
         .replace(REFERENCE_RULE, "")
-        .replace(CONTINUITY_RULE, "");
+        .replace(CONTINUITY_RULE, "")
+        .replace(ANCHOR_RULE, "");
       expect(words(own), id).toBeGreaterThanOrEqual(80);
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
@@ -1049,6 +1050,20 @@ describe("the generated short-form scene pipeline", () => {
       expect(producer, name).toMatch(/pull its last frame with ffmpeg and publish_file it/);
       expect(producer.indexOf("OPENING FRAME is"), name).toBeLessThan(producer.indexOf("call generate_image"));
       expect(seat(TEMPLATES[name], "scriptwriter").system, name).toMatch(/name it as the scene's OPENING FRAME instead of an image_prompt/);
+    }
+  });
+
+  /** A shipped frame anchors every scene still, look-checked (platform ADR-1641). */
+  it("never renders a scene still text-only when a pinned skill ships frames", () => {
+    for (const name of ["faceless", ...SEGMENTED] as TemplateName[]) {
+      const producer = seat(TEMPLATES[name], "producer").system!;
+      expect(producer, name).toContain(ANCHOR_RULE);
+      expect(ANCHOR_RULE).toMatch(/never text-only: image_urls holds that skill's frame of the scene's lead character first, then its setting frame/);
+      expect(ANCHOR_RULE).toMatch(/match_look: true/);
+      expect(producer, name).toMatch(/inspect it against the bible and the skill's frames/);
+      // A card planned before the bible renders as planned, but still opens on a skill frame (ADR-1641).
+      expect(ANCHOR_RULE).toMatch(/A card planned before the bible that names no opening frame opens each segment on that skill's lead-character frame/);
+      expect(seat(TEMPLATES[name], "scriptwriter").system, name).toMatch(/image references name the skill's shipped frames of the lead character and the setting/);
     }
   });
 
