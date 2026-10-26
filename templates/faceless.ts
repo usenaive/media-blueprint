@@ -49,7 +49,7 @@ export const CONTINUITY_RULE =
  * look clearly differs.
  */
 export const ANCHOR_RULE =
-  "When a pinned skill ships frames, a scene image is never text-only: image_urls holds that skill's frame of the scene's lead character first, then its setting frame (from scene two, the first accepted scene image may take that place), with match_look: true, and the prompt describes the look exactly as the skill's Look lock does — no style word it does not use.";
+  "When a pinned skill ships frames, a scene image is never text-only: image_urls holds that skill's frame of the scene's lead character first, then its setting frame (from scene two, the first accepted scene image may take that place), with match_look: true, and the prompt describes the look exactly as the skill's Look lock does — no style word it does not use. A card planned before the bible that names no opening frame opens each segment on that skill's lead-character frame.";
 
 /**
  * Every generated short follows the same scene pipeline below, on the same video models

@@ -1061,6 +1061,8 @@ describe("the generated short-form scene pipeline", () => {
       expect(ANCHOR_RULE).toMatch(/never text-only: image_urls holds that skill's frame of the scene's lead character first, then its setting frame/);
       expect(ANCHOR_RULE).toMatch(/match_look: true/);
       expect(producer, name).toMatch(/inspect it against the bible and the skill's frames/);
+      // A card planned before the bible renders as planned, but still opens on a skill frame (ADR-1641).
+      expect(ANCHOR_RULE).toMatch(/A card planned before the bible that names no opening frame opens each segment on that skill's lead-character frame/);
       expect(seat(TEMPLATES[name], "scriptwriter").system, name).toMatch(/image references name the skill's shipped frames of the lead character and the setting/);
     }
   });
