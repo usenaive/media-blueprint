@@ -97,7 +97,7 @@ every later scene's image is that still re-posed (`generate_image` with the char
 opens on a skill's shipped frame or a previous take's last frame, and every scene's clip animates its
 still with the character, all submitted in one turn. No render prompt holds words, not even a spoken
 line: the line stays in the plan and is voiced in the edit (AUDIO MODE GENERATED, since the clips are
-silent). The burned-in label is a disclosure only; a call to action shows in the last scene only.
+silent). A call to action shows in the last scene only.
 Preflight, AUDIO MODE, the edit and VERIFY are the base producer's, word for word. Both seats drop
 the base's pre-bible (legacy) path: the day-one `character-bible` card is the influencer's own, drawn
 from the persona, the purpose answer and the picked looks (no page, no video), waits on nothing, and

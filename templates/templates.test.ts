@@ -1360,8 +1360,10 @@ describe("the AI Influencer template", () => {
     expect(ONE_SET).toMatch(/generate_image with character, image_urls \[scene 1's accepted image\]/);
   });
 
-  it("shows a call to action only in the last scene; the label stays a disclosure (H2)", () => {
-    expect(seat(AI, "producer").system).toMatch(/the label is a disclosure only and a call to action sits in the last scene only/);
+  it("shows a call to action only in the last scene, and names no label to burn in (H2)", () => {
+    expect(seat(AI, "producer").system).toMatch(/On screen, a call to action sits in the last scene only\./);
+    // "the label" with no label left read as an instruction to burn one in (mb#60 review).
+    expect(seat(AI, "producer").system).not.toMatch(/\bthe label\b|burned-in label/i);
     // Owner, 2026-10-20: the influencer adds no AI-generated label of its own (no burned-in label, no posting flag).
     expect(seat(AI, "producer").system).not.toMatch(/AI-generated|#AIgenerated/);
     // The plan's beats already end on the cta (the scriptwriter's base brief); the producer burns it in last.
