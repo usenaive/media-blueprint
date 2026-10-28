@@ -351,7 +351,13 @@ export const budgetOf = (max_task_micro_usd: number, cap_micro_usd: number): Bud
  */
 const budget = budgetOf(20_000_000, 60_000_000);
 
-const model = "anthropic/claude-sonnet-5";
+/**
+ * The model every seat on every template thinks with — the `ai-influencer` crew too, since it is a
+ * niche of `faceless`. GLM 5.3 Flash (owner decision 2026-10-25): $0.15/M in and $0.50/M out against
+ * Sonnet 5's $3/$15, with tool calling, reasoning and a 1M-token context. Renders are priced apart,
+ * so the per-seat ceilings below, sized from renders, stand.
+ */
+export const SEAT_MODEL = "z-ai/glm-5.3-flash";
 
 /** The one seat that publishes. It is on every template, it is `required`, and it ends every pipeline. */
 export const PUBLISHER = "channel-manager";
@@ -584,7 +590,7 @@ export const agent = (decl: {
   name: decl.name,
   role: decl.role,
   ...(decl.required === undefined ? {} : { required: decl.required }),
-  model,
+  model: SEAT_MODEL,
   budget: decl.budget ?? budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${CREW_RULES}`,

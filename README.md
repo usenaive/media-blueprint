@@ -316,6 +316,9 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - The `longform` producer: **$75 per task, $150 per day.** One piece is up to twelve segments,
   ~$30.60 of video (~$42.04 on Seedance 2.5), in one session.
 - Each fire has its own budget, inside its seat's ceiling.
+- Every seat on every template, `ai-influencer` included, thinks with `z-ai/glm-5.3-flash`
+  (`SEAT_MODEL` in `templates/template.ts`): $0.15/M input and $0.50/M output tokens, so a seat's
+  turns cost a fraction of its renders.
 - `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
   on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
   (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
