@@ -326,8 +326,8 @@ describe("the toolsets", () => {
    * `generate_video` has no derivable default model, so every seat that renders pins the allow-list.
    * `generate_image` is left unpinned on purpose: the platform then takes the cheapest priced model.
    */
-  it("pins the video models on every seat that renders, cheapest measured first, and on no other", () => {
-    expect(VIDEO_MODELS).toEqual(["minimax/hailuo-3", "bytedance/seedance-2.5"]);
+  it("pins the video models on every seat that renders, the default first, and on no other", () => {
+    expect(VIDEO_MODELS).toEqual(["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"]);
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
@@ -344,13 +344,13 @@ describe("the toolsets", () => {
 
   /**
    * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
-   * Hailuo 3 on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
+   * FLUX 3 Max on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
   it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
       const producer = seat(template, "producer");
-      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("minimax/hailuo-3");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("black-forest-labs/flux-3-max");
       expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
@@ -358,7 +358,7 @@ describe("the toolsets", () => {
     expect(RENDER_MODEL_RULE).toMatch(/no model argument.*the channel's default.*unless.*project_context explicitly/);
     for (const template of all) {
       for (const text of everyPrompt(template)) {
-        expect(text, template.name).not.toMatch(/\bveo\b|seedance|hailuo|pick a model|choose a model|the plan's model|the video model;|video model:/i);
+        expect(text, template.name).not.toMatch(/\bveo\b|seedance|hailuo|flux|pick a model|choose a model|the plan's model|the video model;|video model:/i);
       }
     }
   });
