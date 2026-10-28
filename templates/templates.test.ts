@@ -1453,10 +1453,10 @@ describe("the empires niche makes raw video", () => {
     expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
     for (const agent of empires.agents.filter((a) => a.name !== "producer")) expect(agent.budget, agent.name).toEqual(seat(TEMPLATES.faceless, agent.name).budget);
   });
-  it("discloses AI on the post, not on the picture", () => {
+  it("labels neither the picture nor the post: an AI label is the person's opt-in (vetta-mono ADR-1636)", () => {
     for (const agent of empires.agents) {
       const post = agent.tools?.configs["social.post"];
-      if (post?.enabled) expect(post.config, agent.name).toEqual({ ai_generated: true });
+      if (post?.enabled) expect(post, agent.name).toEqual({ enabled: true, permission: "ask" });
     }
     expect(seat(TEMPLATES.history, PUBLISHER).tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
   });

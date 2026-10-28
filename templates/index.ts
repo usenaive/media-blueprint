@@ -154,7 +154,8 @@ export const FRUIT_DRAMA = niche(FACELESS, {
  * ADR-1580: one empire at one moment as raw 4:3 film, one modern flex per shot, cut to a rapped song.
  * The reference reels are rendered from text by Seedance and carry no text at all (owner, 2026-10-24),
  * so these lines follow the base pipeline and win where it says 9:16, an opening image or an
- * instrumental bed. The disclosure is the post's `ai_generated` setting, never pixels.
+ * instrumental bed. No label in the picture, and no seat marks a post AI-generated: that is the
+ * person's opt-in (vetta-mono ADR-1636), and a seat's `social.post` config is ignored for it anyway.
  */
 export const EMPIRES_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5"];
 export const EMPIRES_SCRIPTWRITER =
@@ -183,12 +184,7 @@ const empires = niche(FACELESS, {
 });
 export const EMPIRES: MediaTemplate = {
   ...empires,
-  agents: empires.agents.map((seat) => {
-    const sized = seat.name === "producer" ? { ...seat, budget: EMPIRES_PRODUCER_BUDGET } : seat;
-    const post = sized.tools!.configs["social.post"];
-    if (post?.enabled !== true) return sized;
-    return { ...sized, tools: { ...sized.tools!, configs: { ...sized.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
-  }),
+  agents: empires.agents.map((seat) => (seat.name === "producer" ? { ...seat, budget: EMPIRES_PRODUCER_BUDGET } : seat)),
 };
 
 /**
