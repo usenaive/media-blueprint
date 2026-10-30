@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, AI_LABEL_LINE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -1500,7 +1500,7 @@ describe("the empires niche makes raw video", () => {
 /**
  * vetta-mono ADR-1755: the AI Music Channel. A post is a song and its cover, and a network takes no
  * audio-only post, so the cover-artist muxes the two into a vertical mp4 the channel manager posts.
- * The label is the caption's last line; no seat sets the post's AI flag (vetta-mono ADR-1636).
+ * No AI label in the caption, and no seat sets the post's AI flag (vetta-mono ADR-1636).
  */
 describe("the AI Music Channel", () => {
   const brief = (name: TemplateName, seatName: string) => seat(TEMPLATES[name], seatName).system ?? "";
@@ -1552,9 +1552,11 @@ describe("the AI Music Channel", () => {
       expect(composer, name).toMatch(/second failure means STOPPED/);
       expect(composer, name).toMatch(/never call generate_music for that card again/);
       expect(composer, name).toMatch(/never name or imitate a real artist/);
-      expect(composer, name).toMatch(/A Publish card not yet closed means the queue is ahead: make nothing/);
+      expect(composer, name).toMatch(/A Cover or Publish card not yet closed means the queue is ahead: make nothing/);
       const [fire] = seat(TEMPLATES[name], "composer").schedules!;
       expect(fire!.input, name).toMatch(/make nothing and say why in one line/);
+      // A song still at the cover-artist, or day one's first song still in flight, stops the 10:00 fire.
+      expect(fire!.input, name).toMatch(/a Cover or Publish card not yet closed, or the first-song card not yet closed/);
       expect(fire!.budget_micro_usd, name).toBe(2_000_000);
     }
   });
@@ -1573,16 +1575,15 @@ describe("the AI Music Channel", () => {
     }
   });
 
-  it("labels the post in its caption's last line and never sets the AI-generated flag", () => {
-    expect(AI_LABEL_LINE).toBe("AI-generated music.");
+  it("adds no AI label to the caption and never sets the AI-generated flag (vetta-mono ADR-1636)", () => {
     for (const name of MUSIC_FAMILY) {
       const manager = brief(name, PUBLISHER);
       expect(manager, name).toContain(MUSIC_PUBLISHER_BRIEF);
-      expect(manager, name).toContain(`\`${AI_LABEL_LINE}\` exactly`);
+      expect(manager, name).toMatch(/Add no AI label or disclosure line to the caption/);
       expect(manager, name).toMatch(/never mark the post AI-generated yourself/);
       expect(manager, name).not.toMatch(/ai_generated/);
       expect(seat(TEMPLATES[name], PUBLISHER).tools?.configs["social.post"], name).toEqual({ enabled: true, permission: "ask" });
-      expect(brief(name, "cover-artist"), name).toContain(`its last line "${AI_LABEL_LINE}" exactly`);
+      for (const prompt of everyPrompt(TEMPLATES[name])) expect(prompt, name).not.toMatch(/AI-generated music/i);
     }
   });
 

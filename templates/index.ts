@@ -15,7 +15,7 @@ import { budgetOf, CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche, renderMicroU
 import type { MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
-export { AI_LABEL_LINE, MUSIC, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE } from "./music.ts";
+export { MUSIC, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE } from "./music.ts";
 export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, ROADMAP, lengthPhrase, niche, segmentsOf } from "./template.ts";
 
 /**

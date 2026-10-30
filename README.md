@@ -87,8 +87,8 @@ ffmpeg mux, probed with ffprobe before it is published) and `analyst`. Every sea
 
 Day one, the channel manager writes the **CHANNEL NOTE** on the `channel-note` card — a `CONTEXT SEED`
 block every song prompt starts with, and a `COVER DIRECTION` line — with no model called; the first
-song waits on it. The caption's last line is `AI-generated music.`, word for word; no seat sets the
-post's AI-generated flag, which is the operator's choice (vetta-mono ADR-1636). It asks the genre,
+song waits on it. No seat writes an AI label into the caption or sets the post's AI-generated flag:
+both are the operator's choice (vetta-mono ADR-1636). It asks the genre,
 an optional reference (described in musical words, never copied) and the cadence.
 
 The four genre niches are `niche(MUSIC, …)`: each pins its genre's playbook, whose Context seed is
