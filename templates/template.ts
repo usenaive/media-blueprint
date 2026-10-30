@@ -46,7 +46,14 @@ export type TemplateName =
   // ADR-1288: the AI glass-food cutting ASMR format, on `faceless` (segmented).
   | "glass-food"
   // ADR-1580: one empire at one moment, a modern object in every shot, on `faceless` (segmented).
-  | "empires";
+  | "empires"
+  // vetta-mono ADR-1755: the AI Music Channel base (`music`, a song and its cover a post), and its
+  // four genre niches, which pin `naive/channel-template-<genre>` on the music crew.
+  | "music"
+  | "hardstyle"
+  | "techno"
+  | "rap"
+  | "pop";
 
 /** The project `naive.config.ts` declares — the word the platform stamps on its installs. */
 export const PROJECT_NAME = "media";
@@ -186,6 +193,12 @@ export const FIRST_PIECE_KEY: Record<TemplateName, string> = {
   "food-slime": "first-briefs",
   "glass-food": "first-briefs",
   empires: "first-briefs",
+  // A new base has no v1.x install to stay a no-op on, so its card is keyed for what it starts.
+  music: "first-song",
+  hardstyle: "first-song",
+  techno: "first-song",
+  rap: "first-song",
+  pop: "first-song",
 };
 
 /** How long a piece of a template runs, in seconds. */
@@ -215,8 +228,12 @@ export const SEGMENT_MIN_SECONDS = 5;
 /** How many `generate_video` calls a piece of this length is, at worst. */
 export const segmentsOf = (length: Length): number => Math.ceil(length.max / SEGMENT_MAX_SECONDS);
 
-/** "between 15 and 30 seconds" — the range as every prompt of that template says it. */
-export const lengthPhrase = (length: Length): string => `between ${length.min} and ${length.max} seconds`;
+/**
+ * "between 15 and 30 seconds" — the range as every prompt of that template says it. A fixed length
+ * (`music`: every song is 30 seconds) reads "exactly 30 seconds", never "between 30 and 30".
+ */
+export const lengthPhrase = (length: Length): string =>
+  length.min === length.max ? `exactly ${length.min} seconds` : `between ${length.min} and ${length.max} seconds`;
 
 export interface MediaTemplate {
   /** Spelled exactly as `defineProject({ template })` names it. */

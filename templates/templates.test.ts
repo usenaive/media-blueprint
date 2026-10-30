@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, niche, TEMPLATES } from "./index.ts";
+import { ACTIVE, AI_LABEL_LINE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -54,6 +54,9 @@ const CATALOGUE = [
   "naive/channel-template-food-slime",
   "naive/channel-template-glass-food",
   "naive/channel-template-would-you-choose",
+  // The AI Music Channel's playbook and its genres (vetta-mono ADR-1755).
+  "naive/channel-template-music", "naive/channel-template-hardstyle", "naive/channel-template-techno",
+  "naive/channel-template-rap", "naive/channel-template-pop",
 ];
 
 const all = Object.values(TEMPLATES);
@@ -68,7 +71,11 @@ const SEGMENTED: TemplateName[] = [
  */
 const JOINS_SEGMENTS: TemplateName[] = [...SEGMENTED, "ai-influencer"];
 /** Segmented niches whose form is cadence-only; `channel-cloning` adds a `clone` question, so it is apart. */
-const CADENCE_ONLY_NICHES: TemplateName[] = SEGMENTED.filter((name) => name !== "channel-cloning");
+/** The AI Music Channel's genre niches: the `music` crew with the genre's playbook pinned. */
+const MUSIC_GENRES: TemplateName[] = ["hardstyle", "techno", "rap", "pop"];
+/** The music base and its genres: the one crew whose post is a song, not a render. */
+const MUSIC_FAMILY: TemplateName[] = ["music", ...MUSIC_GENRES];
+const CADENCE_ONLY_NICHES: TemplateName[] = [...SEGMENTED.filter((name) => name !== "channel-cloning"), ...MUSIC_GENRES];
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
 const everySeat = all.flatMap((template) => template.agents.map((agent) => ({ template, agent, id: `${template.name}/${agent.name}` })));
@@ -84,6 +91,7 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
   "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless", "food-slime": "faceless", "glass-food": "faceless", "would-you-choose": "faceless", "fruit-drama": "faceless", empires: "faceless",
   "ai-influencer": "faceless",
+  hardstyle: "music", techno: "music", rap: "music", pop: "music",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
   const out = { ...base } as Record<TemplateName, T>;
@@ -149,6 +157,8 @@ describe("the crews", () => {
     expect(seatsOf(TEMPLATES.faceless)).toEqual(["channel-manager", "producer", "trend-scout", "scriptwriter", "analyst"]);
     expect(seatsOf(TEMPLATES.longform)).toEqual(["channel-manager", "researcher", "writer", "producer", "analyst"]);
     expect(seatsOf(TEMPLATES.clipping)).toEqual(["channel-manager", "clipper", "scout", "caption-editor", "analyst"]);
+    // A song is one call and a cover: four seats, the channel manager publishing (vetta-mono ADR-1755).
+    for (const name of MUSIC_FAMILY) expect(seatsOf(TEMPLATES[name]), name).toEqual(["channel-manager", "composer", "cover-artist", "analyst"]);
   });
 
   /**
@@ -165,7 +175,8 @@ describe("the crews", () => {
       const own = system
         .slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length)
         .replace(REFERENCE_RULE, "")
-        .replace(CONTINUITY_RULE, "");
+        .replace(CONTINUITY_RULE, "")
+        .replace(MUSIC_PUBLISHER_BRIEF, "");
       expect(words(own), id).toBeGreaterThanOrEqual(80);
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
@@ -251,6 +262,7 @@ describe("the toolsets", () => {
       "faceless/channel-manager", "faceless/producer", "faceless/trend-scout", "faceless/scriptwriter",
       "longform/channel-manager", "longform/researcher", "longform/writer", "longform/producer",
       "clipping/channel-manager", "clipping/clipper", "clipping/scout", "clipping/caption-editor",
+      "music/channel-manager", "music/cover-artist",
     ]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "view_image"), id).toBe(LOOKERS.has(id) ? "allow" : "deny");
@@ -308,7 +320,7 @@ describe("the toolsets", () => {
 
   /** A shell provisions and bills a machine; each seat that holds one is a decision written here. */
   it("gives a shell only to the seats that sample frames or join segments", () => {
-    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "faceless/producer", "longform/writer", "longform/producer"]);
+    const SHELL_SEATS = withNicheIds(["faceless/scriptwriter", "faceless/producer", "longform/writer", "longform/producer", "music/cover-artist"]);
     for (const { template, agent, id } of everySeat) {
       expect(permissionFor(template, agent.name, "bash"), id).toBe(SHELL_SEATS.has(id) ? "allow" : "deny");
       for (const sandbox of ["read", "write", "edit", "ls", "find"]) expect(permissionFor(template, agent.name, sandbox), id).toBe("deny");
@@ -433,6 +445,14 @@ describe("the board", () => {
         "report-frame": ["channel-plan"],
         "first-moments": ["source-check", "caption-style"],
       },
+      // The channel note is the seed every song starts from, so the first song waits on it alone.
+      music: {
+        "channel-note": [],
+        "channel-plan": [],
+        "cover-look": ["channel-note"],
+        "report-frame": ["channel-plan"],
+        "first-song": ["channel-note"],
+      },
     });
     for (const template of all) {
       expect(Object.fromEntries(template.tasks.map((task) => [task.key, task.blocked_by ?? []])), template.name).toEqual(chains[template.name]);
@@ -489,6 +509,7 @@ describe("the board", () => {
       faceless: { seats: ["trend-scout", "scriptwriter", "producer", PUBLISHER], cards: ["Plan", "Render", "Publish"] },
       longform: { seats: ["researcher", "writer", "producer", PUBLISHER], cards: ["Plan", "Render", "Publish"] },
       clipping: { seats: ["scout", "clipper", "caption-editor", PUBLISHER], cards: ["Cut", "Caption", "Publish"] },
+      music: { seats: ["composer", "cover-artist", PUBLISHER], cards: ["Cover", "Publish"] },
     });
     for (const template of all) {
       const { seats, cards } = PIPELINES[template.name];
@@ -563,7 +584,8 @@ describe("publishing", () => {
 
   it("is the channel manager's, from a Publish card, with the rendered file", () => {
     expect(PUBLISHER).toBe("channel-manager");
-    for (const template of all) expect(unniched(template, seat(template, PUBLISHER).system ?? "")).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
+    // A music channel's manager is the same seat with one clause on what its video is (vetta-mono ADR-1755).
+    for (const template of all) expect(unniched(template, seat(template, PUBLISHER).system ?? "").replace(`${MUSIC_PUBLISHER_BRIEF} `, "")).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
     expect(brief()).toMatch(/A Publish card wakes you/);
     expect(brief()).toMatch(/social\.post.*file_ids/s);
   });
@@ -710,7 +732,7 @@ describe("the channel's clock", () => {
 
   /** How often the head starts pieces is a price: a long-form piece renders six segments. */
   it("starts pieces on each template at the cadence its render price can carry", () => {
-    const DAYS: Record<TemplateName, string> = withNiches<string>({ faceless: "1,4", longform: "1,3,5", clipping: "*" });
+    const DAYS: Record<TemplateName, string> = withNiches<string>({ faceless: "1,4", longform: "1,3,5", clipping: "*", music: "*" });
     for (const template of all) {
       const [fire] = seat(template, template.pipeline[0]!).schedules!;
       expect(fields(fire!.cron)[4], template.name).toBe(DAYS[template.name]);
@@ -733,7 +755,7 @@ describe("the channel's clock", () => {
 });
 
 describe("the setup questions", () => {
-  const BASES: TemplateName[] = ["faceless", "longform", "clipping"];
+  const BASES: TemplateName[] = ["faceless", "longform", "clipping", "music"];
 
   it("asks two per base template, and a third that is optional", () => {
     for (const name of BASES) {
@@ -790,7 +812,7 @@ describe("the setup questions", () => {
    * instead that the niche is fixed by the template and its pinned skill.
    */
   it("never tells a generative niche's crew the form asked for the niche or the reference", () => {
-    for (const name of SEGMENTED) {
+    for (const name of [...SEGMENTED, ...MUSIC_GENRES]) {
       const template = TEMPLATES[name];
       for (const said of everyPrompt(template)) {
         expect(said, name).not.toMatch(/asked for the niche|from the niche and the reference|the niche, the cadence|asks (three|four) questions/i);
@@ -834,6 +856,9 @@ describe("the length each template makes, and the money that follows from it", (
     // `clip_video`'s own default cut band.
     expect(TEMPLATES.clipping.length).toEqual({ min: 15, max: 60 });
     expect(TEMPLATES.longform.length).toEqual({ min: 60, max: 180 });
+    // One generate_music call of 30 seconds is the whole song, and the post is as long as the song.
+    for (const name of MUSIC_FAMILY) expect(TEMPLATES[name].length, name).toEqual({ min: 30, max: 30 });
+    expect(lengthPhrase(TEMPLATES.music.length)).toBe("exactly 30 seconds");
     // The default model renders 5 to 15 seconds a call, so long form renders up to twelve segments.
     expect(SEGMENT_MAX_SECONDS).toBe(15);
     expect(segmentsOf(TEMPLATES.faceless.length)).toBe(2);
@@ -1469,5 +1494,112 @@ describe("the empires niche makes raw video", () => {
       if (post?.enabled) expect(post, agent.name).toEqual({ enabled: true, permission: "ask" });
     }
     expect(seat(TEMPLATES.history, PUBLISHER).tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
+  });
+});
+
+/**
+ * vetta-mono ADR-1755: the AI Music Channel. A post is a song and its cover, and a network takes no
+ * audio-only post, so the cover-artist muxes the two into a vertical mp4 the channel manager posts.
+ * The label is the caption's last line; no seat sets the post's AI flag (vetta-mono ADR-1636).
+ */
+describe("the AI Music Channel", () => {
+  const brief = (name: TemplateName, seatName: string) => seat(TEMPLATES[name], seatName).system ?? "";
+
+  it("opens every seat on the shared preamble and closes it on the crew's rules", () => {
+    for (const name of MUSIC_FAMILY) {
+      for (const agent of TEMPLATES[name].agents) {
+        const system = unniched(TEMPLATES[name], agent.system ?? "");
+        expect(system.startsWith(CONTEXT_PREAMBLE), `${name}/${agent.name}`).toBe(true);
+        expect(system.endsWith(CREW_RULES), `${name}/${agent.name}`).toBe(true);
+      }
+    }
+  });
+
+  it("lets only the channel manager post, the composer alone compose, and nobody render video", () => {
+    for (const name of MUSIC_FAMILY) {
+      const template = TEMPLATES[name];
+      for (const agent of template.agents) {
+        const id = `${name}/${agent.name}`;
+        expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
+        expect(permissionFor(template, agent.name, "generate_music"), id).toBe(agent.name === "composer" ? "allow" : "deny");
+        expect(agent.tools?.configs["generate_video"], id).toEqual({ enabled: false, permission: "deny" });
+        expect(permissionFor(template, agent.name, "edit_video"), id).toBe("deny");
+      }
+      for (const tool of ["bash", "fetch_file", "publish_file", "generate_image", "view_image"]) {
+        expect(permissionFor(template, "cover-artist", tool), `${name}/${tool}`).toBe("allow");
+      }
+    }
+  });
+
+  it("writes the channel note on day one with no model, and starts the first song behind it", () => {
+    for (const name of MUSIC_FAMILY) {
+      const note = TEMPLATES[name].tasks.find((card) => card.key === "channel-note")!;
+      expect([note.assignee, note.blocked_by ?? []], name).toEqual([PUBLISHER, []]);
+      expect(note.body, name).toMatch(/No model is called on this card/);
+      expect(note.body, name).toMatch(/first line is CHANNEL NOTE.*CONTEXT SEED.*word for word.*COVER DIRECTION/s);
+      // Asked after the card closes, so the first song never waits on an answer.
+      expect(note.body!.indexOf("close the card"), name).toBeLessThan(note.body!.indexOf("ask_operator"));
+      const first = TEMPLATES[name].tasks.at(-1)!;
+      expect([first.key, first.assignee, first.blocked_by], name).toEqual(["first-song", "composer", ["channel-note"]]);
+    }
+  });
+
+  it("makes one song a card, once, from the seed, and starts the cover", () => {
+    for (const name of MUSIC_FAMILY) {
+      const composer = brief(name, "composer");
+      expect(composer, name).toMatch(/CONTEXT SEED block of the CHANNEL NOTE, word for word, then ONE sentence/);
+      expect(composer, name).toMatch(/Call generate_music ONCE with that prompt, length_seconds 30/);
+      expect(composer, name).toMatch(/second failure means STOPPED/);
+      expect(composer, name).toMatch(/never call generate_music for that card again/);
+      expect(composer, name).toMatch(/never name or imitate a real artist/);
+      expect(composer, name).toMatch(/A Publish card not yet closed means the queue is ahead: make nothing/);
+      const [fire] = seat(TEMPLATES[name], "composer").schedules!;
+      expect(fire!.input, name).toMatch(/make nothing and say why in one line/);
+      expect(fire!.budget_micro_usd, name).toBe(2_000_000);
+    }
+  });
+
+  it("posts the cover held over the song as a 1080x1920 mp4, probed before it is published", () => {
+    expect(MUX_RECIPE).toContain("1080:1920");
+    expect(MUX_RECIPE).toContain("-map 1:a");
+    expect(MUX_RECIPE).toMatch(/-shortest/);
+    for (const name of MUSIC_FAMILY) {
+      const cover = brief(name, "cover-artist");
+      expect(cover, name).toContain(MUX_RECIPE);
+      expect(cover, name).toMatch(/aspect_ratio 1:1/);
+      expect(cover, name).toMatch(/ffprobe: one video stream at 1080x1920, one audio stream/);
+      expect(cover, name).toMatch(/publish_file post\.mp4/);
+      expect(cover, name).toMatch(/no text, letters, logo, watermark or real person's face/);
+    }
+  });
+
+  it("labels the post in its caption's last line and never sets the AI-generated flag", () => {
+    expect(AI_LABEL_LINE).toBe("AI-generated music.");
+    for (const name of MUSIC_FAMILY) {
+      const manager = brief(name, PUBLISHER);
+      expect(manager, name).toContain(MUSIC_PUBLISHER_BRIEF);
+      expect(manager, name).toContain(`\`${AI_LABEL_LINE}\` exactly`);
+      expect(manager, name).toMatch(/never mark the post AI-generated yourself/);
+      expect(manager, name).not.toMatch(/ai_generated/);
+      expect(seat(TEMPLATES[name], PUBLISHER).tools?.configs["social.post"], name).toEqual({ enabled: true, permission: "ask" });
+      expect(brief(name, "cover-artist"), name).toContain(`its last line "${AI_LABEL_LINE}" exactly`);
+    }
+  });
+
+  it("asks the genre, an optional reference and the cadence on the base, and only the cadence on a genre", () => {
+    expect(TEMPLATES.music.questions.map((q) => [q.key, q.optional === true])).toEqual([["niche", false], ["reference", true], ["cadence", false]]);
+    for (const name of MUSIC_GENRES) {
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+      for (const agent of TEMPLATES[name].agents) {
+        expect(agent.skills, `${name}/${agent.name}`).toContain(`naive/channel-template-${name}`);
+        expect(agent.system, `${name}/${agent.name}`).toContain(nicheFixed(`naive/channel-template-${name}`));
+      }
+    }
+  });
+
+  it("clears a song and its cover on the default ceilings, far under a render", () => {
+    for (const name of MUSIC_FAMILY) {
+      for (const agent of TEMPLATES[name].agents) expect(agent.budget.max_task_micro_usd, `${name}/${agent.name}`).toBeGreaterThanOrEqual(1_000_000);
+    }
   });
 });
