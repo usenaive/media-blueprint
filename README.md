@@ -19,7 +19,8 @@ can pull, change and deploy it like any app. The crew runs on it and on the plat
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three base templates**, plus seventeen niche channel templates and the AI Influencer template, which reuse them (below).
+The repo carries **three base templates**, plus seventeen niche channel templates and the AI Influencer template, which reuse them (below),
+and the **AI Music Channel** (`music`) with four genre niches, whose post is a song (below).
 A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
@@ -72,6 +73,37 @@ only to point each seat at their pinned skill, which supplies the genre-specific
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
 the first session. It publishes, installs and switches through the exact paths the base three do.
+
+### AI Music Channel
+
+`music` (shown as **AI Music Channel**, vetta-mono ADR-1755, [`templates/music.ts`](templates/music.ts))
+is a fourth base crew whose post is a song: one original 30-second song (`generate_music`, one call
+a song) and one square cover, made into one vertical video — the cover held still, centred on a
+1080×1920 frame over a blurred copy of itself, with the song as its audio track — because a network
+takes no audio-only post. Four seats: `channel-manager` (writes the channel note on day one and
+publishes), `composer` (the head of the chain, daily 10:00), `cover-artist` (the cover, then the
+ffmpeg mux, probed with ffprobe before it is published) and `analyst`. Every seat pins
+`naive/channel-template-music`.
+
+Day one, the channel manager writes the **CHANNEL NOTE** on the `channel-note` card — a `CONTEXT SEED`
+block every song prompt starts with, and a `COVER DIRECTION` line — with no model called; the first
+song waits on it. The caption's last line is `AI-generated music.`, word for word; no seat sets the
+post's AI-generated flag, which is the operator's choice (vetta-mono ADR-1636). It asks the genre,
+an optional reference (described in musical words, never copied) and the cadence.
+
+The four genre niches are `niche(MUSIC, …)`: each pins its genre's playbook, whose Context seed is
+copied into the channel note word for word, so it asks only the cadence.
+
+| Template | Shown as | Reuses | Pins the skill |
+|---|---|---|---|
+| `hardstyle` | AI Hardstyle Channel | `music` | `naive/channel-template-hardstyle` |
+| `techno` | AI Techno Channel | `music` | `naive/channel-template-techno` |
+| `rap` | AI Rap Channel | `music` | `naive/channel-template-rap` |
+| `pop` | AI Pop Channel | `music` | `naive/channel-template-pop` |
+
+These five need engine `@usenaive-sdk/blueprints` 0.13.0, the first that lists them, and ship as
+media-blueprint **v3.2.0**. Under an older engine `naive.config.ts` leaves them out, by name, with a
+warning; the rest of the repo runs as before.
 
 ### AI Influencer
 
@@ -156,6 +188,7 @@ card for the next seat, blocked on its own. When it closes its card, the board w
 faceless   trend-scout ─Plan→ scriptwriter ─Render→ producer ─Publish→ channel-manager → approval card
 longform   researcher  ─Plan→ writer       ─Render→ producer ─Publish→ channel-manager → approval card
 clipping   scout       ─Cut→  clipper      ─Caption→ caption-editor ─Publish→ channel-manager → approval card
+music      composer    ─Cover→ cover-artist ─Publish→ channel-manager → approval card
 ```
 
 Step by step, on `faceless`:
@@ -253,6 +286,15 @@ woken by its cards.
 | `caption-editor` | Captions & titles | — | `caption-style` | Writes the caption and credits the creator; creates the Publish card |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports by source and by clip |
 
+### `music`
+
+| Seat | Role | Timers | Day one | What it does |
+|---|---|---|---|---|
+| `channel-manager` | Channel lead | — | `channel-note`, `channel-plan` | Writes the channel note; publishes each song's video on the cadence |
+| `composer` | Songs | daily 10:00 ($2) | `first-song` | Writes one song a card with one `generate_music` call; creates the Cover card |
+| `cover-artist` | Covers | — | `cover-look` | Makes the square cover, muxes it with the song into the posted mp4 |
+| `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Reports per song and subject |
+
 The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 `naive/short-video-hooks`, `naive/long-form-arc`, `naive/video-assembly`, `naive/clip-selection`,
 `naive/caption-writing`, `naive/video-trend-brief`, `naive/reference-teardown` and
@@ -274,6 +316,8 @@ exception: in place of the dropped niche it keeps a single question, the channel
 | `channel-cloning` | Channel to clone · Posting cadence |
 | `ai-influencer` | Who is your influencer? · Photos of your character (optional) · Pick the looks · What is your influencer for? |
 | `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
+| `music` | Genre · Reference (optional) · Posting cadence |
+| `hardstyle`, `techno`, `rap`, `pop` | Posting cadence |
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
 manager asks you for one when none is connected. `faceless` and `longform` do not ask the
@@ -296,7 +340,8 @@ reference-study ──→ look ─────┐
 ```
 
 (`longform` has `arc-style` for `hook-style` and `first-topic`; `clipping` has `source-check` and
-`caption-style` open at once, with no reference study, and `first-moments`.)
+`caption-style` open at once, with no reference study, and `first-moments`; `music` has
+`channel-note`, then `cover-look` and `first-song` behind it, with no reference study.)
 
 The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-topic`,
 `first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board

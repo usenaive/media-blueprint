@@ -19,7 +19,7 @@ describe("the README", () => {
     let rows = 0;
     for (const line of README.split("\n")) {
       if (line.startsWith("#")) {
-        const heading = /^#{2,3} +`(faceless|clipping|longform)`/.exec(line.trim());
+        const heading = /^#{2,3} +`(faceless|clipping|longform|music)`/.exec(line.trim());
         current = heading ? TEMPLATES[heading[1] as TemplateName] : undefined;
       }
       const cells = line.split("|").map((cell) => cell.trim());
@@ -34,7 +34,7 @@ describe("the README", () => {
         current.tasks.filter((task) => task.assignee === agent.name).map((task) => task.key),
       ]);
     }
-    expect(rows).toBe(15);
+    expect(rows).toBe(19);
   });
 
   /**
