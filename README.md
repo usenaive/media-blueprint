@@ -19,7 +19,7 @@ can pull, change and deploy it like any app. The crew runs on it and on the plat
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three base templates**, plus sixteen niche channel templates and the AI Influencer template, which reuse them (below).
+The repo carries **three base templates**, plus seventeen niche channel templates and the AI Influencer template, which reuse them (below).
 A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
@@ -33,7 +33,7 @@ title, the one-line description, and the networks each template is made for (`PL
 
 ### Niche channel templates
 
-On top of the base three, the repo carries **sixteen niche channel templates**. Each is its base crew
+On top of the base three, the repo carries **seventeen niche channel templates**. Each is its base crew
 with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
 pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
 [`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card
@@ -47,7 +47,7 @@ rules. Every generated short uses the base scene pipeline: script, one opening i
 image-to-video render per scene, then speech, creator-style captions, a ducked music bed and an
 ffmpeg join. A scene opens on a generated
 image unless a pinned skill names its opener — a shipped frame, or the previous take's last frame.
-Scenes run 5 to 15 seconds and total 15–30. The thirteen niche templates use `SEGMENTED_SHORT_FORM`
+Scenes run 5 to 15 seconds and total 15–30. The fourteen niche templates use `SEGMENTED_SHORT_FORM`
 only to point each seat at their pinned skill, which supplies the genre-specific scene grammar.
 
 | Template | Shown as | Reuses | Pins the skill |
@@ -68,6 +68,7 @@ only to point each seat at their pinned skill, which supplies the genre-specific
 | `glass-food` | AI Glass Food Channel | `faceless` | `naive/channel-template-glass-food` |
 | `would-you-choose` | AI Would You Choose Channel | `faceless` | `naive/channel-template-would-you-choose` |
 | `fruit-drama` | AI Fruit Drama Channel | `faceless` | `naive/channel-template-fruit-drama` |
+| `empires` | AI Empires Channel | `faceless` | `naive/channel-template-empires` |
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
 the first session. It publishes, installs and switches through the exact paths the base three do.
@@ -97,7 +98,7 @@ every later scene's image is that still re-posed (`generate_image` with the char
 opens on a skill's shipped frame or a previous take's last frame, and every scene's clip animates its
 still with the character, all submitted in one turn. No render prompt holds words, not even a spoken
 line: the line stays in the plan and is voiced in the edit (AUDIO MODE GENERATED, since the clips are
-silent). The burned-in label is a disclosure only; a call to action shows in the last scene only.
+silent). A call to action shows in the last scene only.
 Preflight, AUDIO MODE, the edit and VERIFY are the base producer's, word for word. Both seats drop
 the base's pre-bible (legacy) path: the day-one `character-bible` card is the influencer's own, drawn
 from the persona, the purpose answer and the picked looks (no page, no video), waits on nothing, and
@@ -269,7 +270,7 @@ exception: in place of the dropped niche it keeps a single question, the channel
 |---|---|
 | `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama` | Posting cadence |
+| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires` | Posting cadence |
 | `channel-cloning` | Channel to clone · Posting cadence |
 | `ai-influencer` | Who is your influencer? · Photos of your character (optional) · Pick the looks · What is your influencer for? |
 | `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
@@ -310,15 +311,20 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 ## 💰 Money
 
-- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$5.07 as the
-  ledger bills Hailuo 3, 169,000 µUSD a second; ~$9.00 on Seedance 2.5) and the turns around it.
+- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$5.10 at
+  FLUX 3 Max's standard 720p rate, 170,000 µUSD a second at cost — about a quarter of that during its
+  launch promo, until 2026-11-07; ~$3.90 on Hailuo 3; ~$7.01 on Seedance 2.5) and the turns around it.
 - The `longform` producer: **$75 per task, $150 per day.** One piece is up to twelve segments,
-  ~$30.42 of video (~$53.97 on Seedance 2.5), in one session.
+  ~$30.60 of video (~$42.04 on Seedance 2.5), in one session.
 - Each fire has its own budget, inside its seat's ceiling.
-- `generate_video` renders with `minimax/hailuo-3` by default on every template: it is first in the
-  pinned allow-list `VIDEO_MODELS` (`bytedance/seedance-2.5` is allowed too), and no brief names a
+- Every seat on every template, `ai-influencer` included, thinks with `z-ai/glm-5.3-flash`
+  (`SEAT_MODEL` in `templates/template.ts`): $0.15/M input and $0.50/M output tokens, so a seat's
+  turns cost a fraction of its renders.
+- `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
+  on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
+  (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
   model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
-  seconds a call, so every segment and scene keeps to that. `ai-influencer` pins
+  seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins
   `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 

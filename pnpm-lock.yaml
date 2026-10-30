@@ -15,8 +15,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@usenaive-sdk/blueprints':
-        specifier: ^0.12.0
-        version: 0.12.0
+        specifier: ^0.12.1
+        version: 0.12.1
       '@usenaive-sdk/vetta-cli':
         specifier: ^0.6.0
         version: 0.6.0
@@ -392,8 +392,8 @@ packages:
     resolution: {integrity: sha512-BbI9G26SegEEzpefeTM7UnDgkYv+Fap+E8CLl8abZivK9WSxpipnSB5ajeM91ZDqut6aAWQf5eHbBKeK538AJw==}
     engines: {node: '>=20'}
 
-  '@usenaive-sdk/blueprints@0.12.0':
-    resolution: {integrity: sha512-bijIpX1RW78eV4nQW6gxAFDqIAihdEu7S+vHeJbHdSCZC2vQEPVQU608QWqB6Rbx0QhA5kRTGJm/0g4Ustkk3Q==}
+  '@usenaive-sdk/blueprints@0.12.1':
+    resolution: {integrity: sha512-vPS+FMyP19Grj4Cwn5bwpBBzPmkPfHEGNAd9zCT/MSPa2TXyloAnxCgyK1LsN304Iw3fk3BgWtwDoSszSpVNyA==}
     engines: {node: '>=20'}
 
   '@usenaive-sdk/vetta-cli@0.6.0':
@@ -521,6 +521,10 @@ packages:
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+
+  ignore@7.0.14:
+    resolution: {integrity: sha512-wCBiZ77u1tuWde6G/nfOtLaCTYcFDU5yCzARzK10y+rLhzYoL7a7yEemcopcc2Mzow7gZOIjnV2ym1NYmdiJOQ==}
+    engines: {node: '>= 4'}
 
   is-potential-custom-element-name@1.0.1:
     resolution: {integrity: sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==}
@@ -1078,9 +1082,10 @@ snapshots:
     dependencies:
       '@usenaive-sdk/vetta': 0.6.0
 
-  '@usenaive-sdk/blueprints@0.12.0':
+  '@usenaive-sdk/blueprints@0.12.1':
     dependencies:
       '@usenaive-sdk/vetta': 0.10.0
+      ignore: 7.0.14
       jiti: 2.7.0
       zod: 4.5.4
 
@@ -1236,6 +1241,8 @@ snapshots:
     transitivePeerDependencies:
       - '@noble/hashes'
     optional: true
+
+  ignore@7.0.14: {}
 
   is-potential-custom-element-name@1.0.1:
     optional: true

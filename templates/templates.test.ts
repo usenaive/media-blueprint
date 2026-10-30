@@ -8,8 +8,8 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_AI_LABEL, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, niche, TEMPLATES } from "./index.ts";
+import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, niche, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -31,8 +31,10 @@ import {
   REFERENCE_RULE,
   RENDER_MODEL_RULE,
   renderMicroUsd,
+  SEEDANCE_MICRO_USD_PER_SECOND,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
+  SEAT_MODEL,
   segmentsOf,
   VIDEO_MODELS,
   words,
@@ -47,7 +49,7 @@ const CATALOGUE = [
   "naive/channel-template-gaming-clips", "naive/channel-template-news", "naive/channel-template-sports",
   "naive/channel-template-ufc", "naive/channel-template-history", "naive/channel-template-animal-feast",
   "naive/channel-template-channel-cloning", "naive/channel-template-comics", "naive/channel-template-cartoons-irl",
-  "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-fruit-drama", "naive/channel-template-ai-influencer",
+  "naive/channel-template-dancing-animals", "naive/channel-template-roadster", "naive/channel-template-fruit-drama", "naive/channel-template-ai-influencer", "naive/channel-template-empires",
   "naive/channel-template-cat-stories",
   "naive/channel-template-food-slime",
   "naive/channel-template-glass-food",
@@ -58,7 +60,7 @@ const all = Object.values(TEMPLATES);
 /** The short-form niches whose playbook renders segments and joins them (`SEGMENTED_SHORT_FORM`). */
 const SEGMENTED: TemplateName[] = [
   "ufc", "history", "animal-feast",
-  "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories", "food-slime", "glass-food", "would-you-choose", "fruit-drama",
+  "channel-cloning", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories", "food-slime", "glass-food", "would-you-choose", "fruit-drama", "empires",
 ];
 /**
  * Every template whose producer renders segments and joins them: the segmented niches and
@@ -80,7 +82,7 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "gaming-clips": "clipping", news: "clipping", sports: "clipping", ufc: "faceless", history: "faceless",
   "animal-feast": "faceless",
   "channel-cloning": "faceless", comics: "faceless", "cartoons-irl": "faceless",
-  "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless", "food-slime": "faceless", "glass-food": "faceless", "would-you-choose": "faceless", "fruit-drama": "faceless",
+  "dancing-animals": "faceless", roadster: "faceless", "cat-stories": "faceless", "food-slime": "faceless", "glass-food": "faceless", "would-you-choose": "faceless", "fruit-drama": "faceless", empires: "faceless",
   "ai-influencer": "faceless",
 };
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
@@ -202,8 +204,7 @@ describe("the toolsets", () => {
    */
   it("lets the publisher post, only with the operator's yes, and denies every other seat", () => {
     for (const { template, agent, id } of everySeat) {
-      // The AI Influencer's publisher also labels every post AI-generated (vetta-mono ADR-1360 (i)).
-      const publishes = template.name === "ai-influencer" ? { enabled: true, permission: "ask", config: { ai_generated: true } } : { enabled: true, permission: "ask" };
+      const publishes = { enabled: true, permission: "ask" };
       expect(agent.tools?.configs["social.post"], id).toEqual(agent.name === PUBLISHER ? publishes : { enabled: false, permission: "deny" });
       expect(permissionFor(template, agent.name, "social.post"), id).toBe(agent.name === PUBLISHER ? "ask" : "deny");
     }
@@ -217,7 +218,8 @@ describe("the toolsets", () => {
     for (const { template, agent, id } of everySeat) {
       // `edit_video` follows `generate_video` (core ADR-1309), so a seat that renders video may ask for an
       // edit — except on ai-influencer, where an edit could change the face (asserted there).
-      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => name !== "social.post" && name !== "edit_video")) {
+      // A seat's video is its own allow or deny (asserted with the renders).
+      for (const tool of ASK_BY_DEFAULT_TOOLS.filter((name) => !["social.post", "generate_video", "edit_video"].includes(name))) {
         const asks = id === "ai-influencer/producer" && tool === "create_character";
         expect(permissionFor(template, agent.name, tool), `${id}/${tool}`).toBe(asks ? "ask" : "deny");
       }
@@ -323,17 +325,24 @@ describe("the toolsets", () => {
     }
   });
 
+  /** One thinking model for every seat of every template, the influencer's included (owner decision 2026-10-25). */
+  it("seats every agent on GLM 5.3 Flash", () => {
+    expect(SEAT_MODEL).toBe("z-ai/glm-5.3-flash");
+    for (const { agent, id } of everySeat) expect(agent.model, id).toBe(SEAT_MODEL);
+    expect(TEMPLATES["ai-influencer"].agents.length).toBeGreaterThan(0);
+  });
+
   /**
    * `generate_video` has no derivable default model, so every seat that renders pins the allow-list.
    * `generate_image` is left unpinned on purpose: the platform then takes the cheapest priced model.
    */
-  it("pins the video models on every seat that renders, cheapest measured first, and on no other", () => {
-    expect(VIDEO_MODELS).toEqual(["minimax/hailuo-3", "bytedance/seedance-2.5"]);
+  it("pins the video models on every seat that renders, the default first, and on no other", () => {
+    expect(VIDEO_MODELS).toEqual(["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"]);
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
-      // The influencer pins the ones measured keeping a face; every other renderer the base's.
-      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : VIDEO_MODELS;
+      // The influencer pins the ones measured keeping a face, empires Seedance; every other renderer the base's.
+      const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : template.name === "empires" ? EMPIRES_VIDEO_MODELS : VIDEO_MODELS;
       expect(video.config, id).toEqual({ models });
       expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
     }
@@ -345,13 +354,13 @@ describe("the toolsets", () => {
 
   /**
    * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
-   * Hailuo 3 on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
+   * FLUX 3 Max on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
   it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
       const producer = seat(template, "producer");
-      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("minimax/hailuo-3");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("black-forest-labs/flux-3-max");
       expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
@@ -359,7 +368,7 @@ describe("the toolsets", () => {
     expect(RENDER_MODEL_RULE).toMatch(/no model argument.*the channel's default.*unless.*project_context explicitly/);
     for (const template of all) {
       for (const text of everyPrompt(template)) {
-        expect(text, template.name).not.toMatch(/\bveo\b|seedance|hailuo|pick a model|choose a model|the plan's model|the video model;|video model:/i);
+        expect(text, template.name).not.toMatch(/\bveo\b|seedance|hailuo|flux|pick a model|choose a model|the plan's model|the video model;|video model:/i);
       }
     }
   });
@@ -932,7 +941,7 @@ describe("the generated short-form scene pipeline", () => {
       for (const tool of ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "read_skill", "transcribe_audio"]) {
         expect(permissionFor(template, "producer", tool), `${name}/${tool}`).toBe("allow");
       }
-      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: VIDEO_MODELS });
+      expect(producer.tools?.configs["generate_video"]?.config, name).toEqual({ models: name === "empires" ? EMPIRES_VIDEO_MODELS : VIDEO_MODELS });
       expect(producer.skills, name).toEqual([
         "naive/video-assembly",
         ...(name === "faceless" ? [] : [`naive/channel-template-${name}`]),
@@ -1193,11 +1202,20 @@ describe("the built-in tool list", () => {
     }
   });
 
+  /** A video asks by default (vetta-mono ADR-1611): every seat names it, so no crew waits on a card. */
+  it("names generate_video on every seat, allowed where it renders and denied elsewhere", () => {
+    for (const { agent, id } of everySeat) {
+      const video = agent.tools?.configs["generate_video"];
+      expect(video, id).toBeDefined();
+      expect(video?.enabled ? video.permission : "deny", id).toMatch(/^(allow|deny)$/);
+    }
+  });
+
   /** Core's `ASK_BY_DEFAULT_TOOLS`, pinned: each falls to `ask` unless a toolset names it. */
   it("pins the platform's ask-by-default list", () => {
     expect([...ASK_BY_DEFAULT_TOOLS].sort()).toEqual([
       "apps.request_access", "card.cancel", "card.credentials", "card.issue", "company.set_brand", "company.set_logo", "company.set_timezone",
-      "create_character", "data_run", "edit_video", "email.send", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
+      "create_character", "data_run", "edit_video", "email.send", "generate_video", "legal.form", "legal.resend_link", "legal.submit", "legal.verify", "mobile",
       "social.post", "wallet.pay", "wallet.transfer",
     ]);
   });
@@ -1274,7 +1292,7 @@ describe("the AI Influencer template", () => {
     }
   });
 
-  it("trains an uploaded face only with consent on the operator's yes, and labels every post AI-generated", () => {
+  it("trains an uploaded face only with consent on the operator's yes, and never sets an AI-generated posting flag", () => {
     const meet = AI.tasks.find((card) => card.title === "Meet the influencer")!;
     expect(meet.body).toMatch(/create_character\{name, image_urls, style_pack:.*consent:\{attested:true\}\}/);
     expect(meet.body).toMatch(/operator's yes, which is their confirmation that the person in the photos is them or agreed to it/);
@@ -1282,7 +1300,7 @@ describe("the AI Influencer template", () => {
     expect(AI.questions.find((q) => q.key === "photos")?.help).toMatch(/approving the training confirms it/);
     for (const agent of AI.agents) {
       const post = agent.tools?.configs["social.post"];
-      if (post?.enabled) expect(post.config, agent.name).toEqual({ ai_generated: true });
+      if (post?.enabled) expect(post.config, agent.name).toBeUndefined();
     }
   });
 
@@ -1353,11 +1371,12 @@ describe("the AI Influencer template", () => {
     expect(ONE_SET).toMatch(/generate_image with character, image_urls \[scene 1's accepted image\]/);
   });
 
-  it("shows a call to action only in the last scene; the label stays a disclosure (H2)", () => {
-    expect(seat(AI, "producer").system).toMatch(/the label is a disclosure only and a call to action sits in the last scene only/);
-    // Owner, 2026-10-20: a realistic face, so the burned-in AI label is required on every frame, in the producer's own appended line.
-    expect(seat(AI, "producer").system).toContain(INFLUENCER_AI_LABEL);
-    expect(INFLUENCER_AI_LABEL).toMatch(/Every frame of every finished piece carries a burned-in on-screen "AI-generated" label/);
+  it("shows a call to action only in the last scene, and names no label to burn in (H2)", () => {
+    expect(seat(AI, "producer").system).toMatch(/On screen, a call to action sits in the last scene only\./);
+    // "the label" with no label left read as an instruction to burn one in (mb#60 review).
+    expect(seat(AI, "producer").system).not.toMatch(/\bthe label\b|burned-in label/i);
+    // Owner, 2026-10-20: the influencer adds no AI-generated label of its own (no burned-in label, no posting flag).
+    expect(seat(AI, "producer").system).not.toMatch(/AI-generated|#AIgenerated/);
     // The plan's beats already end on the cta (the scriptwriter's base brief); the producer burns it in last.
     expect(seat(AI, "scriptwriter").system).toMatch(/hook, setup, turn, payoff, cta/);
   });
@@ -1421,5 +1440,34 @@ describe("the AI Influencer template", () => {
 
   it("names no vendor anywhere a person or a seat reads it", () => {
     expect(JSON.stringify(AI)).not.toMatch(/higgsfield|\bsoul\b/i);
+  });
+});
+
+/** ADR-1580: the empires reels are raw 4:3 film from text, cut to a rapped song, with nothing burned in. */
+describe("the empires niche makes raw video", () => {
+  const empires = TEMPLATES.empires;
+  it("renders 4:3 from text on Seedance, with a sung track and no text, after the base pipeline", () => {
+    const producer = seat(empires, "producer").system!;
+    expect(EMPIRES_VIDEO_MODELS).toEqual(["bytedance/seedance-2.5"]);
+    expect(producer).toContain(EMPIRES_PRODUCER);
+    expect(producer.indexOf(EMPIRES_PRODUCER)).toBeGreaterThan(producer.indexOf("aspect_ratio 9:16"));
+    expect(producer.indexOf(EMPIRES_PRODUCER)).toBeGreaterThan(producer.indexOf("instrumental: true"));
+    expect(seat(empires, "scriptwriter").system).toContain(EMPIRES_SCRIPTWRITER);
+  });
+  it("lets the producer pay for a whole Seedance piece and two retakes, and no more than a day's default", () => {
+    const producer = seat(empires, "producer").budget!;
+    expect(producer).toEqual(EMPIRES_PRODUCER_BUDGET);
+    // Three 15-second calls and two retakes, at Seedance's rate: ~$22.49 before turns.
+    expect(producer.max_task_micro_usd).toBeGreaterThan(5 * 15 * SEEDANCE_MICRO_USD_PER_SECOND);
+    expect(producer.max_task_micro_usd).toBeLessThanOrEqual(producer.cap_micro_usd);
+    expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
+    for (const agent of empires.agents.filter((a) => a.name !== "producer")) expect(agent.budget, agent.name).toEqual(seat(TEMPLATES.faceless, agent.name).budget);
+  });
+  it("labels neither the picture nor the post: an AI label is the person's opt-in (vetta-mono ADR-1636)", () => {
+    for (const agent of empires.agents) {
+      const post = agent.tools?.configs["social.post"];
+      if (post?.enabled) expect(post, agent.name).toEqual({ enabled: true, permission: "ask" });
+    }
+    expect(seat(TEMPLATES.history, PUBLISHER).tools?.configs["social.post"]).toEqual({ enabled: true, permission: "ask" });
   });
 });
