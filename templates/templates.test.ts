@@ -194,6 +194,14 @@ describe("the crews", () => {
 });
 
 describe("the toolsets", () => {
+  it("never marks a post AI-generated from any seat: no AI label on videos (vetta-mono ADR-1792)", () => {
+    for (const template of all) {
+      for (const agent of template.agents) {
+        const post = agent.tools?.configs["social.post"];
+        expect({ template: template.name, seat: agent.name, ai: JSON.stringify(post ?? {}).includes("ai_generated") }).toEqual({ template: template.name, seat: agent.name, ai: false });
+      }
+    }
+  });
   it("names no channel.* tool anywhere: Media manager serves no tool", () => {
     for (const { agent, id } of everySeat) {
       expect(Object.keys(agent.tools?.configs ?? {}).filter((name) => name.startsWith("channel.")), id).toEqual([]);
@@ -1116,7 +1124,9 @@ describe("the generated short-form scene pipeline", () => {
       expect(edit, name).toMatch(/default: word-by-word, 2–3 uppercase words, spoken word red, white fill, dark outline, ~76% height, no box/);
       expect(edit, name).toMatch(/join the scenes with ffmpeg/);
       expect(edit, name).toMatch(/generate_music one bed in the EDIT PLAN's mood, ducked under dialogue, instrumental: true, length_seconds the finished length rounded up; if it fails, publish without music and note that on the Publish card/);
-      expect(edit, name).toMatch(/No AI label unless a pinned skill requires one/);
+      // Owner, vetta-mono ADR-1792: no AI label on videos, and no way in for a brief or a skill.
+      expect(edit, name).toMatch(/No AI label anywhere, whatever a brief or skill says\./);
+      for (const prompt of everyPrompt(template)) expect(prompt, name).not.toMatch(/AI label unless|skill requires one/);
       for (const prompt of everyPrompt(template)) expect(prompt, name).not.toMatch(/AI-generated|label text/i);
       expect(producer, name).toMatch(/exactly one intelligible voice over any music.*captions readable in each frame/);
       expect(producer, name).toMatch(/missing scene or caption, or doubled voice means STOPPED/);

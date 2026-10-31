@@ -154,8 +154,8 @@ export const FRUIT_DRAMA = niche(FACELESS, {
  * The raw-film niches (ADR-1580 empires, ADR-1640 legend-flex and surreal-satire) copy reels that are
  * rendered from text by Seedance and carry no text at all (owner, 2026-10-24), so their lines follow the
  * base pipeline and win where it says 9:16, an opening image or an instrumental bed. No label in the
- * picture, and no seat marks a post AI-generated: that is the person's opt-in (vetta-mono ADR-1636),
- * and a seat's `social.post` config is ignored for it anyway.
+ * picture, and no seat marks a post AI-generated: no AI label on videos (vetta-mono ADR-1792), and a
+ * seat's `social.post` config is ignored for it anyway.
  */
 export const RAW_FILM_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5"];
 /** The raw-film producer whose piece is cut to a rapped song (empires, legend-flex). */
