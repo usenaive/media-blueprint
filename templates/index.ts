@@ -152,25 +152,21 @@ export const FRUIT_DRAMA = niche(FACELESS, {
 });
 /**
  * The raw-film niches (ADR-1580 empires, ADR-1640 legend-flex and surreal-satire) copy reels that are
- * rendered from text and carry no text at all (owner, 2026-10-24), so their lines follow the base
- * pipeline and win where it says 9:16 or an opening image. The disclosure is the post's
- * `ai_generated` setting, never pixels.
+ * rendered from text by Seedance and carry no text at all (owner, 2026-10-24), so their lines follow the
+ * base pipeline and win where it says 9:16, an opening image or an instrumental bed. No label in the
+ * picture, and no seat marks a post AI-generated: that is the person's opt-in (vetta-mono ADR-1636),
+ * and a seat's `social.post` config is ignored for it anyway.
  */
 export const RAW_FILM_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5"];
 /** The raw-film producer whose piece is cut to a rapped song (empires, legend-flex). */
 export const RAW_FILM_PRODUCER =
   "Follow your pinned skills' scene grammar, which overrides the pipeline above: aspect_ratio 4:3, generate_video without image_urls, generate_music instrumental: false, nothing burned in.";
 
-/** A raw-film niche: its producer's ceiling is sized for its Seedance calls, and its publisher labels every post AI-generated. */
+/** A raw-film niche: its producer's ceiling is sized for its Seedance calls. No other seat changes. */
 function rawFilm(template: MediaTemplate, producerBudget: Budget): MediaTemplate {
   return {
     ...template,
-    agents: template.agents.map((seat) => {
-      const sized = seat.name === "producer" ? { ...seat, budget: producerBudget } : seat;
-      const post = sized.tools!.configs["social.post"];
-      if (post?.enabled !== true) return sized;
-      return { ...sized, tools: { ...sized.tools!, configs: { ...sized.tools!.configs, "social.post": { ...post, config: { ai_generated: true } } } } };
-    }),
+    agents: template.agents.map((seat) => (seat.name === "producer" ? { ...seat, budget: producerBudget } : seat)),
   };
 }
 

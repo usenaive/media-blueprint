@@ -1513,4 +1513,9 @@ describe("the legend-flex and surreal-satire niches make raw video", () => {
       for (const agent of template.agents.filter((a) => a.name !== "producer")) expect(agent.budget, agent.name).toEqual(seat(TEMPLATES.faceless, agent.name).budget);
     });
   }
+  it("labels neither the picture nor the post: an AI label is the person's opt-in (vetta-mono ADR-1636)", () => {
+    for (const template of RAW_FILM.map((name) => TEMPLATES[name])) {
+      expect(seat(template, PUBLISHER).tools?.configs["social.post"], template.name).toEqual({ enabled: true, permission: "ask" });
+    }
+  });
 });
