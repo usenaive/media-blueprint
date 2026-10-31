@@ -1254,7 +1254,8 @@ describe("the AI Influencer template", () => {
       false,
       false,
     ]);
-    expect(looks.type === "choice" && [looks.options.length, looks.options[0], looks.multiple, looks.other]).toEqual([12, "Their usual looks", true, false]);
+    expect(looks.type === "choice" && [looks.options.length, looks.options[0], looks.multiple, looks.other]).toEqual([12, "Their usual looks", true, true]);
+    expect(looks.help).toMatch(/Type your own/);
   });
 
   it("pictures every option with a file on the dashboard itself, and every option has one", () => {
@@ -1348,8 +1349,10 @@ describe("the AI Influencer template", () => {
     expect(meet.body).toMatch(/get_character\{character:<its id>\}/);
     // By fixed id, never by name: an org's own character of the same name would win a lookup by name.
     for (const creator of PREBUILT_CREATORS) expect(meet.body).toContain(`${creator.name} = ${creator.id}`);
-    // "Their usual looks" is no look name: a trained face gets the picked looks without it, or the defaults.
-    expect(meet.body).toContain(`style_pack:<the picked looks without "Their usual looks"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>`);
+    // "Their usual looks" and anything the operator typed are not look names: a trained face is filed
+    // under the catalogue names that remain, or the defaults.
+    expect(meet.body).toContain(`style_pack:<catalogue look names among the picked looks, without "Their usual looks" and without anything the operator typed; if none remain, ${DEFAULT_TRAINED_LOOKS.join(", ")}>`);
+    expect(meet.body).toMatch(/Words the operator typed are not a look name: generate_image with no style/);
     expect(meet.body).toMatch(/generate_image\{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"\}/);
     expect(meet.body).toMatch(/generate_video\{character, image_urls:\[the still\]\}/);
     expect(AI.tasks.find((one) => one.key === "first-briefs")!.body).toMatch(/This channel is one person/);
