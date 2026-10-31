@@ -187,7 +187,7 @@ export const ONE_SET =
  * scriptwriter's opening-frame and video-prompt rules are replaced the same way. The rest of the
  * pipeline — preflight, the bible, AUDIO MODE, the edit, VERIFY — is the base's, word for word.
  */
-export const PRODUCER_SCENE_STEP = `Work resumably from the Render card's comments. EVERY SCENE IS THE INFLUENCER, so none opens on a shipped frame or a last frame. (1) Each scene without an accepted image gets one. ${ONE_SET} Comment "SCENE <index> IMAGE <fil_ id>", inspect it against the bible, and allow ONE corrected replacement for a visible mismatch; a second miss stops before video spend. (2) Once all images are accepted, call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: ["<fil_ id>"] holding that scene's accepted image — never a frame cut from a clip. ${NO_DRAWN_WORDS} Then end your turn, and never sleep or poll. On completion comment "SCENE <index> VIDEO <fil_ id>". Never re-render a completed scene. A failed render: comment "SCENE <index> VIDEO FAILED <error>" and re-render it once; a second failure means STOPPED. On screen, the label is a disclosure only and a call to action sits in the last scene only.`;
+export const PRODUCER_SCENE_STEP = `Work resumably from the Render card's comments. EVERY SCENE IS THE INFLUENCER, so none opens on a shipped frame or a last frame. (1) Each scene without an accepted image gets one. ${ONE_SET} Comment "SCENE <index> IMAGE <fil_ id>", inspect it against the bible, and allow ONE corrected replacement for a visible mismatch; a second miss stops before video spend. (2) Once all images are accepted, call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: ["<fil_ id>"] holding that scene's accepted image — never a frame cut from a clip. ${NO_DRAWN_WORDS} Then end your turn, and never sleep or poll. On completion comment "SCENE <index> VIDEO <fil_ id>". Never re-render a completed scene. A failed render: comment "SCENE <index> VIDEO FAILED <error>" and re-render it once; a second failure means STOPPED. On screen, a call to action sits in the last scene only.`;
 
 /** The base producer's scene step, from its first words to the paragraph after it. */
 const SCENE_STEP = { from: "For each scene, resuming from the card's comments:", to: "\n\nAfter all videos exist" };
@@ -215,17 +215,8 @@ export const replaceSpan = (system: string, span: { from: string; to: string }, 
   return `${system.slice(0, at)}${replacement}${system.slice(end)}`;
 };
 
-/**
- * The on-video AI label, required (owner, 2026-10-20): every piece shows a realistic human face, so the
- * burned-in "AI-generated" label stays on every frame. It is appended with the producer's own line, after
- * the base pipeline, so a base brief that drops or conditions the generic label (media-blueprint #59) cannot
- * remove it here.
- */
-export const INFLUENCER_AI_LABEL =
-  'Every frame of every finished piece carries a burned-in on-screen "AI-generated" label: this channel shows a realistic human face, so the label is required whatever any other line or skill says.';
-
-/** The producer's own line, after the base pipeline: the tools that read the face, and the required AI label. */
-export const PRODUCER_INFLUENCER_BRIEF = `Every image and video is the influencer (the chr_ id on the Meet the influencer note), with one video model per piece. ${INFLUENCER_AI_LABEL}`;
+/** The producer's own line, after the base pipeline: the tools that read the face. */
+export const PRODUCER_INFLUENCER_BRIEF = `Every image and video is the influencer (the chr_ id on the Meet the influencer note), with one video model per piece.`;
 
 const SCRIPTWRITER_INFLUENCER_BRIEF = `EVERY SCENE IS THE ONE INFLUENCER: get_character first (voice, wardrobe, looks). No image_prompt or video_prompt says gender, age, face, hair, build or any words: the character carries who they are, and lines are voiced in the edit. ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds a scene, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
 
@@ -346,7 +337,6 @@ const base = niche(FACELESS, {
 export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   ...base,
   // Training a face is paid, so the producer asks first; every other seat keeps it denied by name.
-  // The publisher's posts are labelled AI-generated (`social.post` config).
   // A video edit (`edit_video`, which follows `generate_video` unless named) can change the face, so
   // every seat denies it by name.
   agents: base.agents.map((seat) => ({
@@ -374,11 +364,6 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
         ...seat.tools!.configs,
         edit_video: { enabled: false, permission: "deny" as const },
         ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const } } : {}),
-        // Every post is the influencer, so every post is labelled AI-generated: the network's own label
-        // and an #AIgenerated caption line, added by the publish path (vetta-mono ADR-1360 (i)).
-        ...(seat.tools!.configs["social.post"]?.enabled
-          ? { "social.post": { ...seat.tools!.configs["social.post"], config: { ai_generated: true } } }
-          : {}),
       },
     },
   })),

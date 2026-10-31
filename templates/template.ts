@@ -210,9 +210,10 @@ export const CLIPPING_LENGTH: Length = { min: 15, max: 60 };
 export const LONG_FORM_LENGTH: Length = { min: 60, max: 180 };
 
 /**
- * The longest and shortest one `generate_video` call may be asked for: `minimax/hailuo-3`, the
- * default video model (`VIDEO_MODELS`), renders 5 to 15 seconds a call and refuses any other length.
- * A segment, a scene and a long-form segment are each one call. Re-measure when the default changes.
+ * The longest and shortest one `generate_video` call may be asked for, common to every model in
+ * `VIDEO_MODELS`: FLUX 3 Max, the default, renders 5 to 20 seconds a call, but `minimax/hailuo-3`, the
+ * next in line, renders 5 to 15 and refuses any other length — so a plan keeps to 5–15 and survives a
+ * fall to it. A segment, a scene and a long-form segment are each one call. Re-measure when the list changes.
  */
 export const SEGMENT_MAX_SECONDS = 15;
 export const SEGMENT_MIN_SECONDS = 5;
@@ -325,12 +326,14 @@ export function niche(
 }
 
 /**
- * What one second of rendered video costs the org, as the ledger bills it: `minimax/hailuo-3`
- * settles at 169,000 µUSD a second (845,000 for a 5-second render on staging, 2026-10-17 — the
- * same measure as `AI_INFLUENCER_MICRO_USD_PER_SECOND`). The ledger is what a ceiling is checked
- * against.
+ * What one second of rendered video costs the org, as the ledger bills it: FLUX 3 Max, the default,
+ * at its STANDARD 720p rate, $0.17 a second — 170,000 µUSD, at cost since the platform dropped its
+ * markup (platform ADR-1592, ADR-1638). Until 2026-11-07 its launch promo bills about a quarter of
+ * that (42,500), so this over-budgets until then, on purpose: a ceiling sized to the promo would
+ * refuse the same piece the day it ends. Hailuo 3, next in line, is 130,000 a second; Seedance 2.5,
+ * the last, ~233,530 — ~1.37× this estimate, which every ceiling below still clears.
  */
-export const MICRO_USD_PER_SECOND = 169_000;
+export const MICRO_USD_PER_SECOND = 170_000;
 
 /**
  * Seedance 2.5, the allowed fallback, bills ~299,851 µUSD a second, ~1.8× Hailuo. The default
@@ -342,7 +345,7 @@ export const SEEDANCE_MICRO_USD_PER_SECOND = 299_851;
 /** What rendering a whole piece of this length costs, at its longest, at a model's rate. */
 export const renderMicroUsd = (length: Length, perSecond: number = MICRO_USD_PER_SECOND): number => length.max * perSecond;
 
-/** One Short Form render, ~$5.07 — the floor every seat's per-task ceiling clears. */
+/** One Short Form render, ~$5.10 — the floor every seat's per-task ceiling clears. */
 export const ONE_RENDER_MICRO_USD = renderMicroUsd(SHORT_FORM_LENGTH);
 
 export interface Budget {
@@ -359,12 +362,18 @@ export const budgetOf = (max_task_micro_usd: number, cap_micro_usd: number): Bud
 });
 
 /**
- * The default: $20/task clears one Short Form render (~$5.07) and the turns around it; $60/day is
+ * The default: $20/task clears one Short Form render (~$5.10) and the turns around it; $60/day is
  * per agent. A seat that renders more in one session states its own, sized from `renderMicroUsd`.
  */
 const budget = budgetOf(20_000_000, 60_000_000);
 
-const model = "anthropic/claude-sonnet-5";
+/**
+ * The model every seat on every template thinks with — the `ai-influencer` crew too, since it is a
+ * niche of `faceless`. GLM 5.3 Flash (owner decision 2026-10-25): $0.15/M in and $0.50/M out against
+ * Sonnet 5's $3/$15, with tool calling, reasoning and a 1M-token context. Renders are priced apart,
+ * so the per-seat ceilings below, sized from renders, stand.
+ */
+export const SEAT_MODEL = "z-ai/glm-5.3-flash";
 
 /** The one seat that publishes. It is on every template, it is `required`, and it ends every pipeline. */
 export const PUBLISHER = "channel-manager";
@@ -474,14 +483,17 @@ export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
 export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "generate_video" };
 
 /**
- * The video models a seat may render with, first is the default. `generate_video` derives no
- * default for video (no video model publishes a price), so without this pin every call refuses.
- * Hailuo 3 is first (owner decision, 2026-10-22): ~0.56× Seedance 2.5's price a second, and it
- * renders the restyled frames Seedance refuses (ADR-1120); Seedance 2.5 stays allowed. Hailuo takes
- * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS` a call, which every plan's segments and scenes keep to.
+ * The video models a seat may render with, in order: the platform tries each pin in turn when the
+ * one before it is refused or unavailable (platform ADR-1638), never a model outside them, and a
+ * deploy that does not publish a pin passes over it. The pin keeps the channel off any model the
+ * platform's own default order might add. FLUX 3 Max is first (owner decision, 2026-10-22: native
+ * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. Hailuo 3 is
+ * next (~0.56× Seedance 2.5's price a second, and it renders the restyled frames Seedance refuses,
+ * ADR-1120); Seedance 2.5 stays allowed. Every plan's segments and scenes keep to
+ * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS`, which all three take.
  * `generate_image` is left unpinned, so it takes the cheapest priced model.
  */
-export const VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "bytedance/seedance-2.5"];
+export const VIDEO_MODELS: readonly string[] = ["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
 
 /**
  * How a plan and a render treat the video model. The default path names none: `generate_video`
@@ -595,7 +607,7 @@ export const agent = (decl: {
   name: decl.name,
   role: decl.role,
   ...(decl.required === undefined ? {} : { required: decl.required }),
-  model,
+  model: SEAT_MODEL,
   budget: decl.budget ?? budget,
   description: decl.description,
   system: `${CONTEXT_PREAMBLE} ${decl.brief} ${CREW_RULES}`,

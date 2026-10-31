@@ -7,7 +7,7 @@
  * `SEGMENT_MAX_SECONDS` a call, so a piece is up to twelve segments, rendered separately and joined with
  * ffmpeg in the producer's own sandbox — nothing on the platform joins video. Two segments never
  * match mid-shot, so the writer lays every seam on a shot change before anything is bought. A piece
- * costs ~$30.42 of render, so the pipeline starts three pieces a week, not seven.
+ * costs ~$30.60 of render, so the pipeline starts three pieces a week, not seven.
  */
 import {
   PLAN_MODEL_RULE,
@@ -39,12 +39,12 @@ import {
 const LENGTH = lengthPhrase(LONG_FORM_LENGTH);
 /** Twelve: `ceil(180 / SEGMENT_MAX_SECONDS)`. */
 const SEGMENTS = segmentsOf(LONG_FORM_LENGTH);
-/** ~$30.42 — every segment of the longest piece, as the ledger bills it, inside one session. */
+/** ~$30.60 — every segment of the longest piece, as the ledger bills it, inside one session. */
 const WHOLE_RENDER = `$${(renderMicroUsd(LONG_FORM_LENGTH) / 1_000_000).toFixed(2)}`;
 
 /**
  * The producer renders a whole piece in one session, so its per-task ceiling clears
- * `renderMicroUsd(LONG_FORM_LENGTH)` (~$30.42; ~$53.97 had the operator moved it to Seedance 2.5) plus
+ * `renderMicroUsd(LONG_FORM_LENGTH)` (~$30.60; ~$42.04 had the operator moved it to Seedance 2.5) plus
  * the turns that join and hand it on; the daily cap fits a failed piece re-run the same day.
  */
 const PRODUCER_BUDGET = budgetOf(75_000_000, 150_000_000);
@@ -69,7 +69,7 @@ export const LONGFORM: MediaTemplate = {
       skills: ["naive/video-trend-brief"],
       schedules: [
         schedule({
-          // Monday, Wednesday and Friday 05:00 — three pieces a week, because each is ~$53.97 of render.
+          // Monday, Wednesday and Friday 05:00 — three pieces a week, because each is up to ~$30.60 of render.
           cron: "0 5 * * 1,3,5",
           summary: "Research the next subject",
           input:

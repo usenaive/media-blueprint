@@ -100,7 +100,7 @@ every later scene's image is that still re-posed (`generate_image` with the char
 opens on a skill's shipped frame or a previous take's last frame, and every scene's clip animates its
 still with the character, all submitted in one turn. No render prompt holds words, not even a spoken
 line: the line stays in the plan and is voiced in the edit (AUDIO MODE GENERATED, since the clips are
-silent). The burned-in label is a disclosure only; a call to action shows in the last scene only.
+silent). A call to action shows in the last scene only.
 Preflight, AUDIO MODE, the edit and VERIFY are the base producer's, word for word. Both seats drop
 the base's pre-bible (legacy) path: the day-one `character-bible` card is the influencer's own, drawn
 from the persona, the purpose answer and the picked looks (no page, no video), waits on nothing, and
@@ -313,15 +313,20 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 
 ## 💰 Money
 
-- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$5.07 as the
-  ledger bills Hailuo 3, 169,000 µUSD a second; ~$9.00 on Seedance 2.5) and the turns around it.
+- Every seat: **$20 per task, $60 per day.** $20 clears one 30-second piece of video (~$5.10 at
+  FLUX 3 Max's standard 720p rate, 170,000 µUSD a second at cost — about a quarter of that during its
+  launch promo, until 2026-11-07; ~$3.90 on Hailuo 3; ~$7.01 on Seedance 2.5) and the turns around it.
 - The `longform` producer: **$75 per task, $150 per day.** One piece is up to twelve segments,
-  ~$30.42 of video (~$53.97 on Seedance 2.5), in one session.
+  ~$30.60 of video (~$42.04 on Seedance 2.5), in one session.
 - Each fire has its own budget, inside its seat's ceiling.
-- `generate_video` renders with `minimax/hailuo-3` by default on every template: it is first in the
-  pinned allow-list `VIDEO_MODELS` (`bytedance/seedance-2.5` is allowed too), and no brief names a
+- Every seat on every template, `ai-influencer` included, thinks with `z-ai/glm-5.3-flash`
+  (`SEAT_MODEL` in `templates/template.ts`): $0.15/M input and $0.50/M output tokens, so a seat's
+  turns cost a fraction of its renders.
+- `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
+  on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
+  (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
   model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
-  seconds a call, so every segment and scene keeps to that. `ai-influencer` pins
+  seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins
   `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
