@@ -428,7 +428,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch",
   "generate_image", "generate_video", "clip_video",
-  "create_character", "get_character", "list_characters", "delete_character", "apps",
+  "create_character", "get_character", "list_characters", "update_character", "delete_character", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "project_context",
   "transcribe_audio", "generate_speech", "generate_music", "find_files", "view_image", "fetch_file", "find_stock_photo",

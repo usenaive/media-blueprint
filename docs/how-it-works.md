@@ -21,8 +21,8 @@ channel manager, the analyst's crons, the tool rules, the crew rules every promp
   already wrote.
 - **The setup questions**, which the studio asks before anything is provisioned.
 - **Media manager**, a `fullstack` app deployed from its source in `apps/media-manager`. It is
-  signed in through Naive and reads posts, spend and the setup's cadence with the read key the
-  platform gives a template app. An install may leave it out.
+  signed in through Naive and reads posts and their files, spend, the setup's answers, a creator's
+  character and renders, and the connected accounts, with the read key the platform gives a template app. An install may leave it out.
 
 No secret beyond your own `NAIVE_API_KEY`, and that one never reaches Media manager: the apply mints
 the app its own read key (from a clone, `naive up` needs an admin key to do it, or it refuses the app

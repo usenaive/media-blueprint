@@ -10,10 +10,11 @@ the crew, its timers and its first day of work into your organization.**
 Media manager is a hosted app whose source is in [`apps/media-manager`](apps/media-manager); agents
 can pull, change and deploy it like any app. The crew runs on it and on the platform's own screens:
 
-- **Media manager.** One page under Apps, signed in through Naive: the week's numbers on top, then
-  what waits on you (each with a link to its chat, where you decide it), what is scheduled (a row of
-  cards), and what went out (a picture grid with each post's views). It reads the platform with the
-  read key Naive gives it; you set nothing up.
+- **Media manager.** One page under Apps, signed in through Naive: the creator's face and niche on a
+  channel that has one, a way to connect an account while none is, the week's numbers, then what waits
+  on you (each with a link to its chat, where you decide it), what is scheduled (a row of cards), a
+  creator's stills and clips, and what went out (a picture grid with each post's views). It reads the
+  platform with the read key Naive gives it; you set nothing up.
 - **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
 - **The Media gallery.** Every render and every cut lands there on its own.
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
@@ -79,16 +80,19 @@ the first session. It publishes, installs and switches through the exact paths t
 seats, pinning `naive/channel-template-ai-influencer`, for one photoreal creator who posts every day
 in a few chosen looks ([`templates/ai-influencer.ts`](templates/ai-influencer.ts)). The character is
 a setup answer, not a niche: one of six prebuilt creators, ready at once, or a face trained from the
-operator's own photos ($3.25, about 20 minutes, approved first). Every still of the influencer is
+operator's own photos ($2.50, about 20 minutes, approved first). Every still of the influencer is
 `generate_image` with their character and a look, and every video is `generate_video` with the
 character and such a still as its first frame, so the face never changes. Day one's `look` card
 becomes **Meet the influencer** (same key): the producer resolves the character, trains it if photos
 were uploaded (waiting on an `ask_operator` reply, since nothing wakes a seat when training ends),
-and renders one still per picked look as the channel's look sheet. The producer holds
-`get_character` and `list_characters`, and `create_character` at `ask`; the scriptwriter reads
-`get_character`. Every seat denies `edit_video` by name (an edit can change the face). It renders on
-`AI_INFLUENCER_VIDEO_MODELS`, the two image-to-video models measured keeping a face from a still. It asks no cadence: the manager and the scout read it
-as daily.
+and renders one still per picked look as the channel's look sheet. The persona lives on
+the character: a prebuilt creator's is seeded, and an own face's is built on that card from the purpose
+answer and passed to `create_character`, so every seat reads it with `get_character` and the
+scriptwriter and channel manager keep it true with `update_character`. Each line is spoken in the
+persona's `voice_id`. The producer checks the face at VERIFY, with one redo a piece, and the scout starts
+nothing while two Publish cards wait or no account is connected. The producer also holds
+`list_characters`, and `create_character` at `ask`. Every seat denies `edit_video` by name (an edit can change the face). It renders on
+`AI_INFLUENCER_VIDEO_MODELS`, the two image-to-video models measured keeping a face from a still. It asks no cadence: the manager and the scout read it as daily until the operator asks to change it, which the manager keeps as a `CADENCE:` line on the channel-plan card. YouTube posts are public, as the operator approves each one.
 
 It runs on the short-form scene pipeline (script -> images -> video -> edit, with a character bible),
 with the parts that would change the face replaced rather than added to. The producer's scene step is
