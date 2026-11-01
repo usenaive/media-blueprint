@@ -231,12 +231,12 @@ describe("Media manager", () => {
     expect(posted).toContain('<div class="thumb"></div>');
   });
 
-  it("draws at most 24 Posted tiles, and mints links for no more than it draws", async () => {
+  it("draws at most 12 Posted tiles, and mints links for no more than it draws", async () => {
     const many = Array.from({ length: 30 }, (_, at) => post({ id: `pst_${at}`, posted_at: `2026-10-${String(at % 20 + 1).padStart(2, "0")}T10:00:00Z`, file_ids: [`fil_${at}`] }));
     const seen = api({ posted: many });
     const posted = section(await html(await overview(await signedIn(), ENV, NOW)), "Posted")!;
-    expect(posted.match(/<li class="card">/g)).toHaveLength(24);
-    expect(seen.filter((one) => one.method === "POST").length).toBe(24);
+    expect(posted.match(/<li class="card">/g)).toHaveLength(12);
+    expect(seen.filter((one) => one.method === "POST").length).toBe(12);
   });
 
   describe("a creator's channel", () => {

@@ -40,8 +40,10 @@ const DEFAULT_CADENCE = "3× a week";
 /** Ledger pages of 100 debits read for "Spent"; past this the tile says "at least". */
 const LEDGER_PAGES = 20;
 /** Each tile on the page mints one file link when it opens, so the page draws a bounded number of them. */
-const POSTED_SHOWN = 24;
+const POSTED_SHOWN = 12;
 const RENDERS_SHOWN = 12;
+/** Every link is a signed read and an audit row, so a long queue signs its first few and the rest wait their turn. */
+const LINKED_SHOWN = 12;
 /** Identities asked for an account, only while nothing has gone out. */
 const IDENTITIES_ASKED = 10;
 /** The clock every posting slot is stated in (`CHANNEL_TIMEZONE` in `templates/template.ts`). */
@@ -326,7 +328,7 @@ export async function overview(request: Request, env: AppEnv, now: number): Prom
     nothingYet ? read("the connected accounts", () => hasAccount(env)) : null,
   ]);
   const links = await linksFor(env, [
-    ...[...(pending.ok ? pending.value : []), ...(next.ok ? next.value : []), ...postedShown(posted, failedPosts)].flatMap((post) => (post.media_urls[0] === undefined && post.file_ids[0] !== undefined ? [post.file_ids[0]] : [])),
+    ...[...(pending.ok ? pending.value.slice(0, LINKED_SHOWN) : []), ...(next.ok ? next.value.slice(0, LINKED_SHOWN) : []), ...postedShown(posted, failedPosts)].flatMap((post) => (post.media_urls[0] === undefined && post.file_ids[0] !== undefined ? [post.file_ids[0]] : [])),
     ...(made?.ok ? made.value.map((file) => file.id) : []),
     ...(creator.ok && creator.value !== null && creator.value.sheet.length === 0 ? creator.value.source_images.filter((one) => one.startsWith("fil_")).slice(0, 1) : []),
   ]);

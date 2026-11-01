@@ -1349,6 +1349,9 @@ describe("the AI Influencer template", () => {
   it("starts no piece while posts wait or no account is connected", () => {
     const scout = seat(AI, "trend-scout");
     expect(scout.system).toContain(INFLUENCER_BRAKE);
+    // A new company with no account still gets its first piece to approve: the brake needs a Publish card to exist.
+    expect(INFLUENCER_BRAKE).toMatch(/Once a Publish card exists, start nothing either/);
+    expect(INFLUENCER_BRAKE).toMatch(/The first piece always runs/);
     expect(INFLUENCER_BRAKE).toMatch(/Two or more Publish cards still open/);
     expect(INFLUENCER_BRAKE).toMatch(/no account is connected and no card holds a post id/);
     expect(permissionFor(AI, "trend-scout", "board_read")).toBe("allow");
