@@ -78,7 +78,7 @@ the first session. It publishes, installs and switches through the exact paths t
 `ai-influencer` (shown as **AI Influencer**, ADR-1360) is the `faceless` crew with the segmented
 seats, pinning `naive/channel-template-ai-influencer`, for one photoreal creator who posts every day
 in a few chosen looks ([`templates/ai-influencer.ts`](templates/ai-influencer.ts)). The character is
-a setup answer, not a niche: one of four prebuilt creators, ready at once, or a face trained from the
+a setup answer, not a niche: one of six prebuilt creators, ready at once, or a face trained from the
 operator's own photos ($3.25, about 20 minutes, approved first). Every still of the influencer is
 `generate_image` with their character and a look, and every video is `generate_video` with the
 character and such a still as its first frame, so the face never changes. Day one's `look` card

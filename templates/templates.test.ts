@@ -1230,12 +1230,12 @@ describe("the built-in tool list", () => {
 describe("the AI Influencer template", () => {
   const AI = TEMPLATES["ai-influencer"];
   const LOOK_SLUGS = [
-    "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
+    "candid-selfie", "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
     "foggy-morning", "rainy-day", "90s-editorial", "wide-angle-outfit", "elevator-mirror", "escalator", "tokyo-street-style",
   ];
   /** The first-party pictures vetta-mono ships for the form (canonical-spec §33.6, SPEC §4.6). */
   const ASSETS = new Set([
-    ...["priya-raman", "maya-elusing", "hank-delgado", "ava-lindqvist"].map((slug) => `/setup/characters/${slug}.jpg`),
+    ...["priya-raman", "maya-elusing", "hank-delgado", "ava-lindqvist", "marcus-bell", "theo-park"].map((slug) => `/setup/characters/${slug}.jpg`),
     "/setup/characters/upload.svg",
     "/setup/looks/usual.jpg",
     ...LOOK_SLUGS.map((slug) => `/setup/looks/${slug}.jpg`),
@@ -1250,7 +1250,7 @@ describe("the AI Influencer template", () => {
     ]);
     const [who, , looks] = [AI.questions[0]!, AI.questions[1]!, AI.questions[2]!];
     expect(who.type === "choice" && [who.options, who.multiple, who.other]).toEqual([
-      ["Priya Raman", "Maya Elusing", "Hank Delgado", "Ava Lindqvist", "Upload your own photos"],
+      ["Priya Raman", "Maya Elusing", "Hank Delgado", "Ava Lindqvist", "Marcus Bell", "Theo Park", "Upload your own photos"],
       false,
       false,
     ]);

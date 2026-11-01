@@ -44,12 +44,14 @@ export const AI_INFLUENCER_SKILL = "channel-template-ai-influencer";
  */
 export const AI_INFLUENCER_VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "alibaba/wan-3.0/image-to-video"];
 
-/** The four prebuilt creators: setup name, the slug their first-party pictures are filed under, their niche. */
+/** The six prebuilt creators: setup name, the slug their first-party pictures are filed under, their niche. */
 export const PREBUILT_CREATORS = [
   { name: "Priya Raman", slug: "priya-raman", niche: "Founder · build in public", id: "chr_0yxd67hvgwsz9xg8mrbbc1q33r" },
   { name: "Maya Elusing", slug: "maya-elusing", niche: "Wellness · morning routines", id: "chr_25ptp43961zfpgg5a5jbz4d38z" },
   { name: "Hank Delgado", slug: "hank-delgado", niche: "Small business · bakery owner", id: "chr_kxynfvnew54p253d24zq1h1457" },
   { name: "Ava Lindqvist", slug: "ava-lindqvist", niche: "Fashion · fit checks", id: "chr_t6afyfc7ztb6a6jnj04sdj2x1t" },
+  { name: "Marcus Bell", slug: "marcus-bell", niche: "Fitness · home workouts", id: "chr_bpg78xxfgmtrshbx2nv2nx5f62" },
+  { name: "Theo Park", slug: "theo-park", niche: "Food · weeknight cooking", id: "chr_ry84wq63nwd3nd2j615m4j7svx" },
 ] as const;
 
 /**
@@ -60,7 +62,7 @@ export const PREBUILT_CREATORS = [
 const CREATOR_IDS = PREBUILT_CREATORS.map((one) => `${one.name} = ${one.id}`).join(", ");
 
 /** The looks a trained face gets when the operator picked only "Their usual looks" (it has none of its own). */
-export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Phone snap", "Realistic", "Everyday"];
+export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Candid selfie", "Phone snap", "Realistic"];
 
 /** Where the niche comes from: this template asks no niche question (ADR-1360). */
 export const INFLUENCER_NICHE =
@@ -79,16 +81,16 @@ export const UPLOAD_OWN = "Upload your own photos";
 export const USUAL_LOOKS = "Their usual looks";
 
 /**
- * The looks setup offers (eleven of the platform's sixteen, plus the character's own), each with its
+ * The looks setup offers (eleven of the platform's seventeen, plus the character's own), each with its
  * first-party preview and our one-line description. The names are the platform's look names exactly:
  * the answer is passed as `generate_image{style}` word for word. vetta-mono `packages/core/src/schema/looks.test.ts`
  * pins this list against the catalogue: change both together.
  */
 const LOOK_OPTIONS: readonly { name: string; slug: string; note: string }[] = [
+  { name: "Candid selfie", slug: "candid-selfie", note: "Close-up at arm's length in low light; real skin, loose hair, unretouched." },
   { name: "Phone snap", slug: "phone-snap", note: "Natural light, casual phone framing, soft HDR glow; looks real." },
   { name: "Realistic", slug: "realistic", note: "No filter, crisp true-to-life detail in skin, light and fabric." },
   { name: "Library", slug: "library", note: "Soft indoor light, cozy academia, books and warm wood." },
-  { name: "Quiet luxury", slug: "quiet-luxury", note: "Understated expensive: neutral tones, fine fabrics, calm interiors." },
   { name: "Through the glass", slug: "through-the-glass", note: "Seen through a window or café pane; a quiet observed moment." },
   { name: "Japandi", slug: "japandi", note: "Warm minimalism: clean lines, natural light, pale wood." },
   { name: "Rainy day", slug: "rainy-day", note: "Moody sky, wet-pavement reflections, soft sweaters, slow and cinematic." },
