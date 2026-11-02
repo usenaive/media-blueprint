@@ -19,7 +19,7 @@ can pull, change and deploy it like any app. The crew runs on it and on the plat
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
 - **Chat.** Talk to the channel manager like any agent.
 
-The repo carries **three base templates**, plus seventeen niche channel templates and the AI Influencer template, which reuse them (below).
+The repo carries **three base templates**, plus nineteen niche channel templates and the AI Influencer template, which reuse them (below).
 A template is a crew:
 
 | Template | Shown as | The channel it runs | Its crew | Piece length |
@@ -33,7 +33,7 @@ title, the one-line description, and the networks each template is made for (`PL
 
 ### Niche channel templates
 
-On top of the base three, the repo carries **seventeen niche channel templates**. Each is its base crew
+On top of the base three, the repo carries **nineteen niche channel templates**. Each is its base crew
 with one thing added: a niche playbook (a platform catalogue skill, `naive/channel-template-<niche>`)
 pinned in **every** seat's `skills[]`, plus a niche title and one-line description. `niche()` in
 [`templates/template.ts`](templates/template.ts) is the whole of it — no new crew, question or card
@@ -47,7 +47,7 @@ rules. Every generated short uses the base scene pipeline: script, one opening i
 image-to-video render per scene, then speech, creator-style captions, a ducked music bed and an
 ffmpeg join. A scene opens on a generated
 image unless a pinned skill names its opener — a shipped frame, or the previous take's last frame.
-Scenes run 5 to 15 seconds and total 15–30. The fourteen niche templates use `SEGMENTED_SHORT_FORM`
+Scenes run 5 to 15 seconds and total 15–30. The sixteen niche templates use `SEGMENTED_SHORT_FORM`
 only to point each seat at their pinned skill, which supplies the genre-specific scene grammar.
 
 | Template | Shown as | Reuses | Pins the skill |
@@ -69,6 +69,8 @@ only to point each seat at their pinned skill, which supplies the genre-specific
 | `would-you-choose` | AI Would You Choose Channel | `faceless` | `naive/channel-template-would-you-choose` |
 | `fruit-drama` | AI Fruit Drama Channel | `faceless` | `naive/channel-template-fruit-drama` |
 | `empires` | AI Empires Channel | `faceless` | `naive/channel-template-empires` |
+| `legend-flex` | AI Legend Flex Channel | `faceless` | `naive/channel-template-legend-flex` |
+| `surreal-satire` | AI Surreal Satire Channel | `faceless` | `naive/channel-template-surreal-satire` |
 
 A niche is picked at company creation like any other template; its crew carries the niche skill from
 the first session. It publishes, installs and switches through the exact paths the base three do.
@@ -270,7 +272,7 @@ exception: in place of the dropped niche it keeps a single question, the channel
 |---|---|
 | `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires` | Posting cadence |
+| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires`, `legend-flex`, `surreal-satire` | Posting cadence |
 | `channel-cloning` | Channel to clone · Posting cadence |
 | `ai-influencer` | Who is your influencer? · Photos of your character (optional) · Pick the looks · What is your influencer for? |
 | `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
