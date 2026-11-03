@@ -176,7 +176,8 @@ describe("the crews", () => {
         .slice(CONTEXT_PREAMBLE.length, system.length - CREW_RULES.length)
         .replace(REFERENCE_RULE, "")
         .replace(CONTINUITY_RULE, "")
-        .replace(MUSIC_PUBLISHER_BRIEF, "");
+        .replace(MUSIC_PUBLISHER_BRIEF, "")
+        .replaceAll(OWN_CARDS, ""); // the music crews' shared own-cards rule, like the publisher brief
       expect(words(own), id).toBeGreaterThanOrEqual(80);
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
@@ -556,6 +557,8 @@ describe("the board", () => {
       expect(rules).not.toMatch(/goes to blocked/);
     }
     expect(CREW_RULES).toMatch(/a card you waited on closed STOPPED/);
+    // Round-2 live run: GLM split card_id / status / body over several board_write calls (145/211 refused).
+    for (const rules of [CREW_RULES, CARD_ORDER]) expect(rules).toMatch(/ONE board_write call that carries all of op update, (this card's )?card_id, status done and the note as body/);
     for (const { agent, id } of everySeat) expect(agent.system, id).not.toMatch(/move (your|the) card to blocked/);
   });
 
@@ -1555,6 +1558,11 @@ describe("the AI Music Channel", () => {
       expect(composer, name).toMatch(/Call generate_music ONCE with that prompt, length_seconds 30/);
       expect(composer, name).toMatch(/second failure means STOPPED/);
       expect(composer, name).toMatch(/never call generate_music for that card again/);
+      // Round-2 live run: a parked card re-woke and re-called generate_music 5 times; the failures live in comments now.
+      expect(composer, name).toMatch(/after a SONG comment or two MUSIC FAILED comments, never call generate_music for that card again/);
+      expect(composer, name).toMatch(/comment "MUSIC FAILED <the error>" at once/);
+      expect(composer, name).toMatch(/"not configured" is never retried \(close the card STOPPED\)/);
+      expect(composer.indexOf("First, on every wake, read your card's comments"), name).toBeLessThan(composer.indexOf("Call generate_music ONCE"));
       expect(composer, name).toMatch(/never name or imitate a real artist/);
       // Its own crew's queue only: another music channel on the same board never holds it back.
       expect(composer, name).toMatch(/A Cover card your cover-artist holds or a Publish card your channel-manager holds, not yet closed, means the queue is ahead: make nothing/);
@@ -1623,7 +1631,7 @@ describe("the AI Music Channel", () => {
     for (const name of Object.keys(TEMPLATES) as TemplateName[]) {
       const plan = TEMPLATES[name].tasks.find((card) => card.key === "channel-plan");
       if (plan === undefined) continue;
-      expect(plan.body, name).toMatch(/End the note with the line OPERATOR QUESTION: <the one question you will ask>, so whoever reads the closed card knows it is being asked and does not ask it again/);
+      expect(plan.body, name).toMatch(/End the note with the line OPERATOR QUESTION: <the one question you will ask> \(the channel-manager asks this itself; do not ask it again\), so whoever reads the closed card, the CEO included, knows it is being asked and does not ask it again/);
       expect(plan.body!.indexOf("OPERATOR QUESTION:"), name).toBeLessThan(plan.body!.indexOf("Close this card"));
     }
   });
