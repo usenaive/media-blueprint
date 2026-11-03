@@ -81,8 +81,10 @@ export const USUAL_LOOKS = "Their usual looks";
 /**
  * The looks setup offers (eleven of the platform's sixteen, plus the character's own), each with its
  * first-party preview and our one-line description. The names are the platform's look names exactly:
- * the answer is passed as `generate_image{style}` word for word. vetta-mono `packages/core/src/schema/looks.test.ts`
- * pins this list against the catalogue: change both together.
+ * a ticked name is passed as `generate_image{style}` word for word. `other` is on, so the operator can
+ * type a look the catalogue does not have: those words go in the still's prompt and are never a
+ * `style` or a `style_pack` entry (both refuse a name that is not a look). vetta-mono
+ * `packages/core/src/schema/looks.test.ts` pins this list against the catalogue: change both together.
  */
 const LOOK_OPTIONS: readonly { name: string; slug: string; note: string }[] = [
   { name: "Phone snap", slug: "phone-snap", note: "Natural light, casual phone framing, soft HDR glow; looks real." },
@@ -129,13 +131,13 @@ export const AI_INFLUENCER_QUESTIONS: SetupQuestion[] = [
     label: "Pick the looks",
     type: "choice",
     multiple: true,
-    other: false,
+    other: true,
     options: [USUAL_LOOKS, ...LOOK_OPTIONS.map((one) => one.name)],
     details: [
       { option: USUAL_LOOKS, image: "/setup/looks/usual.jpg", note: "The creator's own style pack" },
       ...LOOK_OPTIONS.map((one) => ({ option: one.name, image: `/setup/looks/${one.slug}.jpg`, note: one.note })),
     ],
-    help: "Your influencer is drawn in the looks you pick. You can see each creator's looks in the Characters tab.",
+    help: "Your influencer is drawn in the looks you pick. Type your own under the pictures when you want a look that is not listed. You can see each creator's looks in the Characters tab.",
   },
   {
     key: "purpose",
@@ -175,7 +177,7 @@ export const ONE_OUTFIT =
  * the wall; the 18 Oct probe kept room, props, outfit and face on every edit.
  */
 export const ONE_SET =
-  "Scene 1's image: generate_image with character (the chr_ id on the Meet the influencer note) and style (the plan's look), aspect_ratio 9:16, exactly its image_prompt, in the piece's one outfit and setting. Each later scene's image is that still re-posed: generate_image with character, image_urls [scene 1's accepted image], exactly its image_prompt — only the new action and framing.";
+  "Scene 1's image: generate_image with character (the chr_ id on the Meet the influencer note) and style (the plan's look; omit style when that look is the operator's own words, which belong in the image_prompt), aspect_ratio 9:16, exactly its image_prompt, in the piece's one outfit and setting. Each later scene's image is that still re-posed: generate_image with character, image_urls [scene 1's accepted image], exactly its image_prompt — only the new action and framing.";
 
 /**
  * The scene pipeline (media-blueprint #55) opens a scene on a generated image, a pinned skill's shipped
@@ -228,7 +230,7 @@ const characterCard = (look: Task): Task =>
     assignee: look.assignee!,
     // Waits on nothing: it needs only the setup answers, so the face is met even while the study runs.
     blocked_by: [],
-    body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": look at the photos answer with view_image; fewer than 10 usable photos of one clear face, ask_operator once for 10 to 16. Then create_character{name, image_urls, style_pack:<the picked looks without "${USUAL_LOOKS}"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>, consent:{attested:true}} — it waits for the operator's yes, which is their confirmation that the person in the photos is them or agreed to it and is not a public figure, and costs $3.25 — and wait until get_character says ready. Refused as a public figure: say so on the card, ask_operator once for photos of themselves or of someone who agreed, and stop. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. Refused as "paused on the platform's side": nothing was charged and a retry fails the same way, so never call create_character again or ask for another approval; say so on the card and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks), with generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}, and look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
+    body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": look at the photos answer with view_image; fewer than 10 usable photos of one clear face, ask_operator once for 10 to 16. Then create_character{name, image_urls, style_pack:<catalogue look names among the picked looks, without "${USUAL_LOOKS}" and without anything the operator typed; if none remain, ${DEFAULT_TRAINED_LOOKS.join(", ")}>, consent:{attested:true}} — it waits for the operator's yes, which is their confirmation that the person in the photos is them or agreed to it and is not a public figure, and costs $3.25 — and wait until get_character says ready. Refused as a public figure: say so on the card, ask_operator once for photos of themselves or of someone who agreed, and stop. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. Refused as "paused on the platform's side": nothing was charged and a retry fails the same way, so never call create_character again or ask for another approval; say so on the card and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks). A catalogue look is generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}. Words the operator typed are not a look name: generate_image with no style, and those words in the prompt. Look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
   });
 
 /**
