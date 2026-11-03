@@ -31,6 +31,18 @@ type Creator = {
   persona: { niche?: string | null } | null;
   sheet: string[];
   source_images: string[];
+  created_at?: string;
+};
+
+/**
+ * The prebuilt creators that were re-faced under new ids (vetta-mono ADR-1812), by name: the earlier id a
+ * channel installed before the new face was seeded keeps. It is off the characters list but still read by id.
+ */
+const RETIRED_CREATORS: Readonly<Record<string, string>> = {
+  "Priya Raman": "chr_0yxd67hvgwsz9xg8mrbbc1q33r",
+  "Maya Elusing": "chr_25ptp43961zfpgg5a5jbz4d38z",
+  "Hank Delgado": "chr_kxynfvnew54p253d24zq1h1457",
+  "Ava Lindqvist": "chr_t6afyfc7ztb6a6jnj04sdj2x1t",
 };
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -109,14 +121,39 @@ async function spentSince(env: AppEnv, from: string): Promise<Spent> {
 }
 
 type Answers = Readonly<Record<string, unknown>>;
+/** The channel's setup answers, and when it was installed (`null` when the API didn't say). */
+type Setup = { answers: Answers; installedAt: string | null };
 
-const answersOf = async (env: AppEnv): Promise<Answers> => (await naive(env).apps.installs.list({ project: env["NAIVE_PROJECT"] })).data[0]?.answers ?? {};
-
-/** Who a setup's `character` answer means: its prebuilt creator by name, else the face this company trained. */
-const creatorOf = (all: readonly Creator[], answer: string): Creator | null => {
-  const own = all.filter((one) => one.scope !== "platform" && one.status !== "failed");
-  return all.find((one) => one.scope === "platform" && one.name === answer) ?? own.find((one) => one.status === "ready") ?? own[0] ?? null;
+const setupOf = async (env: AppEnv): Promise<Setup> => {
+  const install = (await naive(env).apps.installs.list({ project: env["NAIVE_PROJECT"] })).data[0] as { answers?: Answers; created_at?: unknown } | undefined;
+  return { answers: install?.answers ?? {}, installedAt: typeof install?.created_at === "string" ? install.created_at : null };
 };
+
+const madeAt = (one: Creator): number => (one.created_at === undefined ? Number.NaN : Date.parse(one.created_at));
+
+/**
+ * Who a setup's `character` answer means. A prebuilt creator is theirs by name, unless the channel was
+ * installed before that face was seeded: then it is the retired id it started on (`retired`). Characters are
+ * the org's, not the company's, so a trained face is the first one made since this channel was installed,
+ * and only with no such face the org's first ready one.
+ */
+const creatorOf = (all: readonly Creator[], answer: string, installedAt: string | null): { creator: Creator | null; retired: string | null } => {
+  const prebuilt = all.find((one) => one.scope === "platform" && one.name === answer);
+  if (prebuilt !== undefined) {
+    const earlier = RETIRED_CREATORS[answer];
+    const before = installedAt !== null && Date.parse(installedAt) < madeAt(prebuilt);
+    return earlier !== undefined && earlier !== prebuilt.id && before ? { creator: null, retired: earlier } : { creator: prebuilt, retired: null };
+  }
+  const own = all.filter((one) => one.scope !== "platform" && one.status !== "failed");
+  const since = installedAt === null ? [] : own.filter((one) => madeAt(one) >= Date.parse(installedAt)).sort((a, b) => madeAt(a) - madeAt(b));
+  return { creator: since[0] ?? own.find((one) => one.status === "ready") ?? own[0] ?? null, retired: null };
+};
+
+/** The creator a channel's answer means, reading a retired prebuilt creator by its id. */
+async function creatorFor(env: AppEnv, answer: string, installedAt: string | null): Promise<Creator | null> {
+  const found = creatorOf((await rest<{ data: Creator[] }>(env, "/v1/characters?limit=100")).data, answer, installedAt);
+  return found.retired === null ? found.creator : rest<Creator>(env, `/v1/characters/${encodeURIComponent(found.retired)}`);
+}
 
 /**
  * The cadence the tile counts against, or `null` when this page can't know it. A creator's channel asks
@@ -313,12 +350,12 @@ export async function overview(request: Request, env: AppEnv, now: number): Prom
     posts(env, "posted"),
     posts(env, "failed"),
     read("spend", () => spentSince(env, new Date(now - WEEK).toISOString())),
-    read("the channel's setup", () => answersOf(env)),
+    read("the channel's setup", () => setupOf(env)),
   ]);
-  const answer = setup.ok ? setup.value["character"] : undefined;
+  const answer = setup.ok ? setup.value.answers["character"] : undefined;
   const creator: Read<Creator | null> =
-    typeof answer === "string"
-      ? await read("the creator", async () => creatorOf((await rest<{ data: Creator[] }>(env, "/v1/characters?limit=100")).data, answer))
+    typeof answer === "string" && setup.ok
+      ? await read("the creator", () => creatorFor(env, answer, setup.value.installedAt))
       : { ok: true, value: null };
   const nothingYet = [next, pending, posted].every((one) => one.ok && one.value.length === 0);
   const [made, account] = await Promise.all([
@@ -332,7 +369,7 @@ export async function overview(request: Request, env: AppEnv, now: number): Prom
     ...(made?.ok ? made.value.map((file) => file.id) : []),
     ...(creator.ok && creator.value !== null && creator.value.sheet.length === 0 ? creator.value.source_images.filter((one) => one.startsWith("fil_")).slice(0, 1) : []),
   ]);
-  const cadence: Read<string | null> = setup.ok ? { ok: true, value: cadenceOf(setup.value) } : setup;
+  const cadence: Read<string | null> = setup.ok ? { ok: true, value: cadenceOf(setup.value.answers) } : setup;
   return page(
     200,
     `<main>${head(creator, env, links)}${connect(account, env)}${numbers(posted, spent, cadence, now)}${waiting(pending, env, links)}${scheduled(next, links)}${renders(made, links)}${postedGrid(posted, failedPosts, links)}</main>`,

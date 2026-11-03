@@ -178,8 +178,8 @@ describe("the crews", () => {
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
         : false;
-      // The influencer's producer also carries the face check and the persona's voice.
-      expect(words(own), id).toBeLessThanOrEqual(id === "ai-influencer/producer" ? 810 : isScenePipelineSeat ? 745 : 360);
+      // The influencer's producer also carries the face check, the persona's voice and which chr_ id it keeps (ADR-1812).
+      expect(words(own), id).toBeLessThanOrEqual(id === "ai-influencer/producer" ? 825 : isScenePipelineSeat ? 745 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
@@ -1335,6 +1335,8 @@ describe("the AI Influencer template", () => {
       expect(agent.system, agent.name).not.toContain(nicheFixed("naive/channel-template-ai-influencer"));
     }
     for (const name of ["producer", "scriptwriter", PUBLISHER]) expect(seat(AI, name).system, name).toContain(PERSONA_RULE);
+    // A re-faced creator has a new id (vetta-mono ADR-1812); a running channel keeps the one it started on.
+    expect(PERSONA_RULE).toContain("Use the chr_ id on the Meet the influencer note, never a name's newer one.");
     for (const name of ["scriptwriter", PUBLISHER]) expect(seat(AI, name).system, name).toContain(PERSONA_CHANGES);
     expect(AI.tasks.find((card) => card.key === "character-bible")!.body).toMatch(/get_character its persona once it exists/);
   });

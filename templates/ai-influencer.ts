@@ -46,12 +46,17 @@ export const AI_INFLUENCER_SKILL = "channel-template-ai-influencer";
  */
 export const AI_INFLUENCER_VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "alibaba/wan-3.0/image-to-video"];
 
-/** The six prebuilt creators: setup name, the slug their first-party pictures are filed under, their niche. */
+/**
+ * The six prebuilt creators: setup name, the slug their first-party pictures are filed under, their niche
+ * and the id a new install uses. Priya, Maya, Hank and Ava were re-faced as real-looking people (vetta-mono
+ * ADR-1812) under new ids; their earlier rows are retired from new installs but still resolve by id, so a
+ * channel that started on one keeps the id on its Meet the influencer note.
+ */
 export const PREBUILT_CREATORS = [
-  { name: "Priya Raman", slug: "priya-raman", niche: "Founder · build in public", id: "chr_0yxd67hvgwsz9xg8mrbbc1q33r" },
-  { name: "Maya Elusing", slug: "maya-elusing", niche: "Wellness · morning routines", id: "chr_25ptp43961zfpgg5a5jbz4d38z" },
-  { name: "Hank Delgado", slug: "hank-delgado", niche: "Small business · bakery owner", id: "chr_kxynfvnew54p253d24zq1h1457" },
-  { name: "Ava Lindqvist", slug: "ava-lindqvist", niche: "Fashion · fit checks", id: "chr_t6afyfc7ztb6a6jnj04sdj2x1t" },
+  { name: "Priya Raman", slug: "priya-raman", niche: "Founder · build in public", id: "chr_bb1xr9kn5tav3nqbgq5w2p8g61" },
+  { name: "Maya Elusing", slug: "maya-elusing", niche: "Wellness · morning routines", id: "chr_e0tgbzd9kqfrfrzzs33bsxh89f" },
+  { name: "Hank Delgado", slug: "hank-delgado", niche: "Small business · bakery owner", id: "chr_b3nnct3kvsv4d17eb14dhqfhhv" },
+  { name: "Ava Lindqvist", slug: "ava-lindqvist", niche: "Fashion · fit checks", id: "chr_4sq1wcpx4jygj46wqspp4z8d5a" },
   { name: "Marcus Bell", slug: "marcus-bell", niche: "Fitness · home workouts", id: "chr_bpg78xxfgmtrshbx2nv2nx5f62" },
   { name: "Theo Park", slug: "theo-park", niche: "Food · weeknight cooking", id: "chr_ry84wq63nwd3nd2j615m4j7svx" },
 ] as const;
@@ -76,7 +81,7 @@ export const INFLUENCER_NICHE_FIXED =
 
 /** Who the influencer is, in one durable place every seat and session can read, not a card's note. */
 export const PERSONA_RULE =
-  "THE PERSONA LIVES ON THE CHARACTER: get_character gives their niche, bio, voice, wardrobe and hooks, and it outranks a note.";
+  "THE PERSONA LIVES ON THE CHARACTER: get_character gives their niche, bio, voice, wardrobe and hooks, and it outranks a note. Use the chr_ id on the Meet the influencer note, never a name's newer one.";
 
 /** The seats that talk to the operator keep it true. A platform character is refused, so a prebuilt creator's change goes in the bible. */
 export const PERSONA_CHANGES =

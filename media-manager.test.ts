@@ -25,7 +25,7 @@ const SESSION = `ses_${ULID}`;
 
 type Fixture = Record<string, unknown>;
 /** What only some channels hold: their characters, a creator's renders, and each identity's accounts. */
-type World = { characters?: Fixture[]; files?: Fixture[]; accounts?: (Fixture[] | "unactivated")[] };
+type World = { characters?: Fixture[]; retired?: Fixture[]; files?: Fixture[]; accounts?: (Fixture[] | "unactivated")[] };
 const post = (over: Fixture): Fixture => ({
   object: "post",
   id: "pst_1",
@@ -119,6 +119,11 @@ function api(channel: Record<string, Fixture[]> = CHANNEL, answers: Fixture = { 
     }
     if (url.pathname === "/v1/blueprints/installs") return list([install(answers)]);
     if (url.pathname === "/v1/characters") return list(world.characters ?? []);
+    const byId = /^\/v1\/characters\/(chr_\w+)$/.exec(url.pathname);
+    if (byId) {
+      const held = [...(world.characters ?? []), ...(world.retired ?? [])].find((one) => one["id"] === byId[1]);
+      return held === undefined ? new Response("not found", { status: 404 }) : Response.json(held);
+    }
     if (url.pathname === "/v1/files") return list(world.files ?? []);
     if (url.pathname === "/v1/identities") return list((world.accounts ?? []).map((_, at) => ({ id: `idn_${at}${ULID.slice(1)}`, object: "identity" })));
     const accounts = /^\/v1\/identities\/idn_(\d)0+\/social\/accounts$/.exec(url.pathname);
@@ -260,6 +265,32 @@ describe("Media manager", () => {
       expect(page).toContain("<h1>Lou</h1>");
       expect(page).toContain('src="https://api.example/v1/files/fil_still_me/still.png?org=org_1&amp;sig=s"');
       expect(page).not.toContain("elsewhere.example");
+    });
+
+    it("keeps a channel installed before its creator was re-faced on the retired id it started with (ADR-1812)", async () => {
+      const NEW = { ...PRIYA, id: "chr_bb1xr9kn5tav3nqbgq5w2p8g61", created_at: "2026-11-05T00:00:00Z" };
+      const OLD = { ...PRIYA, id: "chr_0yxd67hvgwsz9xg8mrbbc1q33r", sheet: ["/setup/characters/retired/priya-raman.jpg"], created_at: "2026-09-01T00:00:00Z" };
+      const seen = api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [NEW], retired: [OLD] });
+      const page = await html(await overview(await signedIn(), ENV, NOW));
+      expect(page).toContain('src="https://studio.example/setup/characters/retired/priya-raman.jpg"');
+      expect(page).toContain("character=chr_0yxd67hvgwsz9xg8mrbbc1q33r");
+      const read = new URL(seen.find((one) => new URL(one.url).pathname === "/v1/files")!.url).searchParams;
+      expect(read.get("character")).toBe("chr_0yxd67hvgwsz9xg8mrbbc1q33r");
+    });
+
+    it("gives a channel installed after the re-face the new id", async () => {
+      const NEW = { ...PRIYA, id: "chr_bb1xr9kn5tav3nqbgq5w2p8g61", created_at: "2026-09-20T00:00:00Z" };
+      api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [NEW] });
+      expect(await html(await overview(await signedIn(), ENV, NOW))).toContain("character=chr_bb1xr9kn5tav3nqbgq5w2p8g61");
+    });
+
+    it("picks the face trained since this channel was installed, not the org's first one", async () => {
+      const OTHER = { ...MINE, id: "chr_other", name: "Kim", created_at: "2026-09-10T00:00:00Z" };
+      const OURS = { ...MINE, created_at: "2026-10-01T00:20:00Z" };
+      api(CHANNEL, { character: "Upload your own photos" }, undefined, { characters: [OTHER, OURS] });
+      const page = await html(await overview(await signedIn(), ENV, NOW));
+      expect(page).toContain("<h1>Lou</h1>");
+      expect(page).not.toContain("<h1>Kim</h1>");
     });
 
     it("says a face is still training", async () => {
