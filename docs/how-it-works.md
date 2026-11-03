@@ -91,7 +91,7 @@ A card is woken at most three times. After that it is parked for the CEO.
   replacement speech. It never mixes both. It then normalizes and joins with ffmpeg, burns in text
   and captions in the pinned skill's `## Captions and music` style (word-by-word by default, timed
   from `transcribe_audio` word timings, rendered with libass), adds a `generate_music` bed ducked
-  under dialogue and no generic AI label (only a disclosure a pinned skill requires), verifies with
+  under dialogue and no AI label of any kind (vetta-mono ADR-1792), verifies with
   ffprobe, one frame per scene (captions readable) and a transcript of the finished file checked
   scene by scene (music audible, dialogue clear), and publishes one final `fil_`.
 - **Cards planned before the bible**: a Plan card read with no bible note yet is planned the old way
@@ -150,7 +150,7 @@ one vertical video. `composer -> cover-artist -> channel-manager`:
 - **analyst**: per song and subject.
 
 The genre niches `hardstyle`, `techno`, `rap` and `pop` pin `naive/channel-template-<genre>` on this
-crew and ask only the cadence. All five need engine 0.13.0.
+crew and ask only the cadence. All five need engine 0.16.0.
 
 ### Day one
 
