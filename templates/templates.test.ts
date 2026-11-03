@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, TEMPLATES } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER, EMPIRES_PRODUCER_BUDGET, EMPIRES_SCRIPTWRITER, EMPIRES_VIDEO_MODELS, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, OWN_CARDS, TEMPLATES } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -1539,6 +1539,10 @@ describe("the AI Music Channel", () => {
       expect(note.body, name).toMatch(/first line is CHANNEL NOTE.*CONTEXT SEED.*word for word.*COVER DIRECTION/s);
       // Asked after the card closes, so the first song never waits on an answer.
       expect(note.body!.indexOf("close the card"), name).toBeLessThan(note.body!.indexOf("ask_operator"));
+      // The note is the closing update's body, never a comment, and a pending question is named in it.
+      expect(note.body, name).toMatch(/the whole note goes in the body of the board_write update that closes this card \(status done\), never in a comment/);
+      expect(note.body!.indexOf("OPERATOR QUESTION:"), name).toBeLessThan(note.body!.indexOf("ask_operator"));
+      expect(note.body, name).toMatch(/Read no other channel's cards/);
       const first = TEMPLATES[name].tasks.at(-1)!;
       expect([first.key, first.assignee, first.blocked_by], name).toEqual(["first-song", "composer", ["channel-note"]]);
     }
@@ -1552,11 +1556,13 @@ describe("the AI Music Channel", () => {
       expect(composer, name).toMatch(/second failure means STOPPED/);
       expect(composer, name).toMatch(/never call generate_music for that card again/);
       expect(composer, name).toMatch(/never name or imitate a real artist/);
-      expect(composer, name).toMatch(/A Cover or Publish card not yet closed means the queue is ahead: make nothing/);
+      // Its own crew's queue only: another music channel on the same board never holds it back.
+      expect(composer, name).toMatch(/A Cover card your cover-artist holds or a Publish card your channel-manager holds, not yet closed, means the queue is ahead: make nothing/);
       const [fire] = seat(TEMPLATES[name], "composer").schedules!;
       expect(fire!.input, name).toMatch(/make nothing and say why in one line/);
       // A song still at the cover-artist, or day one's first song still in flight, stops the 10:00 fire.
-      expect(fire!.input, name).toMatch(/a Cover or Publish card not yet closed, or the first-song card not yet closed/);
+      expect(fire!.input, name).toMatch(/a Cover or Publish card of your crew not yet closed, or your first-song card not yet closed/);
+      expect(fire!.input, name).toMatch(/your own crew's Cover and Publish cards \(board_read, owner your cover-artist, then your channel-manager\)/);
       expect(fire!.budget_micro_usd, name).toBe(2_000_000);
     }
   });
@@ -1595,6 +1601,37 @@ describe("the AI Music Channel", () => {
         expect(agent.skills, `${name}/${agent.name}`).toContain(`naive/channel-template-${name}`);
         expect(agent.system, `${name}/${agent.name}`).toContain(nicheFixed(`naive/channel-template-${name}`));
       }
+    }
+  });
+
+  /** Live run 2026-11-03: a techno crew read the hardstyle crew's channel note off the shared CEO board. */
+  it("reads only its own crew's cards when other channels share the board", () => {
+    for (const name of MUSIC_FAMILY) {
+      for (const agent of TEMPLATES[name].agents) {
+        expect(agent.system, `${name}/${agent.name}`).toContain(OWN_CARDS);
+        expect(agent.system, `${name}/${agent.name}`).not.toMatch(/the note on the channel-note card \(board_read\)/);
+      }
+      for (const seatName of ["composer", "cover-artist", "analyst"]) {
+        expect(brief(name, seatName), `${name}/${seatName}`).toMatch(/the note on the channel-note card your own channel-manager holds \(board_read, owner your channel-manager\)/);
+      }
+    }
+    expect(OWN_CARDS).toMatch(/board_read with owner set to that seat's name, and never take a note, seed, mood line or queue from another crew's card/);
+  });
+
+  /** Live run 2026-11-03: the CEO read the closed plan card, saw no comment, and asked the same question again. */
+  it("names the pending operator question in the closed plan card's note", () => {
+    for (const name of Object.keys(TEMPLATES) as TemplateName[]) {
+      const plan = TEMPLATES[name].tasks.find((card) => card.key === "channel-plan");
+      if (plan === undefined) continue;
+      expect(plan.body, name).toMatch(/End the note with the line OPERATOR QUESTION: <the one question you will ask>, so whoever reads the closed card knows it is being asked and does not ask it again/);
+      expect(plan.body!.indexOf("OPERATOR QUESTION:"), name).toBeLessThan(plan.body!.indexOf("Close this card"));
+    }
+  });
+
+  it("frames the weekly report with no tool request while no account is connected", () => {
+    for (const name of MUSIC_FAMILY) {
+      const frame = TEMPLATES[name].tasks.find((card) => card.key === "report-frame")!;
+      expect(frame.body, name).toMatch(/request none with request_tools/);
     }
   });
 
