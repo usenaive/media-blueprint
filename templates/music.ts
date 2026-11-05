@@ -1,6 +1,6 @@
 /**
  * `music` — AI Music Channel: one original song at a time, posted as a short vertical video of its
- * cover held still over the track (vetta-mono ADR-1811).
+ * cover held still over the track (vetta-mono ADR-1904).
  *
  * A piece moves along the board as a chain of cards:
  *
@@ -18,7 +18,7 @@
  * crew with `naive/channel-template-<genre>` pinned, so they ask only the cadence.
  *
  * NO AI LABEL: no seat writes an AI label or disclosure line into the caption, and no seat sets the
- * post's `ai_generated` flag. Both are the operator's opt-in (vetta-mono ADR-1636, ADR-1811).
+ * post's `ai_generated` flag. Both are the operator's opt-in (vetta-mono ADR-1636, ADR-1904).
  */
 import {
   ANALYST_REPORT,

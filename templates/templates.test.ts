@@ -55,7 +55,7 @@ const CATALOGUE = [
   "naive/channel-template-food-slime",
   "naive/channel-template-glass-food",
   "naive/channel-template-would-you-choose",
-  // The AI Music Channel's playbook and its genres (vetta-mono ADR-1811).
+  // The AI Music Channel's playbook and its genres (vetta-mono ADR-1904).
   "naive/channel-template-music", "naive/channel-template-hardstyle", "naive/channel-template-techno",
   "naive/channel-template-rap", "naive/channel-template-pop",
 ];
@@ -160,7 +160,7 @@ describe("the crews", () => {
     expect(seatsOf(TEMPLATES.faceless)).toEqual(["channel-manager", "producer", "trend-scout", "scriptwriter", "analyst"]);
     expect(seatsOf(TEMPLATES.longform)).toEqual(["channel-manager", "researcher", "writer", "producer", "analyst"]);
     expect(seatsOf(TEMPLATES.clipping)).toEqual(["channel-manager", "clipper", "scout", "caption-editor", "analyst"]);
-    // A song is one call and a cover: four seats, the channel manager publishing (vetta-mono ADR-1811).
+    // A song is one call and a cover: four seats, the channel manager publishing (vetta-mono ADR-1904).
     for (const name of MUSIC_FAMILY) expect(seatsOf(TEMPLATES[name]), name).toEqual(["channel-manager", "composer", "cover-artist", "analyst"]);
   });
 
@@ -598,7 +598,7 @@ describe("publishing", () => {
 
   it("is the channel manager's, from a Publish card, with the rendered file", () => {
     expect(PUBLISHER).toBe("channel-manager");
-    // A music channel's manager is the same seat with one clause on what its video is (vetta-mono ADR-1811).
+    // A music channel's manager is the same seat with one clause on what its video is (vetta-mono ADR-1904).
     for (const template of all) expect(unniched(template, seat(template, PUBLISHER).system ?? "").replace(`${MUSIC_PUBLISHER_BRIEF} `, "")).toBe(seat(TEMPLATES.faceless, PUBLISHER).system);
     expect(brief()).toMatch(/A Publish card wakes you/);
     expect(brief()).toMatch(/social\.post.*file_ids/s);
@@ -1514,7 +1514,7 @@ describe("the empires niche makes raw video", () => {
 });
 
 /**
- * vetta-mono ADR-1811: the AI Music Channel. A post is a song and its cover, and a network takes no
+ * vetta-mono ADR-1904: the AI Music Channel. A post is a song and its cover, and a network takes no
  * audio-only post, so the cover-artist muxes the two into a vertical mp4 the channel manager posts.
  * No AI label in the caption, and no seat sets the post's AI flag (vetta-mono ADR-1636).
  */

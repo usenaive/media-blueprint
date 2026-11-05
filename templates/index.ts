@@ -242,7 +242,7 @@ export const SURREAL_SATIRE = rawFilm(
 );
 
 /**
- * vetta-mono ADR-1811: the AI Music Channel's genre niches. Each is the `music` crew with the genre's
+ * vetta-mono ADR-1904: the AI Music Channel's genre niches. Each is the `music` crew with the genre's
  * playbook pinned (`naive/channel-template-<genre>`): its Context seed is the channel note, copied
  * word for word on day one, so the genre is never asked.
  */
@@ -275,8 +275,8 @@ export const POP = niche(MUSIC, {
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
  * nineteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580, ADR-1640) and `ai-influencer` (ADR-1360) reuse their crews.
- * Then the fourth base, `music`, and its four genre niches (vetta-mono ADR-1811), carried from
- * engine 0.16.0 on: an older engine skips them (`naive.config.ts`).
+ * Then the fourth base, `music`, and its four genre niches (vetta-mono ADR-1904), carried from
+ * engine 0.17.0 on: an older engine skips them (`naive.config.ts`).
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,

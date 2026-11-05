@@ -44,7 +44,7 @@ describe("naive.config", () => {
     expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
     expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual([
       // The base three, the nineteen niche channel templates (ADR-1115, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580, ADR-1640), AI Influencer (ADR-1360),
-      // and the AI Music Channel with its four genres (vetta-mono ADR-1811), sorted.
+      // and the AI Music Channel with its four genres (vetta-mono ADR-1904), sorted.
       "AI Cartoons IRL Channel",
       "AI Cat Stories Channel",
       "AI Channel Cloning",
@@ -152,7 +152,7 @@ describe("naive.config", () => {
   );
 
   /**
-   * The AI Music Channel and its genres (vetta-mono ADR-1811) are carried from engine 0.16.0 on. Under
+   * The AI Music Channel and its genres (vetta-mono ADR-1904) are carried from engine 0.17.0 on. Under
    * an engine that lists them, the publisher's `NAIVE_TEMPLATE=<name>` build declares that template;
    * under an older one they are skipped by name (the warning above), and this is left to the round-trip.
    */

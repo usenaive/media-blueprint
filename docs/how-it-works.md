@@ -150,7 +150,7 @@ one vertical video. `composer -> cover-artist -> channel-manager`:
 - **analyst**: per song and subject.
 
 The genre niches `hardstyle`, `techno`, `rap` and `pop` pin `naive/channel-template-<genre>` on this
-crew and ask only the cadence. All five need engine 0.16.0.
+crew and ask only the cadence. All five need engine 0.17.0.
 
 ### Day one
 

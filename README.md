@@ -78,7 +78,7 @@ the first session. It publishes, installs and switches through the exact paths t
 
 ### AI Music Channel
 
-`music` (shown as **AI Music Channel**, vetta-mono ADR-1811, [`templates/music.ts`](templates/music.ts))
+`music` (shown as **AI Music Channel**, vetta-mono ADR-1904, [`templates/music.ts`](templates/music.ts))
 is a fourth base crew whose post is a song: one original 30-second song (`generate_music`, one call
 a song) and one square cover, made into one vertical video — the cover held still, centred on a
 1080×1920 frame over a blurred copy of itself, with the song as its audio track — because a network
@@ -103,7 +103,7 @@ copied into the channel note word for word, so it asks only the cadence.
 | `rap` | AI Rap Channel | `music` | `naive/channel-template-rap` |
 | `pop` | AI Pop Channel | `music` | `naive/channel-template-pop` |
 
-These five need engine `@usenaive-sdk/blueprints` 0.16.0, the first that lists them, and ship as
+These five need engine `@usenaive-sdk/blueprints` 0.17.0, the first that lists them, and ship as
 media-blueprint **v3.2.0**. Under an older engine `naive.config.ts` leaves them out, by name, with a
 warning; the rest of the repo runs as before.
 

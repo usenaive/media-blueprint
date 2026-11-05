@@ -51,7 +51,7 @@ export type TemplateName =
   | "legend-flex"
   // ADR-1640: a city where people's heads show what they really are, raw 4:3 film, on `faceless` (segmented).
   | "surreal-satire"
-  // vetta-mono ADR-1811: the AI Music Channel base (`music`, a song and its cover a post), and its
+  // vetta-mono ADR-1904: the AI Music Channel base (`music`, a song and its cover a post), and its
   // four genre niches, which pin `naive/channel-template-<genre>` on the music crew.
   | "music"
   | "hardstyle"
