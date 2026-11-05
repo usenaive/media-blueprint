@@ -5,7 +5,7 @@ the crew, its timers and its first day of work into your organization.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![engine: @usenaive-sdk/blueprints](https://img.shields.io/npm/v/@usenaive-sdk/blueprints?label=engine%3A%20%40usenaive-sdk%2Fblueprints&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/blueprints)
-[![CLI: @usenaive-sdk/vetta-cli](https://img.shields.io/npm/v/@usenaive-sdk/vetta-cli?label=cli%3A%20naive&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/vetta-cli)
+[![CLI: @usenaive-sdk/cli](https://img.shields.io/npm/v/@usenaive-sdk/cli?label=cli%3A%20naive&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/cli)
 
 Media manager is a hosted app whose source is in [`apps/media-manager`](apps/media-manager); agents
 can pull, change and deploy it like any app. The crew runs on it and on the platform's own screens:
