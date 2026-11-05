@@ -11,8 +11,8 @@
   "devDependencies": {
     "@types/node": "^22.20.1",
     "@usenaive-sdk/app": "^0.1.0",
-    "@usenaive-sdk/blueprints": "^0.16.0",
-    "@usenaive-sdk/vetta-cli": "^0.6.0",
+    "@usenaive-sdk/blueprints": "^0.18.0",
+    "@usenaive-sdk/cli": "^1.0.0",
     "typescript": "5.9.3",
     "vitest": "^3.2.7"
   }
