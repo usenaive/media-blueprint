@@ -8,7 +8,7 @@
  * What is asserted here is that the data says exactly that, and nothing else.
  */
 import { describe, expect, it } from "vitest";
-import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
+import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_BRAKE, INFLUENCER_CADENCE, INFLUENCER_FACE_FLAG, INFLUENCER_MANAGER_BRIEF, INFLUENCER_NICHE, INFLUENCER_NICHE_FIXED, INFLUENCER_PUBLIC, PERSONA_CHANGES, PERSONA_RULE, PRODUCER_SPEECH_VOICE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER_BUDGET, FFMPEG_SETUP, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, OWN_CARDS, RAW_FILM_PRODUCER, RAW_FILM_SCRIPTWRITER, RAW_FILM_VIDEO_MODELS, SURREAL_SATIRE_PRODUCER, SURREAL_SATIRE_SCRIPTWRITER, TEMPLATES, TWO_CALL_PIECE_BUDGET } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
@@ -109,7 +109,12 @@ const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<Template
 const unniched = (template: MediaTemplate, system: string): string =>
   BASE_OF[template.name] === undefined
     ? system
-    : system.replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "").replace(`${INFLUENCER_CADENCE} `, "");
+    : system
+        .replace(` ${nicheFixed(`naive/channel-template-${template.name}`)}`, "")
+        .replace(` ${INFLUENCER_NICHE_FIXED}`, "")
+        .replace(`${INFLUENCER_MANAGER_BRIEF} `, "")
+        .replace(`${INFLUENCER_BRAKE} `, "")
+        .replace(`${INFLUENCER_CADENCE} `, "");
 /** Expand a set of `template/seat` ids to include the same seats on each niche that mirrors the base. */
 const withNicheIds = (ids: readonly string[]): Set<string> => {
   const out = new Set(ids);
@@ -185,7 +190,8 @@ describe("the crews", () => {
       const isScenePipelineSeat = BASE_OF[template.name] === "faceless" || template.name === "faceless"
         ? ["scriptwriter", "producer"].includes(agent.name)
         : false;
-      expect(words(own), id).toBeLessThanOrEqual(isScenePipelineSeat ? 745 : 360);
+      // The influencer's producer also carries the face check, the persona's voice and which chr_ id it keeps (ADR-1812).
+      expect(words(own), id).toBeLessThanOrEqual(id === "ai-influencer/producer" ? 825 : isScenePipelineSeat ? 745 : 360);
       for (const skill of agent.skills ?? []) expect(CATALOGUE, id).toContain(skill);
       expect(permissionFor(template, agent.name, "read_skill"), id).toBe((agent.skills ?? []).length > 0 ? "allow" : "deny");
     }
@@ -1189,7 +1195,7 @@ describe("the built-in tool list", () => {
   const CORE_BUILTIN_TOOLS = [
     "bash", "read", "write", "edit", "ls", "find",
     "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch", "generate_image", "generate_video", "clip_video",
-    "create_character", "get_character", "list_characters", "delete_character", "apps",
+    "create_character", "get_character", "list_characters", "update_character", "delete_character", "apps",
     "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
     "ask_operator", "request_tools", "project_context",
     "transcribe_audio", "generate_speech", "generate_music", "find_files", "view_image", "fetch_file", "find_stock_photo",
@@ -1271,12 +1277,12 @@ describe("the built-in tool list", () => {
 describe("the AI Influencer template", () => {
   const AI = TEMPLATES["ai-influencer"];
   const LOOK_SLUGS = [
-    "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
+    "candid-selfie", "phone-snap", "realistic", "everyday", "library", "quiet-luxury", "through-the-glass", "flight-mode", "selfcare", "japandi",
     "foggy-morning", "rainy-day", "90s-editorial", "wide-angle-outfit", "elevator-mirror", "escalator", "tokyo-street-style",
   ];
   /** The first-party pictures vetta-mono ships for the form (canonical-spec §33.6, SPEC §4.6). */
   const ASSETS = new Set([
-    ...["priya-raman", "maya-elusing", "hank-delgado", "ava-lindqvist"].map((slug) => `/setup/characters/${slug}.jpg`),
+    ...["priya-raman", "maya-elusing", "hank-delgado", "ava-lindqvist", "marcus-bell", "theo-park"].map((slug) => `/setup/characters/${slug}.jpg`),
     "/setup/characters/upload.svg",
     "/setup/looks/usual.jpg",
     ...LOOK_SLUGS.map((slug) => `/setup/looks/${slug}.jpg`),
@@ -1291,7 +1297,7 @@ describe("the AI Influencer template", () => {
     ]);
     const [who, , looks] = [AI.questions[0]!, AI.questions[1]!, AI.questions[2]!];
     expect(who.type === "choice" && [who.options, who.multiple, who.other]).toEqual([
-      ["Priya Raman", "Maya Elusing", "Hank Delgado", "Ava Lindqvist", "Upload your own photos"],
+      ["Priya Raman", "Maya Elusing", "Hank Delgado", "Ava Lindqvist", "Marcus Bell", "Theo Park", "Upload your own photos"],
       false,
       false,
     ]);
@@ -1324,7 +1330,9 @@ describe("the AI Influencer template", () => {
       expect(permissionFor(AI, agent.name, "delete_character"), id).toBe("deny");
       // A video edit can change the face: denied by name, not left to follow generate_video.
       expect(agent.tools?.configs["edit_video"], id).toEqual({ enabled: false, permission: "deny" });
-      expect(permissionFor(AI, agent.name, "get_character"), id).toBe(["producer", "scriptwriter"].includes(agent.name) ? "allow" : "deny");
+      // The persona is every seat's to read, and the seats that talk to the operator's to keep true.
+      expect(permissionFor(AI, agent.name, "get_character"), id).toBe("allow");
+      expect(permissionFor(AI, agent.name, "update_character"), id).toBe(["scriptwriter", "channel-manager"].includes(agent.name) ? "allow" : "deny");
       expect(permissionFor(AI, agent.name, "list_characters"), id).toBe(agent.name === "producer" ? "allow" : "deny");
       expect(agent.skills, id).toContain("naive/channel-template-ai-influencer");
     }
@@ -1333,9 +1341,77 @@ describe("the AI Influencer template", () => {
     }
   });
 
+  /** An own persona's home is the character: asked for on the Meet card, filed by create_character, kept true after. */
+  it("builds an own persona into the character, asks for photos when none came, and says what it costs", () => {
+    const meet = AI.tasks.find((card) => card.title === "Meet the influencer")!;
+    const photos = AI.questions.find((q) => q.key === "photos")!;
+    const purpose = AI.questions.find((q) => q.key === "purpose")!;
+    expect(photos.optional).toBe(true);
+    expect(photos.help).toMatch(/leave it empty and you'll be asked for photos in chat/);
+    expect(photos.type === "media" && photos.placeholder).toMatch(/leave this empty/);
+    expect(purpose.help).toMatch(/their name, what they post about and how they talk/);
+    expect(meet.body).toMatch(/never stop for empty photos/);
+    expect(meet.body).toMatch(/ask_operator once, with a media field \(it takes uploads\), for 10 to 16, and in the same question for whichever of their name/);
+    expect(meet.body).toMatch(/Build the persona from those answers/);
+    // What billing charges at cost (vetta-mono ADR-1592): the setup, the card and the README agree.
+    const said = JSON.stringify([meet.body, AI.questions]);
+    expect(said).toContain("$2.50");
+    expect(said).not.toContain("$3.25");
+    // A niche template's "never ask" would stop the Meet card asking who they are.
+    for (const agent of AI.agents) {
+      expect(agent.system, agent.name).toContain(INFLUENCER_NICHE_FIXED);
+      expect(agent.system, agent.name).not.toContain(nicheFixed("naive/channel-template-ai-influencer"));
+    }
+    for (const name of ["producer", "scriptwriter", PUBLISHER]) expect(seat(AI, name).system, name).toContain(PERSONA_RULE);
+    // A re-faced creator has a new id (vetta-mono ADR-1812); a running channel keeps the one it started on.
+    expect(PERSONA_RULE).toContain("Use the chr_ id on the Meet the influencer note, never a name's newer one.");
+    for (const name of ["scriptwriter", PUBLISHER]) expect(seat(AI, name).system, name).toContain(PERSONA_CHANGES);
+    expect(AI.tasks.find((card) => card.key === "character-bible")!.body).toMatch(/get_character its persona once it exists/);
+  });
+
+  /** One creator, one voice. No seat pins a speech model, so a persona's voice id is accepted (vetta-mono §35.3). */
+  it("speaks every line in the persona's voice, on the default speech path", () => {
+    const producer = seat(AI, "producer").system!;
+    expect(producer).toContain(PRODUCER_SPEECH_VOICE);
+    expect(producer).not.toContain("with a voice only when project_context supplied its supported id");
+    for (const agent of AI.agents) expect(agent.tools?.configs["generate_speech"]?.config, agent.name).toBeUndefined();
+  });
+
+  /** The base never re-renders a finished scene; only this one narrow redo may, and only once a piece. */
+  it("checks the face at VERIFY with one redo a piece, and tells the operator when it's still off", () => {
+    const producer = seat(AI, "producer").system!;
+    expect(producer).toContain("Never re-render a completed scene, except the one FACE CHECK allows.");
+    expect(producer).not.toMatch(/Never re-render a completed scene\. /);
+    expect(producer).toMatch(/FACE CHECK at VERIFY: compare one frame per scene with the first still/);
+    expect(producer).toMatch(/One redo a piece/);
+    expect(producer).toMatch(/put "FACE CHECK: scene <index> may not look like them" first on the Publish card/);
+    expect(seat(AI, PUBLISHER).system).toContain(INFLUENCER_FACE_FLAG);
+  });
+
+  /** Nobody approving, or nowhere to post: the crew stops buying renders. The scout holds no social tool, so it reads the board. */
+  it("starts no piece while posts wait or no account is connected", () => {
+    const scout = seat(AI, "trend-scout");
+    expect(scout.system).toContain(INFLUENCER_BRAKE);
+    // A new company with no account still gets its first piece to approve: the brake needs a Publish card to exist.
+    expect(INFLUENCER_BRAKE).toMatch(/Once a Publish card exists, start nothing either/);
+    expect(INFLUENCER_BRAKE).toMatch(/The first piece always runs/);
+    expect(INFLUENCER_BRAKE).toMatch(/Two or more Publish cards still open/);
+    expect(INFLUENCER_BRAKE).toMatch(/no account is connected and no card holds a post id/);
+    expect(permissionFor(AI, "trend-scout", "board_read")).toBe("allow");
+    expect(permissionFor(AI, "trend-scout", "social.accounts")).toBe("deny");
+    expect(seat(TEMPLATES.faceless, "trend-scout").system).not.toContain(INFLUENCER_BRAKE);
+  });
+
+  it("posts YouTube publicly and keeps a changed cadence on the board, on this template alone", () => {
+    expect(seat(AI, PUBLISHER).system).toContain(INFLUENCER_PUBLIC);
+    expect(seat(TEMPLATES.faceless, PUBLISHER).system).not.toContain(INFLUENCER_PUBLIC);
+    for (const name of [PUBLISHER, "trend-scout"]) expect(seat(AI, name).system, name).toMatch(/unless the channel-plan card's newest CADENCE line says otherwise/);
+    expect(INFLUENCER_CADENCE).toMatch(/comments "CADENCE: daily", "CADENCE: 3× a week" or "CADENCE: weekly" on the channel-plan card/);
+  });
+
   it("trains an uploaded face only with consent on the operator's yes, and never sets an AI-generated posting flag", () => {
     const meet = AI.tasks.find((card) => card.title === "Meet the influencer")!;
-    expect(meet.body).toMatch(/create_character\{name, image_urls, style_pack:.*consent:\{attested:true\}\}/);
+    expect(meet.body).toMatch(/create_character\{name, description, persona, image_urls, style_pack:.*consent:\{attested:true\}\}/);
     expect(meet.body).toMatch(/operator's yes, which is their confirmation that the person in the photos is them or agreed to it/);
     expect(meet.body).toMatch(/Refused as a public figure/);
     expect(AI.questions.find((q) => q.key === "photos")?.help).toMatch(/approving the training confirms it/);

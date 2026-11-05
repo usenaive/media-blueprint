@@ -5,8 +5,8 @@
  * generative niches, on the same scene pipeline (script -> images -> video -> edit, a character bible
  * on day one), and one load-bearing difference: the face. Every image of the influencer is
  * rendered with their character and a look, and every video is animated from such a still, so the
- * person never changes. The character is a setup answer, not a niche: one engine id serves the four
- * prebuilt creators and a face trained from the operator's own photos.
+ * person never changes. The character is a setup answer, not a niche: one engine id serves the six
+ * prebuilt creators and a face trained from the operator's own photos, whose persona lives on the character.
  *
  * What it changes on the faceless crew:
  *   · the questions — who, their photos, the looks, what for (no niche, reference or cadence);
@@ -17,13 +17,15 @@
  *   · the `look` day-one card — becomes "Meet the influencer" (same key, so the chain is unchanged);
  *   · the `character-bible` day-one card — the influencer's bible, from the persona, not from a study;
  *   · the first-piece card — every piece is the influencer;
- *   · the cadence — not asked; the manager and the scout read it as daily.
+ *   · the cadence — not asked; the manager and the scout read it as daily until the operator changes it;
+ *   · the brakes — the scout starts nothing while posts pile up unapproved, and the producer checks the face.
  */
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import {
   budgetOf,
   lengthPhrase,
   niche,
+  nicheFixed,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
   SHORT_FORM_LENGTH,
@@ -44,12 +46,19 @@ export const AI_INFLUENCER_SKILL = "channel-template-ai-influencer";
  */
 export const AI_INFLUENCER_VIDEO_MODELS: readonly string[] = ["minimax/hailuo-3", "alibaba/wan-3.0/image-to-video"];
 
-/** The four prebuilt creators: setup name, the slug their first-party pictures are filed under, their niche. */
+/**
+ * The six prebuilt creators: setup name, the slug their first-party pictures are filed under, their niche
+ * and the id a new install uses. Priya, Maya, Hank and Ava were re-faced as real-looking people (vetta-mono
+ * ADR-1812) under new ids; their earlier rows are retired from new installs but still resolve by id, so a
+ * channel that started on one keeps the id on its Meet the influencer note.
+ */
 export const PREBUILT_CREATORS = [
-  { name: "Priya Raman", slug: "priya-raman", niche: "Founder · build in public", id: "chr_0yxd67hvgwsz9xg8mrbbc1q33r" },
-  { name: "Maya Elusing", slug: "maya-elusing", niche: "Wellness · morning routines", id: "chr_25ptp43961zfpgg5a5jbz4d38z" },
-  { name: "Hank Delgado", slug: "hank-delgado", niche: "Small business · bakery owner", id: "chr_kxynfvnew54p253d24zq1h1457" },
-  { name: "Ava Lindqvist", slug: "ava-lindqvist", niche: "Fashion · fit checks", id: "chr_t6afyfc7ztb6a6jnj04sdj2x1t" },
+  { name: "Priya Raman", slug: "priya-raman", niche: "Founder · build in public", id: "chr_bb1xr9kn5tav3nqbgq5w2p8g61" },
+  { name: "Maya Elusing", slug: "maya-elusing", niche: "Wellness · morning routines", id: "chr_e0tgbzd9kqfrfrzzs33bsxh89f" },
+  { name: "Hank Delgado", slug: "hank-delgado", niche: "Small business · bakery owner", id: "chr_b3nnct3kvsv4d17eb14dhqfhhv" },
+  { name: "Ava Lindqvist", slug: "ava-lindqvist", niche: "Fashion · fit checks", id: "chr_4sq1wcpx4jygj46wqspp4z8d5a" },
+  { name: "Marcus Bell", slug: "marcus-bell", niche: "Fitness · home workouts", id: "chr_bpg78xxfgmtrshbx2nv2nx5f62" },
+  { name: "Theo Park", slug: "theo-park", niche: "Food · weeknight cooking", id: "chr_ry84wq63nwd3nd2j615m4j7svx" },
 ] as const;
 
 /**
@@ -60,11 +69,23 @@ export const PREBUILT_CREATORS = [
 const CREATOR_IDS = PREBUILT_CREATORS.map((one) => `${one.name} = ${one.id}`).join(", ");
 
 /** The looks a trained face gets when the operator picked only "Their usual looks" (it has none of its own). */
-export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Phone snap", "Realistic", "Everyday"];
+export const DEFAULT_TRAINED_LOOKS: readonly string[] = ["Candid selfie", "Phone snap", "Realistic"];
 
 /** Where the niche comes from: this template asks no niche question (ADR-1360). */
 export const INFLUENCER_NICHE =
-  "THE NICHE IS THE INFLUENCER'S: the picked creator's niche in naive/channel-template-ai-influencer §4, or, for a face the operator trained, what the purpose answer says they are for.";
+  "THE NICHE IS THE INFLUENCER'S: the niche in their persona (get_character, with the chr_ id on the Meet the influencer note); before that character exists, the picked creator's in naive/channel-template-ai-influencer §4, or what the purpose answer says for a face still being trained.";
+
+/** Replaces `nicheFixed` in every seat: a niche template's "never ask" would stop the Meet card asking who an own face is. */
+export const INFLUENCER_NICHE_FIXED =
+  "This channel's niche is the influencer's, read from their persona. It is not a setup answer, so never ask for it, except where the Meet the influencer card says to.";
+
+/** Who the influencer is, in one durable place every seat and session can read, not a card's note. */
+export const PERSONA_RULE =
+  "THE PERSONA LIVES ON THE CHARACTER: get_character gives their niche, bio, voice, wardrobe and hooks, and it outranks a note. Use the chr_ id on the Meet the influencer note, never a name's newer one.";
+
+/** The seats that talk to the operator keep it true. A platform character is refused, so a prebuilt creator's change goes in the bible. */
+export const PERSONA_CHANGES =
+  "When the operator changes who they are on a face they trained, call update_character and say what changed on the character-bible card. A prebuilt creator can't be changed: put it in the bible as a CREATOR DIRECTIVE.";
 
 /**
  * Said to every seat and card that opens other people's videos. The day-one study and the first-piece
@@ -79,16 +100,16 @@ export const UPLOAD_OWN = "Upload your own photos";
 export const USUAL_LOOKS = "Their usual looks";
 
 /**
- * The looks setup offers (eleven of the platform's sixteen, plus the character's own), each with its
+ * The looks setup offers (eleven of the platform's seventeen, plus the character's own), each with its
  * first-party preview and our one-line description. The names are the platform's look names exactly:
  * the answer is passed as `generate_image{style}` word for word. vetta-mono `packages/core/src/schema/looks.test.ts`
  * pins this list against the catalogue: change both together.
  */
 const LOOK_OPTIONS: readonly { name: string; slug: string; note: string }[] = [
+  { name: "Candid selfie", slug: "candid-selfie", note: "Close-up at arm's length in low light; real skin, loose hair, unretouched." },
   { name: "Phone snap", slug: "phone-snap", note: "Natural light, casual phone framing, soft HDR glow; looks real." },
   { name: "Realistic", slug: "realistic", note: "No filter, crisp true-to-life detail in skin, light and fabric." },
   { name: "Library", slug: "library", note: "Soft indoor light, cozy academia, books and warm wood." },
-  { name: "Quiet luxury", slug: "quiet-luxury", note: "Understated expensive: neutral tones, fine fabrics, calm interiors." },
   { name: "Through the glass", slug: "through-the-glass", note: "Seen through a window or café pane; a quiet observed moment." },
   { name: "Japandi", slug: "japandi", note: "Warm minimalism: clean lines, natural light, pale wood." },
   { name: "Rainy day", slug: "rainy-day", note: "Moody sky, wet-pavement reflections, soft sweaters, slow and cinematic." },
@@ -112,7 +133,7 @@ export const AI_INFLUENCER_QUESTIONS: SetupQuestion[] = [
     options: [...PREBUILT_CREATORS.map((one) => one.name), UPLOAD_OWN],
     details: [
       ...PREBUILT_CREATORS.map((one) => ({ option: one.name, image: `/setup/characters/${one.slug}.jpg`, note: `${one.niche} · ready now` })),
-      { option: UPLOAD_OWN, image: "/setup/characters/upload.svg", note: "Trains a new face · $3.25 · about 20 min" },
+      { option: UPLOAD_OWN, image: "/setup/characters/upload.svg", note: "Trains a new face · $2.50 · about 20 min" },
     ],
     help: "Prebuilt creators are already trained and can post today. Upload photos to train a face only you can use.",
   },
@@ -121,8 +142,8 @@ export const AI_INFLUENCER_QUESTIONS: SetupQuestion[] = [
     label: "Photos of your character",
     type: "media",
     optional: true,
-    placeholder: "Or paste a link to a photo",
-    help: "Only if you picked Upload your own photos. Up to 12 clear photos of one person (the crew asks in chat for more, 10 to 16 in all): face visible, different angles, light and outfits. Only photos of you, or of someone who agreed: approving the training confirms it, and photos of a public figure are refused.",
+    placeholder: "Paste links to photos, or leave this empty",
+    help: "Only if you picked Upload your own photos. Paste links here, or leave it empty and you'll be asked for photos in chat. 10 to 16 clear photos of one person: face visible, different angles, light and outfits. Only photos of you, or of someone who agreed: approving the training confirms it, and photos of a public figure are refused.",
   },
   {
     key: "looks",
@@ -142,13 +163,32 @@ export const AI_INFLUENCER_QUESTIONS: SetupQuestion[] = [
     label: "What is your influencer for?",
     type: "text",
     placeholder: "Grow an audience of their own, or promote my product: example.com",
-    help: "An audience of their own, or your product woven into what they post.",
+    help: "An audience of their own, or your product woven into what they post. Using your own photos? Also say their name, what they post about and how they talk.",
   },
 ];
 
-/** The setup asks no cadence; the two seats that read one are told it here. */
+/** The setup asks no cadence; the two seats that read one are told it here, and where a change is kept. */
 export const INFLUENCER_CADENCE =
-  "THIS CHANNEL POSTS DAILY: its setup asks no cadence, so wherever this brief says the cadence answer, read daily, and never ask for one.";
+  "THIS CHANNEL POSTS DAILY unless the channel-plan card's newest CADENCE line says otherwise: its setup asks no cadence, so wherever this brief says the cadence answer, read that, and never ask for one. When the operator asks to post more or less, the channel manager comments \"CADENCE: daily\", \"CADENCE: 3× a week\" or \"CADENCE: weekly\" on the channel-plan card.";
+
+/** No setup question sets a video's visibility here, and every post already waits for the operator's yes. */
+export const INFLUENCER_PUBLIC =
+  "THIS CHANNEL'S YOUTUBE POSTS ARE PUBLIC: read visibility as public unless the operator says otherwise. A creator grows in public, and the operator has already approved each post.";
+
+/** What the manager does with the producer's flag: the person hears it before they approve. */
+export const INFLUENCER_FACE_FLAG =
+  "A Publish card with a FACE CHECK line: tell the operator with ask_operator before you post it, and do what they say.";
+
+/** All the channel manager adds to the shared seat. */
+export const INFLUENCER_MANAGER_BRIEF = `${INFLUENCER_CADENCE} ${INFLUENCER_PUBLIC} ${INFLUENCER_FACE_FLAG} ${PERSONA_RULE} ${PERSONA_CHANGES}`;
+
+/**
+ * The spending brake. Pieces render whether or not anyone approves or can post, so a channel nobody is
+ * looking at would bill up to the producer's daily ceiling. The scout heads every chain, and it can read
+ * the board: that's where both signs are. It holds no social tools, so it reads the manager's plan note.
+ */
+export const INFLUENCER_BRAKE =
+  "BEFORE YOU START ANY PIECE, CHECK THE BOARD. Two or more Publish cards still open means posts are waiting on the operator, or an account: start nothing this fire and say so in one line. Once a Publish card exists, start nothing either while the channel-plan note says no account is connected and no card holds a post id, unless that card's comments say the operator will connect none. The first piece always runs, so they have something to approve.";
 
 /**
  * No render draws words. On staging (round 2) a shot's on-screen text went into the clip's prompt and
@@ -187,7 +227,7 @@ export const ONE_SET =
  * scriptwriter's opening-frame and video-prompt rules are replaced the same way. The rest of the
  * pipeline — preflight, the bible, AUDIO MODE, the edit, VERIFY — is the base's, word for word.
  */
-export const PRODUCER_SCENE_STEP = `Work resumably from the Render card's comments. EVERY SCENE IS THE INFLUENCER, so none opens on a shipped frame or a last frame. (1) Each scene without an accepted image gets one. ${ONE_SET} Comment "SCENE <index> IMAGE <fil_ id>", inspect it against the bible, and allow ONE corrected replacement for a visible mismatch; a second miss stops before video spend. (2) Once all images are accepted, call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: ["<fil_ id>"] holding that scene's accepted image — never a frame cut from a clip. ${NO_DRAWN_WORDS} Then end your turn, and never sleep or poll. On completion comment "SCENE <index> VIDEO <fil_ id>". Never re-render a completed scene. A failed render: comment "SCENE <index> VIDEO FAILED <error>" and re-render it once; a second failure means STOPPED. On screen, a call to action sits in the last scene only.`;
+export const PRODUCER_SCENE_STEP = `Work resumably from the Render card's comments. EVERY SCENE IS THE INFLUENCER, so none opens on a shipped frame or a last frame. (1) Each scene without an accepted image gets one. ${ONE_SET} Comment "SCENE <index> IMAGE <fil_ id>", inspect it against the bible, and allow ONE corrected replacement for a visible mismatch; a second miss stops before video spend. (2) Once all images are accepted, call generate_video for each in one turn, with character, exactly its video_prompt and seconds, and image_urls: ["<fil_ id>"] holding that scene's accepted image — never a frame cut from a clip. ${NO_DRAWN_WORDS} Then end your turn, and never sleep or poll. On completion comment "SCENE <index> VIDEO <fil_ id>". Never re-render a completed scene, except the one FACE CHECK allows. A failed render: comment "SCENE <index> VIDEO FAILED <error>" and re-render it once; a second failure means STOPPED. On screen, a call to action sits in the last scene only.`;
 
 /** The base producer's scene step, from its first words to the paragraph after it. */
 const SCENE_STEP = { from: "For each scene, resuming from the card's comments:", to: "\n\nAfter all videos exist" };
@@ -216,9 +256,17 @@ export const replaceSpan = (system: string, span: { from: string; to: string }, 
 };
 
 /** The producer's own line, after the base pipeline: the tools that read the face. */
-export const PRODUCER_INFLUENCER_BRIEF = `Every image and video is the influencer (the chr_ id on the Meet the influencer note), with one video model per piece.`;
+export const PRODUCER_INFLUENCER_BRIEF = `Every image and video is the influencer (the chr_ id on the Meet the influencer note), with one video model per piece. ${PERSONA_RULE} FACE CHECK at VERIFY: compare one frame per scene with the first still on the Meet the influencer note. Not their face: comment "FACE REDO SCENE <index>", render that scene once more from its accepted image, and edit again. One redo a piece. Still wrong: put "FACE CHECK: scene <index> may not look like them" first on the Publish card.`;
 
-const SCRIPTWRITER_INFLUENCER_BRIEF = `EVERY SCENE IS THE ONE INFLUENCER: get_character first (voice, wardrobe, looks). No image_prompt or video_prompt says gender, age, face, hair, build or any words: the character carries who they are, and lines are voiced in the edit. ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds a scene, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
+/**
+ * One creator, one voice. The base seat voices lines with an id only if setup supplied one, and this
+ * setup never does, so every creator would speak in the speech model's default voice. No seat pins a
+ * speech model (`toolset`), so a persona's Kokoro voice id is accepted on the default path.
+ */
+const SPEECH_VOICE = { from: "generate every planned line, with a voice only when project_context supplied its supported id,", to: " and REMOVE all original audio" };
+export const PRODUCER_SPEECH_VOICE = "generate every planned line in one voice: generate_speech with voice, the voice_id in the persona (get_character) when it has one, and no voice when it has none,";
+
+const SCRIPTWRITER_INFLUENCER_BRIEF = `EVERY SCENE IS THE ONE INFLUENCER: get_character first (voice, wardrobe, hooks, looks). ${PERSONA_RULE} ${PERSONA_CHANGES} No image_prompt or video_prompt says gender, age, face, hair, build or any words: the character carries who they are, and lines are voiced in the edit. ${SEGMENT_MIN_SECONDS} to ${SEGMENT_MAX_SECONDS} seconds a scene, ${lengthPhrase(SHORT_FORM_LENGTH)} together.`;
 
 /** The `look` card's replacement: same key, so the day-one chain and its re-apply guard are unchanged. */
 const characterCard = (look: Task): Task =>
@@ -228,7 +276,7 @@ const characterCard = (look: Task): Task =>
     assignee: look.assignee!,
     // Waits on nothing: it needs only the setup answers, so the face is met even while the study runs.
     blocked_by: [],
-    body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": look at the photos answer with view_image; fewer than 10 usable photos of one clear face, ask_operator once for 10 to 16. Then create_character{name, image_urls, style_pack:<the picked looks without "${USUAL_LOOKS}"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>, consent:{attested:true}} — it waits for the operator's yes, which is their confirmation that the person in the photos is them or agreed to it and is not a public figure, and costs $3.25 — and wait until get_character says ready. Refused as a public figure: say so on the card, ask_operator once for photos of themselves or of someone who agreed, and stop. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. Refused as "paused on the platform's side": nothing was charged and a retry fails the same way, so never call create_character again or ask for another approval; say so on the card and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks), with generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}, and look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
+    body: `Day one meets the influencer and renders their stills, not a video. Read project_context and naive/channel-template-ai-influencer. Resolve the influencer from setup: a creator's name is get_character{character:<its id>} (${CREATOR_IDS}), prebuilt and ready, no training. "${UPLOAD_OWN}": the photos answer holds links, or nothing, which is fine: never stop for empty photos. Look at any with view_image. Fewer than 10 usable photos of one clear face: ask_operator once, with a media field (it takes uploads), for 10 to 16, and in the same question for whichever of their name, what they post about and how they talk the purpose answer doesn't say. Build the persona from those answers, in plain words: niche, a short bio, voice, wardrobe and hooks, plus voice_id, the one voice they always speak in: nova, shimmer, alloy or coral for a woman, echo, onyx, ash or fable for a man. Invent no facts about a real person; where they said nothing, keep it short. Then create_character{name, description, persona, image_urls, style_pack:<the picked looks without "${USUAL_LOOKS}"; if that was the only pick, ${DEFAULT_TRAINED_LOOKS.join(", ")}>, consent:{attested:true}} — it waits for the operator's yes, which is their confirmation that the person in the photos is them or agreed to it and is not a public figure, and costs $2.50 — and wait until get_character says ready. Refused as a public figure: say so on the card, ask_operator once for photos of themselves or of someone who agreed, and stop. Nothing wakes you when training ends, so while it trains (about 20 minutes) ask_operator to reply once the Characters tab shows it Ready — a question keeps this card yours; on the reply get_character again, and ask again if it is still training. Failed: comment its reason, ask_operator once for new photos, and stop. Refused as "paused on the platform's side": nothing was charged and a retry fails the same way, so never call create_character again or ask for another approval; say so on the card and stop. A creator's name and photos both answered: the creator wins, and your note says the photos were not used. Then render one 9:16 still per picked look, at most 4 ("${USUAL_LOOKS}" are the character's looks), with generate_image{character:<its chr_ id>, style:<the look>, aspect_ratio:"9:16"}, and look at each with view_image: a face that is not theirs is rendered again once. Attach the stills: your note starts with the chr_ id, then each look with its still's fil_ id. They are the channel's look sheet, and every plan names its look from it. Every later video starts from such a still: generate_video{character, image_urls:[the still]}.`,
   });
 
 /**
@@ -255,7 +303,7 @@ export const STUDY_SPEND_MICRO_USD = 400_000;
  * template's own render: Hailuo 3 bills 169,000 µUSD a second (845,000 for 5 s on staging), so a 30-second
  * piece is about $5.07 and the producer's $8 per task clears it with its stills and turns. The seats that
  * render nothing get $3 a task, which a looping session hits in minutes rather than an hour; the analyst
- * gets $1.50, the study's hard cap. A training ($3.25) is a price the operator approved, held past the
+ * gets $1.50, the study's hard cap. A training ($2.50) is a price the operator approved, held past the
  * per-task ceiling, so the producer's day clears a training and a piece.
  */
 export const AI_INFLUENCER_MICRO_USD_PER_SECOND = 169_000;
@@ -269,7 +317,7 @@ export const AI_INFLUENCER_BUDGETS: Readonly<Record<string, Budget>> = {
 
 /** The hook style, from the influencer: it waits on nothing, so the first piece never waits on the study. */
 const HOOK_STYLE_BODY =
-  "Day one is set-up, not scripts. Read project_context and naive/channel-template-ai-influencer: the picked creator's voice and hooks in §4, or for a face the operator trained, what the purpose answer says they are for. Write the channel's hook style as this card's note, in five lines: the openings this audience stops for, the shape of a piece in beats, the voice, the caption shape, and what never to say. Say it is drawn from the influencer's persona; the reference teardown comes later and refines it — do not wait for the reference-study card. Every plan this channel files is written to this note.";
+  "Day one is set-up, not scripts. Read project_context and naive/channel-template-ai-influencer: the picked creator's voice and hooks in §4, or for a face the operator trained, their persona (get_character, once the Meet the influencer card has made it), else what the purpose answer says. Write the channel's hook style as this card's note, in five lines: the openings this audience stops for, the shape of a piece in beats, the voice, the caption shape, and what never to say. Say it is drawn from the influencer's persona; the reference teardown comes later and refines it — do not wait for the reference-study card. Every plan this channel files is written to this note.";
 
 /** The study, off the critical path and capped: no downloads, no frame sampling, two videos at most. */
 const STUDY_BODY = `Run after the first piece has started — it never waits on you. Find two real short videos (15 to 30 seconds) that creators like this influencer post and that do well, and study them with the browser and web_fetch: how they open and their first three seconds, where they turn, how fast they cut, the shot grammar, the caption shape, what they never do. At most two videos and about eight page views in all; never open the same page twice; download nothing and sample no frames. Stop once session_spend reads past $${(STUDY_SPEND_MICRO_USD / 1_000_000).toFixed(2)} and file what you have. Write the teardown as this card's note, specific enough to plan from, with every video by URL and what you inferred marked apart from what you saw; say in its first line that these are the crew's picks. Write no hooks, scripts or briefs here.`;
@@ -281,7 +329,7 @@ const STUDY_BODY = `Run after the first piece has started — it never waits on 
  * on nothing, and opens no page: the first piece waits on it, and the study runs after the first piece.
  * Its close-then-ask order is the base card's, so an unanswered question never parks the channel.
  */
-const BIBLE_BODY = `Day one is set-up, not a script: this is the influencer's character bible, and the first piece waits on it. Read project_context and, with read_skill, naive/channel-template-ai-influencer and every other skill pinned to you. Resolve the influencer as the Meet the influencer card does: a creator's name is its fixed id (${CREATOR_IDS}) — get_character it for voice, wardrobe and looks; "${UPLOAD_OWN}" is the face that card trains, described by the purpose answer. Copy the purpose answer verbatim, labelled CREATOR DIRECTIVE. Open no page and sample no video: the reference study runs after the first piece.
+const BIBLE_BODY = `Day one is set-up, not a script: this is the influencer's character bible, and the first piece waits on it. Read project_context and, with read_skill, naive/channel-template-ai-influencer and every other skill pinned to you. Resolve the influencer as the Meet the influencer card does: a creator's name is its fixed id (${CREATOR_IDS}) — get_character it for voice, wardrobe and looks; "${UPLOAD_OWN}" is the face that card trains: get_character its persona once it exists, else the purpose answer. Copy the purpose answer verbatim, labelled CREATOR DIRECTIVE. Open no page and sample no video: the reference study runs after the first piece.
 
 Write a complete draft with: CHARACTER MODE (recurring cast: the influencer alone); CONTENT THEMES and NARRATIVE PATTERNS from the persona and purpose; CANONICAL CAST (the influencer: chr_ id, or "the face the Meet the influencer card trains", role, wardrobe and palette in each picked look, personality, expressions and movement, voice, and a reusable prompt block of action, setting and framing only — never gender, age, face, hair or build, which the character carries); ONE-OFF CHARACTER RULE (nobody else is a named character); WORLD (their everyday places and props); VISUAL LANGUAGE (the picked looks); DIALOGUE/VOICE; MUST NOT CHANGE (the face comes from the character; one look, outfit and setting per piece); ALLOWED VARIATION; NEGATIVE CONSTRAINTS (no words drawn into a render, no text-only render of them); and REFERENCES. Mark what you inferred.
 
@@ -326,13 +374,23 @@ const base = niche(FACELESS, {
     },
     scriptwriter: {
       ...SEGMENTED_SHORT_FORM.scriptwriter,
-      tools: [...(SEGMENTED_SHORT_FORM.scriptwriter?.tools ?? []), "get_character"],
+      tools: [...(SEGMENTED_SHORT_FORM.scriptwriter?.tools ?? []), "get_character", "update_character"],
       brief: SCRIPTWRITER_INFLUENCER_BRIEF,
     },
-    "channel-manager": { brief: INFLUENCER_CADENCE },
-    "trend-scout": { brief: `${INFLUENCER_CADENCE} ${INFLUENCER_NICHE} ${INFLUENCER_PAGES}` },
+    "channel-manager": { tools: ["get_character", "update_character"], brief: INFLUENCER_MANAGER_BRIEF },
+    analyst: { tools: ["get_character"] },
+    "trend-scout": { tools: ["get_character"], brief: `${INFLUENCER_BRAKE} ${INFLUENCER_CADENCE} ${INFLUENCER_NICHE} ${INFLUENCER_PAGES}` },
   },
 });
+
+/** A base sentence an influencer says differently, or throw: the base text it stands in for has moved. */
+const swapText = (system: string, text: string, replacement: string, seat: string): string => {
+  if (!system.includes(text)) throw new Error(`ai-influencer ${seat}: the base brief no longer carries "${text}"`);
+  return system.replace(text, () => replacement);
+};
+
+const OWN_NICHE = (seat: { name: string; system?: string }): string =>
+  swapText(seat.system!, nicheFixed(`naive/${AI_INFLUENCER_SKILL}`), INFLUENCER_NICHE_FIXED, seat.name);
 
 export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   ...base,
@@ -344,14 +402,18 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
     // The scene steps an influencer replaces (see `PRODUCER_SCENE_STEP`), in place, so no brief holds both.
     system:
       seat.name === "producer"
-        ? replaceSpan(replaceSpan(seat.system!, PRODUCER_LEGACY, "Every Render card ", seat.name), SCENE_STEP, PRODUCER_SCENE_STEP, seat.name)
+        ? [
+            [PRODUCER_LEGACY, "Every Render card "],
+            [SCENE_STEP, PRODUCER_SCENE_STEP],
+            [SPEECH_VOICE, PRODUCER_SPEECH_VOICE],
+          ].reduce((system, [span, text]) => replaceSpan(system, span as typeof SCENE_STEP, text as string, seat.name), OWN_NICHE(seat))
         : seat.name === "scriptwriter"
           ? [
               [SCRIPTWRITER_LEGACY, ""],
               [OPENING_FRAME_RULE, SCRIPTWRITER_IMAGE_RULE],
               [VIDEO_CARRIES, SCRIPTWRITER_VIDEO_CARRIES],
-            ].reduce((system, [span, text]) => replaceSpan(system, span as typeof SCENE_STEP, text as string, seat.name), seat.system!)
-          : seat.system,
+            ].reduce((system, [span, text]) => replaceSpan(system, span as typeof SCENE_STEP, text as string, seat.name), OWN_NICHE(seat))
+          : OWN_NICHE(seat),
     // Day one's hard stops (H5): each seat's ceiling, and every fire inside it.
     budget: AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget,
     schedules: (seat.schedules ?? []).map((fire) => ({
