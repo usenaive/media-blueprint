@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { BLUEPRINTS, collectFiles, defineProject } from "@usenaive-sdk/blueprints";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import project, { declaration } from "./naive.config";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, ROADMAP, TEMPLATES } from "./templates/index.ts";
 
@@ -43,7 +43,8 @@ describe("naive.config", () => {
     expect(declaration.description).toBe(ACTIVE.description);
     expect(declaration.platforms).toEqual(["youtube", "tiktok", "instagram"]);
     expect(Object.values(TEMPLATES).map((one) => one.title).sort()).toEqual([
-      // The base three, the nineteen niche channel templates (ADR-1115, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580, ADR-1640) and AI Influencer (ADR-1360), sorted.
+      // The base three, the nineteen niche channel templates (ADR-1115, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580, ADR-1640), AI Influencer (ADR-1360),
+      // and the AI Music Channel with its four genres (vetta-mono ADR-1904), sorted.
       "AI Cartoons IRL Channel",
       "AI Cat Stories Channel",
       "AI Channel Cloning",
@@ -54,11 +55,16 @@ describe("naive.config", () => {
       "AI Food Slime Channel",
       "AI Fruit Drama Channel",
       "AI Glass Food Channel",
+      "AI Hardstyle Channel",
       "AI History Channel",
       "AI Impossible Roadster Channel",
       "AI Influencer",
       "AI Legend Flex Channel",
+      "AI Music Channel",
+      "AI Pop Channel",
+      "AI Rap Channel",
       "AI Surreal Satire Channel",
+      "AI Techno Channel",
       "AI UFC Channel",
       "AI Would You Choose Channel",
       "Clipping channel",
@@ -144,6 +150,32 @@ describe("naive.config", () => {
       expect(parsed.template).toBe(one.name);
     },
   );
+
+  /**
+   * The AI Music Channel and its genres (vetta-mono ADR-1904) are carried from engine 0.17.0 on. Under
+   * an engine that lists them, the publisher's `NAIVE_TEMPLATE=<name>` build declares that template;
+   * under an older one they are skipped by name (the warning above), and this is left to the round-trip.
+   */
+  it.each(["music", "hardstyle", "techno", "rap", "pop"])("declares %s when the publisher builds it, once the engine lists it", async (name) => {
+    const admits = BLUEPRINTS.media?.templates ?? [];
+    if (!admits.includes(name)) {
+      expect(declaration.templates.map((one) => one.name)).not.toContain(name);
+      return;
+    }
+    const before = process.env["NAIVE_TEMPLATE"];
+    process.env["NAIVE_TEMPLATE"] = name;
+    try {
+      vi.resetModules();
+      const fresh = await import("./naive.config.ts");
+      expect(fresh.declaration.template).toBe(name);
+      expect(fresh.default.template).toBe(name);
+      expect(fresh.declaration.templates.map((one) => one.name).sort()).toEqual([...admits].sort());
+    } finally {
+      if (before === undefined) delete process.env["NAIVE_TEMPLATE"];
+      else process.env["NAIVE_TEMPLATE"] = before;
+      vi.resetModules();
+    }
+  });
 
   /**
    * The crons, as the engine actually accepted them.

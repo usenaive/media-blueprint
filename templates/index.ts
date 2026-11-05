@@ -10,10 +10,12 @@ import { AI_INFLUENCER } from "./ai-influencer.ts";
 import { CLIPPING } from "./clipping.ts";
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
+import { MUSIC } from "./music.ts";
 import { budgetOf, CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche, renderMicroUsd, SEEDANCE_MICRO_USD_PER_SECOND, SEGMENT_MAX_SECONDS } from "./template.ts";
 import type { Budget, MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
+export { FFMPEG_SETUP, MUSIC, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, OWN_CARDS } from "./music.ts";
 export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, ROADMAP, lengthPhrase, niche, segmentsOf } from "./template.ts";
 
 /**
@@ -240,9 +242,41 @@ export const SURREAL_SATIRE = rawFilm(
 );
 
 /**
+ * vetta-mono ADR-1904: the AI Music Channel's genre niches. Each is the `music` crew with the genre's
+ * playbook pinned (`naive/channel-template-<genre>`): its Context seed is the channel note, copied
+ * word for word on day one, so the genre is never asked.
+ */
+export const HARDSTYLE = niche(MUSIC, {
+  name: "hardstyle",
+  title: "AI Hardstyle Channel",
+  description: "AI Hardstyle Channel is a template that builds an agent team that manages an entire social media account for you, producing original hardstyle songs, each a cover and a track posted as a short video. This lets you run the hardstyle channels growing fast right now.",
+  skill: "channel-template-hardstyle",
+});
+export const TECHNO = niche(MUSIC, {
+  name: "techno",
+  title: "AI Techno Channel",
+  description: "AI Techno Channel is a template that builds an agent team that manages an entire social media account for you, producing original techno songs, each a cover and a track posted as a short video. This lets you run the techno channels growing fast right now.",
+  skill: "channel-template-techno",
+});
+export const RAP = niche(MUSIC, {
+  name: "rap",
+  title: "AI Rap Channel",
+  description: "AI Rap Channel is a template that builds an agent team that manages an entire social media account for you, producing original rap songs, each a cover and a track posted as a short video. This lets you run the rap channels growing fast right now.",
+  skill: "channel-template-rap",
+});
+export const POP = niche(MUSIC, {
+  name: "pop",
+  title: "AI Pop Channel",
+  description: "AI Pop Channel is a template that builds an agent team that manages an entire social media account for you, producing original pop songs, each a cover and a track posted as a short video. This lets you run the pop channels growing fast right now.",
+  skill: "channel-template-pop",
+});
+
+/**
  * Keyed by the id the wire carries; the studio shows each by its `title`. The ids never change:
  * `install.template` is a stored string on every provisioned org. The base three come first; the
  * nineteen niche templates (ADR-1115, ADR-1119, ADR-1174, ADR-1287, ADR-1314, ADR-1286, ADR-1289, ADR-1288, ADR-1290, ADR-1580, ADR-1640) and `ai-influencer` (ADR-1360) reuse their crews.
+ * Then the fourth base, `music`, and its four genre niches (vetta-mono ADR-1904), carried from
+ * engine 0.17.0 on: an older engine skips them (`naive.config.ts`).
  */
 export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   faceless: FACELESS,
@@ -268,6 +302,11 @@ export const TEMPLATES: Record<TemplateName, MediaTemplate> = {
   empires: EMPIRES,
   "legend-flex": LEGEND_FLEX,
   "surreal-satire": SURREAL_SATIRE,
+  music: MUSIC,
+  hardstyle: HARDSTYLE,
+  techno: TECHNO,
+  rap: RAP,
+  pop: POP,
 };
 
 /**

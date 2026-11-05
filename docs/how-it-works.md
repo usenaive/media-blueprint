@@ -6,8 +6,8 @@ runs all of it. Agents can pull, change and deploy Media manager like any app.
 
 ## 1. What a template is
 
-A template is one crew: five seats, their prompts, their tool lists, their crons, their setup
-questions and their day-one cards. The three live in `templates/`. `ACTIVE` in
+A template is one crew: five seats (four on `music`), their prompts, their tool lists, their crons, their setup
+questions and their day-one cards. The four base crews live in `templates/`. `ACTIVE` in
 `templates/index.ts` picks the one that runs. `templates/template.ts` holds what they share: the
 channel manager, the analyst's crons, the tool rules, the crew rules every prompt ends with.
 
@@ -54,6 +54,7 @@ The cards per piece:
 | `faceless` | **Plan** (scriptwriter) — body: the brief | **Render** (producer) — body: the plan | **Publish** (channel-manager) — body: file id, caption | approval card |
 | `longform` | **Plan** (writer) — body: the brief | **Render** (producer) — body: the plan, cut into segments | **Publish** (channel-manager) | approval card |
 | `clipping` | **Cut** (clipper) — body: source URL, start, end, why | **Caption** (caption-editor) — body: file id, source, creator | **Publish** (channel-manager) | approval card |
+| `music` | **Cover** (cover-artist) — body: song file id, its subject, draft caption | **Publish** (channel-manager) — body: the mp4's file id, cover and song ids, caption | — | approval card |
 
 Two platform rules keep this safe:
 
@@ -125,6 +126,31 @@ to twelve segments, rendered separately and joined with ffmpeg.
 - **caption-editor**: title, caption, hashtags, and a credit to the original creator on every clip;
   creates the Publish card.
 - **analyst**: by source and by clip.
+
+### `music` — AI Music Channel, exactly 30 seconds
+
+A post is a song, and a network takes no audio-only post, so the song and its cover are made into
+one vertical video. `composer -> cover-artist -> channel-manager`:
+
+- **composer** (daily 10:00): makes nothing while a Cover or Publish card (or day one's first-song
+  card) is open, or while the next posting slot is
+  more than a day away. Otherwise ONE `generate_music` call a song — the channel note's
+  `CONTEXT SEED` word for word plus one sentence, `length_seconds` 30 — retried once on a failure and
+  never again once its `SONG` comment is on the card. It creates the Cover card with the song's
+  `fil_`, its subject and a draft caption (no AI label).
+- **cover-artist**: ONE square `generate_image` cover (no text, logo or real face; one corrected
+  retry), then `fetch_file` the cover and the song and, with ffmpeg, the post: the cover centred on a
+  1080×1920 frame over a blurred, darkened copy, the song as the AAC track, as long as the song. It
+  probes the file with ffprobe (one 1080×1920 video stream, one audio stream, the song's duration),
+  `publish_file`s it and creates the Publish card with the mp4's `fil_`.
+- **channel-manager**: writes the CHANNEL NOTE on day one (the pinned genre skill's Context seed
+  verbatim, else one built from the genre answer, plus a COVER DIRECTION line; no model called), then
+  publishes as on every template (section 5). It adds no AI label to the caption and never sets the
+  post's AI-generated flag — both are the operator's choice (vetta-mono ADR-1636).
+- **analyst**: per song and subject.
+
+The genre niches `hardstyle`, `techno`, `rap` and `pop` pin `naive/channel-template-<genre>` on this
+crew and ask only the cadence. All five need engine 0.17.0.
 
 ### Day one
 
