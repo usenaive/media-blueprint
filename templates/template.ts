@@ -434,7 +434,7 @@ export const BUILTIN_TOOLS = [
   "bash", "read", "write", "edit", "ls", "find",
   "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch",
   "generate_image", "generate_video", "clip_video",
-  "create_character", "get_character", "list_characters", "delete_character", "apps",
+  "create_character", "get_character", "list_characters", "update_character", "delete_character", "apps",
   "send_to_agent", "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write",
   "ask_operator", "request_tools", "project_context",
   "transcribe_audio", "generate_speech", "generate_music", "find_files", "view_image", "fetch_file", "find_stock_photo",
@@ -483,9 +483,8 @@ export const ASK_BY_DEFAULT_TOOLS: readonly string[] = [
 export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "generate_video" };
 
 /**
- * The video models a seat may render with, in order: the platform tries each pin in turn when the
- * one before it is refused or unavailable (platform ADR-1638), never a model outside them, and a
- * deploy that does not publish a pin passes over it. The pin keeps the channel off any model the
+ * The video models a seat may render with, in order: the first one a deploy publishes and that can take
+ * the request renders, alone (platform ADR-1769). If it's busy the call fails, uncharged, and the seat says so. The pin keeps the channel off any model the
  * platform's own default order might add. FLUX 3 Max is first (owner decision, 2026-10-22: native
  * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. Hailuo 3 is
  * next (~0.56× Seedance 2.5's price a second, and it renders the restyled frames Seedance refuses,
