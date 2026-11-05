@@ -50,12 +50,29 @@ export const SONG_SECONDS = MUSIC_LENGTH.max;
 export const MUSIC_SKILL = "naive/channel-template-music";
 
 /**
+ * ffmpeg and ffprobe for the cover-artist's computer, which does not ship them (r5). One pinned,
+ * checksummed static build, installed into the home directory: the home is what the machine's
+ * archive carries to a replacement machine, so it is installed once, not fetched from a moving
+ * "latest" on every new machine. A no-op once either copy is there. The same lines are in
+ * `naive/channel-template-music` (vetta-mono `skills/`).
+ */
+export const FFMPEG_BUILD = "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-6.0.1-amd64-static.tar.xz";
+export const FFMPEG_SHA256 = "28268bf402f1083833ea269331587f60a242848880073be8016501d864bd07a5";
+export const FFMPEG_SETUP =
+  `export PATH="$HOME/bin:$PATH"; command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null || (curl -fsSL -o /tmp/ff.tar.xz ${FFMPEG_BUILD} && echo "${FFMPEG_SHA256}  /tmp/ff.tar.xz" | sha256sum -c - && tar -xJf /tmp/ff.tar.xz -C /tmp && mkdir -p "$HOME/bin" && cp /tmp/ffmpeg-6.0.1-amd64-static/ffmpeg /tmp/ffmpeg-6.0.1-amd64-static/ffprobe "$HOME/bin/" && rm -rf /tmp/ff.tar.xz /tmp/ffmpeg-6.0.1-amd64-static); ffmpeg -version | head -1; ffprobe -version | head -1`;
+
+/**
  * The post, made on the cover-artist's computer: the square cover centred on a 1080×1920 frame over a
  * blurred, darkened copy of itself, the song as the AAC audio track, as long as the song. The same
  * recipe is in `naive/channel-template-music` (vetta-mono `skills/`).
+ *
+ * Two steps, because the machine has one vCPU and 1 GB (r5: the one-pass blur at 30 fps was killed
+ * for memory twice, and the machine with it). The frame is composed once; the video is that still
+ * frame, read at 2 fps and written at 30 by one x264 thread with a short lookahead: about 400 MB and
+ * a few seconds, where the one-pass recipe took 1.8 GB.
  */
 export const MUX_RECIPE =
-  'ffmpeg -y -loop 1 -i cover.png -i song.mp3 -filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:2,eq=brightness=-0.15[bg];[0:v]scale=1080:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]" -map "[v]" -map 1:a -c:v libx264 -tune stillimage -r 30 -c:a aac -b:a 192k -shortest -movflags +faststart post.mp4';
+  'export PATH="$HOME/bin:$PATH"; ffmpeg -y -loglevel error -i cover.png -filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:2,eq=brightness=-0.15[bg];[0:v]scale=1080:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2" -frames:v 1 frame.png && ffmpeg -y -loglevel error -framerate 2 -loop 1 -i frame.png -i song.mp3 -map 0:v -map 1:a -c:v libx264 -preset veryfast -tune stillimage -threads 1 -x264-params rc-lookahead=8 -r 30 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest -movflags +faststart post.mp4';
 
 /**
  * Several music channels can share one company's board (a second install's seats are prefixed, and
@@ -109,7 +126,7 @@ const coverArtist = agent({
   name: "cover-artist",
   role: "Covers",
   description: "Makes one square cover for each song and turns the two into the short vertical video the channel posts.",
-  brief: `You are the cover-artist. A Cover card wakes you with a song's fil_ id, its one-sentence subject and a draft caption. Read the COVER DIRECTION line of ${NOTE}. Make ONE square cover: generate_image with aspect_ratio 1:1, the COVER DIRECTION and the song's sentence, and no text, letters, logo, watermark or real person's face; comment "COVER <fil_ id>". Inspect it with view_image: text, a logo or a face gets ONE corrected retry, and a second miss means STOPPED. Then make the post, a vertical video of the cover held still over the song (\`${MUSIC_SKILL}\`): fetch_file the cover and the song (cover.png below is the cover as fetched, with its own extension; song.mp3 the song), then with bash run exactly: ${MUX_RECIPE} VERIFY with ffprobe: one video stream at 1080x1920, one audio stream, and a duration within 1 second of the song's. A failed probe is fixed and run once more; a second failure means STOPPED. publish_file post.mp4 and comment "VIDEO <fil_ id>". Then create the next card — title "Publish: <the song>", assignee channel-manager, blocked_by your Cover card — whose body holds the video's fil_ id (the file to post), the cover's and the song's fil_ ids, and the caption as drafted. You never write or change the song, and you never post. ${OWN_CARDS}`,
+  brief: `You are the cover-artist. A Cover card wakes you with a song's fil_ id, its one-sentence subject and a draft caption. Read the COVER DIRECTION line of ${NOTE}. Make ONE square cover: generate_image with aspect_ratio 1:1, the COVER DIRECTION and the song's sentence, and no text, letters, logo, watermark or real person's face; comment "COVER <fil_ id>". Inspect it with view_image: text, a logo or a face gets ONE corrected retry, and a second miss means STOPPED. Then make the post, a vertical video of the cover held still over the song (\`${MUSIC_SKILL}\`): fetch_file the cover and the song (cover.png below is the cover as fetched, with its own extension; song.mp3 the song), then with bash run exactly, first: ${FFMPEG_SETUP} — and then: ${MUX_RECIPE} Never install ffmpeg any other way. VERIFY with ffprobe: one video stream at 1080x1920, one audio stream, and a duration within 1 second of the song's. A failed probe is fixed and run once more; a second failure means STOPPED. publish_file post.mp4 and comment "VIDEO <fil_ id>". Then create the next card — title "Publish: <the song>", assignee channel-manager, blocked_by your Cover card — whose body holds the video's fil_ id (the file to post), the cover's and the song's fil_ ids, and the caption as drafted. You never write or change the song, and you never post. ${OWN_CARDS}`,
   tools: ["generate_image", "view_image", "fetch_file", "publish_file", "bash"],
   skills: [MUSIC_SKILL],
   schedules: [],
@@ -157,7 +174,7 @@ export const MUSIC: MediaTemplate = {
       title: "Set the cover brief and check the machine the posts are made on",
       assignee: "cover-artist",
       blocked_by: ["channel-note"],
-      body: "Day one is set-up, not a cover. Read project_context and the CHANNEL NOTE — the note on the channel-note card this one waited on. Write, as this card's note, the cover brief you will hold every song to, in two lines: the COVER DIRECTION in your own words, and what no cover may show (text, letters, a logo, a real face). Then check the machine every post is made on: with bash run ffmpeg -version and ffprobe -version, and put the first line of each in your note; where either is missing, say so in the note's first line. Call no model and make no file on this card.",
+      body: `Day one is set-up, not a cover. Read project_context and the CHANNEL NOTE — the note on the channel-note card this one waited on. Write, as this card's note, the cover brief you will hold every song to, in two lines: the COVER DIRECTION in your own words, and what no cover may show (text, letters, a logo, a real face). Then set up and check the machine every post is made on: with bash run exactly ${FFMPEG_SETUP} and put the two version lines it prints in your note; where either is missing, say so in the note's first line. Call no model and make no file on this card.`,
     }),
     task({
       key: "report-frame",

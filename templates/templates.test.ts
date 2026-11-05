@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_CADENCE, INFLUENCER_NICHE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
-import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER_BUDGET, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, OWN_CARDS, RAW_FILM_PRODUCER, RAW_FILM_SCRIPTWRITER, RAW_FILM_VIDEO_MODELS, SURREAL_SATIRE_PRODUCER, SURREAL_SATIRE_SCRIPTWRITER, TEMPLATES, TWO_CALL_PIECE_BUDGET } from "./index.ts";
+import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER_BUDGET, FFMPEG_SETUP, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, OWN_CARDS, RAW_FILM_PRODUCER, RAW_FILM_SCRIPTWRITER, RAW_FILM_VIDEO_MODELS, SURREAL_SATIRE_PRODUCER, SURREAL_SATIRE_SCRIPTWRITER, TEMPLATES, TWO_CALL_PIECE_BUDGET } from "./index.ts";
 import { CONTINUITY_RULE } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
@@ -1592,8 +1592,18 @@ describe("the AI Music Channel", () => {
     expect(MUX_RECIPE).toContain("1080:1920");
     expect(MUX_RECIPE).toContain("-map 1:a");
     expect(MUX_RECIPE).toMatch(/-shortest/);
+    // r5: the one-pass blur at 30 fps was killed for memory on the 1 GB machine. Frame once, then
+    // one x264 thread over the still frame.
+    expect(MUX_RECIPE).toContain("-frames:v 1 frame.png && ");
+    expect(MUX_RECIPE).toContain("-threads 1");
+    // r5: no ffmpeg on the image, and agents fetched an unpinned "latest". One pinned, checked build into the archived home.
+    expect(FFMPEG_SETUP).toMatch(/old-releases\/ffmpeg-6\.0\.1-amd64-static\.tar\.xz/);
+    expect(FFMPEG_SETUP).toMatch(/[0-9a-f]{64} {2}\/tmp\/ff\.tar\.xz" \| sha256sum -c -/);
+    expect(FFMPEG_SETUP).toContain('"$HOME/bin/"');
+    expect(FFMPEG_SETUP).not.toMatch(/latest|apt-get/);
     for (const name of MUSIC_FAMILY) {
       const cover = brief(name, "cover-artist");
+      expect(cover, name).toContain(FFMPEG_SETUP);
       expect(cover, name).toContain(MUX_RECIPE);
       expect(cover, name).toMatch(/aspect_ratio 1:1/);
       expect(cover, name).toMatch(/ffprobe: one video stream at 1080x1920, one audio stream/);
