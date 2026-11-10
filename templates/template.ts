@@ -246,6 +246,11 @@ export interface MediaTemplate {
   name: TemplateName;
   /** What the operator calls it on the studio's screens ("Faceless channel"), ≤ 80 characters. */
   title: string;
+  /**
+   * The base template a niche reuses the crew of (`niche()`), printed on its Marketplace card as "Built on
+   * <the base's title>" (vetta-mono ADR-2143). Absent on a template that is its own foundation.
+   */
+  built_on?: TemplateName;
   /** How long a piece runs; `lengthPhrase` puts it in this template's prompts. */
   length: Length;
   /** One line for the operator: what this crew does, ≤ 280 characters. */
@@ -315,6 +320,7 @@ export function niche(
   return {
     ...base,
     name: over.name,
+    built_on: base.name,
     title: over.title,
     description: over.description,
     questions: base.questions.filter((question) => !NICHE_ANSWERED.has(question.key)),

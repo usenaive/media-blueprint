@@ -80,6 +80,43 @@ describe("naive.config", () => {
     }
   });
 
+  /** vetta-mono ADR-2143: a niche says which base it is built on, and a base says nothing. */
+  it("names the base each niche is built on, and none for a base", () => {
+    expect(declaration.built_on).toBe(ACTIVE.built_on);
+    const bases = Object.fromEntries(Object.values(TEMPLATES).map((one) => [one.name, one.built_on ?? null]));
+    expect(bases).toEqual({
+      faceless: null,
+      longform: null,
+      clipping: null,
+      music: null,
+      // The character is a setup answer, not a niche skill, but its crew is the faceless one (ADR-1360).
+      "ai-influencer": "faceless",
+      "gaming-clips": "clipping",
+      news: "clipping",
+      sports: "clipping",
+      ufc: "faceless",
+      history: "faceless",
+      "animal-feast": "faceless",
+      "channel-cloning": "faceless",
+      comics: "faceless",
+      "cartoons-irl": "faceless",
+      "dancing-animals": "faceless",
+      roadster: "faceless",
+      "cat-stories": "faceless",
+      "food-slime": "faceless",
+      "glass-food": "faceless",
+      "would-you-choose": "faceless",
+      "fruit-drama": "faceless",
+      empires: "faceless",
+      "legend-flex": "faceless",
+      "surreal-satire": "faceless",
+      hardstyle: "music",
+      techno: "music",
+      rap: "music",
+      pop: "music",
+    });
+  });
+
   /**
    * vetta-mono ADR-1482: Media manager is a hosted app like any app an agent makes, so the crew can
    * pull, change and deploy it. Its source ships as the deployment; the host builds it.
