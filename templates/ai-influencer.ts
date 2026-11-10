@@ -360,7 +360,7 @@ const base = niche(FACELESS, {
   name: "ai-influencer",
   title: "AI Influencer",
   description:
-    "AI Influencer is a template that builds an agent team that runs a photoreal AI influencer for you: a consistent creator who posts short videos in your chosen looks, every day.",
+    "Runs a photoreal AI influencer: a consistent creator who posts short videos in your chosen looks, every day.",
   skill: AI_INFLUENCER_SKILL,
   seats: {
     ...SEGMENTED_SHORT_FORM,
