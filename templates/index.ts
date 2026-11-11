@@ -29,39 +29,39 @@ export { CHANNEL_IDENTITY, CHANNEL_TIMEZONE, PLATFORMS, PROJECT_NAME, ROADMAP, l
 export const GAMING_CLIPS = niche(CLIPPING, {
   name: "gaming-clips",
   title: "Gaming Clips Channel",
-  description: "Gaming Clips Channel is a template that builds an agent team that manages an entire social media account for you, finding the best moments in the streams you pick and cutting them into clips. This lets you post the clutch plays and streamer reactions getting big views right now.",
+  description: "Cuts the best moments from the streams you pick into short clips: the clutch plays and the streamer reactions.",
   skill: "channel-template-gaming-clips",
 });
 export const NEWS = niche(CLIPPING, {
   name: "news",
   title: "News Clips Channel",
-  description: "News Clips Channel is a template that builds an agent team that manages an entire social media account for you, finding the key moments in news broadcasts and cutting them into captioned clips. This lets you post the biggest moment of a story while it is still news.",
+  description: "Cuts the key moments from news broadcasts into short captioned clips, while the story is still news.",
   skill: "channel-template-news",
 });
 export const SPORTS = niche(CLIPPING, {
   name: "sports",
   title: "Sports Clips Channel",
-  description: "Sports Clips Channel is a template that builds an agent team that manages an entire social media account for you, finding the best plays in the games you have rights to and cutting them into clips. This lets you post highlights while people are still talking about the game.",
+  description: "Cuts the best plays from games you have the rights to into short highlight clips, while people still talk about the game.",
   skill: "channel-template-sports",
 });
 export const UFC = niche(FACELESS, {
   name: "ufc",
   title: "AI UFC Channel",
-  description: "AI UFC Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing content using a UFC-style template. This lets you create the UFC-style fighting videos that are going really viral right now.",
+  description: "Researches and makes short UFC-style fight videos.",
   skill: "channel-template-ufc",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const HISTORY = niche(FACELESS, {
   name: "history",
   title: "AI History Channel",
-  description: "AI History Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing videos of major historical events in color, as if filmed today. This lets you create the history videos that are going really viral right now.",
+  description: "Makes short videos of major historical events in color, as if filmed today.",
   skill: "channel-template-history",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const ANIMAL_FEAST = niche(FACELESS, {
   name: "animal-feast",
   title: "AI Eating Animal Channel",
-  description: "AI Eating Animal Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing videos of an animal eating a big feast. This lets you create the animal eating videos that are going really viral right now.",
+  description: "Makes short videos of an animal eating a big feast.",
   skill: "channel-template-animal-feast",
   seats: SEGMENTED_SHORT_FORM,
 });
@@ -77,7 +77,7 @@ export const CHANNEL_CLONING: MediaTemplate = {
   ...niche(FACELESS, {
     name: "channel-cloning",
     title: "AI Channel Cloning",
-    description: "AI Channel Cloning is a template that builds an agent team that manages an entire social media account for you, studying a channel you name and producing new videos in the same format. This lets you create videos in a format that is already going really viral right now.",
+    description: "Studies a channel you name and makes new videos in the same format.",
     skill: "channel-template-channel-cloning",
     seats: SEGMENTED_SHORT_FORM,
   }),
@@ -87,28 +87,28 @@ export const CHANNEL_CLONING: MediaTemplate = {
 export const COMICS = niche(FACELESS, {
   name: "comics",
   title: "AI Comics Channel",
-  description: "AI Comics Channel is a template that builds an agent team that manages an entire social media account for you, researching and producing motion-comic videos, comic-book stories told as moving panels. This lets you create the comic videos that are going really viral right now.",
+  description: "Makes motion-comic videos: comic-book stories told as moving panels.",
   skill: "channel-template-comics",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const CARTOONS_IRL = niche(FACELESS, {
   name: "cartoons-irl",
   title: "AI Cartoons IRL Channel",
-  description: "AI Cartoons IRL Channel is a template that builds an agent team that manages an entire social media account for you, producing videos of 2D cartoon characters reimagined in live action. This lets you create the cartoon-in-real-life videos that are going really viral right now.",
+  description: "Makes videos of 2D cartoon characters reimagined in live action.",
   skill: "channel-template-cartoons-irl",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const DANCING_ANIMALS = niche(FACELESS, {
   name: "dancing-animals",
   title: "AI Dancing Animals Channel",
-  description: "AI Dancing Animals Channel is a template that builds an agent team that manages an entire social media account for you, producing videos of an animal from your niche dancing on its hind legs. This lets you create the dancing animal videos that are going really viral right now.",
+  description: "Makes videos of an animal from your niche dancing on its hind legs.",
   skill: "channel-template-dancing-animals",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const ROADSTER = niche(FACELESS, {
   name: "roadster",
   title: "AI Impossible Roadster Channel",
-  description: "AI Impossible Roadster Channel is a template that builds an agent team that manages an entire social media account for you, producing phone-shot videos of a white roadster doing impossible things, like driving up a skyscraper. These are going really viral right now.",
+  description: "Makes phone-shot videos of a white roadster doing impossible things, like driving up a skyscraper.",
   skill: "channel-template-roadster",
   seats: SEGMENTED_SHORT_FORM,
 });
@@ -116,7 +116,7 @@ export const ROADSTER = niche(FACELESS, {
 export const CAT_STORIES = niche(FACELESS, {
   name: "cat-stories",
   title: "AI Cat Stories Channel",
-  description: "AI Cat Stories Channel is a template that builds an agent team that manages an entire social media account for you, producing short stories of cats living human lives. This lets you create the AI cat story videos that are going really viral right now.",
+  description: "Makes short stories of cats living human lives.",
   skill: "channel-template-cat-stories",
   seats: SEGMENTED_SHORT_FORM,
 });
@@ -124,7 +124,7 @@ export const CAT_STORIES = niche(FACELESS, {
 export const FOOD_SLIME = niche(FACELESS, {
   name: "food-slime",
   title: "AI Food Slime Channel",
-  description: "AI Food Slime Channel is a template that builds an agent team that manages an entire social media account for you, producing ASMR videos of real-looking food being kneaded into slime. This lets you create the food-to-slime videos that are going really viral right now.",
+  description: "Makes ASMR videos of real-looking food being kneaded into slime.",
   skill: "channel-template-food-slime",
   seats: SEGMENTED_SHORT_FORM,
 });
@@ -133,14 +133,14 @@ export const FOOD_SLIME = niche(FACELESS, {
 export const GLASS_FOOD = niche(FACELESS, {
   name: "glass-food",
   title: "AI Glass Food Channel",
-  description: "AI Glass Food Channel is a template that builds an agent team that manages an entire social media account for you, producing videos of foods made of glass being sliced with a knife. This lets you create the glass fruit cutting ASMR videos that are going really viral right now.",
+  description: "Makes ASMR videos of foods made of glass being sliced with a knife.",
   skill: "channel-template-glass-food",
   seats: SEGMENTED_SHORT_FORM,
 });
 export const WOULD_YOU_CHOOSE = niche(FACELESS, {
   name: "would-you-choose",
   title: "AI Would You Choose Channel",
-  description: "AI Would You Choose Channel is a template that builds an agent team that manages an entire social media account for you, producing \"which one would you choose\" videos of absurd options. This lets you create the would-you-choose videos that are going really viral right now.",
+  description: "Makes \"which one would you choose\" videos of absurd options.",
   skill: "channel-template-would-you-choose",
   seats: SEGMENTED_SHORT_FORM,
 });
@@ -148,7 +148,7 @@ export const WOULD_YOU_CHOOSE = niche(FACELESS, {
 export const FRUIT_DRAMA = niche(FACELESS, {
   name: "fruit-drama",
   title: "AI Fruit Drama Channel",
-  description: "AI Fruit Drama Channel is a template that builds an agent team that manages an entire social media account for you, producing reality-show style dramas starring fruit characters. This lets you create the AI fruit drama videos that are going really viral right now.",
+  description: "Makes reality-show style dramas starring fruit characters.",
   skill: "channel-template-fruit-drama",
   seats: SEGMENTED_SHORT_FORM,
 });
@@ -188,7 +188,7 @@ export const EMPIRES = rawFilm(
   niche(FACELESS, {
     name: "empires",
     title: "AI Empires Channel",
-    description: "AI Empires Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos of one empire at one moment in history, with one modern object in every shot. These history videos are going really viral right now.",
+    description: "Makes funny videos of one empire at one moment in history, with one modern object in every shot.",
     skill: "channel-template-empires",
     seats: {
       scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${RAW_FILM_SCRIPTWRITER}` },
@@ -209,7 +209,7 @@ export const LEGEND_FLEX = rawFilm(
   niche(FACELESS, {
     name: "legend-flex",
     title: "AI Legend Flex Channel",
-    description: "AI Legend Flex Channel is a template that builds an agent team that manages an entire social media account for you, producing funny videos where a legend's famous signs become 1990s rap-video flexes, shot like a flash photo roll. These videos are going really viral right now.",
+    description: "Makes funny videos where a legend's famous signs become 1990s rap-video flexes, shot like a flash photo roll.",
     skill: "channel-template-legend-flex",
     seats: {
       scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${RAW_FILM_SCRIPTWRITER}` },
@@ -231,7 +231,7 @@ export const SURREAL_SATIRE = rawFilm(
   niche(FACELESS, {
     name: "surreal-satire",
     title: "AI Surreal Satire Channel",
-    description: "AI Surreal Satire Channel is a template that builds an agent team that manages an entire social media account for you, producing deadpan films where people's heads show what they really are, like rat-headed commuters. These surreal videos are going really viral right now.",
+    description: "Makes deadpan films where people's heads show what they really are, like rat-headed commuters.",
     skill: "channel-template-surreal-satire",
     seats: {
       scriptwriter: { brief: `${SEGMENTED_SHORT_FORM.scriptwriter!.brief} ${SURREAL_SATIRE_SCRIPTWRITER}` },
@@ -249,25 +249,25 @@ export const SURREAL_SATIRE = rawFilm(
 export const HARDSTYLE = niche(MUSIC, {
   name: "hardstyle",
   title: "AI Hardstyle Channel",
-  description: "AI Hardstyle Channel is a template that builds an agent team that manages an entire social media account for you, producing original hardstyle songs, each a cover and a track posted as a short video. This lets you run the hardstyle channels growing fast right now.",
+  description: "Writes one original hardstyle song at a time and posts each with its cover as a short video.",
   skill: "channel-template-hardstyle",
 });
 export const TECHNO = niche(MUSIC, {
   name: "techno",
   title: "AI Techno Channel",
-  description: "AI Techno Channel is a template that builds an agent team that manages an entire social media account for you, producing original techno songs, each a cover and a track posted as a short video. This lets you run the techno channels growing fast right now.",
+  description: "Writes one original techno song at a time and posts each with its cover as a short video.",
   skill: "channel-template-techno",
 });
 export const RAP = niche(MUSIC, {
   name: "rap",
   title: "AI Rap Channel",
-  description: "AI Rap Channel is a template that builds an agent team that manages an entire social media account for you, producing original rap songs, each a cover and a track posted as a short video. This lets you run the rap channels growing fast right now.",
+  description: "Writes one original rap song at a time and posts each with its cover as a short video.",
   skill: "channel-template-rap",
 });
 export const POP = niche(MUSIC, {
   name: "pop",
   title: "AI Pop Channel",
-  description: "AI Pop Channel is a template that builds an agent team that manages an entire social media account for you, producing original pop songs, each a cover and a track posted as a short video. This lets you run the pop channels growing fast right now.",
+  description: "Writes one original pop song at a time and posts each with its cover as a short video.",
   skill: "channel-template-pop",
 });
 

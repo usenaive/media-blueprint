@@ -77,6 +77,8 @@ describe("naive.config", () => {
     for (const one of Object.values(TEMPLATES)) {
       expect(one.title.length, one.name).toBeLessThanOrEqual(80);
       expect(one.description.length, one.name).toBeLessThanOrEqual(280);
+      // A listing says what the company does, in plain words (vetta-mono ADR-2143): never "template".
+      expect(one.description, one.name).not.toMatch(/\btemplates?\b/i);
     }
   });
 
