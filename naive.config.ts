@@ -40,6 +40,8 @@ export const declaration = {
   title: ACTIVE.title,
   description: ACTIVE.description,
   platforms: ACTIVE.platforms,
+  /** The template this one is a niche of, for the card's "Built on" (vetta-mono ADR-2143). Printed, never provisioned. */
+  built_on: ACTIVE.built_on,
   /** The first week as the studio's launch card says it (`canonical-spec §31.5`). Printed, never provisioned. */
   roadmap: ROADMAP,
 
