@@ -15,8 +15,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@usenaive-sdk/blueprints':
-        specifier: ^0.19.0
-        version: 0.19.0
+        specifier: ^0.19.2
+        version: 0.19.2
       '@usenaive-sdk/cli':
         specifier: ^1.0.0
         version: 1.0.0
@@ -392,8 +392,8 @@ packages:
     resolution: {integrity: sha512-BbI9G26SegEEzpefeTM7UnDgkYv+Fap+E8CLl8abZivK9WSxpipnSB5ajeM91ZDqut6aAWQf5eHbBKeK538AJw==}
     engines: {node: '>=20'}
 
-  '@usenaive-sdk/blueprints@0.19.0':
-    resolution: {integrity: sha512-0ZhSbO60dagpuSRdQaSlTCdZ+e5wz6mY+FXLG4N5gjyA/lErp6nZwB7AxdY0Ox0IMNq0JaG1FNFfiutvuoqJXw==}
+  '@usenaive-sdk/blueprints@0.19.2':
+    resolution: {integrity: sha512-wo2qrXN1uq2HcJlAWsUtI/0E1BOYGkfAyPjK9W7g96kXa2q7gHZfnn4Ivij74G6AIRBlP6/dKPW+40MG68IXYA==}
     engines: {node: '>=20'}
 
   '@usenaive-sdk/cli@1.0.0':
@@ -401,8 +401,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@usenaive-sdk/managed-agents@0.12.5':
-    resolution: {integrity: sha512-F21b5zFweQGZKvxoj36pIvs77i5NvMQbEE1YHyUhiS808HqV6pEoSQ51T5tLUQaKvSflWcPgnXvAyMTq8B7HPw==}
+  '@usenaive-sdk/managed-agents@0.12.7':
+    resolution: {integrity: sha512-h6g20/NPNBchMNHMsdYf1pedHKBDLhIt8PCsF6ISOCfKCZKmlOMzxkYLTRo8OfNlqN1UC68SitiTwmc9oO94jw==}
     engines: {node: '>=20'}
 
   '@usenaive-sdk/vetta@0.6.0':
@@ -580,24 +580,28 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.33.0:
     resolution: {integrity: sha512-yiO5ROMuYQgXbC60yjZU5CYSFZGKXL0HFATXt9mHJn1+zW55oCtMI9NfcVhYLMFDL7gV7oBPon/EmMMGg2OvtQ==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.33.0:
     resolution: {integrity: sha512-ar+Ju7LmcN0Jo4FpL4hpFybwNG9/3A/Br5KW2n2jyODg3MEZXaDYADdemoNS+BDNfMgKvylJLj4S5tyRActuAg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.33.0:
     resolution: {integrity: sha512-RYiYbkokw0trfKqqzfF55lginwEPrD3OJDfTuJzFs1MK6iFnDenaz1fqLLtX4ITG3OktJQXOeTaw1awrBAlZPw==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.33.0:
     resolution: {integrity: sha512-1K+MPfLSFVpphzpdbfkhlWk6wBrTObBzS2T6db10PNOZgR9GoVsAWzwNyuhUYYbTp23j+4RrncfujZ4uAzXvwA==}
@@ -1093,9 +1097,9 @@ snapshots:
     dependencies:
       '@usenaive-sdk/vetta': 0.6.0
 
-  '@usenaive-sdk/blueprints@0.19.0':
+  '@usenaive-sdk/blueprints@0.19.2':
     dependencies:
-      '@usenaive-sdk/managed-agents': 0.12.5
+      '@usenaive-sdk/managed-agents': 0.12.7
       ignore: 7.0.14
       jiti: 2.7.0
       zod: 4.6.7
@@ -1104,7 +1108,7 @@ snapshots:
     dependencies:
       jiti: 2.7.0
 
-  '@usenaive-sdk/managed-agents@0.12.5':
+  '@usenaive-sdk/managed-agents@0.12.7':
     dependencies:
       zod: 4.6.7
 
