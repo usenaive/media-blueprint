@@ -16,11 +16,12 @@ import {
   BUILTIN_TOOLS,
   FOLLOWS_TOOL,
   PLATFORM_TOOLS,
-  CADENCE_QUESTION,
+  CADENCE_RULE,
   CADENCE_SLOTS,
   CARD_ORDER,
   CONTEXT_PREAMBLE,
   CREW_RULES,
+  DEFAULT_CADENCE,
   FIRST_PIECE_KEY,
   lengthPhrase,
   nicheFixed,
@@ -71,12 +72,12 @@ const SEGMENTED: TemplateName[] = [
  * `ai-influencer`, which takes the same seats but its own models, questions and opening frames.
  */
 const JOINS_SEGMENTS: TemplateName[] = [...SEGMENTED, "ai-influencer"];
-/** Segmented niches whose form is cadence-only; `channel-cloning` adds a `clone` question, so it is apart. */
 /** The AI Music Channel's genre niches: the `music` crew with the genre's playbook pinned. */
 const MUSIC_GENRES: TemplateName[] = ["hardstyle", "techno", "rap", "pop"];
 /** The music base and its genres: the one crew whose post is a song, not a render. */
 const MUSIC_FAMILY: TemplateName[] = ["music", ...MUSIC_GENRES];
-const CADENCE_ONLY_NICHES: TemplateName[] = [...SEGMENTED.filter((name) => name !== "channel-cloning"), ...MUSIC_GENRES];
+/** Segmented niches that ask nothing; `channel-cloning` asks a `clone` question, so it is apart. */
+const NO_QUESTION_NICHES: TemplateName[] = [...SEGMENTED.filter((name) => name !== "channel-cloning"), ...MUSIC_GENRES];
 const seatsOf = (template: MediaTemplate) => template.agents.map((agent) => agent.name);
 const seat = (template: MediaTemplate, name: string) => template.agents.find((agent) => agent.name === name)!;
 /** The niches that render raw 4:3 film from text on Seedance, with nothing in the picture (ADR-1580, ADR-1640). */
@@ -103,8 +104,7 @@ const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<Template
 };
 /**
  * A seat's system without the one line `niche()` adds after the preamble, so a niche reads as its base
- * — and, on `ai-influencer`, without the daily-cadence line its manager and scout are told instead of a
- * cadence question.
+ * — and, on `ai-influencer`, without the daily-cadence line its manager and scout are told.
  */
 const unniched = (template: MediaTemplate, system: string): string =>
   BASE_OF[template.name] === undefined
@@ -617,9 +617,8 @@ describe("publishing", () => {
     expect(brief()).toMatch(/second call without one/);
   });
 
-  it("schedules each post into the next free slot the cadence answer names", () => {
-    expect(CADENCE_QUESTION.type === "choice" && CADENCE_QUESTION.options).toEqual(Object.keys(CADENCE_SLOTS));
-    expect(brief()).toMatch(/scheduled_at/);
+  it("schedules each post into the next free slot the cadence names", () => {
+    expect(brief()).toMatch(/scheduled_at is the next free slot for the cadence \(/);
     for (const [answer, days] of Object.entries(CADENCE_SLOTS)) expect(brief()).toContain(`${answer}: ${days}`);
     expect(brief()).toContain(`${POST_TIME} channel time (${CHANNEL_TIMEZONE})`);
   });
@@ -777,11 +776,11 @@ describe("the channel's clock", () => {
 describe("the setup questions", () => {
   const BASES: TemplateName[] = ["faceless", "longform", "clipping", "music"];
 
-  it("asks two per base template, and a third that is optional", () => {
+  it("asks one per base template, and a second that is optional", () => {
     for (const name of BASES) {
       const template = TEMPLATES[name];
-      expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(2);
-      expect(template.questions.length, name).toBe(3);
+      expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(1);
+      expect(template.questions.length, name).toBe(2);
       expect(new Set(template.questions.map((q) => q.key)).size).toBe(template.questions.length);
     }
   });
@@ -809,25 +808,25 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The generative niches asked only `niche`, `reference` and the cadence, so the cadence is all that is left. */
-  it("leaves a generative niche asking only the cadence", () => {
-    for (const name of CADENCE_ONLY_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  /** The generative niches' bases ask only `niche` and `reference`, so a niche is left asking nothing. */
+  it("leaves a generative niche asking nothing", () => {
+    for (const name of NO_QUESTION_NICHES) expect(TEMPLATES[name].questions, name).toEqual([]);
   });
 
   /** `channel-cloning` is the one generated niche that keeps a question: the channel it clones. */
-  it("asks the channel-cloning niche for the channel to clone, then the cadence", () => {
-    expect(TEMPLATES["channel-cloning"].questions.map((q) => q.key)).toEqual(["clone", "cadence"]);
+  it("asks the channel-cloning niche only for the channel to clone", () => {
+    expect(TEMPLATES["channel-cloning"].questions.map((q) => q.key)).toEqual(["clone"]);
   });
 
   /** A clipping niche keeps the sources it cannot cut without, and its optional visibility. */
   it("leaves a clipping niche its sources and visibility", () => {
     for (const name of ["gaming-clips", "news", "sports"] as TemplateName[]) {
-      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility"]);
     }
   });
 
   /**
-   * A generative niche's form asks only the cadence, so nothing it puts in front of its crew may
+   * A generative niche's form asks nothing, so nothing it puts in front of its crew may
    * promise a niche or a reference answer, or say the form asked for one (ADR-1143): every seat reads
    * instead that the niche is fixed by the template and its pinned skill.
    */
@@ -841,26 +840,32 @@ describe("the setup questions", () => {
     }
   });
 
-  /** The engine refuses more than four; a template with none, or with nothing required, is a broken form. */
-  it("asks one to four questions on every template, uniquely keyed, at least one required", () => {
+  /** The engine refuses more than four. None is a form the studio skips: a niche that needs nothing asks nothing. */
+  it("asks at most four questions on every template, uniquely keyed", () => {
     for (const template of all) {
       const keys = template.questions.map((q) => q.key);
-      expect(keys.length, template.name).toBeGreaterThanOrEqual(1);
       expect(keys.length, template.name).toBeLessThanOrEqual(4);
       expect(new Set(keys).size, template.name).toBe(keys.length);
-      expect(template.questions.some((q) => q.optional !== true), template.name).toBe(true);
     }
   });
 
   /**
-   * The cadence is one question, spelled once, on every template but `ai-influencer`: its four are
-   * who, their photos, the looks and what for, so it posts daily and tells the two seats that read a
-   * cadence so.
+   * NO TEMPLATE ASKS THE CADENCE (owner, 2026-11-16). Every seat is told it is no answer to ask for
+   * and where a change is kept; the channel plan starts on the platform's default, and
+   * `ai-influencer` on daily, which its manager and scout are told too.
    */
-  it("asks the cadence on every template, the same question object", () => {
-    for (const template of all.filter((one) => one.name !== "ai-influencer")) expect(template.questions.find((q) => q.key === "cadence"), template.name).toBe(CADENCE_QUESTION);
+  it("asks the cadence on no template, and tells every seat where it is kept", () => {
+    for (const template of all) {
+      expect(template.questions.map((q) => q.key), template.name).not.toContain("cadence");
+      for (const agent of template.agents) expect(agent.system, `${template.name}/${agent.name}`).toContain(CADENCE_RULE);
+    }
+    expect(CADENCE_RULE).toMatch(/never ask for one/);
+    for (const cadence of Object.keys(CADENCE_SLOTS)) expect(CADENCE_RULE).toContain(`"CADENCE: ${cadence}"`);
+    const plan = (template: MediaTemplate) => template.tasks.find((card) => card.key === "channel-plan")!.body ?? "";
+    expect(DEFAULT_CADENCE).toBe("3× a week");
+    expect(plan(TEMPLATES.faceless)).toContain(`the line CADENCE: <the cadence> — project_context's cadence answer if it has one, else ${DEFAULT_CADENCE}`);
     const influencer = TEMPLATES["ai-influencer"];
-    expect(influencer.questions.map((q) => q.key)).not.toContain("cadence");
+    expect(plan(influencer)).toContain("cadence answer if it has one, else daily");
     for (const name of [PUBLISHER, "trend-scout"]) expect(seat(influencer, name).system, name).toContain(INFLUENCER_CADENCE);
   });
 
@@ -1405,8 +1410,8 @@ describe("the AI Influencer template", () => {
   it("posts YouTube publicly and keeps a changed cadence on the board, on this template alone", () => {
     expect(seat(AI, PUBLISHER).system).toContain(INFLUENCER_PUBLIC);
     expect(seat(TEMPLATES.faceless, PUBLISHER).system).not.toContain(INFLUENCER_PUBLIC);
-    for (const name of [PUBLISHER, "trend-scout"]) expect(seat(AI, name).system, name).toMatch(/unless the channel-plan card's newest CADENCE line says otherwise/);
-    expect(INFLUENCER_CADENCE).toMatch(/comments "CADENCE: daily", "CADENCE: 3× a week" or "CADENCE: weekly" on the channel-plan card/);
+    for (const name of [PUBLISHER, "trend-scout"]) expect(seat(AI, name).system, name).toMatch(/THIS CHANNEL POSTS DAILY unless the channel-plan card's newest CADENCE line says otherwise/);
+    expect(seat(TEMPLATES.faceless, PUBLISHER).system).not.toContain(INFLUENCER_CADENCE);
   });
 
   it("trains an uploaded face only with consent on the operator's yes, and never sets an AI-generated posting flag", () => {
@@ -1700,10 +1705,10 @@ describe("the AI Music Channel", () => {
     }
   });
 
-  it("asks the genre, an optional reference and the cadence on the base, and only the cadence on a genre", () => {
-    expect(TEMPLATES.music.questions.map((q) => [q.key, q.optional === true])).toEqual([["niche", false], ["reference", true], ["cadence", false]]);
+  it("asks the genre and an optional reference on the base, and nothing on a genre", () => {
+    expect(TEMPLATES.music.questions.map((q) => [q.key, q.optional === true])).toEqual([["niche", false], ["reference", true]]);
     for (const name of MUSIC_GENRES) {
-      expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+      expect(TEMPLATES[name].questions, name).toEqual([]);
       for (const agent of TEMPLATES[name].agents) {
         expect(agent.skills, `${name}/${agent.name}`).toContain(`naive/channel-template-${name}`);
         expect(agent.system, `${name}/${agent.name}`).toContain(nicheFixed(`naive/channel-template-${name}`));

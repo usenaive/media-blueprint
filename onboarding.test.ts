@@ -43,8 +43,8 @@ describe("the question form", () => {
       expect(template.questions.length, template.name).toBeLessThanOrEqual(4);
     }
     const { defineProject } = await import("@usenaive-sdk/blueprints");
-    const extra = { key: "extra", label: "One more thing", type: "text" as const };
-    const over = { ...declaration, questions: [...declaration.questions, extra, extra] };
+    const extra = (n: number) => ({ key: `extra-${n}`, label: "One more thing", type: "text" as const });
+    const over = { ...declaration, questions: [...declaration.questions, ...Array.from({ length: 5 - declaration.questions.length }, (_, n) => extra(n))] };
     expect(() => defineProject(over)).toThrow(/asks \d+ questions, but a template asks at most 4/);
     expect(() => defineProject(declaration)).not.toThrow();
   });
@@ -67,10 +67,10 @@ describe("the question that asks what to model the channel on", () => {
     expect(TEMPLATES.clipping.questions).not.toContain(REFERENCE_QUESTION);
   });
 
-  /** Second, so the form reads as what the channel is, what it is like, how often. */
-  it("is asked after the niche and before the cadence", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
-    expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY, "cadence"]);
+  /** Second, so the form reads as what the channel is, then what it is like. */
+  it("is asked after the niche", () => {
+    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY]);
+    expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY]);
   });
 });
 
@@ -90,7 +90,7 @@ describe("the question that asks who sees a new YouTube video", () => {
   });
 
   it("is asked by clipping only, second", () => {
-    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "visibility", "cadence"]);
+    expect(TEMPLATES.clipping.questions.map((q) => q.key)).toEqual(["sources", "visibility"]);
     expect(TEMPLATES.faceless.questions).not.toContain(VISIBILITY_QUESTION);
     expect(TEMPLATES.longform.questions).not.toContain(VISIBILITY_QUESTION);
   });
@@ -99,8 +99,8 @@ describe("the question that asks who sees a new YouTube video", () => {
 /**
  * NICHE TEMPLATES. A niche IS its niche, and the reference is the niche skill's playbook — not
  * something the operator models the channel on — so the studio asks neither (ADR-1143). The
- * generative niches, whose base asks only the niche, the reference and the cadence, are left asking
- * the cadence alone; the clipping niches keep the `sources` they cannot cut without.
+ * generative niches, whose base asks only the niche and the reference, are left asking nothing; the
+ * clipping niches keep the `sources` they cannot cut without.
  */
 describe("a niche template's questions", () => {
   const GENERATIVE = ["ufc", "history", "animal-feast", "comics", "cartoons-irl", "dancing-animals", "roadster", "cat-stories", "food-slime", "glass-food", "would-you-choose", "fruit-drama", "empires", "legend-flex", "surreal-satire", "hardstyle", "techno", "rap", "pop"] as const;
@@ -116,15 +116,15 @@ describe("a niche template's questions", () => {
     }
   });
 
-  it("leaves a generative niche asking only the cadence", () => {
-    for (const name of GENERATIVE) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["cadence"]);
+  it("leaves a generative niche asking nothing", () => {
+    for (const name of GENERATIVE) expect(TEMPLATES[name].questions, name).toEqual([]);
   });
 
-  it("asks the channel-cloning niche for the channel to clone, then the cadence", () => {
-    for (const name of CLONE_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["clone", "cadence"]);
+  it("asks the channel-cloning niche only for the channel to clone", () => {
+    for (const name of CLONE_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["clone"]);
   });
 
   it("leaves a clipping niche its sources and visibility", () => {
-    for (const name of CLIPPING_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility", "cadence"]);
+    for (const name of CLIPPING_NICHES) expect(TEMPLATES[name].questions.map((q) => q.key), name).toEqual(["sources", "visibility"]);
   });
 });

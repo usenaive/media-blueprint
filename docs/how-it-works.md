@@ -150,7 +150,7 @@ one vertical video. `composer -> cover-artist -> channel-manager`:
 - **analyst**: per song and subject.
 
 The genre niches `hardstyle`, `techno`, `rap` and `pop` pin `naive/channel-template-<genre>` on this
-crew and ask only the cadence. All five need engine 0.17.0.
+crew and ask nothing. All five need engine 0.17.0.
 
 ### Day one
 
@@ -244,12 +244,13 @@ a cron fire is not.
 
 The studio asks at most three questions, never where to post; the answers land on the install; every seat reads them with
 `project_context`. A niche template asks fewer — it is its niche, and its reference is the niche skill's,
-so both are dropped and a generative niche asks only the cadence (ADR-1143). The engine prepends its own
+so both are dropped and a generative niche asks nothing (ADR-1143). No template asks the cadence: the
+channel plan starts on 3× a week and keeps a `CADENCE:` line a chat request can change (`CADENCE_RULE`). The engine prepends its own
 "read the project context first" preamble to every template agent, and our `CONTEXT_PREAMBLE` adds that
 the answers are the operator's. On a niche, every seat also reads that the niche is fixed by the
 template and its pinned skill, never asked (`nicheFixed`). A template built from reference videos has its skill pinned to every seat; users never name skills in an answer. `ai-influencer` asks its own four instead:
 who the influencer is (a prebuilt creator, or upload your own photos), the photos (optional), the
-looks, and what it is for. It asks no cadence, so its manager and scout read daily.
+looks, and what it is for. Its channel plan starts daily.
 
 ## 9. What the platform cannot express yet
 

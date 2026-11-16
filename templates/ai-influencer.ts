@@ -17,12 +17,13 @@
  *   · the `look` day-one card — becomes "Meet the influencer" (same key, so the chain is unchanged);
  *   · the `character-bible` day-one card — the influencer's bible, from the persona, not from a study;
  *   · the first-piece card — every piece is the influencer;
- *   · the cadence — not asked; the manager and the scout read it as daily until the operator changes it;
+ *   · the cadence — daily, not the crews' 3× a week: its channel plan starts on it, and the manager and the scout are told it;
  *   · the brakes — the scout starts nothing while posts pile up unapproved, and the producer checks the face.
  */
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import {
   budgetOf,
+  DEFAULT_CADENCE,
   lengthPhrase,
   niche,
   nicheFixed,
@@ -167,9 +168,11 @@ export const AI_INFLUENCER_QUESTIONS: SetupQuestion[] = [
   },
 ];
 
-/** The setup asks no cadence; the two seats that read one are told it here, and where a change is kept. */
-export const INFLUENCER_CADENCE =
-  "THIS CHANNEL POSTS DAILY unless the channel-plan card's newest CADENCE line says otherwise: its setup asks no cadence, so wherever this brief says the cadence answer, read that, and never ask for one. When the operator asks to post more or less, the channel manager comments \"CADENCE: daily\", \"CADENCE: 3× a week\" or \"CADENCE: weekly\" on the channel-plan card.";
+/** A creator grows by posting every day, so this channel starts daily where the other crews start 3× a week. */
+export const INFLUENCER_STARTING_CADENCE = "daily";
+
+/** The two seats that read the cadence are told the influencer's own; where a change is kept is every seat's `CADENCE_RULE`. */
+export const INFLUENCER_CADENCE = "THIS CHANNEL POSTS DAILY unless the channel-plan card's newest CADENCE line says otherwise.";
 
 /** No setup question sets a video's visibility here, and every post already waits for the operator's yes. */
 export const INFLUENCER_PUBLIC =
@@ -348,6 +351,7 @@ const withInfluencerCards = (template: MediaTemplate): MediaTemplate => ({
       return task({ key: card.key, title: card.title, assignee: "analyst", blocked_by: ["first-briefs"], body: `${INFLUENCER_NICHE} ${INFLUENCER_PAGES} ${STUDY_BODY}` });
     }
     if (card.key === "hook-style") return task({ key: card.key, title: card.title, assignee: card.assignee!, blocked_by: [], body: HOOK_STYLE_BODY });
+    if (card.key === "channel-plan") return { ...card, body: swapText(card.body ?? "", `else ${DEFAULT_CADENCE}`, `else ${INFLUENCER_STARTING_CADENCE}`, card.key) };
     if (card.key === "character-bible") return task({ key: card.key, title: "Write the influencer's character bible, then get the operator's approval", assignee: card.assignee!, blocked_by: [], body: BIBLE_BODY });
     if (card.key === "first-briefs") return { ...card, body: (card.body ?? "").replace(/ How this card works\./, ` ${FIRST_PIECE_INFLUENCER} ${DAY_ONE_PIECE} ${INFLUENCER_NICHE} ${INFLUENCER_PAGES} How this card works.`) };
     return card;

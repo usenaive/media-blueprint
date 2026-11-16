@@ -17,7 +17,6 @@ import {
   agent,
   ANALYST_REPORT,
   analystSchedules,
-  CADENCE_QUESTION,
   channelManager,
   channelPlanCard,
   lengthPhrase,
@@ -161,7 +160,7 @@ Close this card with the complete bible as its note, beginning "DRAFT CHARACTER 
   ],
 
   /**
-   * The niche, what it should be like (optional) and how often. Where it posts is the accounts the
+   * The niche, and what it should be like (optional). How often is the channel plan's default. Where it posts is the accounts the
    * operator connects; the tone and who it is for, the manager asks on its day-one card.
    */
   questions: [
@@ -173,6 +172,5 @@ Close this card with the complete bible as its note, beginning "DRAFT CHARACTER 
       help: "Pick one or type your own. The channel manager asks about tone and audience next.",
     },
       REFERENCE_QUESTION,
-    CADENCE_QUESTION,
   ],
 };

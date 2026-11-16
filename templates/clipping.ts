@@ -12,7 +12,6 @@ import {
   agent,
   ANALYST_REPORT,
   analystSchedules,
-  CADENCE_QUESTION,
   CLIPPING_LENGTH,
   channelManager,
   channelPlanCard,
@@ -102,7 +101,7 @@ export const CLIPPING: MediaTemplate = {
       title: "Set up the weekly report this channel will be measured against",
       assignee: "analyst",
       blocked_by: ["channel-plan"],
-      body: "Read project_context for the reference channels and the cadence, and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the sources it cuts from, the metrics you will read per clip (social.post_metrics), and the week's target taken from the plan's posting slots. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
+      body: "Read project_context for the reference channels, and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the sources it cuts from, the metrics you will read per clip (social.post_metrics), and the week's target taken from the plan's posting slots. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
     }),
     task({
       // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
@@ -127,6 +126,5 @@ export const CLIPPING: MediaTemplate = {
       help: "The crew cuts from these and nowhere else.",
     },
       VISIBILITY_QUESTION,
-    CADENCE_QUESTION,
   ],
 };

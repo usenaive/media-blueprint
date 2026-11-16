@@ -91,11 +91,11 @@ ffmpeg mux, probed with ffprobe before it is published) and `analyst`. Every sea
 Day one, the channel manager writes the **CHANNEL NOTE** on the `channel-note` card — a `CONTEXT SEED`
 block every song prompt starts with, and a `COVER DIRECTION` line — with no model called; the first
 song waits on it. No seat writes an AI label into the caption or sets the post's AI-generated flag:
-both are the operator's choice (vetta-mono ADR-1636). It asks the genre,
-an optional reference (described in musical words, never copied) and the cadence.
+both are the operator's choice (vetta-mono ADR-1636). It asks the genre and
+an optional reference (described in musical words, never copied).
 
 The four genre niches are `niche(MUSIC, …)`: each pins its genre's playbook, whose Context seed is
-copied into the channel note word for word, so it asks only the cadence.
+copied into the channel note word for word, so it asks nothing.
 
 | Template | Shown as | Reuses | Pins the skill |
 |---|---|---|---|
@@ -126,7 +126,7 @@ scriptwriter and channel manager keep it true with `update_character`. Each line
 persona's `voice_id`. The producer checks the face at VERIFY, with one redo a piece, and the scout starts
 nothing while two Publish cards wait or no account is connected. The producer also holds
 `list_characters`, and `create_character` at `ask`. Every seat denies `edit_video` by name (an edit can change the face). It renders on
-`AI_INFLUENCER_VIDEO_MODELS`, the two image-to-video models measured keeping a face from a still. It asks no cadence: the manager and the scout read it as daily until the operator asks to change it, which the manager keeps as a `CADENCE:` line on the channel-plan card. YouTube posts are public, as the operator approves each one.
+`AI_INFLUENCER_VIDEO_MODELS`, the two image-to-video models measured keeping a face from a still. Its channel plan starts daily, where the other crews start 3× a week (below). YouTube posts are public, as the operator approves each one.
 
 It runs on the short-form scene pipeline (script -> images -> video -> edit, with a character bible),
 with the parts that would change the face replaced rather than added to. The producer's scene step is
@@ -310,20 +310,25 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
 template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
-niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking only
-the cadence; a clipping niche keeps the sources it cannot cut without. `channel-cloning` is the one
+niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking
+nothing; a clipping niche keeps the sources it cannot cut without. `channel-cloning` is the one
 exception: in place of the dropped niche it keeps a single question, the channel it clones.
 
 | Template | Questions |
 |---|---|
-| `faceless`, `longform` | Niche · Reference (optional) · Posting cadence |
-| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires`, `legend-flex`, `surreal-satire` | Posting cadence |
-| `channel-cloning` | Channel to clone · Posting cadence |
+| `faceless`, `longform` | Niche · Reference (optional) |
+| `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) |
+| `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires`, `legend-flex`, `surreal-satire` | None |
+| `channel-cloning` | Channel to clone |
 | `ai-influencer` | Who is your influencer? · Photos of your character (optional) · Pick the looks · What is your influencer for? |
-| `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) · Posting cadence |
-| `music` | Genre · Reference (optional) · Posting cadence |
-| `hardstyle`, `techno`, `rap`, `pop` | Posting cadence |
+| `gaming-clips`, `news`, `sports` | Channels to cut from · Who sees a new YouTube video? (optional) |
+| `music` | Genre · Reference (optional) |
+| `hardstyle`, `techno`, `rap`, `pop` | None |
+
+No question asks how often the channel posts. Every post waits for your Allow, so the team starts on
+3× a week (daily on `ai-influencer`), the platform's own default, and the channel plan says so in a
+`CADENCE:` line. Ask in chat to post more or less often: the channel manager comments the new
+`CADENCE:` line on the channel-plan card, and every seat and the studio's weekly goal read it there.
 
 No question asks where the channel posts. It posts to the accounts you connect to it; the channel
 manager asks you for one when none is connected. `faceless` and `longform` do not ask the
