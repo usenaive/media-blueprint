@@ -11,7 +11,7 @@ import { CLIPPING } from "./clipping.ts";
 import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
 import { MUSIC } from "./music.ts";
-import { budgetOf, CADENCE_QUESTION, CLONE_CHANNEL_QUESTION, niche, renderMicroUsd, SEEDANCE_MICRO_USD_PER_SECOND, SEGMENT_MAX_SECONDS } from "./template.ts";
+import { budgetOf, CLONE_CHANNEL_QUESTION, niche, renderMicroUsd, SEEDANCE_MICRO_USD_PER_SECOND, SEGMENT_MAX_SECONDS } from "./template.ts";
 import type { Budget, MediaTemplate, TemplateName } from "./template.ts";
 
 export type { Length, MediaTemplate, SetupQuestion, TemplateName } from "./template.ts";
@@ -82,7 +82,7 @@ export const CHANNEL_CLONING: MediaTemplate = {
     seats: SEGMENTED_SHORT_FORM,
   }),
   // A clone channel's niche is the channel it clones, so it asks for that in place of the niche.
-  questions: [CLONE_CHANNEL_QUESTION, CADENCE_QUESTION],
+  questions: [CLONE_CHANNEL_QUESTION],
 };
 export const COMICS = niche(FACELESS, {
   name: "comics",

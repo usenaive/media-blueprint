@@ -15,14 +15,13 @@
  * Day one: the channel manager writes the CHANNEL NOTE (the context seed every song starts from: the
  * pinned genre skill's, verbatim, or one built from the genre answer) on the `channel-note` card, and
  * the first song waits on it. The four genre niches (`hardstyle`, `techno`, `rap`, `pop`) are this
- * crew with `naive/channel-template-<genre>` pinned, so they ask only the cadence.
+ * crew with `naive/channel-template-<genre>` pinned, so they ask nothing.
  *
  * NO AI LABEL: no seat writes an AI label or disclosure line into the caption, and no seat sets the
  * post's `ai_generated` flag. Both are the operator's opt-in (vetta-mono ADR-1636, ADR-1904).
  */
 import {
   ANALYST_REPORT,
-  CADENCE_QUESTION,
   CREW_RULES,
   FIRST_PIECE_KEY,
   PLATFORMS,
@@ -116,7 +115,7 @@ const composer = agent({
     schedule({
       cron: "0 10 * * *", // Daily 10:00 — the cadence gate below decides whether today makes a song.
       summary: "Write the next song",
-      input: `Write the next song. Read project_context, ${NOTE}, the newest weekly report card, and your own crew's Cover and Publish cards (board_read, owner your cover-artist, then your channel-manager). With no CHANNEL NOTE yet, or a Cover or Publish card of your crew not yet closed, or your first-song card not yet closed, or the next free posting slot for the cadence answer more than a day away, make nothing and say why in one line. Otherwise start ONE song as your brief says: one generate_music call, then its Cover card for the cover-artist.`,
+      input: `Write the next song. Read project_context, ${NOTE}, the newest weekly report card, and your own crew's Cover and Publish cards (board_read, owner your cover-artist, then your channel-manager). With no CHANNEL NOTE yet, or a Cover or Publish card of your crew not yet closed, or your first-song card not yet closed, or the next free posting slot for the cadence more than a day away, make nothing and say why in one line. Otherwise start ONE song as your brief says: one generate_music call, then its Cover card for the cover-artist.`,
       budget_micro_usd: 2_000_000, // $2 — one 30-second song (~$0.08) and the turns around it.
     }),
   ],
@@ -194,7 +193,7 @@ export const MUSIC: MediaTemplate = {
 
   /**
    * The genre (keyed `niche`, so a genre niche drops it like every niche does — ADR-1143), a sound
-   * to aim for (optional), and how often.
+   * to aim for (optional). How often is the channel plan's default.
    */
   questions: [
     {
@@ -205,6 +204,5 @@ export const MUSIC: MediaTemplate = {
       help: "Pick one or type your own. The channel manager turns it into the channel's sound on day one.",
     },
     MUSIC_REFERENCE_QUESTION,
-    CADENCE_QUESTION,
   ],
 };

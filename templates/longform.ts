@@ -17,7 +17,6 @@ import {
   ANALYST_REPORT,
   analystSchedules,
   budgetOf,
-  CADENCE_QUESTION,
   channelManager,
   channelPlanCard,
   lengthPhrase,
@@ -145,6 +144,5 @@ export const LONGFORM: MediaTemplate = {
       help: "Pick one or type your own. The channel manager asks about tone and audience next.",
     },
       REFERENCE_QUESTION,
-    CADENCE_QUESTION,
   ],
 };
