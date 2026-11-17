@@ -43,8 +43,8 @@ describe("the README", () => {
    * seat's ceiling.
    */
   it("prints a day-one ceiling of one per-task ceiling per card", () => {
-    // The first-video chain (faceless, v3.7.0) renders on a seeded card, so only its Publish card is added.
-    const chain = (template: MediaTemplate) => (template.tasks.some((task) => task.key === "references") ? ["channel-manager"] : template.pipeline.slice(1));
+    // The first-video chain (faceless, v3.7.0) renders and posts on seeded cards, so nothing is added.
+    const chain = (template: MediaTemplate) => (template.tasks.some((task) => task.key === "references") ? [] : template.pipeline.slice(1));
     const dayOne = (template: MediaTemplate) =>
       template.tasks.reduce((sum, task) => sum + ceiling(template, task.assignee!), 0) +
       chain(template).reduce((sum, seat) => sum + ceiling(template, seat), 0);

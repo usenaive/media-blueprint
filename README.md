@@ -266,7 +266,7 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `kickoff`, `channel-plan` | Asks where to post; publishes each piece on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `kickoff`, `first-post`, `channel-plan` | Asks where to post; publishes each piece on the cadence; reads the weekly report |
 | `producer` | Video production | — | `references`, `first-briefs`, `look` | Generates the reference stills and scene videos, edits the final piece, creates the Publish card |
 | `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `topics` | Offers the first video's four ideas; starts each later piece as a Plan card |
 | `scriptwriter` | Hooks & scripts | — | `episode`, `reference-study`, `character-bible`, `hook-style` | Writes the first episode; drafts the continuity bible and asks for approval; writes every scene and prompt |
@@ -355,27 +355,42 @@ costly step says what it costs before it starts:
 kickoff      (channel-manager)  connect card: Instagram, TikTok, YouTube — asked after it closes, skippable
 topics       (trend-scout)      a choice of four ideas it wrote                    words only
 episode      (scriptwriter)     the script, filed once as Episodes/<slug>.md        words only
-references   (producer)         "about 200 to 1,600 credits": four stills, then a picture choice
-first-briefs (producer)         "about 2,800 credits": the 10-second video → Publish card: "Is this good?"
+references   (producer)         "about 450 to 1,300 credits": three stills, then a picture choice
+first-briefs (producer)         "about 2,800 credits": one 8-second scene
+first-post   (channel-manager)  "Is this good?" on the approval card
 ```
 
-Each video line is the template's own: its first pinned model's rate (`VIDEO_RATES`, copied from the
-platform's rate table) times the first video's length, plus about 1,000 credits for voice, music and
-the edit. The faceless crews render 10 seconds at 180 credits a second, so the whole first run fits
-5,000 credits at its most (~4,650). The raw-film niches (`empires`, `legend-flex`, `surreal-satire`)
-render one 15-second Seedance call and say "about 18,600 credits", so the wall comes at their video.
+Each cost line is the template's own. The video line is the producer's first pinned model's rate
+(`VIDEO_RATES`, copied from the platform's rate table) times the first video's length, plus about
+1,300 credits: the producer's turns, voice, music and the first post's turn. The stills line covers
+3 to 5 pictures (two redos at most) at $0.01–0.04 each, plus the producer's turns. Every seat's turns
+are estimated from its real prompt (`turnCredits`), and the tests hold each constant to that estimate.
+At its most, the faceless first run is ~4,700 of the 5,000 free credits:
+
+| Step | Credits at most |
+|---|---|
+| Words: connect, topics, script, the CEO's six digests | 600 |
+| Stills and their turns | 1,300 |
+| The 8-second video, its turns, voice, music and the first post | 2,800 |
+| **Total** | **4,700** |
+
+The raw-film niches (`empires`, `legend-flex`, `surreal-satire`) render one 15-second Seedance call and
+say "about 18,900 credits", so their wall comes at the video.
 
 `kickoff` and `topics` wait on nothing, on two seats, so the connect card never holds the topic back.
-Week one waits for the video to finish, done or stopped, so it never spends what the video needs and a
-failed video never stops the channel: `reference-study` → `look`, `hook-style`, `character-bible`;
-`channel-plan` after `look`; then `report-frame`. Nothing on day one waits on the bible. A pick nobody
-makes doesn't hold the channel either: the analyst's daily fire nudges once after half a day, and a day
-later goes on with the first option. Defaults are made, not asked: 9:16, the template's look and voice,
-3× a week to every connected account (later pieces run 15–30 seconds). One connect card at a time: with
-the first still unanswered, the first post waits for it; skipped, the Publish card asks again. Each step
-comments one short line on its card. On a channel set up before (its manager has a done card, or its
-board holds the old "Start the channel's first piece"), `kickoff` and `topics` close at once on
-`ALREADY RUNNING` and the cards behind them do the same, so an update buys nothing.
+Week one waits for the first post to be decided — posted, not posted, or stopped — so it never competes
+with the first post for the last free credits, and a failed video never stops the channel:
+`reference-study` → `look`, `hook-style`, `character-bible`; `channel-plan` after `look`; then
+`report-frame`. Nothing on day one waits on the bible. A pick nobody makes doesn't hold the channel
+either: the analyst's daily fire comments a nudge on it after 12 hours, and at the next daily check
+goes on with the first option. It never asks from the fire, because a fire that waits on the person
+makes the platform skip every later one. Defaults are made, not asked: 9:16, the template's look and
+voice, 3× a week to every connected account; later pieces run 15–30 seconds. One connect card at a
+time: while the first is unanswered, the first post waits for it and is filed again once an account
+is connected; if it was skipped, the publisher asks again. Each step comments one short line on its
+card. On a channel set up before (its manager has a done card, or its board holds the old "Start the
+channel's first piece"), `kickoff` and `topics` close at once on `ALREADY RUNNING` and the cards behind
+them do the same, so an update buys nothing.
 
 The other templates, and `ai-influencer`, keep the study-first day one:
 
@@ -413,14 +428,14 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   (`SEAT_MODEL` in `templates/template.ts`): $0.15/M input and $0.50/M output tokens, so a seat's
   turns cost a fraction of its renders.
 - `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
-  on `longform`, which renders from text: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
+  on `longform`: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
   (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
   model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
   seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins
-  `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`). The `faceless` producers, which render
-  every scene from a still, pin `heygen/heygen-video-1` first (`FACELESS_VIDEO_MODELS`): the platform's
-  own default, $0.036 a second with sound. It takes a first frame only, and a refused call is never
-  passed down the list, so only image-to-video seats pin it. The raw-film niches pin Seedance 2.5 alone.
+  `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`). The `faceless` producers pin
+  `heygen/heygen-video-1` first (`FACELESS_VIDEO_MODELS`, a proposal): the platform's own default,
+  $0.036 a second with sound, so their first video fits the free credits. `longform` keeps its own pin.
+  The raw-film niches pin Seedance 2.5 alone.
   `generate_image` is left unpinned, so it takes the cheapest priced model.
 
 ## 🔐 Tool permissions

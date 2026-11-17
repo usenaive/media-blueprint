@@ -396,9 +396,9 @@ function styles(setup: Read<Setup>, env: AppEnv): string {
   return `<section><h2>Styles</h2><ul class="styles">${tiles}</ul>${players}<script>${STYLE_SCRIPT}</script></section>`;
 }
 
-/** Posters first; play at most four clips, only while on screen; open a style's player with its sound, and stop it when it closes. */
+/** Posters first; play at most four clips, only while on screen, the next one on screen taking a freed place; open a style's player with its sound, and stop it when it closes. */
 export const PLAYING_MAX = 4;
-const STYLE_SCRIPT = `(()=>{const on=new Set();const seen=new IntersectionObserver((all)=>{for(const one of all){if(one.isIntersecting&&on.size<${PLAYING_MAX}){on.add(one.target);one.target.play().catch(()=>{});}else if(!one.isIntersecting){on.delete(one.target);one.target.pause();}}});for(const clip of document.querySelectorAll(".style video"))seen.observe(clip);for(const tile of document.querySelectorAll(".style"))tile.addEventListener("click",()=>{const box=document.getElementById(tile.dataset.open);box.showModal();box.querySelector("video").play().catch(()=>{});});for(const box of document.querySelectorAll(".player")){box.addEventListener("close",()=>box.querySelector("video").pause());box.addEventListener("click",(event)=>{if(event.target===box)box.close();});}})();`;
+const STYLE_SCRIPT = `(()=>{const on=new Set(),shown=new Set();const fill=()=>{for(const clip of shown){if(on.size>=${PLAYING_MAX})break;if(!on.has(clip)){on.add(clip);clip.play().catch(()=>{});}}};const seen=new IntersectionObserver((all)=>{for(const one of all){if(one.isIntersecting)shown.add(one.target);else{shown.delete(one.target);on.delete(one.target);one.target.pause();}}fill();});for(const clip of document.querySelectorAll(".style video"))seen.observe(clip);for(const tile of document.querySelectorAll(".style"))tile.addEventListener("click",()=>{const box=document.getElementById(tile.dataset.open);box.showModal();box.querySelector("video").play().catch(()=>{});});for(const box of document.querySelectorAll(".player")){box.addEventListener("close",()=>box.querySelector("video").pause());box.addEventListener("click",(event)=>{if(event.target===box)box.close();});}})();`;
 
 function renders(files: Read<{ id: string }[]> | null, links: Links): string {
   if (files === null || (files.ok && files.value.length === 0)) return "";

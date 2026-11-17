@@ -368,11 +368,12 @@ export function niche(
 export const MICRO_USD_PER_SECOND = 170_000;
 
 /**
- * Seedance 2.5, the allowed fallback, bills ~299,851 µUSD a second, ~1.8× Hailuo. The default
- * $20 task ceiling clears one 30-second piece on it (~$9) but not the retakes around it, so a
- * niche that renders on Seedance sizes its producer's ceiling from this rate (the raw-film niches).
+ * Seedance 2.5, the allowed fallback, bills 233,530 µUSD a second at cost (its `VIDEO_RATES` entry, the
+ * platform's table; `templates.test.ts` holds the two equal), ~1.8× Hailuo. The default $20 task ceiling
+ * clears one 30-second piece on it (~$7.01) but not the retakes around it, so a niche that renders on
+ * Seedance sizes its producer's ceiling from this rate (the raw-film niches).
  */
-export const SEEDANCE_MICRO_USD_PER_SECOND = 299_851;
+export const SEEDANCE_MICRO_USD_PER_SECOND = 233_530;
 
 /** What rendering a whole piece of this length costs, at its longest, at a model's rate. */
 export const renderMicroUsd = (length: Length, perSecond: number = MICRO_USD_PER_SECOND): number => length.max * perSecond;

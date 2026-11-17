@@ -531,7 +531,9 @@ describe("Styles", () => {
     expect(grid).not.toMatch(/<video[^>]*autoplay/);
     expect(grid.match(/preload="none"/g)).toHaveLength(2 * STYLES.length);
     expect(PLAYING_MAX).toBe(4);
-    expect(grid).toContain("one.isIntersecting&&on.size<4");
+    expect(grid).toContain("if(on.size>=4)break;");
+    // A clip leaving the screen frees its place for the next one on screen, without a scroll back.
+    expect(grid).toMatch(/else\{shown\.delete\(one\.target\);on\.delete\(one\.target\);one\.target\.pause\(\);\}\}fill\(\);/);
   });
 
   it("leaves out the channel's own look, and every channel that is not a faceless one", async () => {

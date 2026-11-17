@@ -157,11 +157,11 @@ crew and ask nothing. All five need engine 0.17.0.
 `faceless` and its niches (v3.7.0) start with the first video, on the company's free credits:
 `kickoff` (the channel manager's connect card, asked after the card closes) and `topics` (four ideas to
 pick from) at once, then `episode` (the script, written once to `Episodes/<slug>.md`), `references`
-(four stills and a picture choice) and `first-briefs` (a 10-second video, then the Publish card's "Is
-this good?"). The first three are words only; the last two say what they cost in credits, at the
-template's own model rate, before they start. The study, look, hook style and bible follow the video
-in week one, whether it finished or stopped; an unanswered pick is nudged by the analyst's daily fire
-and then defaulted to the first option.
+(three stills and a picture choice), `first-briefs` (one 8-second scene) and `first-post` (the
+approval card's "Is this good?"). The first three are words only; the costly two say what they cost in
+credits, at the template's own model rate, before they start. The study, look, hook style and bible
+follow the first post in week one, whatever became of it; an unanswered pick gets a nudge comment from
+the analyst's daily fire and is then defaulted to the first option, without the fire ever asking.
 
 Every other template seeds its set-up cards first — the channel plan, reference study, look, voice,
 report skeleton and, for generated shorts, the character bible (closed on a draft, approved later) —
@@ -243,7 +243,7 @@ a cron fire is not.
   edit and deploy Media manager or build a new app, with each app action on an approval card; `apps`
   reaches only this channel's own apps, never another project's in the same organization;
 - `generate_video` carries `config.models`: on the `faceless` producers `FACELESS_VIDEO_MODELS`, the
-  platform's default (`heygen/heygen-video-1`, a first frame only) first; elsewhere `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3,
+  platform's default (`heygen/heygen-video-1`) first; elsewhere `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3,
   with Seedance 2.5 allowed; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
   Every generated short renders 5–15 second scenes;

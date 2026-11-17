@@ -185,7 +185,7 @@ export const RAW_FILM_SCRIPTWRITER =
   "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 7 to 8 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is a rapped song with the lyrics you write.";
 /**
  * ADR-1580: one empire at one moment as raw 4:3 film, one modern flex per shot, cut to a rapped song.
- * Up to three 15-second calls a piece, and two retakes for a logo or a gesture: five calls (~$22.49).
+ * Up to three 15-second calls a piece, and two retakes for a logo or a gesture: five calls (~$17.51).
  */
 export const EMPIRES_PRODUCER_BUDGET = seedanceCeiling(5);
 export const EMPIRES = rawFilm(
@@ -202,7 +202,7 @@ export const EMPIRES = rawFilm(
   EMPIRES_PRODUCER_BUDGET,
 );
 
-/** A legend-flex or surreal-satire piece is two 15-second calls; two retakes make four calls (~$17.99). */
+/** A legend-flex or surreal-satire piece is two 15-second calls; two retakes make four calls (~$14.01). */
 export const TWO_CALL_PIECE_BUDGET = seedanceCeiling(4);
 
 /**
