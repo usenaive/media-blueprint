@@ -393,7 +393,7 @@ describe("the toolsets", () => {
    * Another is named only when the operator's context explicitly asks for it.
    */
   it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
-    // Long-form renders from text, which the platform's default (first frame only) refuses: it keeps FLUX 3 Max.
+    // The proposal pins the platform's default on the faceless producers only; long-form keeps FLUX 3 Max first.
     for (const [template, first] of [[TEMPLATES.faceless, "heygen/heygen-video-1"], [TEMPLATES.longform, "black-forest-labs/flux-3-max"]] as const) {
       const producer = seat(template, "producer");
       expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe(first);
