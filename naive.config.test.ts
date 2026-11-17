@@ -258,7 +258,12 @@ describe("naive.config", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
     // One required — no question asks where the channel posts, or how often — plus the optional one (ADR-0757).
     expect(project.questions.length).toBe(ACTIVE.questions.length);
-    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(1);
+    // v3.7.0: the faceless form asks nothing it needs; its one question is optional.
+    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(0);
+    // What the setup CEO does before the team starts (vetta-mono Track W). Handed to `up` as declared; the
+    // pinned engine (0.19.2) does not know the field yet and drops it, so it works once Track W's engine is pinned.
+    expect(declaration.before_start).toBe(ACTIVE.before_start);
+    expect(declaration.before_start).toMatch(/\[Make the references\]\(\?start\)/);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.

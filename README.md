@@ -267,8 +267,8 @@ woken by its cards.
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
 | `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
-| `producer` | Video production | — | `look` | Generates scene images and videos, edits the final piece, creates the Publish card |
-| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
+| `producer` | Video production | — | `references`, `first-briefs`, `look` | Generates the reference stills and scene videos, edits the final piece, creates the Publish card |
+| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | — | Starts each piece after the first as a Plan card, with exemplars it opened |
 | `scriptwriter` | Hooks & scripts | — | `reference-study`, `character-bible`, `hook-style` | Drafts the continuity bible and asks for approval; writes every scene and prompt |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
@@ -308,7 +308,9 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
+The studio asks at most three before anything is provisioned; the engine refuses a fifth. It asks only the
+required ones before it hires, so `faceless` (whose one question is optional from v3.7.0) starts with none:
+a blank niche is chosen by the first topic pick. A niche
 template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
 niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking
 nothing; a clipping niche keeps the sources it cannot cut without. `channel-cloning` is the one
@@ -316,7 +318,8 @@ exception: in place of the dropped niche it keeps a single question, the channel
 
 | Template | Questions |
 |---|---|
-| `faceless`, `longform` | Niche · Reference (optional) |
+| `faceless` | Niche (optional) |
+| `longform` | Niche · Reference (optional) |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) |
 | `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires`, `legend-flex`, `surreal-satire` | None |
 | `channel-cloning` | Channel to clone |
@@ -343,6 +346,27 @@ day-one card closes.
 The cards are seeded on the company board. A card waiting on another is not woken, and costs
 nothing, until that card closes.
 
+On `faceless` and its niches (v3.7.0) day one is **the first video**, driven from the chat.
+
+Before payment only the CEO runs, on words, from the template's `before_start` (vetta-mono Track W):
+it shows the connect card for Instagram, TikTok and YouTube (skipping is fine), offers four ideas
+for the first video, writes the picked one's script to `Episodes/<idea>.md`, and ends on the button
+**Make the references**, which opens the paywall. After payment the crew's cards take over:
+
+```
+references   (producer)  four stills from the newest script, then a picture choice (pick one or more)   first paid step
+first-briefs (producer)  the video from the picked stills → Publish card: "Is this good?" on the approval card
+```
+
+Then week one, behind the picked pictures: `reference-study` → `look`, `hook-style`,
+`character-bible`; `channel-plan` after `look`, then `report-frame`. Nothing on day one waits on the
+bible. Defaults are made, not asked: 15–30 seconds, 9:16, the template's look and voice, 3× a week to
+every connected account; with none connected, the Publish card asks again. Each step comments one
+short line on its card. On a channel that already makes videos, `references` closes at once on
+`ALREADY RUNNING` and the video card behind it does the same, so an update buys nothing.
+
+The other templates, and `ai-influencer`, keep the study-first day one:
+
 ```
 channel-plan ──→ report-frame
 reference-study ──→ look ─────┐
@@ -358,12 +382,12 @@ The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-t
 `first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board
 holds, so updating an existing channel to 2.0 does not start a new paid piece.
 
-Day one sets up the plan, reference, look, voice and a draft continuity bible, then starts **one**
-piece. That piece runs its full chain to your approval card. The timers start the rest.
+Day one starts **one** piece. That piece runs its full chain to your approval card. The timers
+start the rest.
 
 A card carries no budget of its own: a woken seat runs on its per-task ceiling. So day one is
 bounded by one ceiling per seeded card, plus one per card of the first piece's chain
-($200 on `faceless`, $290 on `longform`, $160 on `clipping`).
+($180 on `faceless`, $290 on `longform`, $160 on `clipping`).
 
 ## 💰 Money
 

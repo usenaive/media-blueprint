@@ -20,7 +20,7 @@
  *   · the cadence — daily, not the crews' 3× a week: its channel plan starts on it, and the manager and the scout are told it;
  *   · the brakes — the scout starts nothing while posts pile up unapproved, and the producer checks the face.
  */
-import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
+import { FACELESS, SEGMENTED_SHORT_FORM, STUDY_FIRST_TASKS } from "./faceless.ts";
 import {
   budgetOf,
   DEFAULT_CADENCE,
@@ -360,7 +360,8 @@ const withInfluencerCards = (template: MediaTemplate): MediaTemplate => ({
     .sort((a, b) => Number(a.key === "reference-study") - Number(b.key === "reference-study")),
 });
 
-const base = niche(FACELESS, {
+// The influencer's first piece is the face and the persona, made after payment: none of faceless's script first.
+const { before_start: _scriptFirst, ...base } = niche(FACELESS, {
   name: "ai-influencer",
   title: "AI Influencer",
   description:
@@ -398,6 +399,8 @@ const OWN_NICHE = (seat: { name: string; system?: string }): string =>
 
 export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   ...base,
+  // The influencer keeps its own measured day one (H5) on the study-first cards, not faceless's first-video chain.
+  tasks: STUDY_FIRST_TASKS,
   // Training a face is paid, so the producer asks first; every other seat keeps it denied by name.
   // A video edit (`edit_video`, which follows `generate_video` unless named) can change the face, so
   // every seat denies it by name.

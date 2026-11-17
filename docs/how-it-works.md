@@ -154,9 +154,16 @@ crew and ask nothing. All five need engine 0.17.0.
 
 ### Day one
 
-Each template seeds its set-up cards first — the channel plan, reference study, look, voice, report
-skeleton and, for generated shorts, the character bible (closed on a draft, approved later) — then
-one piece card for the head of the chain (`first-briefs`, `first-topic` or `first-moments`: the
+`faceless` and its niches (v3.7.0) start with the first video. Before payment the setup CEO follows
+the template's `before_start`: the connect card (skippable), four ideas to pick from, the script in
+`Episodes/<idea>.md`, then the button "Make the references", which opens the paywall. After payment
+`references` makes four stills and asks a picture choice (the first step that spends), and
+`first-briefs` makes the video, then the Publish card's "Is this good?". The study, look, hook style
+and bible follow in week one; nothing on day one waits on them.
+
+Every other template seeds its set-up cards first — the channel plan, reference study, look, voice,
+report skeleton and, for generated shorts, the character bible (closed on a draft, approved later) —
+then one piece card for the head of the chain (`first-briefs`, `first-topic` or `first-moments`: the
 key 1.x already seeded, so a re-apply to an existing org seeds nothing and starts no paid piece).
 That piece runs its full chain to the approval card. The reference study never asks the operator: a
 blank reference answer means go and find two or three real videos in the niche.

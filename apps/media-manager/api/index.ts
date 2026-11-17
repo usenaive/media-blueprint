@@ -5,12 +5,15 @@
  *
  *   · the creator, on a channel that has one (AI Influencer): their face, name and niche, with a way to them in Naive;
  *   · Connect an account, only while nothing has gone out and no account is connected;
+ *   · References, only while there are some: each episode's script under `Episodes/`, with its stills;
  *   · the numbers: views over the last seven days with their change, posts this week against the
  *     cadence, and what the company spent;
  *   · Waiting on you, only while something does: each post links to its chat in Naive, where it is decided;
  *   · Scheduled, only while something is: one sideways row, soonest first;
  *   · Stills and clips, only for a creator with some: the newest things rendered as them;
- *   · Posted: a picture grid, newest first, each with its views or "Didn't post".
+ *   · Posted: a picture grid, newest first, each with its views or "Didn't post";
+ *   · Styles, on a faceless channel: other channels' looks, looping, each opening a player with one
+ *     "Recreate this style".
  *
  * One file with no relative imports: the host compiles each function on its own. Agents may pull,
  * change and deploy it like any app.
@@ -56,6 +59,9 @@ const POSTED_SHOWN = 12;
 const RENDERS_SHOWN = 12;
 /** Every link is a signed read and an audit row, so a long queue signs its first few and the rest wait their turn. */
 const LINKED_SHOWN = 12;
+/** The newest episode files and stills the References strip reads; the scripts are read for their STILLS line. */
+const EPISODE_FILES = 40;
+const EPISODES_SHOWN = 3;
 /** Identities asked for an account, only while nothing has gone out. */
 const IDENTITIES_ASKED = 10;
 /** The clock every posting slot is stated in (`CHANNEL_TIMEZONE` in `templates/template.ts`). */
@@ -121,12 +127,16 @@ async function spentSince(env: AppEnv, from: string): Promise<Spent> {
 }
 
 type Answers = Readonly<Record<string, unknown>>;
-/** The channel's setup answers, and when it was installed (`null` when the API didn't say). */
-type Setup = { answers: Answers; installedAt: string | null };
+/** The channel's setup answers, its template, and when it was installed (`null` when the API didn't say). */
+type Setup = { answers: Answers; template: string | null; installedAt: string | null };
 
 const setupOf = async (env: AppEnv): Promise<Setup> => {
-  const install = (await naive(env).apps.installs.list({ project: env["NAIVE_PROJECT"] })).data[0] as { answers?: Answers; created_at?: unknown } | undefined;
-  return { answers: install?.answers ?? {}, installedAt: typeof install?.created_at === "string" ? install.created_at : null };
+  const install = (await naive(env).apps.installs.list({ project: env["NAIVE_PROJECT"] })).data[0] as { answers?: Answers; template?: unknown; created_at?: unknown } | undefined;
+  return {
+    answers: install?.answers ?? {},
+    template: typeof install?.template === "string" ? install.template : null,
+    installedAt: typeof install?.created_at === "string" ? install.created_at : null,
+  };
 };
 
 const madeAt = (one: Creator): number => (one.created_at === undefined ? Number.NaN : Date.parse(one.created_at));
@@ -274,13 +284,120 @@ function head(creator: Read<Creator | null>, env: AppEnv, links: Links): string 
   return `<header class="creator">${face === undefined ? `<div class="face"></div>` : `<img class="face" src="${escape(face)}" alt="">`}<div class="who"><h1>${escape(one.name)}</h1><span class="muted">${escape(line)}</span></div>${manage}</header>`;
 }
 
+/**
+ * The channel manager asks on a connect card in the chat, so that is where this points. A framed app
+ * cannot open that card or navigate the studio (its frame has no top navigation), so the fallback is
+ * the studio's Connections in a new tab.
+ */
 function connect(account: Read<boolean> | null, env: AppEnv): string {
   if (account === null || (account.ok && account.value)) return "";
   if (!account.ok) return failed(account);
   const studio = studioOf(env);
-  const open = studio === null ? "" : `<a href="${escape(`${studio}/connections`)}" target="_blank" rel="noopener">Connect in Naive ↗</a>`;
-  return `<section class="connect"><div><span class="title">Connect an account</span><span class="muted">Nothing can post until one is connected.</span></div>${open}</section>`;
+  const open = studio === null ? "" : `<a href="${escape(`${studio}/connections`)}" target="_blank" rel="noopener">Connections ↗</a>`;
+  return `<section class="connect"><div><span class="title">Connect an account</span><span class="muted">Tap Connect on the card in your chat. Nothing posts until one is connected.</span></div>${open}</section>`;
 }
+
+/** A file under `Episodes/`, as `GET /v1/files` lists it. */
+type EpisodeFile = { id: string; name: string; content_type: string; folder?: string | null; created_at?: string };
+/** One episode: its script's title, the stills it picked (`STILLS:`), and every still in its folder. */
+type Episode = { title: string; picked: string[]; stills: string[] };
+
+const isScript = (file: EpisodeFile): boolean => /\.md$/i.test(file.name);
+const isStill = (file: EpisodeFile): boolean => file.content_type.startsWith("image/");
+
+/** A script's words, read with the app's own key (`?download=true`): only its title and STILLS line are used. */
+async function scriptText(env: AppEnv, id: string): Promise<string> {
+  const response = await fetch(`${env["NAIVE_API_URL"]?.replace(/\/+$/, "")}/v1/files/${encodeURIComponent(id)}?download=true`, { headers: { authorization: `Bearer ${env["NAIVE_API_KEY"]}` } });
+  if (!response.ok) throw new Error(`the API answered ${response.status}`);
+  return response.text();
+}
+
+/**
+ * The episodes the crew filed: `Episodes/<topic>.md` and its stills in `Episodes/<topic>/`. A script is
+ * filed again once its stills are picked, so the newest of a name is the episode. Newest first.
+ */
+async function episodesOf(env: AppEnv): Promise<Episode[]> {
+  const files = (await rest<{ data: EpisodeFile[] }>(env, `/v1/files?folder=Episodes&subfolders=true&order=desc&limit=${EPISODE_FILES}`)).data;
+  const scripts = new Map<string, EpisodeFile>();
+  for (const file of files.filter(isScript)) if (!scripts.has(file.name)) scripts.set(file.name, file);
+  return Promise.all(
+    [...scripts.values()].slice(0, EPISODES_SHOWN).map(async (script) => {
+      const topic = script.name.replace(/\.md$/i, "");
+      const text = await scriptText(env, script.id).catch(() => "");
+      const title = /^#\s+(.+)$/m.exec(text)?.[1]?.trim() || topic;
+      const picked = /^STILLS:(.*)$/m.exec(text)?.[1]?.match(/fil_\w+/g) ?? [];
+      const stills = files.filter((file) => isStill(file) && file.folder === `Episodes/${topic}`).map((file) => file.id);
+      return { title, picked, stills };
+    }),
+  );
+}
+
+/** The picked stills first and whole; the rest dimmed until a pick names them. */
+function references(episodes: Read<Episode[]>, links: Links): string {
+  if (episodes.ok && episodes.value.length === 0) return "";
+  const rows = episodes.ok
+    ? episodes.value
+        .map((one) => {
+          const order = [...one.picked, ...one.stills.filter((id) => !one.picked.includes(id))];
+          const dim = (id: string) => (one.picked.length > 0 && !one.picked.includes(id) ? " dim" : "");
+          const cards = order.map((id) => `<li class="card${dim(id)}">${picture(links.get(id))}</li>`).join("");
+          const said = one.picked.length > 0 ? `${one.picked.length} picked` : one.stills.length > 0 ? "Pick in your chat" : "Script ready";
+          return `<div class="episode"><p><span class="title">${escape(one.title)}</span> <span class="muted">${said}</span></p><ul class="strip">${cards}</ul></div>`;
+        })
+        .join("")
+    : "";
+  return `<section><h2>References</h2>${failed(episodes)}${rows}</section>`;
+}
+
+/**
+ * OTHER CHANNELS' LOOKS (owner, 2026-11-16: "lots of inspiration underneath", the way a faceless studio
+ * shows what it made). Each is a template of this blueprint built on `faceless`. The clips and posters
+ * are the site's own style files, linked rather than shipped, so the app carries none of their bytes.
+ */
+export const STYLE_MEDIA = "https://usenaive.ai/styles";
+export const STYLES: readonly { template: string; title: string; niche: string }[] = [
+  { template: "history", title: "History in Color", niche: "History" },
+  { template: "ufc", title: "UFC Fights", niche: "Sports" },
+  { template: "animal-feast", title: "Animals Eating", niche: "Animals" },
+  { template: "cat-stories", title: "Cat Stories", niche: "Stories" },
+  { template: "fruit-drama", title: "Fruit Drama", niche: "Drama" },
+  { template: "glass-food", title: "Glass Food", niche: "ASMR" },
+  { template: "food-slime", title: "Food to Slime", niche: "ASMR" },
+  { template: "dancing-animals", title: "Dancing Animals", niche: "Animals" },
+  { template: "roadster", title: "Impossible Roadster", niche: "Cars" },
+  { template: "cartoons-irl", title: "Cartoons IRL", niche: "Cartoons" },
+  { template: "comics", title: "Comics", niche: "Stories" },
+  { template: "would-you-choose", title: "Would You Choose", niche: "Games" },
+  { template: "empires", title: "Empires", niche: "History" },
+  { template: "channel-cloning", title: "Channel Cloning", niche: "Any niche" },
+];
+
+/**
+ * Tapped, a style opens in a player here, in the panel, with one action. Recreate cannot fill the CEO's
+ * box from inside a frame, so it opens the style's setup in Naive: a new channel in that look.
+ */
+function styles(setup: Read<Setup>, env: AppEnv): string {
+  const template = setup.ok ? setup.value.template : null;
+  const studio = studioOf(env);
+  if (studio === null || (template !== "faceless" && !STYLES.some((one) => one.template === template))) return "";
+  const shown = STYLES.filter((one) => one.template !== template);
+  const tiles = shown
+    .map(
+      (one) =>
+        `<li><button class="style" type="button" data-open="style-${one.template}"><video src="${STYLE_MEDIA}/${one.template}.mp4" poster="${STYLE_MEDIA}/${one.template}.jpg" muted loop playsinline preload="none"></video><span class="title">${escape(one.title)}</span><span class="muted">${escape(one.niche)}</span></button></li>`,
+    )
+    .join("");
+  const players = shown
+    .map((one) => {
+      const recreate = `${studio}/setup?${new URLSearchParams({ blueprint: "media", template: one.template })}`;
+      return `<dialog id="style-${one.template}" class="player"><video src="${STYLE_MEDIA}/${one.template}.mp4" poster="${STYLE_MEDIA}/${one.template}.jpg" controls playsinline loop preload="none"></video><div class="who"><span class="title">${escape(one.title)}</span><span class="muted">${escape(one.niche)}</span></div><a class="recreate" href="${escape(recreate)}" target="_blank" rel="noopener">Recreate this style</a><form method="dialog"><button class="close" type="submit">Close</button></form></dialog>`;
+    })
+    .join("");
+  return `<section><h2>Styles</h2><ul class="styles">${tiles}</ul>${players}<script>${STYLE_SCRIPT}</script></section>`;
+}
+
+/** Play what is on screen, open a style's player with its sound, and stop it when it closes. */
+const STYLE_SCRIPT = `(()=>{const seen=new IntersectionObserver((all)=>{for(const one of all){if(one.isIntersecting)one.target.play().catch(()=>{});else one.target.pause();}});for(const clip of document.querySelectorAll(".style video"))seen.observe(clip);for(const tile of document.querySelectorAll(".style"))tile.addEventListener("click",()=>{const box=document.getElementById(tile.dataset.open);box.showModal();box.querySelector("video").play().catch(()=>{});});for(const box of document.querySelectorAll(".player")){box.addEventListener("close",()=>box.querySelector("video").pause());box.addEventListener("click",(event)=>{if(event.target===box)box.close();});}})();`;
 
 function renders(files: Read<{ id: string }[]> | null, links: Links): string {
   if (files === null || (files.ok && files.value.length === 0)) return "";
@@ -358,21 +475,23 @@ export async function overview(request: Request, env: AppEnv, now: number): Prom
       ? await read("the creator", () => creatorFor(env, answer, setup.value.installedAt))
       : { ok: true, value: null };
   const nothingYet = [next, pending, posted].every((one) => one.ok && one.value.length === 0);
-  const [made, account] = await Promise.all([
+  const [made, account, episodes] = await Promise.all([
     creator.ok && creator.value !== null
       ? read("the creator's renders", async () => (await rest<{ data: { id: string }[] }>(env, `/v1/files?character=${encodeURIComponent(creator.value!.id)}&order=desc&limit=${RENDERS_SHOWN}`)).data)
       : null,
     nothingYet ? read("the connected accounts", () => hasAccount(env)) : null,
+    read("the episodes", () => episodesOf(env)),
   ]);
   const links = await linksFor(env, [
     ...[...(pending.ok ? pending.value.slice(0, LINKED_SHOWN) : []), ...(next.ok ? next.value.slice(0, LINKED_SHOWN) : []), ...postedShown(posted, failedPosts)].flatMap((post) => (post.media_urls[0] === undefined && post.file_ids[0] !== undefined ? [post.file_ids[0]] : [])),
     ...(made?.ok ? made.value.map((file) => file.id) : []),
+    ...(episodes.ok ? episodes.value.flatMap((one) => [...one.picked, ...one.stills]) : []),
     ...(creator.ok && creator.value !== null && creator.value.sheet.length === 0 ? creator.value.source_images.filter((one) => one.startsWith("fil_")).slice(0, 1) : []),
   ]);
   const cadence: Read<string | null> = setup.ok ? { ok: true, value: cadenceOf(setup.value.answers) } : setup;
   return page(
     200,
-    `<main>${head(creator, env, links)}${connect(account, env)}${numbers(posted, spent, cadence, now)}${waiting(pending, env, links)}${scheduled(next, links)}${renders(made, links)}${postedGrid(posted, failedPosts, links)}</main>`,
+    `<main>${head(creator, env, links)}${connect(account, env)}${references(episodes, links)}${numbers(posted, spent, cadence, now)}${waiting(pending, env, links)}${scheduled(next, links)}${renders(made, links)}${postedGrid(posted, failedPosts, links)}${styles(setup, env)}</main>`,
   );
 }
 
@@ -398,5 +517,19 @@ ul{list-style:none;margin:0;padding:0}.rows .row{display:flex;gap:12px;align-ite
 .card{display:flex;flex-direction:column;gap:4px}time{color:var(--soft);font-size:12px}
 .thumb{width:72px;aspect-ratio:9/16;object-fit:cover;background:var(--well);border-radius:10px;display:block}
 .card .thumb{width:100%}
-@media (max-width:560px){.numbers{grid-template-columns:1fr}}
+.episode{margin-bottom:16px}.episode p{margin:0 0 8px}.card.dim{opacity:.45}.connect a{white-space:nowrap}
+.styles{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+button{font:inherit;color:inherit;outline:none;cursor:pointer}
+.style{display:flex;flex-direction:column;gap:4px;width:100%;padding:0;border:0;background:none;text-align:left}
+.style video{width:100%;aspect-ratio:9/16;object-fit:cover;background:var(--well);border-radius:10px;display:block;transition:filter .15s}
+.style:hover video,.style:focus-visible video{filter:brightness(.8)}
+.player{border:0;border-radius:16px;padding:12px;background:var(--bg);color:var(--ink);width:min(360px,calc(100vw - 32px));outline:none}
+.player::backdrop{background:rgba(0,0,0,.6)}
+.player video{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;display:block;background:#000}
+.player .who{margin:10px 0}
+.recreate{display:block;text-align:center;background:var(--chip);color:var(--chip-ink);border-radius:999px;padding:10px;text-decoration:none}
+.recreate:focus-visible{opacity:.8}
+.close{width:100%;margin-top:6px;padding:8px;border:0;border-radius:999px;background:none;color:var(--soft)}
+.close:hover,.close:focus-visible{background:var(--well);color:var(--ink)}
+@media (max-width:560px){.numbers{grid-template-columns:1fr}.styles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 `;

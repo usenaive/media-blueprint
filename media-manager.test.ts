@@ -6,7 +6,7 @@
 import { mintTicket } from "@usenaive-sdk/app";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./apps/media-manager/api/enter.ts";
-import { overview } from "./apps/media-manager/api/index.ts";
+import { overview, STYLE_MEDIA, STYLES } from "./apps/media-manager/api/index.ts";
 
 const ORIGIN = "https://media-manager.example";
 const ENV = {
@@ -25,7 +25,16 @@ const SESSION = `ses_${ULID}`;
 
 type Fixture = Record<string, unknown>;
 /** What only some channels hold: their characters, a creator's renders, and each identity's accounts. */
-type World = { characters?: Fixture[]; retired?: Fixture[]; files?: Fixture[]; accounts?: (Fixture[] | "unactivated")[] };
+type World = {
+  characters?: Fixture[];
+  retired?: Fixture[];
+  files?: Fixture[];
+  accounts?: (Fixture[] | "unactivated")[];
+  /** What `Episodes/` holds, newest first, and each script's words by id. */
+  episodes?: Fixture[];
+  scripts?: Record<string, string>;
+  template?: string;
+};
 const post = (over: Fixture): Fixture => ({
   object: "post",
   id: "pst_1",
@@ -61,12 +70,12 @@ const debit = (micro: number): Fixture => ({
   line_items: [],
   created_at: "2026-10-20T00:00:00Z",
 });
-const install = (answers: Fixture): Fixture => ({
+const install = (answers: Fixture, template = "faceless"): Fixture => ({
   id: `bpi_${ULID}`,
   object: "blueprint_install",
   project: "my-channel",
   blueprint: "media",
-  template: "faceless",
+  template,
   revision: 1,
   artifact_version: "3.0.0",
   answers,
@@ -117,14 +126,16 @@ function api(channel: Record<string, Fixture[]> = CHANNEL, answers: Fixture = { 
     if (url.pathname === "/v1/credits/ledger") {
       return url.searchParams.get("after") === "cur_2" ? list([debit(250_000)]) : list([debit(1_250_000), debit(500_000)], "cur_2");
     }
-    if (url.pathname === "/v1/blueprints/installs") return list([install(answers)]);
+    if (url.pathname === "/v1/blueprints/installs") return list([install(answers, world.template)]);
     if (url.pathname === "/v1/characters") return list(world.characters ?? []);
     const byId = /^\/v1\/characters\/(chr_\w+)$/.exec(url.pathname);
     if (byId) {
       const held = [...(world.characters ?? []), ...(world.retired ?? [])].find((one) => one["id"] === byId[1]);
       return held === undefined ? new Response("not found", { status: 404 }) : Response.json(held);
     }
-    if (url.pathname === "/v1/files") return list(world.files ?? []);
+    if (url.pathname === "/v1/files") return list(url.searchParams.get("folder") === "Episodes" ? (world.episodes ?? []) : (world.files ?? []));
+    const script = /^\/v1\/files\/(fil_\w+)$/.exec(url.pathname);
+    if (script && url.searchParams.get("download") === "true" && world.scripts?.[script[1]!] !== undefined) return new Response(world.scripts[script[1]!]);
     if (url.pathname === "/v1/identities") return list((world.accounts ?? []).map((_, at) => ({ id: `idn_${at}${ULID.slice(1)}`, object: "identity" })));
     const accounts = /^\/v1\/identities\/idn_(\d)0+\/social\/accounts$/.exec(url.pathname);
     if (accounts) {
@@ -338,8 +349,9 @@ describe("Media manager", () => {
     it("asks while nothing has gone out and no identity holds an account, activated or not", async () => {
       api({}, {}, undefined, { accounts: ["unactivated", []] });
       const page = await html(await overview(await signedIn(), ENV, NOW));
-      expect(page).toContain('<a href="https://studio.example/connections" target="_blank" rel="noopener">Connect in Naive ↗</a>');
-      expect(page).toContain("Nothing can post until one is connected.");
+      // The connect card is in the chat; a framed app can't open it, so Connections is the fallback.
+      expect(page).toContain("Tap Connect on the card in your chat. Nothing posts until one is connected.");
+      expect(page).toContain('<a href="https://studio.example/connections" target="_blank" rel="noopener">Connections ↗</a>');
     });
 
     it("asks with no identity at all", async () => {
@@ -435,7 +447,7 @@ describe("Media manager", () => {
   it("escapes what the crew wrote", async () => {
     api({ pending: [post({ status: "pending", content: `<script>alert("x")</script> & co`, platforms: ["<b>tiktok</b>"] })] });
     const page = await html(await overview(await signedIn(), ENV, NOW));
-    expect(page).not.toContain("<script>");
+    expect(page).not.toContain("<script>alert");
     expect(page).not.toContain("<b>tiktok");
     expect(page).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; co");
   });
@@ -449,5 +461,93 @@ describe("Media manager", () => {
     const form = new FormData();
     form.set("ticket", await mintTicket(ENV.DASHBOARD_TOKEN, { sub: "usr_1", email: null, role: "owner", org: "org_1", app: "app_2", exp: Math.floor(Date.now() / 1000) + 120 }));
     expect((await POST(new Request(`${ORIGIN}/api/enter`, { method: "POST", body: form }))).status).toBe(401);
+  });
+});
+
+/** A file under `Episodes/`, as the API lists it. */
+const filed = (id: string, name: string, folder: string, content_type = "image/png"): Fixture => ({ id, object: "file", name, folder, content_type, created_at: "2026-10-21T00:00:00Z" });
+
+describe("References", () => {
+  const STILLS = ["fil_still_a", "fil_still_b", "fil_still_c"].map((id, at) => filed(id, `still-${at}.png`, "Episodes/Rome burns"));
+
+  it("draws each episode's script title and its stills, the picked ones first and the rest dimmed", async () => {
+    const seen = api({}, {}, undefined, {
+      // Filed again once the stills were picked: the newest of a name is the episode.
+      episodes: [filed("fil_script_2", "Rome burns.md", "Episodes", "text/markdown"), ...STILLS, filed("fil_script_1", "Rome burns.md", "Episodes", "text/markdown")],
+      scripts: { fil_script_2: "# Rome burns in one night\nSTILLS: fil_still_c, fil_still_a\n\nHook…", fil_script_1: "# Old title" },
+    });
+    const refs = section(await html(await overview(await signedIn(), ENV, NOW)), "References")!;
+    expect(refs).toContain('<span class="title">Rome burns in one night</span> <span class="muted">2 picked</span>');
+    expect(refs).not.toContain("Old title");
+    const order = [...refs.matchAll(/files\/(fil_still_\w)\//g)].map((m) => m[1]);
+    expect(order).toEqual(["fil_still_c", "fil_still_a", "fil_still_b"]);
+    expect(refs).toMatch(/<li class="card dim"><img class="thumb" src="[^"]*fil_still_b/);
+    expect(refs).not.toMatch(/<li class="card dim"><img class="thumb" src="[^"]*fil_still_c/);
+    // One read of the folder, the newest script's words read once with the app's own key.
+    const listed = new URL(seen.find((one) => new URL(one.url).searchParams.get("folder") === "Episodes")!.url).searchParams;
+    expect([listed.get("subfolders"), listed.get("order")]).toEqual(["true", "desc"]);
+    const reads = seen.filter((one) => new URL(one.url).searchParams.get("download") === "true");
+    expect(reads.map((one) => new URL(one.url).pathname)).toEqual(["/v1/files/fil_script_2"]);
+    expect(reads[0]!.headers.get("authorization")).toBe("Bearer sk_live_media_manager");
+  });
+
+  it("says to pick in the chat while the stills wait on a pick", async () => {
+    api({}, {}, undefined, { episodes: [filed("fil_script_1", "Rome burns.md", "Episodes", "text/markdown"), ...STILLS], scripts: { fil_script_1: "# Rome burns" } });
+    const refs = section(await html(await overview(await signedIn(), ENV, NOW)), "References")!;
+    expect(refs).toContain("Pick in your chat");
+    expect(refs).not.toContain("dim");
+  });
+
+  it("is not drawn before the crew has filed an episode", async () => {
+    api({}, {}, undefined, {});
+    expect(section(await html(await overview(await signedIn(), ENV, NOW)), "References")).toBeUndefined();
+  });
+});
+
+describe("Styles", () => {
+  const styles = async () => section(await html(await overview(await signedIn(), ENV, NOW)), "Styles");
+
+  it("shows an empty faceless channel the other looks, looping and muted, each with its title and niche", async () => {
+    api({}, {}, undefined, {});
+    const page = await html(await overview(await signedIn(), ENV, NOW));
+    expect(section(page, "Posted")).toContain("Nothing posted yet.");
+    const grid = section(page, "Styles")!;
+    expect(grid.match(/<button class="style"/g)).toHaveLength(STYLES.length);
+    expect(grid).toContain(`<video src="${STYLE_MEDIA}/history.mp4" poster="${STYLE_MEDIA}/history.jpg" muted loop playsinline preload="none"></video><span class="title">History in Color</span><span class="muted">History</span>`);
+    // Below everything else on the page.
+    expect(page.indexOf("<h2>Posted</h2>")).toBeLessThan(page.indexOf("<h2>Styles</h2>"));
+  });
+
+  it("opens each style in a player with one Recreate this style, which sets that look up in Naive", async () => {
+    api({}, {}, undefined, {});
+    const grid = (await styles())!;
+    for (const one of STYLES) {
+      const player = grid.split(`<dialog id="style-${one.template}" class="player">`)[1]!.split("</dialog>")[0]!;
+      expect(grid, one.template).toContain(`data-open="style-${one.template}"`);
+      expect(player, one.template).toContain(`<video src="${STYLE_MEDIA}/${one.template}.mp4"`);
+      expect(player, one.template).toContain(`<a class="recreate" href="https://studio.example/setup?blueprint=media&amp;template=${one.template}" target="_blank" rel="noopener">Recreate this style</a>`);
+      expect(player.match(/<a /g), one.template).toHaveLength(1);
+    }
+    expect(grid).toContain("showModal()");
+  });
+
+  it("leaves out the channel's own look, and every channel that is not a faceless one", async () => {
+    api({}, {}, undefined, { template: "history" });
+    const grid = (await styles())!;
+    expect(grid).not.toContain('data-open="style-history"');
+    expect(grid.match(/<button class="style"/g)).toHaveLength(STYLES.length - 1);
+    for (const template of ["music", "clipping", "longform", "ai-influencer"]) {
+      api({}, {}, undefined, { template });
+      expect(await styles(), template).toBeUndefined();
+    }
+  });
+
+  it("shows a hovered or focused style by dimming it, and draws no ring anywhere", async () => {
+    api({}, {}, undefined, {});
+    const page = await html(await overview(await signedIn(), ENV, NOW));
+    expect(page).toContain(".style:hover video,.style:focus-visible video{filter:brightness(.8)}");
+    expect(page).toContain("button{font:inherit;color:inherit;outline:none;cursor:pointer}");
+    expect(page).not.toMatch(/outline:(?!none)/);
+    expect(page).not.toMatch(/box-shadow/);
   });
 });
