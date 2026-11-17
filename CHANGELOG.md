@@ -41,8 +41,8 @@ the video needs a plan.
 | What | Credits at most |
 |---|---|
 | Words: topics, script, the CEO's five digests (estimated 415–417) | 500 |
-| Stills: 3 to 5 at $0.01–0.04, and the producer's turns (estimated 243–244) | 1,300 |
-| **Before a plan, per sign-up** | **1,800 (~$0.36)** |
+| Stills: 3, one redo each at most (6 in all), at 170 credits each, and the producer's turns (estimated 244–245) | 1,320 |
+| **Before a plan, per sign-up** | **1,820 (~$0.36)** |
 
 | Template | First video, on the plan's credits | Credits |
 |---|---|---|
@@ -55,6 +55,65 @@ from vetta-mono `packages/billing/src/video-rates.ts`), plus 1,300 credits aroun
 stays: what runs before a plan fits 5,000. The HeyGen proposal (`FACELESS_VIDEO_MODELS`) and the
 "fits 5,000" tests are gone; the faceless producers pin `VIDEO_MODELS` again. The Seedance rate the
 raw-film ceilings use is the platform's 233,530 µUSD a second, not 299,851.
+
+### The free stills: a top image model, side by side
+
+The owner asked for "a good one from a top image model", with as much value as possible for as
+little time and effort. So the stills seat now pins `STILL_MODELS`, where before `generate_image`
+fell to the cheapest priced model. The candidates are below, all callable on the gateway today
+(`GET https://openrouter.ai/api/v1/models?output_modalities=image`, read 2026-11-16) except Soul,
+which is the primary backend's.
+
+| Model (gateway id) | $ a 9:16 still | Credits | Median time | AA Elo | References |
+|---|---|---|---|---|---|
+| Soul v2 standard (`soul/v2/standard`), the default until now | ~$0.004 (catalogue estimate) | ~20 | not measured | not ranked | none: text only |
+| **Nano Banana 2.1** (`google/gemini-nano-banana-2.1`) | $0.0336 at 1K | 168 | ~16 s at its default thinking | **1176** | up to 14 |
+| Nano Banana 2 Lite (`google/gemini-3.1-flash-lite-image`) | $0.0336 at 1K | 168 | 3.3 s | 1110 | up to 5 |
+| Nano Banana 2 (`google/gemini-3.1-flash-image`) | $0.067 at 1K | 335 | 7.9 s | 1143 | up to 14 |
+| Nano Banana Pro (`google/gemini-3-pro-image`) | $0.134 at 1K/2K | 670 | 14.3 s | 1119 | up to 14 |
+| GPT Image 2.6 Sunburst, max (`openai/gpt-image-2.6-sunburst`) | ~$0.21 | ~1,054 | ~50 s (2.5 Flare max: 52.7 s) | 1261 | yes |
+| GPT Image 2, high (`openai/gpt-image-2`) | ~$0.21 | ~1,055 | ~143 s | 1192 | yes |
+| Seedream 5.5 (`bytedance-seed/seedream-5-5`) | $0.02 at 1K–1.5K, +$0.008 a reference | 100, +40 | 24–27 s (third party, 2K with references) | 1134 | up to 10 |
+| Seedream 4.5 (`bytedance-seed/seedream-4.5`) | $0.04 | 200 | 11.2 s | 1030 | up to 10 |
+| FLUX 3 Image (`black-forest-labs/flux-3-image`) | ~$0.041–0.048 at 1K | ~240 | not measured | 1115 | up to 10 |
+| FLUX.2 pro (`black-forest-labs/flux.2-pro`) | $0.03 | 150 | 10.0 s | 1004 | yes |
+| MAI-Image-2.6-Flash (`microsoft/mai-image-2.6-flash`) | $0.0195 | 97 | not measured (MAI-Image-2.5: 27.6 s) | 1124 | yes |
+
+**The pick: Nano Banana 2.1, with Nano Banana 2 Lite as the fallback.** It is the best quality per
+credit the gateway serves. It is 33 Elo over Nano Banana 2 at half the price, and 42 over Seedream 5.5,
+whose references add 40 credits each and whose measured time is 24–27 s. Its 1K still is 768×1376 at
+9:16, which is above the 720p video it opens. It takes the channel's look as a reference. Three stills
+side by side take one image's time, about 16 s. The fallback costs the same and renders in 3.3 s.
+
+- **Over the 15 s mark by about a second.** The gateway sends no thinking level, and 2.1's default is
+  "medium". If the owner wants it strictly under 15 s, swap the two entries in `STILL_MODELS`. That
+  costs 66 Elo and nothing in credits.
+- **The fallback is catalogue-level only.** The platform falls through on a pin only when the first
+  model is not published. On a render that fails at run time, the producer renders again once on the
+  same model (vetta-mono `packages/media/src/request.ts`, `resolveModels`).
+- **Still 3, with one redo each at most** (6 in all). A fourth would cost only 170 more credits, but
+  it would be one more picture to choose from, for no better video.
+- **Side by side.** The card makes all three `generate_image` calls in one step. The platform runs the
+  calls of one step in parallel (vetta-mono `harness-pi` `harness.ts`). Each still lands in
+  `Episodes/<slug>/`, so the channel shows the first one as soon as it is there.
+- **About a minute from the pick to the stills, an estimate:**
+  - the topic card closes: ~5 s;
+  - the script turn: ~25–30 s;
+  - the producer claims and reads: ~5–10 s;
+  - three stills side by side: ~16 s;
+  - one look and the ask: ~5–10 s.
+- **The script still comes first.** A still drawn from the topic alone would not match the scene the
+  script then writes. The board also starts the stills card only once the script card closes, so a
+  running turn cannot be handed the script later. So the gain is in the stills step, not around it.
+- Sources:
+  - Elo and timings: Artificial Analysis, [text-to-image leaderboard](https://artificialanalysis.ai/image/leaderboard/text-to-image) and [image models](https://artificialanalysis.ai/image/models), read 2026-11-16.
+  - Nano Banana 2.1's ~16 s: Artificial Analysis, as reported on [Digg](https://digg.com/ai/jt8yn55h).
+  - GPT Image times: Artificial Analysis, as reported on [Digg](https://digg.com/ai/3sax8h78).
+  - Gemini prices and token counts: [Gemini API pricing](https://aistudio.google.com/docs/pricing).
+  - Seedream 5.5 price and time: [APIYI](https://docs.apiyi.com/en/api-capabilities/seedream-image/seedream-5-5-pricing) and [Segmind](https://www.segmind.com/models/seedream-5.5/pricing).
+  - FLUX 3 Image price: [Layer3 Labs](https://www.layer3labs.io/guides/flux-3-image-pricing).
+  - Reference limits: [Atlas Cloud](https://www.atlascloud.ai/es/blog/tips/nano-banana-2.1-whats-new).
+  - Soul's figure is the catalogue estimate in vetta-mono `media-higgsfield/src/catalogue.ts`.
 
 ### The channel app (`media-manager`, `home: true`)
 

@@ -393,6 +393,9 @@ const swapText = (system: string, text: string, replacement: string, seat: strin
   return system.replace(text, () => replacement);
 };
 
+/** A tool's config without its model pin. */
+const unpinned = ({ config: _pin, ...tool }: { config?: unknown; enabled: boolean; permission: "allow" | "ask" | "deny" }) => tool;
+
 const OWN_NICHE = (seat: { name: string; system?: string }): string =>
   swapText(seat.system!, nicheFixed(`naive/${AI_INFLUENCER_SKILL}`), INFLUENCER_NICHE_FIXED, seat.name);
 
@@ -433,7 +436,8 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
       configs: {
         ...seat.tools!.configs,
         edit_video: { enabled: false, permission: "deny" as const },
-        ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const } } : {}),
+        // A trained face renders only on a model that pins one, so the influencer keeps the platform's own image choice.
+        ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const }, generate_image: unpinned(seat.tools!.configs["generate_image"]!) } : {}),
       },
     },
   })),

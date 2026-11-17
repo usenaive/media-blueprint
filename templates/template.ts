@@ -527,9 +527,24 @@ export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "gen
  * next (~0.56× Seedance 2.5's price a second, and it renders the restyled frames Seedance refuses,
  * ADR-1120); Seedance 2.5 stays allowed. Every plan's segments and scenes keep to
  * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS`, which all three take.
- * `generate_image` is left unpinned, so it takes the cheapest priced model.
+ * `generate_image` is left unpinned, so it takes the cheapest priced model, except on the first-video
+ * crews' producer, which pins `STILL_MODELS`.
  */
 export const VIDEO_MODELS: readonly string[] = ["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
+
+/**
+ * THE FREE STILLS' IMAGE MODELS (owner, 2026-11-16: "a good one from a top image model", as much value
+ * in as little time as possible), pinned on the first-video crews' producer. The first one the live
+ * catalogue publishes renders; the second is there for the day the first is not published.
+ *
+ * Nano Banana 2.1 is the best quality per credit the gateway serves: Artificial Analysis text-to-image
+ * Elo 1176, against 1143 for Nano Banana 2 at twice the price and 1134 for Seedream 5.5 (read
+ * 2026-11-16). A 1K image (768×1376 at 9:16, above the 720p video it opens) is 1,120 output tokens at
+ * $30 per million: $0.0336, 168 credits (Google's Gemini API pricing page). About 16 s an image at its
+ * default thinking level (Artificial Analysis), so three side by side take about 16 s. It takes up to
+ * 14 reference images. Nano Banana 2 Lite is the same price, Elo 1110, 3.3 s, up to 5 references.
+ */
+export const STILL_MODELS: readonly string[] = ["google/gemini-nano-banana-2.1", "google/gemini-3.1-flash-lite-image"];
 
 /** What a credit is worth: 1 credit = 200 µUSD, so $1 = 5,000 credits (vetta-mono billing). */
 export const MICRO_USD_PER_CREDIT = 200;

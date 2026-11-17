@@ -11,6 +11,7 @@
  * manager. Day one makes the first video (`firstVideoTasks`); week one then sets up the plan, the
  * reference, the look and the voice.
  */
+import type { AgentDecl } from "@usenaive-sdk/blueprints";
 import {
   PLAN_MODEL_RULE,
   RENDER_MODEL_RULE,
@@ -31,6 +32,7 @@ import {
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
   SHORT_FORM_LENGTH,
+  STILL_MODELS,
   task,
   type MediaTemplate,
   type Task,
@@ -149,15 +151,15 @@ export const WORDS_ONLY = "Words only on this card: make no picture, video, spee
 /**
  * WHAT THE FIRST RUN COSTS, in credits. The words and stills run on the 5,000 free credits; the video
  * waits for a plan (`needs_plan`) and says its cost when it starts. The video is the platform's own
- * rate for the producer's first pinned model (`VIDEO_RATES`). The stills take the cheapest priced image
- * model at run time, priced nowhere in code: about $0.01–0.04 a picture, so 50–200 credits. Every seat's
- * turns are estimated from its real prompt by `turnCredits`; `templates.test.ts` holds each constant
- * below to that estimate on every template.
+ * rate for the producer's first pinned model (`VIDEO_RATES`). A still is the first of `STILL_MODELS`
+ * at 1K: 168 credits, and 170 with the channel's look read in as a reference. Every seat's turns are
+ * estimated from its real prompt by `turnCredits`; `templates.test.ts` holds each constant below to
+ * that estimate on every template.
  */
 export const STILLS = 3;
-/** Two redos in all at most: the card's own cap, so the stills line has a ceiling. */
-export const STILLS_MAX = STILLS + 2;
-export const STILL_CREDITS = { min: 50, max: 200 } as const;
+/** One redo for each still at most: the card's own cap, so the stills line has a ceiling. */
+export const STILLS_MAX = STILLS * 2;
+export const STILL_CREDITS = 170;
 
 /**
  * HOW A SEAT'S TURNS ARE ESTIMATED. Every step of a turn re-sends the seat's system and card, the
@@ -199,7 +201,7 @@ export const EDIT_CREDITS = 1_300;
 export const FIRST_VIDEO_SECONDS = 8;
 
 const up100 = (credits: number): number => Math.ceil(credits / 100) * 100;
-export const stillsCost = { min: STILLS * STILL_CREDITS.min + STILLS_TURN_CREDITS, max: STILLS_MAX * STILL_CREDITS.max + STILLS_TURN_CREDITS } as const;
+export const stillsCost = { min: STILLS * STILL_CREDITS + STILLS_TURN_CREDITS, max: STILLS_MAX * STILL_CREDITS + STILLS_TURN_CREDITS } as const;
 /** The video line: its seconds on the first pinned model, plus the producer's turns, the services and the post. */
 export const videoCost = (models: readonly string[], seconds: number): number => up100(videoCredits(models[0]!, seconds) + EDIT_CREDITS);
 /** What the first run spends before a plan, at its most: the words and every still the card may make. */
@@ -234,7 +236,7 @@ export const firstVideoTasks = (models: readonly string[], seconds: number): Tas
       title: REFERENCES_TITLE,
       assignee: "producer",
       blocked_by: ["episode"],
-      body: `Read project_context, the SLUG and script in the note of the episode card this one waited on, and your pinned skills' look. FIRST comment on this card and reply in one line, "Making ${STILLS} pictures for <the topic>." Then render ${STILLS} stills with generate_image, aspect_ratio 9:16 unless your pinned skill renders another, folder "${EPISODES_FOLDER}/<the slug>": one opening still per scene, from its picture line in the template's look, then alternates of the first scene until there are ${STILLS}. Look at each with view_image and render one again if it is broken (extra limbs, words in the picture, the wrong subject) — at most ${STILLS_MAX} pictures on this card in all, redos included. Comment "STILL <n> <fil_ id>" as each lands. Then ask the operator once with ask_operator: prompt "Pick the pictures for your video. Your pick starts the video.", one field: key stills, label "References", type choice, multiple true, options "Scene 1", "Scene 2" and so on (an alternate is "Scene 1, take 2"), details with each option's image "/files/<its fil_ id>/raw". Words instead of a pick: take them as direction for the video, with the first still of each scene. Publish nothing else: the script file stays as it is. Close this card done with the note "STILLS: <the picked fil_ ids, in scene order>", each scene's still, the SLUG and the whole script. ${FIRST_VIDEO_RULE}`,
+      body: `Read project_context, the SLUG and script in the note of the episode card this one waited on, and your pinned skills' look. ALL AT ONCE, in one step as soon as the card is claimed: comment on this card "Making ${STILLS} pictures for <the topic>." and make ${STILLS} generate_image calls in that same step, so they render side by side, never one after another: aspect_ratio 9:16 unless your pinned skill renders another, folder "${EPISODES_FOLDER}/<the slug>", no model argument; one opening still per scene, from its picture line in the template's look, then alternates of the first scene until there are ${STILLS}. Every prompt carries the same words for the cast and the look, so the stills match; where a pinned skill ships a frame of the channel's look, pass that one frame in image_urls on every call. Then look at all of them with view_image, in one step, and render a broken one again (extra limbs, words in the picture, the wrong subject), once at most — ${STILLS_MAX} pictures on this card in all, redos included. Comment "STILL <n> <fil_ id>" for each, and reply "Pictures ready: pick yours." Then ask the operator once with ask_operator: prompt "Pick the pictures for your video. Your pick starts the video.", one field: key stills, label "References", type choice, multiple true, options "Scene 1", "Scene 2" and so on (an alternate is "Scene 1, take 2"), details with each option's image "/files/<its fil_ id>/raw". Words instead of a pick: take them as direction for the video, with the first still of each scene. Publish nothing else: the script file stays as it is. Close this card done with the note "STILLS: <the picked fil_ ids, in scene order>", each scene's still, the SLUG and the whole script. ${FIRST_VIDEO_RULE}`,
     }),
     {
       ...task({
@@ -288,6 +290,12 @@ export const FIRST_RUN_WATCH = `FIRST-RUN WATCH, first: board_read with owner "t
 /** The faceless crews' first run, on their pinned models. */
 export const FIRST_VIDEO_TASKS: Task[] = firstVideoTasks(VIDEO_MODELS, FIRST_VIDEO_SECONDS);
 
+/** The producer, its stills on `STILL_MODELS`: the first-video crews only; the influencer's renders a trained face. */
+const stillsPinned = (seat: AgentDecl): AgentDecl => ({
+  ...seat,
+  tools: { ...seat.tools!, configs: { ...seat.tools!.configs, generate_image: { ...seat.tools!.configs["generate_image"]!, config: { models: STILL_MODELS } } } },
+});
+
 export const FACELESS: MediaTemplate = {
   name: "faceless",
   title: "Faceless channel",
@@ -298,7 +306,7 @@ export const FACELESS: MediaTemplate = {
 
   agents: [
     channelManager(),
-    agent({
+    stillsPinned(agent({
       name: "producer",
       role: "Video production",
       description: "Makes each planned scene as an image, animates it into video, edits the scenes into one finished vertical piece, and hands it to the channel manager.",
@@ -312,7 +320,7 @@ EDIT per \`naive/video-assembly\`: normalize streams, join the scenes with ffmpe
       tools: ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "generate_speech", "generate_music", "transcribe_audio"],
       skills: ["naive/video-assembly"],
       schedules: [],
-    }),
+    })),
     agent({
       name: "trend-scout",
       role: "Trends & briefs",

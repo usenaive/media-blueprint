@@ -360,13 +360,17 @@ first-briefs (producer)         needs_plan; "about 8,100 credits": one 8-second 
 first-post   (channel-manager)  "Is this good?" on the approval card; connect only if no account is
 ```
 
-What runs before a plan is at most ~1,800 credits (~$0.36) a sign-up:
+What runs before a plan is at most ~1,820 credits (~$0.36) a sign-up:
 
 | Step | Credits at most |
 |---|---|
 | Words: topics, script, the CEO's five digests | 500 |
-| Stills (3 to 5, two redos at most, $0.01–0.04 each) and their turns | 1,300 |
-| **Before a plan** | **1,800** |
+| Stills: 3, one redo each at most, on Nano Banana 2.1 at 170 credits each, and their turns | 1,320 |
+| **Before a plan** | **1,820** |
+
+The stills render side by side in one step, on the producer's pinned `STILL_MODELS`: Nano Banana 2.1
+(`google/gemini-nano-banana-2.1`), then Nano Banana 2 Lite where it is not published. Every still's
+prompt carries the same cast and look words, and a pinned skill's frame of the look as a reference.
 
 The video is said when it starts, on the plan's credits. Its line is the producer's first pinned
 model's rate (`VIDEO_RATES`, copied from the platform's rate table) times the first video's length,
@@ -435,7 +439,8 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins
   `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`). The raw-film niches pin Seedance 2.5
   alone.
-  `generate_image` is left unpinned, so it takes the cheapest priced model.
+  `generate_image` is left unpinned, so it takes the cheapest priced model, except on the first-video
+  crews' producer, which pins `STILL_MODELS` for the free stills.
 
 ## 🔐 Tool permissions
 

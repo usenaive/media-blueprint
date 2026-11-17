@@ -40,6 +40,8 @@ import {
   VIDEO_MODELS,
   VIDEO_RATES,
   FREE_CREDITS,
+  MICRO_USD_PER_CREDIT,
+  STILL_MODELS,
   words,
 } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
@@ -378,7 +380,9 @@ describe("the toolsets", () => {
       // The influencer pins the ones measured keeping a face, the raw-film niches Seedance; every other renderer the base's.
       const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : RAW_FILM.includes(template.name) ? RAW_FILM_VIDEO_MODELS : VIDEO_MODELS;
       expect(video.config, id).toEqual({ models });
-      expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
+      // The first-video crews' producer pins the free stills' models; every other image is the platform's cheapest.
+      const firstVideo = agent.name === "producer" && template.tasks.some((one) => one.key === "references");
+      expect(agent.tools?.configs["generate_image"]?.config, id).toEqual(firstVideo ? { models: STILL_MODELS } : undefined);
     }
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
@@ -1899,14 +1903,14 @@ describe("the first video", () => {
     expect(EPISODES_FOLDER).toBe("Episodes");
   });
 
-  it("asks for the pictures as a choice of the stills themselves, more than one allowed, at most two takes each", () => {
+  it("asks for the pictures as a choice of the stills themselves, more than one allowed, at most one redo each", () => {
     for (const template of FAMILY) {
       const body = card(template, "references").body!;
       expect(body, template.name).toMatch(/one field: key stills, label "References", type choice, multiple true/);
       expect(body, template.name).toContain('details with each option\'s image "/files/<its fil_ id>/raw"');
-      expect(body, template.name).toContain(`at most ${STILLS_MAX} pictures on this card in all, redos included`);
+      expect(body, template.name).toContain(`once at most — ${STILLS_MAX} pictures on this card in all, redos included`);
     }
-    expect([STILLS, STILLS_MAX]).toEqual([3, 5]);
+    expect([STILLS, STILLS_MAX]).toEqual([3, 6]);
     expect("/files/fil_abc/raw").toMatch(/^\/(?:[^/]|$)/);
   });
 
@@ -1931,6 +1935,22 @@ describe("the first video", () => {
     for (const { agent } of everySeat) {
       const config = agent.tools?.configs["generate_video"];
       if (config?.enabled === true) for (const model of (config.config as { models: string[] }).models) expect(VIDEO_RATES[model], model).toBeDefined();
+    }
+  });
+
+  it("pins the free stills on the best image model per credit, with one fallback, never on the influencer", () => {
+    expect(STILL_MODELS).toEqual(["google/gemini-nano-banana-2.1", "google/gemini-3.1-flash-lite-image"]);
+    for (const template of FAMILY) expect(seat(template, "producer").tools?.configs["generate_image"], template.name).toEqual({ enabled: true, permission: "allow", config: { models: STILL_MODELS } });
+    expect(seat(TEMPLATES["ai-influencer"], "producer").tools?.configs["generate_image"]).toEqual({ enabled: true, permission: "allow" });
+  });
+
+  it("renders the stills side by side in one step once claimed, on one look, with one redo each", () => {
+    for (const template of FAMILY) {
+      const body = card(template, "references").body!;
+      expect(body, template.name).toContain(`ALL AT ONCE, in one step as soon as the card is claimed: comment on this card "Making ${STILLS} pictures for <the topic>." and make ${STILLS} generate_image calls in that same step, so they render side by side, never one after another`);
+      expect(body, template.name).toContain("no model argument");
+      expect(body, template.name).toContain("Every prompt carries the same words for the cast and the look, so the stills match; where a pinned skill ships a frame of the channel's look, pass that one frame in image_urls on every call.");
+      expect(body, template.name).toContain(`look at all of them with view_image, in one step, and render a broken one again (extra limbs, words in the picture, the wrong subject), once at most — ${STILLS_MAX} pictures on this card in all`);
     }
   });
 
@@ -1970,11 +1990,13 @@ describe("the first video", () => {
   });
 
   it("keeps what runs before a plan, the words and every still, inside the free credits on every template", () => {
-    expect([STILL_CREDITS.min, STILL_CREDITS.max]).toEqual([50, 200]);
-    // 3 × 50 + 300 turns at least; 5 × 200 + 300 at most.
-    expect(stillsCost).toEqual({ min: 3 * 50 + STILLS_TURN_CREDITS, max: 5 * 200 + STILLS_TURN_CREDITS });
-    expect(freeRunCredits()).toBe(WORD_CREDITS + stillsCost.max);
-    expect(freeRunCredits()).toBeLessThanOrEqual(FREE_CREDITS);
+    // Nano Banana 2.1 at 1K, worked by hand: 1,120 output tokens at $30 a million is 33,600 µUSD, 168 credits; 170 with a reference read in.
+    expect((1_120 * 30) / MICRO_USD_PER_CREDIT).toBe(168);
+    expect(STILL_CREDITS).toBe(170);
+    // 3 × 170 + 300 turns at least; 6 × 170 + 300 at most (one redo each).
+    expect(stillsCost).toEqual({ min: 3 * 170 + STILLS_TURN_CREDITS, max: 6 * 170 + STILLS_TURN_CREDITS });
+    expect(freeRunCredits()).toBe(1_820);
+    expect(freeRunCredits()).toBeLessThanOrEqual(FREE_CREDITS / 2);
     // The first video is short on purpose: one 8-second scene; the raw-film niches' one 15-second call is their skill's.
     for (const template of FAMILY) expect(secondsOf(template), template.name).toBe(RAW_FILM.includes(template.name) ? 15 : 8);
   });
