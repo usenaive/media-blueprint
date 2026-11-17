@@ -20,7 +20,7 @@
  *   · the cadence — daily, not the crews' 3× a week: its channel plan starts on it, and the manager and the scout are told it;
  *   · the brakes — the scout starts nothing while posts pile up unapproved, and the producer checks the face.
  */
-import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
+import { FACELESS, FIRST_RUN_WATCH, SEGMENTED_SHORT_FORM, STUDY_FIRST_TASKS } from "./faceless.ts";
 import {
   budgetOf,
   DEFAULT_CADENCE,
@@ -393,11 +393,16 @@ const swapText = (system: string, text: string, replacement: string, seat: strin
   return system.replace(text, () => replacement);
 };
 
+/** A tool's config without its model pin. */
+const unpinned = ({ config: _pin, ...tool }: { config?: unknown; enabled: boolean; permission: "allow" | "ask" | "deny" }) => tool;
+
 const OWN_NICHE = (seat: { name: string; system?: string }): string =>
   swapText(seat.system!, nicheFixed(`naive/${AI_INFLUENCER_SKILL}`), INFLUENCER_NICHE_FIXED, seat.name);
 
 export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
   ...base,
+  // The influencer keeps its own measured day one (H5) on the study-first cards, not faceless's first-video chain.
+  tasks: STUDY_FIRST_TASKS,
   // Training a face is paid, so the producer asks first; every other seat keeps it denied by name.
   // A video edit (`edit_video`, which follows `generate_video` unless named) can change the face, so
   // every seat denies it by name.
@@ -420,8 +425,10 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
           : OWN_NICHE(seat),
     // Day one's hard stops (H5): each seat's ceiling, and every fire inside it.
     budget: AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget,
+    // The first-run watch is the faceless chain's; the influencer keeps its own day one.
     schedules: (seat.schedules ?? []).map((fire) => ({
       ...fire,
+      input: fire.input.replace(`${FIRST_RUN_WATCH} Then the numbers. `, ""),
       budget_micro_usd: Math.min(fire.budget_micro_usd, (AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget).max_task_micro_usd),
     })),
     tools: {
@@ -429,7 +436,8 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
       configs: {
         ...seat.tools!.configs,
         edit_video: { enabled: false, permission: "deny" as const },
-        ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const } } : {}),
+        // A trained face renders only on a model that pins one, so the influencer keeps the platform's own image choice.
+        ...(seat.name === "producer" ? { create_character: { enabled: true, permission: "ask" as const }, generate_image: unpinned(seat.tools!.configs["generate_image"]!) } : {}),
       },
     },
   })),

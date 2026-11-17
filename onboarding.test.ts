@@ -57,11 +57,11 @@ describe("the question form", () => {
 });
 
 describe("the question that asks what to model the channel on", () => {
-  it("is optional free text, asked only by the templates that generate video", () => {
+  it("is optional free text, asked only by long-form: the faceless crew finds its own (v3.7.0)", () => {
     expect(REFERENCE_QUESTION.optional).toBe(true);
     expect(REFERENCE_QUESTION.type).toBe("text");
     expect(REFERENCE_QUESTION.key).toBe(REFERENCE_ANSWER_KEY);
-    expect(TEMPLATES.faceless.questions).toContain(REFERENCE_QUESTION);
+    expect(TEMPLATES.faceless.questions).not.toContain(REFERENCE_QUESTION);
     expect(TEMPLATES.longform.questions).toContain(REFERENCE_QUESTION);
     // `clipping` names its sources instead, and means something stronger: cut from these only.
     expect(TEMPLATES.clipping.questions).not.toContain(REFERENCE_QUESTION);
@@ -69,8 +69,29 @@ describe("the question that asks what to model the channel on", () => {
 
   /** Second, so the form reads as what the channel is, then what it is like. */
   it("is asked after the niche", () => {
-    expect(TEMPLATES.faceless.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY]);
     expect(TEMPLATES.longform.questions.map((q) => q.key)).toEqual(["niche", REFERENCE_ANSWER_KEY]);
+  });
+});
+
+/**
+ * THE FACELESS FORM (v3.7.0, owner 2026-11-16): nothing blocks the first video. The studio asks only a
+ * required question before it hires, so one optional niche is a form of none; a blank niche is chosen by
+ * the first topic pick.
+ */
+describe("the faceless form", () => {
+  it("asks at most one question, and it may be left blank", () => {
+    expect(TEMPLATES.faceless.questions.length).toBeLessThanOrEqual(1);
+    for (const question of TEMPLATES.faceless.questions) expect(question.optional, question.key).toBe(true);
+    expect(declaration.questions.filter((q) => q.optional !== true)).toEqual([]);
+  });
+
+  it("keeps the niche, as a choice that takes the person's own words", () => {
+    const [niche] = TEMPLATES.faceless.questions;
+    expect(niche?.key).toBe("niche");
+    expect(niche?.type).toBe("choice");
+    if (niche?.type !== "choice") return;
+    expect(niche.other).not.toBe(false);
+    expect(niche.help).toMatch(/skip it/);
   });
 });
 

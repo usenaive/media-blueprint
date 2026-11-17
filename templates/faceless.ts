@@ -8,8 +8,10 @@
  * The scout's twice-weekly fire starts the pieces the cadence needs, each as a Plan card whose body
  * is the brief. Every seat after it is woken by the board when its card becomes due, and hands on by
  * creating the next card. The analyst reads the numbers and files a weekly report card for the
- * manager. Day one sets up the plan, the reference, the look and the voice, then starts one piece.
+ * manager. Day one makes the first video (`firstVideoTasks`); week one then sets up the plan, the
+ * reference, the look and the voice.
  */
+import type { AgentDecl } from "@usenaive-sdk/blueprints";
 import {
   PLAN_MODEL_RULE,
   RENDER_MODEL_RULE,
@@ -21,17 +23,22 @@ import {
   channelPlanCard,
   lengthPhrase,
   lookCard,
+  MICRO_USD_PER_CREDIT,
   PLATFORMS,
+  PUBLISHER,
   referenceStudyCard,
-  REFERENCE_QUESTION,
   REFERENCE_RULE,
   schedule,
   SEGMENT_MAX_SECONDS,
   SEGMENT_MIN_SECONDS,
   SHORT_FORM_LENGTH,
+  STILL_MODELS,
   task,
   type MediaTemplate,
+  type Task,
   type SeatOverride,
+  VIDEO_MODELS,
+  videoCredits,
 } from "./template.ts";
 
 const LENGTH = lengthPhrase(SHORT_FORM_LENGTH);
@@ -54,6 +61,241 @@ export const SEGMENTED_SHORT_FORM: Record<string, SeatOverride> = {
   },
 };
 
+/**
+ * THE v3.6 DAY ONE, study first: the teardown, look, voice and character bible, then one piece from the
+ * head of the chain. `ai-influencer` keeps it (its own measured day one, H5); `faceless` and its niches
+ * start on `FIRST_VIDEO_TASKS` instead, where these cards run in week one and never block the first video.
+ */
+export const STUDY_FIRST_TASKS: Task[] = [
+  channelPlanCard("the channel's tone and who it is for, in one line."),
+  referenceStudyCard("scriptwriter", SHORT_FORM_LENGTH),
+  lookCard("scriptwriter", ""),
+  task({
+    key: "character-bible",
+    title: "Extract the character, world and story bible, then get the operator's approval",
+    assignee: "scriptwriter",
+    blocked_by: ["reference-study"],
+    body: `Day one is set-up, not a script. Read project_context, the completed reference teardown and, with read_skill, EVERY skill pinned to you — naive/channel-template-*, c-* creator templates and media-* skills built from reel links. Preserve the creator's relevant wording verbatim and label it CREATOR DIRECTIVE; never rewrite it as though the creator said your interpretation. A pinned skill's Character bible, World and themes, Story patterns, Dialogue and voice, Scene grammar, Look, Must not change and Allowed variation sections are primary evidence at CREATOR DIRECTIVE level: carry them over, then re-open its Source links for timestamps; a skill with no source links is cited by its shipped frames and cast blocks. Re-open the named reference videos and inspect evidence throughout each one: sample the opening densely, every major scene change and story turn, recurring character appearances and the ending; extract audio and use transcribe_audio only where dialogue or voice is part of the format. publish_file representative frames and inspect them with view_image.
+
+Write a complete draft with: CHARACTER MODE (recurring cast, recurring archetype, or none); CONTENT THEMES; NARRATIVE PATTERNS; CANONICAL CAST (stable id, role, physical invariants, wardrobe/material/palette, personality, expressions/movement, voice, relationships, exact reusable prompt block); ONE-OFF CHARACTER RULE; WORLD (locations, props, period and environment); VISUAL LANGUAGE; DIALOGUE/VOICE; MUST NOT CHANGE; ALLOWED VARIATION; NEGATIVE CONSTRAINTS; and REFERENCES. Every observed claim cites URL and timestamp and says observed; every synthesis says inferred with confidence. A trait seen once is optional, not canon. Conflicts are listed, not guessed. Copy usable creator-provided still URLs exactly; record representative fil_ frame ids as evidence. If the references do not repeat a cast, define an archetype or none instead of inventing a named character.
+
+Close this card with the complete bible as its note, beginning "DRAFT CHARACTER BIBLE": the first piece waits on this card and works from the draft, so never hold it open for an answer. THEN, once it is closed and not before, ask the operator once with ask_operator to approve the draft or state corrections. When they answer, apply stated corrections without overriding them and comment on this card "APPROVED CHARACTER BIBLE" followed by the entire approved bible; approved unchanged, copy the entire draft. That comment replaces the draft for every later piece. Generate nothing on this card.`,
+  }),
+  task({
+    key: "hook-style",
+    title: "Write the channel's hook style, so every piece is in one voice",
+    assignee: "scriptwriter",
+    blocked_by: ["reference-study"],
+    body: `Day one is set-up, not scripts. Read project_context and your own teardown — the note on the reference-study card you just closed. Write the channel's hook style as this card's note, in five lines: the openings this audience stops for, the shape of a piece ${LENGTH} in beats, the voice, the caption shape, and what never to say. Each line says which of the teardown's patterns it came from; where the operator named no reference, say the patterns are the crew's reading. Every plan this channel files is written to this note.`,
+  }),
+  task({
+    key: "report-frame",
+    title: "Set up the weekly report this channel will be measured against",
+    assignee: "analyst",
+    blocked_by: ["channel-plan"],
+    body: "Read project_context and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the metrics you will read per piece and where they come from (social.post_metrics), and the week's target taken from the plan's posting slots rather than invented here. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
+  }),
+  task({
+    // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
+    key: FIRST_PIECE_KEY.faceless,
+    title: "Start the channel's first piece",
+    assignee: "trend-scout",
+    blocked_by: ["look", "hook-style", "character-bible"],
+    body: "The look, voice and character bible (approved, or the draft) exist now — the notes on the cards this one waited on. Read project_context and the teardown. Find what is moving in the niche right now and pick ONE topic within the bible's approved themes and narrative patterns; choose its canonical cast or explicitly one-off characters; find one to three real videos already doing it well, and open each with the browser before you name it. Then create its Plan card for the scriptwriter — title \"Plan: <the topic>\", assignee scriptwriter — whose body is the brief: the topic, format, why now, hook direction, look, bible theme, narrative pattern, cast, and each exemplar's URL with one line on what to copy. ONE piece today: its chain of cards takes it to the approval card, and your Monday and Thursday fires start the rest. Put the Plan card's id in your note.",
+  }),
+];
+
+/** Where every first-run file lands: one folder per episode in the company's Files, read by Media manager. */
+export const EPISODES_FOLDER = "Episodes";
+
+/**
+ * An episode's file and folder name, from its topic: the files' folder rules allow 64 characters and
+ * no `/` (vetta-mono `FolderNameSchema`), so the topic is slugged and its words kept inside the file.
+ */
+export const SLUG_RULE = "its slug: the topic in lower-case words joined by hyphens, letters and digits only, at most 48 characters";
+
+/**
+ * The line an existing channel's first-run cards close on. A re-apply of v3.7.0 to a channel that
+ * already ran seeds these new keys (only `first-briefs` was held); each then closes at once, quietly,
+ * instead of asking topics and rendering stills nobody asked for.
+ */
+export const ALREADY_RUNNING = "ALREADY RUNNING";
+
+/** The titles the first-run chain reads by name: its own cards, and the first-piece card 2.0–3.6 seeded. */
+export const TOPICS_TITLE = "Offer four ideas for the first video";
+export const EPISODE_TITLE = "Write the first episode's script";
+export const REFERENCES_TITLE = "Make the reference pictures";
+export const FIRST_VIDEO_TITLE = "Make the first video";
+export const OLD_FIRST_PIECE_TITLE = "Start the channel's first piece";
+export const FIRST_POST_TITLE = "Publish the first video";
+
+/**
+ * WHAT EVERY FIRST-VIDEO CARD IS TOLD (owner, 2026-11-16). The chain runs before the week-one study, so
+ * the teardown, look note and bible the seats' briefs mention do not exist yet and are not waited for.
+ * Defaults are made, never asked. Each step says one short line, so the person can follow it in chat.
+ */
+export const FIRST_VIDEO_RULE = `FIRST VIDEO. This card is part of the channel's first video, made before the week-one study: there is no teardown, look note, hook style or character bible yet, and none is needed — where your brief says to read one, say "none yet" and work from project_context, your pinned skills and the notes of the cards this one waited on; never wait for them. Defaults, never asked before the first video: 9:16 unless your pinned skill says otherwise, the template's own look and voice, 3× a week to every connected network; the operator changes any of them in chat later. If a card this one waited on closed with a note starting ${ALREADY_RUNNING}, close this card done with the same note and do nothing else. If you wake to the operator's answer and this card is already done (a note ending DEFAULTED), it went on without them: say in one line what was used, and do nothing else. KEEP THE PERSON WITH YOU: at each step comment one short line on this card — what is happening and what comes next, at most 15 words — and end your turn with one such line. No walls of text.`;
+
+/**
+ * THE GUARD the head of the first-run chain runs first, scoped to this crew and to titles only a
+ * template writes: a channel with a done card of its manager's (its channel plan, a Publish card),
+ * or the first-piece card 2.0–3.6 seeded (still blocked on a v3.5 install), was set up before
+ * this card existed, so nothing is asked or generated. The first video's manager card is its last,
+ * so on a new channel the manager has no done card yet.
+ */
+const ALREADY_RUNNING_CHECK = `First check that this channel is new: board_read with owner "${PUBLISHER}" and status "done", then board_read with owner "trend-scout". If the first lists any card, or the second lists a card titled exactly "${OLD_FIRST_PIECE_TITLE}", this channel was set up before this card existed: close this card done with the note "${ALREADY_RUNNING}: this channel already makes videos." and ask nothing.`;
+
+/** The cheap steps stay cheap: no browsing and nothing generated. */
+export const WORDS_ONLY = "Words only on this card: make no picture, video, speech or music, and open no web page.";
+
+/**
+ * WHAT THE FIRST RUN COSTS, in credits. The words and stills run on the 5,000 free credits; the video
+ * waits for a plan (`needs_plan`) and says its cost when it starts. The video is the platform's own
+ * rate for the producer's first pinned model (`VIDEO_RATES`). A still is the first of `STILL_MODELS`
+ * at 1K: 168 credits, and 170 with the channel's look read in as a reference. Every seat's turns are
+ * estimated from its real prompt by `turnCredits`; `templates.test.ts` holds each constant below to
+ * that estimate on every template.
+ */
+export const STILLS = 3;
+/** One redo for each still at most: the card's own cap, so the stills line has a ceiling. */
+export const STILLS_MAX = STILLS * 2;
+export const STILL_CREDITS = 170;
+
+/**
+ * HOW A SEAT'S TURNS ARE ESTIMATED. Every step of a turn re-sends the seat's system and card, the
+ * platform's own prompt, the tool list and what earlier steps read; each step writes a little. Priced
+ * at the seat model, GLM 5.3 Flash ($0.15/M in, $0.50/M out; the free plan's text model is a flash
+ * model too). The token counts are estimates: ~4 characters a token; the platform prompt and the
+ * tools at ~3,000 and ~6,000 tokens; what earlier steps read averages `readTokens` a step.
+ */
+export const TURNS = { charsPerToken: 4, platformTokens: 3_000, toolTokens: 6_000, outputTokensPerStep: 400, inMicroUsdPerToken: 0.15, outMicroUsdPerToken: 0.5 } as const;
+/** Steps a card's turn takes, and what earlier steps read on average (skills, cards, pictures, frames). */
+export const STEPS = {
+  topics: { steps: 8, readTokens: 6_000 },
+  episode: { steps: 8, readTokens: 6_000 },
+  references: { steps: 14, readTokens: 10_000 },
+  "first-briefs": { steps: 35, readTokens: 12_000 },
+  "first-post": { steps: 6, readTokens: 6_000 },
+} as const;
+export const turnCredits = (promptChars: number, card: keyof typeof STEPS): number => {
+  const { steps, readTokens } = STEPS[card];
+  const input = promptChars / TURNS.charsPerToken + TURNS.platformTokens + TURNS.toolTokens + readTokens;
+  return Math.ceil((steps * (input * TURNS.inMicroUsdPerToken + TURNS.outputTokensPerStep * TURNS.outMicroUsdPerToken)) / MICRO_USD_PER_CREDIT);
+};
+/** The CEO's board digests, one as each first-run card closes (five): ~25,000 tokens and two steps each, an estimate. */
+export const DIGEST_CREDITS = 5 * Math.ceil((2 * 25_000 * TURNS.inMicroUsdPerToken) / MICRO_USD_PER_CREDIT);
+/** Voice, music and transcription around a short video, priced nowhere in code: about $0.06, an estimate. */
+export const SERVICE_CREDITS = 300;
+
+/** The words: the topics and episode turns, and the CEO's digests. */
+export const WORD_CREDITS = 500;
+/** The producer's turns on the references card, inside the stills line. */
+export const STILLS_TURN_CREDITS = 300;
+/** The producer's turns on the video card, the services and the first post's turn, inside the video line. */
+export const EDIT_CREDITS = 1_300;
+
+/**
+ * The first video's length on the image-to-video crews: one 8-second scene on FLUX 3 Max, about 8,100
+ * of the plan's credits (owner, 2026-11-16). Later pieces run 15–30 seconds.
+ */
+export const FIRST_VIDEO_SECONDS = 8;
+
+const up100 = (credits: number): number => Math.ceil(credits / 100) * 100;
+export const stillsCost = { min: STILLS * STILL_CREDITS + STILLS_TURN_CREDITS, max: STILLS_MAX * STILL_CREDITS + STILLS_TURN_CREDITS } as const;
+/** The video line: its seconds on the first pinned model, plus the producer's turns, the services and the post. */
+export const videoCost = (models: readonly string[], seconds: number): number => up100(videoCredits(models[0]!, seconds) + EDIT_CREDITS);
+/** What the first run spends before a plan, at its most: the words and every still the card may make. */
+export const freeRunCredits = (): number => WORD_CREDITS + stillsCost.max;
+
+/**
+ * THE FIRST VIDEO (owner, 2026-11-16, channel first): the topics, the script and the stills run on the
+ * 5,000 free credits; the video needs a plan. Its card is `needs_plan`, so the board holds it, with no
+ * turn spent, until the company has a plan, and activation wakes it. Then "Your video is ready. Is
+ * this good?", and only with no account connected, a connect question at that point, never earlier.
+ * `models` is the producer's pinned list and `seconds` the first video's length, so each template's
+ * cost line is its own.
+ */
+export const firstVideoTasks = (models: readonly string[], seconds: number): Task[] => {
+  const video = `about ${videoCost(models, seconds).toLocaleString("en-US")} credits`;
+  return [
+    task({
+      key: "topics",
+      title: TOPICS_TITLE,
+      assignee: "trend-scout",
+      body: `${ALREADY_RUNNING_CHECK} You start no Plan card here, so no bible note is needed. Read project_context and, with read_skill, every skill pinned to you. Write FOUR ideas for the channel's first video in its niche — the pinned channel template's niche, else project_context's niche answer, else, with neither, four ideas in four different popular niches, so the pick sets the niche. Each idea is at most eight plain words, all four different in kind (a story, a fact, a question, a how-to). Comment them on this card as "IDEAS: 1) … 2) … 3) … 4) …", then ask the operator once with ask_operator: prompt "Pick the first video, or type your own idea.", one field: key topic, label "First video", type choice, the four ideas as options, and details with one line per option saying what the viewer sees. When they answer, close this card done with the note "TOPIC: <their answer, word for word>" and, on the next line, "NICHE: <the niche it is in>". ${WORDS_ONLY} ${FIRST_VIDEO_RULE}`,
+    }),
+    task({
+      key: "episode",
+      title: EPISODE_TITLE,
+      assignee: "scriptwriter",
+      blocked_by: ["topics"],
+      body: `Read project_context, the TOPIC and NICHE on the topics card this one waited on, and, with read_skill, every skill pinned to you. Create no Render card: the cards waiting on this one make the pictures and the video. Write the script as a plan from no bible: the hook line; then scenes of ${SEGMENT_MIN_SECONDS}–${SEGMENT_MAX_SECONDS} seconds that sum to exactly ${seconds} seconds — the first video is short — each with its seconds, its picture (one sentence: who and what is in frame, in the template's look — the image_prompt for its opening still), its motion (the render prompt), its exact voiceover and its on-screen text; the music mood; ${PLAN_MODEL_RULE}; and the caption (\`naive/caption-writing\`, first line the YouTube title). Work out ${SLUG_RULE}. Publish it once with publish_file, content the script in markdown starting "# <the topic>", name "<the slug>.md", folder "${EPISODES_FOLDER}". Close this card done with the note: "SLUG: <the slug>", the file's fil_ id, then the whole script. ${WORDS_ONLY} ${FIRST_VIDEO_RULE}`,
+    }),
+    task({
+      key: "references",
+      title: REFERENCES_TITLE,
+      assignee: "producer",
+      blocked_by: ["episode"],
+      body: `Read project_context, the SLUG and script in the note of the episode card this one waited on, and your pinned skills' look. ALL AT ONCE, in one step as soon as the card is claimed: comment on this card "Making ${STILLS} pictures for <the topic>." and make ${STILLS} generate_image calls in that same step, so they render side by side, never one after another: aspect_ratio 9:16 unless your pinned skill renders another, folder "${EPISODES_FOLDER}/<the slug>", no model argument; one opening still per scene, from its picture line in the template's look, then alternates of the first scene until there are ${STILLS}. Every prompt carries the same words for the cast and the look, so the stills match; where a pinned skill ships a frame of the channel's look, pass that one frame in image_urls on every call. Then look at all of them with view_image, in one step, and render a broken one again (extra limbs, words in the picture, the wrong subject), once at most — ${STILLS_MAX} pictures on this card in all, redos included. Comment "STILL <n> <fil_ id>" for each, and reply "Pictures ready: pick yours." Then ask the operator once with ask_operator: prompt "Pick the pictures for your video. Your pick starts the video.", one field: key stills, label "References", type choice, multiple true, options "Scene 1", "Scene 2" and so on (an alternate is "Scene 1, take 2"), details with each option's image "/files/<its fil_ id>/raw". Words instead of a pick: take them as direction for the video, with the first still of each scene. Publish nothing else: the script file stays as it is. Close this card done with the note "STILLS: <the picked fil_ ids, in scene order>", each scene's still, the SLUG and the whole script. ${FIRST_VIDEO_RULE}`,
+    }),
+    {
+      ...task({
+        // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
+        key: FIRST_PIECE_KEY.faceless,
+        title: FIRST_VIDEO_TITLE,
+        assignee: "producer",
+        blocked_by: ["references"],
+        body: `Read project_context and the note of the references card this one waited on: the script and the picked stills. FIRST say what it costs: comment on this card and reply in one line, "Making the video: ${video}, ready in about 15 minutes." This card is a plan made before the bible: render it as planned, one generate_video call per scene, image_urls ["<that scene's picked still>"] — a scene whose still was not picked opens on the picked still nearest it — unless your pinned skill renders from text without image_urls, and then the stills set the look and cast its prompts describe. A scene opens on its picked still; one scene with more than one picked opens on the first, and its video_prompt moves through the others. Voice, caption, score, join, VERIFY and publish_file the finished video as your brief says, in folder "${EPISODES_FOLDER}/<the slug>". Its Publish card, "${FIRST_POST_TITLE}", already waits on this one: create no other. Close this card done with the note: "VIDEO: <the final fil_ id>", "TOPIC: <the topic>" and the caption. ONE video today: the Monday and Thursday fires start the rest once the week-one cards are done. ${FIRST_VIDEO_RULE}`,
+      }),
+      // The first paid step: the board wakes this card only once the company has a plan.
+      needs_plan: true,
+    },
+    task({
+      key: "first-post",
+      title: FIRST_POST_TITLE,
+      assignee: PUBLISHER,
+      blocked_by: [FIRST_PIECE_KEY.faceless],
+      body: `If the card this one waited on is titled exactly "${OLD_FIRST_PIECE_TITLE}", this channel was set up before this card existed: close this card done with the note "${ALREADY_RUNNING}: this channel already makes videos." and do nothing else. Read project_context and the note of the card this one waited on: the finished video's fil_ id (VIDEO), its TOPIC and its caption. This is the channel's first post. Read the connected accounts (social.accounts; not offered means none is connected). If one is connected, tell the operator in one line: "Your video is ready. Is this good? Allow posts it; Don't allow and say what to change." and post it as your brief says. If none is connected, this is the one time the channel asks: ask the operator once with ask_operator: prompt "Your video is ready. Connect an account to post it.", one field of type connect, key accounts, platforms ${JSON.stringify(PLATFORMS)}, and no other field. When they answer with an account connected, tell them the line above and post it as your brief says; with none, close this card done with the note "Not posted: no account yet. VIDEO: <the fil_ id>". ${FIRST_VIDEO_RULE}`,
+    }),
+    // Week one: the same cards as before, behind the first post, so they never hold it or its seats.
+    ...STUDY_FIRST_TASKS.filter((card) => card.key !== FIRST_PIECE_KEY.faceless && card.key !== "report-frame" && card.key !== "channel-plan").map((card) =>
+      card.key === "reference-study"
+        ? { ...card, blocked_by: ["first-post"], body: `${WEEK_ONE} ${card.body}` }
+        : card.key === "character-bible"
+          ? { ...card, body: card.body!.replace("the first piece waits on this card and works from the draft", "the next pieces wait on this card and work from the draft") }
+          : card,
+    ),
+    { ...STUDY_FIRST_TASKS.find((card) => card.key === "channel-plan")!, blocked_by: ["look"] },
+    STUDY_FIRST_TASKS.find((card) => card.key === "report-frame")!,
+  ];
+};
+
+/**
+ * Week one waits for the first post to be decided (or the first video to stop), never for it to succeed,
+ * so it never competes with the first video for its seats, and a stopped first video (a busy
+ * model twice) never stops the study, look, bible and plan behind it. Both STOPPED rules a seat holds
+ * are named and set aside for that one card.
+ */
+export const WEEK_ONE = `WEEK ONE. This card waited only for the card titled exactly "${FIRST_POST_TITLE}" to finish. Do it whether that card closed done, "Not posted:" or STOPPED. Two rules you hold say otherwise for a STOPPED card — your crew rules' "When a card you waited on closed STOPPED, stop the same way." and this card's "A card you waited on that closed STOPPED means stop the same way." — and neither applies to that card.`;
+
+/**
+ * A PICK NOBODY MAKES MUST NOT HOLD THE CHANNEL FOREVER. A parked question has no alarm, so the analyst's
+ * daily fire watches the two first-run choices: unanswered for 12 hours, it comments a nudge on the
+ * card; at the next daily check after that, about a day on, it closes the card with the first option,
+ * as its own seat would. It never asks the operator: a fire that waits on the person makes the platform
+ * skip every later fire of that schedule (vetta-mono ADR-1453) and holds the seat's standing card.
+ */
+export const FIRST_RUN_WATCH = `FIRST-RUN WATCH, first: board_read with owner "trend-scout" and with owner "producer", and find the cards titled exactly "${TOPICS_TITLE}" and "${REFERENCES_TITLE}" that are still doing. For each one whose question has waited more than 12 hours (its IDEAS comment, or its last STILL comment, is that old): with no NUDGED comment on it, comment on it "NUDGED: no pick yet; the team goes on with the first option at the next daily check" — a comment only, never a question: this fire must not wait on the operator; with a NUDGED comment more than 20 hours old, close that card yourself in ONE board_write call — status done, the note its own seat would write with the first option, ending "DEFAULTED: no pick in a day": for the ideas card "TOPIC: <the first idea on its IDEAS comment>" and "NICHE: <its niche>"; for the pictures card "STILLS: <the first still of each scene>", then the SLUG and script from the episode card's note.`;
+
+/** The faceless crews' first run, on their pinned models. */
+export const FIRST_VIDEO_TASKS: Task[] = firstVideoTasks(VIDEO_MODELS, FIRST_VIDEO_SECONDS);
+
+/** The producer, its stills on `STILL_MODELS`: the first-video crews only; the influencer's renders a trained face. */
+const stillsPinned = (seat: AgentDecl): AgentDecl => ({
+  ...seat,
+  tools: { ...seat.tools!, configs: { ...seat.tools!.configs, generate_image: { ...seat.tools!.configs["generate_image"]!, config: { models: STILL_MODELS } } } },
+});
+
 export const FACELESS: MediaTemplate = {
   name: "faceless",
   title: "Faceless channel",
@@ -64,7 +306,7 @@ export const FACELESS: MediaTemplate = {
 
   agents: [
     channelManager(),
-    agent({
+    stillsPinned(agent({
       name: "producer",
       role: "Video production",
       description: "Makes each planned scene as an image, animates it into video, edits the scenes into one finished vertical piece, and hands it to the channel manager.",
@@ -78,7 +320,7 @@ EDIT per \`naive/video-assembly\`: normalize streams, join the scenes with ffmpe
       tools: ["generate_video", "generate_image", "view_image", "bash", "fetch_file", "publish_file", "generate_speech", "generate_music", "transcribe_audio"],
       skills: ["naive/video-assembly"],
       schedules: [],
-    }),
+    })),
     agent({
       name: "trend-scout",
       role: "Trends & briefs",
@@ -116,61 +358,25 @@ SCENES IN ORDER: for each, id, beat, seconds, characters, location/props, exact 
       brief: `You are the analyst: you measure, and you never plan, make or publish. Every morning you record the numbers (social.post_metrics). Once a week you write the report: per piece — each closed Publish card names its post ids — what went out and what it did, in numbers you actually read. Read the plans behind them on the board: the hook and the beats are what the numbers are a verdict on, so report by hook pattern and by format, and say whether the pieces that followed the reference did better than the ones that drifted. ${ANALYST_REPORT} ${REFERENCE_RULE}`,
       tools: ["social.post_metrics"],
       skills: ["naive/channel-report"],
-      schedules: analystSchedules("Per piece, per hook pattern and per format, say what went out and what it did, and whether the pieces that followed the reference did better."),
+      schedules: analystSchedules("Per piece, per hook pattern and per format, say what went out and what it did, and whether the pieces that followed the reference did better.", FIRST_RUN_WATCH),
     }),
   ],
 
-  tasks: [
-    channelPlanCard("the channel's tone and who it is for, in one line."),
-    referenceStudyCard("scriptwriter", SHORT_FORM_LENGTH),
-    lookCard("scriptwriter", ""),
-    task({
-      key: "character-bible",
-      title: "Extract the character, world and story bible, then get the operator's approval",
-      assignee: "scriptwriter",
-      blocked_by: ["reference-study"],
-      body: `Day one is set-up, not a script. Read project_context, the completed reference teardown and, with read_skill, EVERY skill pinned to you — naive/channel-template-*, c-* creator templates and media-* skills built from reel links. Preserve the creator's relevant wording verbatim and label it CREATOR DIRECTIVE; never rewrite it as though the creator said your interpretation. A pinned skill's Character bible, World and themes, Story patterns, Dialogue and voice, Scene grammar, Look, Must not change and Allowed variation sections are primary evidence at CREATOR DIRECTIVE level: carry them over, then re-open its Source links for timestamps; a skill with no source links is cited by its shipped frames and cast blocks. Re-open the named reference videos and inspect evidence throughout each one: sample the opening densely, every major scene change and story turn, recurring character appearances and the ending; extract audio and use transcribe_audio only where dialogue or voice is part of the format. publish_file representative frames and inspect them with view_image.
-
-Write a complete draft with: CHARACTER MODE (recurring cast, recurring archetype, or none); CONTENT THEMES; NARRATIVE PATTERNS; CANONICAL CAST (stable id, role, physical invariants, wardrobe/material/palette, personality, expressions/movement, voice, relationships, exact reusable prompt block); ONE-OFF CHARACTER RULE; WORLD (locations, props, period and environment); VISUAL LANGUAGE; DIALOGUE/VOICE; MUST NOT CHANGE; ALLOWED VARIATION; NEGATIVE CONSTRAINTS; and REFERENCES. Every observed claim cites URL and timestamp and says observed; every synthesis says inferred with confidence. A trait seen once is optional, not canon. Conflicts are listed, not guessed. Copy usable creator-provided still URLs exactly; record representative fil_ frame ids as evidence. If the references do not repeat a cast, define an archetype or none instead of inventing a named character.
-
-Close this card with the complete bible as its note, beginning "DRAFT CHARACTER BIBLE": the first piece waits on this card and works from the draft, so never hold it open for an answer. THEN, once it is closed and not before, ask the operator once with ask_operator to approve the draft or state corrections. When they answer, apply stated corrections without overriding them and comment on this card "APPROVED CHARACTER BIBLE" followed by the entire approved bible; approved unchanged, copy the entire draft. That comment replaces the draft for every later piece. Generate nothing on this card.`,
-    }),
-    task({
-      key: "hook-style",
-      title: "Write the channel's hook style, so every piece is in one voice",
-      assignee: "scriptwriter",
-      blocked_by: ["reference-study"],
-      body: `Day one is set-up, not scripts. Read project_context and your own teardown — the note on the reference-study card you just closed. Write the channel's hook style as this card's note, in five lines: the openings this audience stops for, the shape of a piece ${LENGTH} in beats, the voice, the caption shape, and what never to say. Each line says which of the teardown's patterns it came from; where the operator named no reference, say the patterns are the crew's reading. Every plan this channel files is written to this note.`,
-    }),
-    task({
-      key: "report-frame",
-      title: "Set up the weekly report this channel will be measured against",
-      assignee: "analyst",
-      blocked_by: ["channel-plan"],
-      body: "Read project_context and the channel plan — the note on the channel-plan card this one waited on. Write, as this card's note, the skeleton of the weekly report: the metrics you will read per piece and where they come from (social.post_metrics), and the week's target taken from the plan's posting slots rather than invented here. Write no report today — nothing has posted, and your Monday 07:30 fire writes the first real one.",
-    }),
-    task({
-      // The key v1.x already seeded, so a re-apply to an existing org is a no-op: see FIRST_PIECE_KEY.
-      key: FIRST_PIECE_KEY.faceless,
-      title: "Start the channel's first piece",
-      assignee: "trend-scout",
-      blocked_by: ["look", "hook-style", "character-bible"],
-      body: "The look, voice and character bible (approved, or the draft) exist now — the notes on the cards this one waited on. Read project_context and the teardown. Find what is moving in the niche right now and pick ONE topic within the bible's approved themes and narrative patterns; choose its canonical cast or explicitly one-off characters; find one to three real videos already doing it well, and open each with the browser before you name it. Then create its Plan card for the scriptwriter — title \"Plan: <the topic>\", assignee scriptwriter — whose body is the brief: the topic, format, why now, hook direction, look, bible theme, narrative pattern, cast, and each exemplar's URL with one line on what to copy. ONE piece today: its chain of cards takes it to the approval card, and your Monday and Thursday fires start the rest. Put the Plan card's id in your note.",
-    }),
-  ],
+  tasks: FIRST_VIDEO_TASKS,
 
   /**
-   * The niche, and what it should be like (optional). How often is the channel plan's default. Where it posts is the accounts the
-   * operator connects; the tone and who it is for, the manager asks on its day-one card.
+   * One question, and it may be left blank: the niche. The studio asks only required questions before
+   * it hires, so a faceless channel starts with none; a blank niche is chosen by the topic pick
+   * (`topics`). No reference question: the crew finds its references. How often, where and how long are defaults.
    */
   questions: [
     {
       key: "niche",
       label: "Niche",
       type: "choice",
+      optional: true,
       options: ["Stoicism & philosophy", "True crime recaps", "Space & astronomy", "Personal finance", "History mysteries", "Health & longevity"],
-      help: "Pick one or type your own. The channel manager asks about tone and audience next.",
+      help: "Pick one, type your own, or skip it and pick from the team's first ideas.",
     },
-      REFERENCE_QUESTION,
   ],
 };

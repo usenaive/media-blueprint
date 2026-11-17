@@ -1,26 +1,28 @@
 /**
- * Media manager: the channel's one page, a hosted app the template ships as source (vetta-mono
- * ADR-1482/1483). It replaces the mini app of 2.x and reads the same things the platform's mini-app
- * sources read, with the app's own read key (`NAIVE_API_KEY`, minted with the read preset, §29.7):
+ * The channel: the company's home screen, a hosted app the template ships as source (vetta-mono
+ * ADR-1482/1483) and declares `home: true` (channel-first SPEC §3). The studio frames it full-screen
+ * and draws every decision itself, so this page only shows. It reads, with the app's own read key
+ * (`NAIVE_API_KEY`, the read preset, §29.7):
  *
- *   · the creator, on a channel that has one (AI Influencer): their face, name and niche, with a way to them in Naive;
- *   · Connect an account, only while nothing has gone out and no account is connected;
- *   · the numbers: views over the last seven days with their change, posts this week against the
- *     cadence, and what the company spent;
- *   · Waiting on you, only while something does: each post links to its chat in Naive, where it is decided;
- *   · Scheduled, only while something is: one sideways row, soonest first;
- *   · Stills and clips, only for a creator with some: the newest things rendered as them;
- *   · Posted: a picture grid, newest first, each with its views or "Didn't post".
+ *   · the header: the creator's face and name on a channel that has one (AI Influencer), else the
+ *     channel's own words, the niche the person typed;
+ *   · the episodes, newest first, after a "Create new episode" card. An episode is a chain of board
+ *     cards — the first run's topics → script → pictures → video → post, or a later Plan → Render →
+ *     Publish — and each reads as Generating, Needs you, Posted or Stopped;
+ *   · one episode's page (`?episode=<its first card>`): its steps, its script and its stills.
+ *
+ * It writes nothing. Its only actions are two links the studio opens (SPEC §3 "Bridge"):
+ * `?needs=<ses_ id>` opens that waiting question or approval in the studio's sheet, and
+ * `?say=<words>` opens Ask CEO with the words in the box, unsent. A framed app cannot navigate the
+ * studio, so a click posts `{ type: "naive:open", href }` to it; the page posts `naive:ready` once.
  *
  * One file with no relative imports: the host compiles each function on its own. Agents may pull,
  * change and deploy it like any app.
  */
 import { naive, signInUrl, viewer, type AppEnv } from "@usenaive-sdk/app";
 
-type Client = ReturnType<typeof naive>;
-type Post = Awaited<ReturnType<Client["social"]["listPosts"]>>["data"][number];
 type Read<T> = { ok: true; value: T } | { ok: false; error: string };
-/** A file's short-lived address by its `fil_` id. A stored post carries ids, never `media_urls` (§27.1). */
+/** A file's short-lived address by its `fil_` id. */
 type Links = ReadonlyMap<string, string>;
 /** The fields of `GET /v1/characters` this page draws. The client this app is built on has no `characters` yet. */
 type Creator = {
@@ -33,6 +35,24 @@ type Creator = {
   source_images: string[];
   created_at?: string;
 };
+/** A card on the company board, as `GET /v1/boards/:id/cards` lists it (§28.6). */
+export type Card = {
+  id: string;
+  board_id: string;
+  title: string;
+  body: string;
+  note: string | null;
+  status: "todo" | "doing" | "blocked" | "done";
+  blocked_by: string[];
+  woken_session_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+type Comment = { body: string; created_at: string };
+/** A file under `Episodes/`, as `GET /v1/files` lists it. */
+type EpisodeFile = { id: string; name: string; content_type: string; folder?: string | null };
+/** What a waiting session waits on: a question (`awaiting_answer`) or an approval (`awaiting_approval`). */
+type Parked = ReadonlyMap<string, "question" | "approval">;
 
 /**
  * The prebuilt creators that were re-faced under new ids (vetta-mono ADR-1812), by name: the earlier id a
@@ -45,42 +65,34 @@ const RETIRED_CREATORS: Readonly<Record<string, string>> = {
   "Ava Lindqvist": "chr_t6afyfc7ztb6a6jnj04sdj2x1t",
 };
 
-const DAY = 24 * 60 * 60 * 1000;
-const WEEK = 7 * DAY;
+/**
+ * The first run's card titles and its closing words, as `templates/faceless.ts` writes them (a test
+ * holds the two files to one another): this page reads the board by them.
+ */
+export const FIRST_RUN_TITLES = {
+  topic: "Offer four ideas for the first video",
+  script: "Write the first episode's script",
+  pictures: "Make the reference pictures",
+  video: "Make the first video",
+  post: "Publish the first video",
+} as const;
+export const ALREADY_RUNNING = "ALREADY RUNNING";
+const EPISODES_FOLDER = "Episodes";
+
 /** The cadence a company that never said one runs at (`@vetta/core` `DEFAULT_CADENCE`). */
 const DEFAULT_CADENCE = "3× a week";
-/** Ledger pages of 100 debits read for "Spent"; past this the tile says "at least". */
-const LEDGER_PAGES = 20;
-/** Each tile on the page mints one file link when it opens, so the page draws a bounded number of them. */
-const POSTED_SHOWN = 12;
-const RENDERS_SHOWN = 12;
-/** Every link is a signed read and an audit row, so a long queue signs its first few and the rest wait their turn. */
-const LINKED_SHOWN = 12;
-/** Identities asked for an account, only while nothing has gone out. */
-const IDENTITIES_ASKED = 10;
-/** The clock every posting slot is stated in (`CHANNEL_TIMEZONE` in `templates/template.ts`). */
-const WHEN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" });
+/** Board pages of 100 (the API's most); the store answers at most 500 cards. */
+const BOARD_PAGES = 5;
+/** The newest episodes drawn. Each may read one card's comments and mint one file link. */
+export const EPISODES_SHOWN = 12;
+/** The newest `Episodes/` files read for the first run's stills, video and script. */
+const EPISODE_FILES = 100;
+const WHEN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
 
-export const GET = (request: Request) => overview(request, process.env, Date.now());
-
-/** Ported verbatim from `@vetta/core` `sources.ts`: a weekly post count, or `null` when unreadable. */
-function perWeek(cadence: string): number | null {
-  const said = cadence.trim().toLowerCase();
-  if (said === "daily" || said === "every day") return 7;
-  if (said === "weekly" || said === "once a week") return 1;
-  if (said === "twice a week") return 2;
-  const count = /^(\d+)\s*(?:×|x|times)\s*(?:a|per)\s*week$/.exec(said);
-  return count ? Number(count[1]) : null;
-}
+export const GET = (request: Request) => overview(request, process.env);
 
 const escape = (value: string): string =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
-
-const page = (status: number, body: string): Response =>
-  new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Media manager</title><style>${CSS}</style></head><body>${body}</body></html>`,
-    { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
-  );
 
 async function read<T>(what: string, run: () => Promise<T>): Promise<Read<T>> {
   try {
@@ -90,38 +102,23 @@ async function read<T>(what: string, run: () => Promise<T>): Promise<Read<T>> {
   }
 }
 
-/**
- * Only `scheduled` asks the provider first (§27.1, at most five due posts a read, each once in five
- * minutes). That read is the one that settles a post into posted or failed, so a refused post never
- * sits in Scheduled, and nothing else on the page needs to ask again.
- */
-const posts = (env: AppEnv, status: Post["status"]) =>
-  read(`${status} posts`, async () => (await naive(env).social.listPosts({ status, limit: 50, reconcile: status === "scheduled" })).data);
+const failed = (read: Read<unknown>): string => (read.ok ? "" : `<p class="error">${escape(read.error)}</p>`);
 
-async function rest<T>(env: AppEnv, path: string): Promise<T> {
+async function rest(env: AppEnv, path: string): Promise<Response> {
   const response = await fetch(`${env["NAIVE_API_URL"]?.replace(/\/+$/, "")}${path}`, { headers: { authorization: `Bearer ${env["NAIVE_API_KEY"]}` } });
   if (!response.ok) throw Object.assign(new Error(`the API answered ${response.status}`), { status: response.status });
-  return (await response.json()) as T;
+  return response;
 }
 
-type Spent = { micro: number; complete: boolean };
-
-/** Debits are negative on the ledger; spend is their size. `complete` is false when debits were left unread. */
-async function spentSince(env: AppEnv, from: string): Promise<Spent> {
-  const client = naive(env);
-  let micro = 0;
-  let after: string | undefined;
-  for (let pages = 0; pages < LEDGER_PAGES; pages += 1) {
-    const { data, next_cursor } = await client.credits.ledger({ type: "debit", from, limit: 100, ...(after === undefined ? {} : { after }) });
-    for (const entry of data) micro += Math.abs(entry.amount_micro_usd);
-    if (next_cursor === null) return { micro, complete: true };
-    after = next_cursor;
-  }
-  return { micro, complete: false };
+async function json<T>(env: AppEnv, path: string): Promise<T> {
+  return (await (await rest(env, path)).json()) as T;
 }
+
+const studioOf = (env: AppEnv): string | null => env["NAIVE_STUDIO_URL"]?.replace(/\/+$/, "") || null;
+
+// ---------- reads ----------
 
 type Answers = Readonly<Record<string, unknown>>;
-/** The channel's setup answers, and when it was installed (`null` when the API didn't say). */
 type Setup = { answers: Answers; installedAt: string | null };
 
 const setupOf = async (env: AppEnv): Promise<Setup> => {
@@ -149,37 +146,49 @@ const creatorOf = (all: readonly Creator[], answer: string, installedAt: string 
   return { creator: since[0] ?? own.find((one) => one.status === "ready") ?? own[0] ?? null, retired: null };
 };
 
-/** The creator a channel's answer means, reading a retired prebuilt creator by its id. */
 async function creatorFor(env: AppEnv, answer: string, installedAt: string | null): Promise<Creator | null> {
-  const found = creatorOf((await rest<{ data: Creator[] }>(env, "/v1/characters?limit=100")).data, answer, installedAt);
-  return found.retired === null ? found.creator : rest<Creator>(env, `/v1/characters/${encodeURIComponent(found.retired)}`);
+  const found = creatorOf((await json<{ data: Creator[] }>(env, "/v1/characters?limit=100")).data, answer, installedAt);
+  return found.retired === null ? found.creator : json<Creator>(env, `/v1/characters/${encodeURIComponent(found.retired)}`);
 }
 
-/**
- * The cadence the tile counts against, or `null` when this page can't know it. A creator's channel asks
- * none and the operator can change it in chat, on the board, so its tile is a count: better than a wrong goal.
- */
-function cadenceOf(answers: Answers): string | null {
-  const said = answers["cadence"];
-  if (typeof said === "string" && said.trim() !== "") return said;
-  return typeof answers["character"] === "string" ? null : DEFAULT_CADENCE;
-}
-
-/** Whether any identity holds an account. An identity that never activated social is a 4xx, which means no. */
-async function hasAccount(env: AppEnv): Promise<boolean> {
-  const { data } = await rest<{ data: { id: string }[] }>(env, `/v1/identities?limit=${IDENTITIES_ASKED}`);
-  for (const identity of data) {
-    try {
-      if ((await rest<{ data: unknown[] }>(env, `/v1/identities/${encodeURIComponent(identity.id)}/social/accounts`)).data.length > 0) return true;
-    } catch (error) {
-      const status = (error as { status?: unknown }).status;
-      if (typeof status !== "number" || status >= 500) throw error;
-    }
+/** The company board: the CEO's, where the template seeds its cards (§31.11). */
+async function boardOf(env: AppEnv): Promise<Card[]> {
+  const me = await json<{ organization: { id: string } | null }>(env, "/v1/me");
+  if (me.organization === null) throw new Error("the key names no company");
+  const org = await json<{ ceo_agent_id?: string | null }>(env, `/v1/organizations/${encodeURIComponent(me.organization.id)}`);
+  if (!org.ceo_agent_id) return [];
+  const cards: Card[] = [];
+  let after: string | null = null;
+  for (let pages = 0; pages < BOARD_PAGES; pages += 1) {
+    const page: { data: Card[]; next_cursor: string | null } = await json(env, `/v1/boards/${encodeURIComponent(org.ceo_agent_id)}/cards?limit=100${after === null ? "" : `&after=${encodeURIComponent(after)}`}`);
+    cards.push(...page.data);
+    if (page.next_cursor === null) break;
+    after = page.next_cursor;
   }
-  return false;
+  return cards;
 }
 
-/** A failed link leaves its tile blank rather than failing the page. */
+/** The sessions waiting on the person, as the studio's own rail reads them (vetta-mono `@vetta/core` attention.ts). */
+async function parkedOf(env: AppEnv): Promise<Parked> {
+  const [questions, approvals] = await Promise.all(
+    (["awaiting_answer", "awaiting_approval"] as const).map((reason) => json<{ data: { id: string }[] }>(env, `/v1/sessions?status=idle&stop_reason=${reason}&limit=100`)),
+  );
+  return new Map([...questions!.data.map((one) => [one.id, "question"] as const), ...approvals!.data.map((one) => [one.id, "approval"] as const)]);
+}
+
+const episodeFiles = async (env: AppEnv): Promise<EpisodeFile[]> =>
+  (await json<{ data: EpisodeFile[] }>(env, `/v1/files?folder=${EPISODES_FOLDER}&subfolders=true&order=desc&limit=${EPISODE_FILES}`)).data;
+
+async function commentsOf(env: AppEnv, card: Card): Promise<Comment[]> {
+  return (await json<{ data: Comment[] }>(env, `/v1/boards/${encodeURIComponent(card.board_id)}/cards/${encodeURIComponent(card.id)}/comments?limit=100`)).data;
+}
+
+/** A script's words, read with the app's own key (`?download=true`). */
+async function fileText(env: AppEnv, id: string): Promise<string> {
+  return (await rest(env, `/v1/files/${encodeURIComponent(id)}?download=true`)).text();
+}
+
+/** A failed link leaves its picture blank rather than failing the page. */
 async function linksFor(env: AppEnv, ids: readonly string[]): Promise<Links> {
   const client = naive(env);
   const found = await Promise.all(
@@ -194,66 +203,158 @@ async function linksFor(env: AppEnv, ids: readonly string[]): Promise<Links> {
   return new Map(found.filter((one) => one !== null));
 }
 
-const compact = (n: number): string => {
-  const short = (x: number) => (x < 10 ? x.toFixed(1).replace(/\.0$/, "") : String(Math.round(x)));
-  return n >= 1_000_000 ? `${short(n / 1_000_000)}M` : n >= 1_000 ? `${short(n / 1_000)}k` : String(n);
+// ---------- episodes ----------
+
+type Step = keyof typeof FIRST_RUN_TITLES;
+/** An episode's steps in order: the first run's five, or a later piece's three. */
+const stepsOf = (head: Card): Step[] => (head.title === FIRST_RUN_TITLES.topic ? ["topic", "script", "pictures", "video", "post"] : ["script", "video", "post"]);
+const STEP_BY_TITLE = new Map<string, Step>(Object.entries(FIRST_RUN_TITLES).map(([step, title]) => [title, step as Step]));
+
+/** Which step of an episode a card is: by the first run's titles, or a later piece's "Plan:", "Render:" and "Publish:". */
+const stepOf = (card: Card): Step | null =>
+  STEP_BY_TITLE.get(card.title) ?? (card.title.startsWith("Plan: ") ? "script" : card.title.startsWith("Render: ") ? "video" : card.title.startsWith("Publish: ") ? "post" : null);
+const isHead = (card: Card): boolean => card.title === FIRST_RUN_TITLES.topic || card.title.startsWith("Plan: ");
+
+/** The cards that follow a head: each the one card of a known step that waits on the last. */
+function chainFrom(head: Card, cards: readonly Card[]): Card[] {
+  const chain = [head];
+  for (;;) {
+    const last = chain[chain.length - 1]!;
+    const next = cards.find((one) => one.blocked_by.includes(last.id) && stepOf(one) !== null && !isHead(one) && !chain.includes(one));
+    if (next === undefined) return chain;
+    chain.push(next);
+  }
+}
+
+export type Label = "Generating" | "Needs you" | "Posted" | "Stopped";
+/** A link the studio opens. `bridge` marks it for the click handler, which hands it to the studio. */
+type Action = { text: string; href: string };
+export type Episode = {
+  number: number;
+  head: Card;
+  chain: Card[];
+  title: string;
+  /** The first run's `Episodes/<slug>`; a later piece files nowhere this page reads. */
+  slug: string | null;
+  label: Label;
+  line: string;
+  action: Action | null;
+  /** The card working now, while it is `doing`: its newest comment is the Generating line. */
+  working: Card | null;
 };
 
-const viewsOf = (post: Post): number | null => (typeof post.metrics?.["views"] === "number" ? Math.round(post.metrics["views"]) : null);
-const at = (value: string | null): number => (value === null ? NaN : Date.parse(value));
-const when = (value: string | null): string => (value === null || Number.isNaN(Date.parse(value)) ? "" : WHEN.format(Date.parse(value)));
+const say = (words: string): string => `?say=${encodeURIComponent(words)}`;
+const needs = (session: string): string => `?needs=${encodeURIComponent(session)}`;
+const firstLine = (text: string | null): string => (text ?? "").trim().split("\n")[0]!.trim();
+const noteStarts = (card: Card, word: string): boolean => (card.note ?? "").trimStart().startsWith(word);
 
-const failed = (read: Read<unknown>): string => (read.ok ? "" : `<p class="error">${escape(read.error)}</p>`);
+const WORKING: Record<Step, string> = {
+  topic: "Finding 4 ideas…",
+  script: "Writing the script…",
+  pictures: "Drawing the pictures…",
+  video: "Making the video…",
+  post: "Getting it ready to post…",
+};
 
-function picture(url: string | undefined): string {
-  if (url === undefined) return `<div class="thumb"></div>`;
-  // `#t=` paints the first frame where a browser would otherwise leave a loaded video blank.
-  return /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(url)
-    ? `<video class="thumb" src="${escape(url)}#t=0.1" muted playsinline preload="metadata"></video>`
-    : `<img class="thumb" src="${escape(url)}" alt="" loading="lazy">`;
-}
-
-const thumb = (post: Post, links: Links): string => picture(post.media_urls[0] ?? links.get(post.file_ids[0] ?? ""));
-
-const networks = (post: Post): string => `<span class="muted">${escape(post.platforms.join(" · "))}</span>`;
-const caption = (post: Post): string => `<p class="caption">${escape(post.content ?? "")}</p>`;
-
-function decideLink(post: Post, env: AppEnv): string {
-  const studio = env["NAIVE_STUDIO_URL"]?.replace(/\/+$/, "");
-  if (!studio || !post.agent_id || !post.session_id) return "";
-  const href = `${studio}/agents/${encodeURIComponent(post.agent_id)}/sessions/${encodeURIComponent(post.session_id)}`;
-  return `<a href="${escape(href)}" target="_blank" rel="noopener">Decide in Naive ↗</a>`;
-}
-
-function numbers(posted: Read<Post[]>, spent: Read<Spent>, cadence: Read<string | null>, now: number): string {
-  let views = failed(posted);
-  let week = failed(posted);
-  if (posted.ok) {
-    const sum = (from: number, to: number) =>
-      posted.value.reduce((total, post) => {
-        const when = at(post.posted_at);
-        const seen = viewsOf(post);
-        return when >= from && when < to && seen !== null ? total + seen : total;
-      }, 0);
-    const current = sum(now - WEEK, Infinity);
-    const before = sum(now - 2 * WEEK, now - WEEK);
-    const change = before === 0 ? "" : `<span class="muted">${current >= before ? "+" : "−"}${Math.abs(Math.round(((current - before) / before) * 100))}%</span>`;
-    views = `<strong>${compact(current)}</strong>${change}`;
-
-    const today = new Date(now);
-    const monday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
-    const count = posted.value.filter((post) => at(post.posted_at) >= monday).length;
-    const goal = cadence.ok && cadence.value !== null ? perWeek(cadence.value) : null;
-    week = `<strong>${count}</strong>${goal === null ? "" : `<span class="muted">of ${goal}</span>`}${failed(cadence)}`;
+/** The one thing an episode waits on, its line and its link, read off its cards and the waiting sessions. */
+function stateOf(number: number, chain: readonly Card[], parked: Parked): Pick<Episode, "label" | "line" | "action" | "working"> {
+  const stopped = chain.find((one) => noteStarts(one, "STOPPED"));
+  if (stopped !== undefined) return { label: "Stopped", line: "The team stopped", action: { text: "Ask CEO", href: say(`Episode ${number} stopped. What happened?`) }, working: null };
+  const post = chain.find((one) => stepOf(one) === "post");
+  if (post?.status === "done") {
+    if (noteStarts(post, "Not posted")) return { label: "Needs you", line: "Connect to post", action: { text: "Connect", href: say(`Connect an account and post Episode ${number}.`) }, working: null };
+    return { label: "Posted", line: `Posted ${WHEN.format(Date.parse(post.updated_at))}`, action: null, working: null };
   }
-  const money = spent.ok
-    ? `${spent.value.complete ? "" : `<span class="muted">at least</span>`}<strong>$${(spent.value.micro / 1e6).toFixed(2)}</strong>`
-    : failed(spent);
-  const tile = (label: string, body: string) => `<div class="tile"><span class="label">${label}</span>${body}</div>`;
-  return `<section class="numbers">${tile("Views", views)}${tile("Posts this week", week)}${tile("Spent", money)}</section>`;
+  const now = chain.find((one) => one.status !== "done");
+  if (now === undefined) {
+    // Every card so far is done and the next is not filed yet: the seat that closed the last files it.
+    const steps = stepsOf(chain[0]!);
+    return { label: "Generating", line: WORKING[steps[steps.indexOf(stepOf(chain[chain.length - 1]!)!) + 1] ?? "post"], action: null, working: null };
+  }
+  const step = stepOf(now)!;
+  const waits = now.woken_session_id ? parked.get(now.woken_session_id) : undefined;
+  if (now.status === "doing" && waits !== undefined) {
+    const href = needs(now.woken_session_id!);
+    if (step === "topic") return { label: "Needs you", line: "Pick a topic", action: { text: "Pick a topic", href }, working: null };
+    if (step === "pictures") return { label: "Needs you", line: "Pick pictures", action: { text: "Pick pictures", href }, working: null };
+    if (step === "post") return waits === "approval" ? { label: "Needs you", line: "Ready to post", action: { text: "Post", href }, working: null } : { label: "Needs you", line: "Connect to post", action: { text: "Connect", href }, working: null };
+    return { label: "Needs you", line: "The team has a question", action: { text: "Answer", href }, working: null };
+  }
+  // The first video waits for a plan (`needs_plan`): blocked, with the cards before it done. The studio's own Start opens the plan.
+  if (now.title === FIRST_RUN_TITLES.video && now.status === "blocked") {
+    return { label: "Needs you", line: "Start your team", action: null, working: null };
+  }
+  return { label: "Generating", line: WORKING[step], action: null, working: now.status === "doing" ? now : null };
 }
 
-const studioOf = (env: AppEnv): string | null => env["NAIVE_STUDIO_URL"]?.replace(/\/+$/, "") || null;
+/** Every episode on the board, numbered oldest first, newest first. A first run that closed on ALREADY RUNNING is none. */
+export function episodesOf(cards: readonly Card[], parked: Parked): Episode[] {
+  const heads = cards
+    .filter(isHead)
+    .filter((head) => !noteStarts(head, ALREADY_RUNNING))
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  return heads
+    .map((head, at) => {
+      const chain = chainFrom(head, cards);
+      const firstRun = head.title === FIRST_RUN_TITLES.topic;
+      const script = chain.find((one) => stepOf(one) === "script");
+      const topic = firstRun ? /^TOPIC:\s*(.+)$/m.exec(head.note ?? "")?.[1]?.trim() : head.title.slice("Plan: ".length).trim();
+      return {
+        number: at + 1,
+        head,
+        chain,
+        title: topic || "Your first episode",
+        slug: firstRun ? (/^SLUG:\s*(\S+)/m.exec(script?.note ?? "")?.[1] ?? null) : null,
+        ...stateOf(at + 1, chain, parked),
+      };
+    })
+    .reverse();
+}
+
+/**
+ * The working card's newest line for the person: the crew comments one short line a step
+ * (`FIRST_VIDEO_RULE`), beside lines for itself in capitals ("IDEAS:", "STILL 2 fil_…"), skipped here.
+ */
+export function progressLine(comments: readonly Comment[]): string | null {
+  const said = [...comments]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .map((one) => firstLine(one.body))
+    .find((line) => line !== "" && !/^[A-Z]{3,}\b/.test(line));
+  if (said === undefined) return null;
+  return said.length > 90 ? `${said.slice(0, 89).trimEnd()}…` : said;
+}
+
+/** An episode's folder, the first run's: its stills, newest last, and its finished video. */
+const folderOf = (files: readonly EpisodeFile[], slug: string | null) => {
+  const inside = slug === null ? [] : files.filter((file) => file.folder === `${EPISODES_FOLDER}/${slug}`).reverse();
+  return { stills: inside.filter((file) => file.content_type.startsWith("image/")).map((file) => file.id), video: inside.find((file) => file.content_type.startsWith("video/"))?.id ?? null };
+};
+
+/** What an episode's card shows: its finished video, else its first still, else the later piece's first scene image. */
+function coverOf(episode: Episode, files: readonly EpisodeFile[], comments: readonly Comment[]): { id: string; video: boolean } | null {
+  const folder = folderOf(files, episode.slug);
+  if (folder.video !== null) return { id: folder.video, video: true };
+  if (folder.stills[0] !== undefined) return { id: folder.stills[0], video: false };
+  const scene = comments.map((one) => /^SCENE \d+ IMAGE (fil_\w+)/.exec(one.body.trim())?.[1]).find((id) => id !== undefined);
+  return scene === undefined ? null : { id: scene, video: false };
+}
+
+// ---------- drawing ----------
+
+function picture(url: string | undefined, video: boolean): string {
+  if (url === undefined) return "";
+  // `#t=` paints the first frame where a browser would otherwise leave a loaded video blank.
+  return video ? `<video src="${escape(url)}#t=0.1" muted playsinline preload="metadata"></video>` : `<img src="${escape(url)}" alt="" loading="lazy">`;
+}
+
+const CHIP: Record<Label, string> = { Generating: "gen", "Needs you": "you", Posted: "posted", Stopped: "stopped" };
+const chip = (label: Label): string => `<span class="chip ${CHIP[label]}"><i></i>${label}</span>`;
+const pill = (action: Action | null): string => (action === null ? "" : `<a class="pill" data-bridge href="${escape(action.href)}">${escape(action.text)}</a>`);
+
+/** "silicon valley comedy" → "Silicon Valley Comedy": the channel is named by the words the person typed. */
+const titled = (words: string): string => words.trim().replace(/(^|\s)(\p{Ll})/gu, (_all, space: string, letter: string) => space + letter.toUpperCase());
+
+type Header = { name: string; kicker: string; face: string | undefined };
 
 /** A prebuilt's first sheet still is a path on the studio; a trained face's first photo is a stored file. Any other link is never loaded. */
 function faceOf(creator: Creator, env: AppEnv, links: Links): string | undefined {
@@ -264,139 +365,156 @@ function faceOf(creator: Creator, env: AppEnv, links: Links): string | undefined
   return file === undefined ? undefined : links.get(file);
 }
 
-function head(creator: Read<Creator | null>, env: AppEnv, links: Links): string {
-  if (!creator.ok || creator.value === null) return `<h1>Media manager</h1>${failed(creator)}`;
-  const one = creator.value;
-  const face = faceOf(one, env, links);
-  const line = one.status === "training" ? "Training · about 20 min" : (one.persona?.niche ?? "");
-  const studio = studioOf(env);
-  const manage = studio === null ? "" : `<a href="${escape(`${studio}/orchestrator?pane=characters&character=${encodeURIComponent(one.id)}`)}" target="_blank" rel="noopener">Manage in Naive ↗</a>`;
-  return `<header class="creator">${face === undefined ? `<div class="face"></div>` : `<img class="face" src="${escape(face)}" alt="">`}<div class="who"><h1>${escape(one.name)}</h1><span class="muted">${escape(line)}</span></div>${manage}</header>`;
+function headerOf(setup: Read<Setup>, creator: Read<Creator | null>, env: AppEnv, links: Links, cover: string | undefined): Header {
+  if (creator.ok && creator.value !== null) {
+    const one = creator.value;
+    return { name: one.name, kicker: one.status === "training" ? "Training · about 20 min" : (one.persona?.niche ?? ""), face: faceOf(one, env, links) };
+  }
+  const answers = setup.ok ? setup.value.answers : {};
+  const niche = typeof answers["niche"] === "string" && answers["niche"].trim() !== "" ? answers["niche"] : null;
+  const cadence = typeof answers["cadence"] === "string" && answers["cadence"].trim() !== "" ? answers["cadence"] : DEFAULT_CADENCE;
+  return { name: niche === null ? "Your channel" : titled(niche), kicker: cadence, face: cover };
 }
 
-function connect(account: Read<boolean> | null, env: AppEnv): string {
-  if (account === null || (account.ok && account.value)) return "";
-  if (!account.ok) return failed(account);
-  const studio = studioOf(env);
-  const open = studio === null ? "" : `<a href="${escape(`${studio}/connections`)}" target="_blank" rel="noopener">Connect in Naive ↗</a>`;
-  return `<section class="connect"><div><span class="title">Connect an account</span><span class="muted">Nothing can post until one is connected.</span></div>${open}</section>`;
+const header = (head: Header): string =>
+  `<header class="chead">${head.face === undefined ? `<div class="av"></div>` : `<img class="av" src="${escape(head.face)}" alt="">`}<div><div class="kicker">${escape(head.kicker)}</div><h1>${escape(head.name)}</h1></div></header>`;
+
+const NEW_EPISODE = `<a class="ep" data-bridge href="${escape(say("New episode: "))}"><div class="shot new"><span class="plus">+</span></div><div class="foot"><span class="title">Create new episode</span><span class="line">Tell the CEO what it's about</span></div></a>`;
+
+function card(episode: Episode, cover: { url: string | undefined; video: boolean }, line: string): string {
+  const shot = cover.url === undefined ? `<div class="waitline">${escape(line)}</div>` : picture(cover.url, cover.video);
+  return `<div class="ep"><a class="open" href="?episode=${encodeURIComponent(episode.head.id)}"><div class="shot">${shot}${chip(episode.label)}</div><div class="foot"><span class="num">Episode #${episode.number}</span><span class="title">${escape(episode.title)}</span>${cover.url === undefined ? "" : `<span class="line">${escape(line)}</span>`}</div></a>${episode.action === null ? "" : `<div class="act">${pill(episode.action)}</div>`}</div>`;
 }
 
-function renders(files: Read<{ id: string }[]> | null, links: Links): string {
-  if (files === null || (files.ok && files.value.length === 0)) return "";
-  const cards = files.ok
-    ? files.value
-        .map((file) => {
-          const url = links.get(file.id);
-          return `<li class="card">${url === undefined ? picture(undefined) : `<a href="${escape(url)}" target="_blank" rel="noopener">${picture(url)}</a>`}</li>`;
-        })
-        .join("")
-    : "";
-  return `<section><h2>Stills and clips</h2>${failed(files)}<ul class="strip">${cards}</ul></section>`;
-}
+const STEP_NAMES: Record<Step, string> = { topic: "Topic", script: "Script", pictures: "Pictures", video: "Video", post: "Post" };
 
-function waiting(pending: Read<Post[]>, env: AppEnv, links: Links): string {
-  if (pending.ok && pending.value.length === 0) return "";
-  const rows = pending.ok
-    ? pending.value
-        .map((post) => `<li class="row">${thumb(post, links)}<div>${caption(post)}${networks(post)}</div><div class="act"><span class="badge">Needs you</span>${decideLink(post, env)}</div></li>`)
-        .join("")
-    : "";
-  return `<section><h2>Waiting on you</h2>${failed(pending)}<ul class="rows">${rows}</ul></section>`;
-}
-
-function scheduled(next: Read<Post[]>, links: Links): string {
-  if (next.ok && next.value.length === 0) return "";
-  const cards = next.ok
-    ? [...next.value]
-        .sort((a, b) => at(a.scheduled_at) - at(b.scheduled_at))
-        .map((post) => `<li class="card">${thumb(post, links)}<time>${escape(when(post.scheduled_at))}</time>${networks(post)}${caption(post)}</li>`)
-        .join("")
-    : "";
-  return `<section><h2>Scheduled</h2>${failed(next)}<ul class="strip">${cards}</ul></section>`;
-}
-
-/** The Posted tiles: newest first, as many as the page draws. */
-const postedShown = (posted: Read<Post[]>, failedPosts: Read<Post[]>): Post[] =>
-  [...(posted.ok ? posted.value : []), ...(failedPosts.ok ? failedPosts.value : [])]
-    .sort((a, b) => at(b.posted_at ?? b.created_at) - at(a.posted_at ?? a.created_at))
-    .slice(0, POSTED_SHOWN);
-
-function postedGrid(posted: Read<Post[]>, failedPosts: Read<Post[]>, links: Links): string {
-  const out = postedShown(posted, failedPosts);
-  const tiles = out
-    .map((post) => {
-      const seen = viewsOf(post);
-      const result = post.status === "failed" ? `<span class="bad">Didn't post</span>` : `<span>${seen === null ? "" : `${compact(seen)} views`}</span>`;
-      const open = post.url ? `<a href="${escape(post.url)}" target="_blank" rel="noopener">Open ↗</a>` : "";
-      return `<li class="card">${thumb(post, links)}<time>${escape(when(post.posted_at ?? post.created_at))}</time>${networks(post)}${result}${open}</li>`;
+/** One episode's page: its steps from its cards, then its script and stills, the first run's. */
+function episodePage(episode: Episode, line: string, script: Read<string> | null, stills: readonly (string | undefined)[]): string {
+  const steps = stepsOf(episode.head);
+  const now = episode.chain.find((one) => one.status !== "done");
+  const rows = steps
+    .map((step) => {
+      const held = episode.chain.find((one) => stepOf(one) === step);
+      const state = held?.status === "done" ? "done" : held !== undefined && held === now ? "now" : "";
+      return `<li class="step ${state}"><i></i>${STEP_NAMES[step]}${state === "now" ? ` · ${escape(line)}` : ""}</li>`;
     })
     .join("");
-  const empty = out.length === 0 && posted.ok && failedPosts.ok ? `<p class="muted">Nothing posted yet.</p>` : "";
-  return `<section><h2>Posted</h2>${failed(posted)}${failed(failedPosts)}${empty}<ul class="grid">${tiles}</ul></section>`;
+  const pictures = stills.filter((url) => url !== undefined).map((url) => `<li>${picture(url, false)}</li>`).join("");
+  const words = script === null ? "" : script.ok ? (script.value.trim() === "" ? "" : `<pre class="script">${escape(script.value.trim())}</pre>`) : failed(script);
+  return `<a class="back" href="?">← Episodes</a><div class="page"><div><span class="num">Episode #${episode.number}</span> ${chip(episode.label)}<h2>${escape(episode.title)}</h2><ol class="steps">${rows}</ol>${episode.action === null ? "" : `<div class="act">${pill(episode.action)}</div>`}</div><div>${pictures === "" ? "" : `<ul class="stills">${pictures}</ul>`}${words}</div></div>`;
 }
 
-/** The page, for `now`. Signed out, it sends the visitor back through Naive, which signs them in. */
-export async function overview(request: Request, env: AppEnv, now: number): Promise<Response> {
+/**
+ * THE BRIDGE (SPEC §3): one `naive:ready` to the studio, then each marked link handed to it as
+ * `naive:open` instead of followed. Outside a frame there is no studio to hand it to, so it is followed.
+ */
+const bridge = (origin: string): string =>
+  `<script>(()=>{if(parent===window)return;const to=${JSON.stringify(origin)};parent.postMessage({type:"naive:ready"},to);document.addEventListener("click",(event)=>{const link=event.target.closest("a[data-bridge]");if(!link)return;event.preventDefault();parent.postMessage({type:"naive:open",href:link.getAttribute("href")},to);});})();</script>`;
+
+const page = (status: number, title: string, body: string, env: AppEnv): Response => {
+  const studio = studioOf(env);
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)}</title><style>${CSS}</style></head><body><main>${body}</main>${bridge(studio === null ? "*" : new URL(studio).origin)}</body></html>`,
+    { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+  );
+};
+
+/** The page. Signed out, it sends the visitor back through Naive, which signs them in. */
+export async function overview(request: Request, env: AppEnv): Promise<Response> {
   if ((await viewer(request, env)) === null) {
     const back = signInUrl(env);
-    if (back === null) return page(401, `<main><p>Open Media manager from Naive.</p></main>`);
+    if (back === null) return page(401, "Your channel", `<p>Open your channel from Naive.</p>`, env);
     return new Response(null, { status: 303, headers: { location: back, "cache-control": "no-store" } });
   }
-  // First, as this is the read that settles a post: the ones after it see what it settled.
-  const next = await posts(env, "scheduled");
-  const [pending, posted, failedPosts, spent, setup] = await Promise.all([
-    posts(env, "pending"),
-    posts(env, "posted"),
-    posts(env, "failed"),
-    read("spend", () => spentSince(env, new Date(now - WEEK).toISOString())),
+  const [setup, board, parked, files] = await Promise.all([
     read("the channel's setup", () => setupOf(env)),
+    read("the board", () => boardOf(env)),
+    read("what waits on you", () => parkedOf(env)),
+    read("the episodes' files", () => episodeFiles(env)),
   ]);
   const answer = setup.ok ? setup.value.answers["character"] : undefined;
   const creator: Read<Creator | null> =
-    typeof answer === "string" && setup.ok
-      ? await read("the creator", () => creatorFor(env, answer, setup.value.installedAt))
-      : { ok: true, value: null };
-  const nothingYet = [next, pending, posted].every((one) => one.ok && one.value.length === 0);
-  const [made, account] = await Promise.all([
-    creator.ok && creator.value !== null
-      ? read("the creator's renders", async () => (await rest<{ data: { id: string }[] }>(env, `/v1/files?character=${encodeURIComponent(creator.value!.id)}&order=desc&limit=${RENDERS_SHOWN}`)).data)
-      : null,
-    nothingYet ? read("the connected accounts", () => hasAccount(env)) : null,
-  ]);
-  const links = await linksFor(env, [
-    ...[...(pending.ok ? pending.value.slice(0, LINKED_SHOWN) : []), ...(next.ok ? next.value.slice(0, LINKED_SHOWN) : []), ...postedShown(posted, failedPosts)].flatMap((post) => (post.media_urls[0] === undefined && post.file_ids[0] !== undefined ? [post.file_ids[0]] : [])),
-    ...(made?.ok ? made.value.map((file) => file.id) : []),
-    ...(creator.ok && creator.value !== null && creator.value.sheet.length === 0 ? creator.value.source_images.filter((one) => one.startsWith("fil_")).slice(0, 1) : []),
-  ]);
-  const cadence: Read<string | null> = setup.ok ? { ok: true, value: cadenceOf(setup.value.answers) } : setup;
-  return page(
-    200,
-    `<main>${head(creator, env, links)}${connect(account, env)}${numbers(posted, spent, cadence, now)}${waiting(pending, env, links)}${scheduled(next, links)}${renders(made, links)}${postedGrid(posted, failedPosts, links)}</main>`,
+    typeof answer === "string" && setup.ok ? await read("the creator", () => creatorFor(env, answer, setup.value.installedAt)) : { ok: true, value: null };
+  const all = board.ok ? episodesOf(board.value, parked.ok ? parked.value : new Map()) : [];
+  const fileList = files.ok ? files.value : [];
+  const opened = new URL(request.url).searchParams.get("episode");
+  const one = opened === null ? undefined : all.find((episode) => episode.head.id === opened);
+  const shown = one === undefined ? all.slice(0, EPISODES_SHOWN) : [one];
+
+  // The working card's comments: the Generating line, and a later piece's scene image.
+  const comments = new Map(
+    await Promise.all(
+      shown.map(async (episode) => [episode.head.id, episode.working === null ? [] : await commentsOf(env, episode.working).catch((): Comment[] => [])] as const),
+    ),
   );
+  const covers = new Map(shown.map((episode) => [episode.head.id, coverOf(episode, fileList, comments.get(episode.head.id)!)] as const));
+  const stills = one === undefined ? [] : folderOf(fileList, one.slug).stills;
+  const scriptFile = one?.slug ? fileList.find((file) => file.folder === EPISODES_FOLDER && file.name === `${one.slug}.md`) : undefined;
+  const [links, script] = await Promise.all([
+    linksFor(env, [
+      ...[...covers.values()].flatMap((cover) => (cover === null ? [] : [cover.id])),
+      ...stills,
+      ...(creator.ok && creator.value !== null && creator.value.sheet.length === 0 ? creator.value.source_images.filter((id) => id.startsWith("fil_")).slice(0, 1) : []),
+    ]),
+    scriptFile === undefined ? null : read("the script", () => fileText(env, scriptFile.id)),
+  ]);
+  const lineOf = (episode: Episode) => progressLine(comments.get(episode.head.id)!) ?? episode.line;
+  const coverUrl = (episode: Episode) => {
+    const cover = covers.get(episode.head.id);
+    return { url: cover ? links.get(cover.id) : undefined, video: cover?.video ?? false };
+  };
+  // The channel's face, with no creator: the newest episode's still.
+  const still = shown.map((episode) => coverUrl(episode)).find((cover) => cover.url !== undefined && !cover.video)?.url;
+  const head = headerOf(setup, creator, env, links, still);
+  const errors = [setup, creator, board, parked, files].map(failed).join("");
+
+  if (one !== undefined) {
+    return page(200, `${one.title} · ${head.name}`, `${header(head)}${errors}${episodePage(one, lineOf(one), script, stills.map((id) => links.get(id)))}`, env);
+  }
+  const cards = shown.map((episode) => card(episode, coverUrl(episode), lineOf(episode))).join("");
+  return page(200, head.name, `${header(head)}${errors}<h2 class="sec">Episodes</h2><div class="grid">${NEW_EPISODE}${cards}</div>`, env);
 }
 
 const CSS = `
-:root{color-scheme:light dark;--bg:#fff;--ink:#111;--soft:#6b6b70;--well:#f4f4f5;--line:#e8e8ea;--bad:#a40000;--chip:#111;--chip-ink:#fff}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--ink:#f4f4f5;--soft:#9c9ca3;--well:#1a1a1d;--line:#26262a;--bad:#ff7a7a;--chip:#f4f4f5;--chip-ink:#111}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.45 -apple-system,system-ui,sans-serif}
-main{max-width:1040px;margin:0 auto;padding:24px 16px}h1{font-size:24px;font-weight:300;margin:0}main>h1{margin-bottom:16px}h2{font-size:15px;font-weight:400;margin:28px 0 10px}
-a{color:inherit;outline:none}a:focus-visible{opacity:.6}.muted{color:var(--soft)}.error,.bad{color:var(--bad)}
-.creator{display:flex;align-items:center;gap:14px;margin-bottom:20px}.face{width:64px;height:64px;border-radius:50%;object-fit:cover;object-position:top;background:var(--well);flex:none}
-.who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.connect{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--well);border-radius:14px;padding:14px;margin-bottom:12px}
-.connect div{display:flex;flex-direction:column;gap:2px}
-.numbers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.tile{background:var(--well);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:4px}
-.tile strong{font-size:24px;font-weight:300}.label{color:var(--soft);font-size:12px}
-ul{list-style:none;margin:0;padding:0}.rows .row{display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--line);padding:10px 0}
-.rows .row>div:nth-child(2){flex:1;min-width:0}.act{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-.badge{background:var(--chip);color:var(--chip-ink);border-radius:999px;padding:2px 8px;font-size:12px}
-.caption{margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.strip{display:flex;gap:12px;overflow-x:auto}.strip .card{flex:0 0 150px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-.card{display:flex;flex-direction:column;gap:4px}time{color:var(--soft);font-size:12px}
-.thumb{width:72px;aspect-ratio:9/16;object-fit:cover;background:var(--well);border-radius:10px;display:block}
-.card .thumb{width:100%}
-@media (max-width:560px){.numbers{grid-template-columns:1fr}}
+:root{color-scheme:light dark;--bg:#fff;--ink:#111114;--soft:#6e6e6e;--body:#555;--well:#f2f2f2;--line:rgba(0,0,0,.1);--wait:#0a66ff;--done:#1fa846;--bad:#a40000;--glass:rgba(255,255,255,.92)}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--ink:#f4f4f5;--soft:#9c9ca3;--body:#c4c4c8;--well:#1a1a1d;--line:rgba(255,255,255,.12);--wait:#4d8dff;--done:#3cc464;--bad:#ff7a7a;--glass:rgba(20,20,22,.88)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.45 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1040px;margin:0 auto;padding:28px 16px 40px}
+a{color:inherit;text-decoration:none;outline:none}a:focus-visible{opacity:.6}
+.error{color:var(--bad);margin:8px 0}
+.chead{display:flex;align-items:center;gap:14px}
+.av{width:56px;height:56px;border-radius:50%;object-fit:cover;object-position:50% 22%;background:var(--well);flex:none}
+.kicker{font-size:12px;color:var(--soft)}h1{font-size:22px;font-weight:600;margin:1px 0 0;letter-spacing:-.01em}
+.sec{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--soft);margin:32px 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
+.ep{display:flex;flex-direction:column;min-width:0}.ep .open{display:flex;flex-direction:column}
+.shot{position:relative;aspect-ratio:9/13;background:var(--well);border-radius:14px;overflow:hidden}
+.shot img,.shot video{width:100%;height:100%;object-fit:cover;display:block}
+.waitline{position:absolute;inset:0;display:grid;place-items:center;padding:18px;text-align:center;color:var(--soft);font-size:13px;line-height:1.4}
+.new{display:grid;place-items:center}.plus{width:44px;height:44px;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-size:22px}
+a.ep:hover .new,a.ep:focus-visible .new{filter:brightness(.95)}
+.chip{position:absolute;top:10px;left:10px;height:26px;padding:0 10px;border-radius:999px;background:var(--glass);font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.page .chip{position:static;vertical-align:middle}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--soft);display:inline-block}
+.chip.gen i{animation:pulse 1.2s ease-in-out infinite}
+.chip.you{background:var(--wait);color:#fff}.chip.you i{background:#fff}
+.chip.posted i{background:var(--done)}.chip.stopped i{background:var(--bad)}
+@keyframes pulse{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.chip.gen i{animation:none}}
+.foot{padding:10px 2px 4px;display:flex;flex-direction:column;gap:2px}
+.num{font-size:12px;color:var(--soft)}.title{font-size:14px;font-weight:500;line-height:1.3}.line{font-size:12px;color:var(--soft)}
+.act{display:flex;justify-content:flex-end;margin-top:6px}
+.pill{height:30px;padding:0 14px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:13px;font-weight:500;display:inline-flex;align-items:center;white-space:nowrap}
+.pill:hover,.pill:focus-visible{opacity:.8}
+.back{font-size:14px;color:var(--soft);margin-top:22px;display:inline-block}
+.page{display:grid;grid-template-columns:1fr 320px;gap:32px;margin-top:20px}
+.page h2{font-size:26px;font-weight:600;margin:6px 0 6px;letter-spacing:-.01em}
+.steps{list-style:none;padding:0;margin:16px 0 0;display:flex;flex-direction:column;gap:8px}
+.step{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--soft)}
+.step i{width:18px;height:18px;border-radius:50%;background:var(--well);flex:none}
+.step.done{color:var(--ink)}.step.done i{background:var(--ink)}
+.step.now{color:var(--ink);font-weight:500}.step.now i{background:var(--wait)}
+.stills{list-style:none;padding:0;margin:0 0 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stills img{width:100%;aspect-ratio:9/14;object-fit:cover;border-radius:10px;display:block;background:var(--well)}
+.script{margin:0;background:var(--well);border-radius:14px;padding:12px 16px;font:inherit;font-size:13px;line-height:1.5;color:var(--body);white-space:pre-wrap;overflow-wrap:anywhere}
+@media (max-width:640px){.grid{grid-template-columns:1fr 1fr;gap:10px}.page{grid-template-columns:1fr;gap:16px}.av{width:44px;height:44px}h1{font-size:19px}.sec{margin:20px 0 10px}}
 `;

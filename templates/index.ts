@@ -8,7 +8,7 @@
  */
 import { AI_INFLUENCER } from "./ai-influencer.ts";
 import { CLIPPING } from "./clipping.ts";
-import { FACELESS, SEGMENTED_SHORT_FORM } from "./faceless.ts";
+import { FACELESS, firstVideoTasks, SEGMENTED_SHORT_FORM } from "./faceless.ts";
 import { LONGFORM } from "./longform.ts";
 import { MUSIC } from "./music.ts";
 import { budgetOf, CLONE_CHANNEL_QUESTION, niche, renderMicroUsd, SEEDANCE_MICRO_USD_PER_SECOND, SEGMENT_MAX_SECONDS } from "./template.ts";
@@ -164,10 +164,14 @@ export const RAW_FILM_VIDEO_MODELS: readonly string[] = ["bytedance/seedance-2.5
 export const RAW_FILM_PRODUCER =
   "Follow your pinned skills' scene grammar, which overrides the pipeline above: aspect_ratio 4:3, generate_video without image_urls, generate_music instrumental: false, nothing burned in.";
 
-/** A raw-film niche: its producer's ceiling is sized for its Seedance calls. No other seat changes. */
+/**
+ * A raw-film niche: its producer's ceiling is sized for its Seedance calls, and its first video is one
+ * 15-second call, as its skill writes it, with the cost lines at Seedance's own rate. No other seat changes.
+ */
 function rawFilm(template: MediaTemplate, producerBudget: Budget): MediaTemplate {
   return {
     ...template,
+    tasks: firstVideoTasks(RAW_FILM_VIDEO_MODELS, SEGMENT_MAX_SECONDS),
     agents: template.agents.map((seat) => (seat.name === "producer" ? { ...seat, budget: producerBudget } : seat)),
   };
 }
@@ -181,7 +185,7 @@ export const RAW_FILM_SCRIPTWRITER =
   "This channel renders from text: a scene has no image_prompt, and its video_prompt is one multi-shot prompt of 7 to 8 shots for 15 seconds, as the pinned skill writes it. The EDIT PLAN's music is a rapped song with the lyrics you write.";
 /**
  * ADR-1580: one empire at one moment as raw 4:3 film, one modern flex per shot, cut to a rapped song.
- * Up to three 15-second calls a piece, and two retakes for a logo or a gesture: five calls (~$22.49).
+ * Up to three 15-second calls a piece, and two retakes for a logo or a gesture: five calls (~$17.51).
  */
 export const EMPIRES_PRODUCER_BUDGET = seedanceCeiling(5);
 export const EMPIRES = rawFilm(
@@ -198,7 +202,7 @@ export const EMPIRES = rawFilm(
   EMPIRES_PRODUCER_BUDGET,
 );
 
-/** A legend-flex or surreal-satire piece is two 15-second calls; two retakes make four calls (~$17.99). */
+/** A legend-flex or surreal-satire piece is two 15-second calls; two retakes make four calls (~$14.01). */
 export const TWO_CALL_PIECE_BUDGET = seedanceCeiling(4);
 
 /**

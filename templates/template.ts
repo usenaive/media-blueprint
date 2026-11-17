@@ -167,8 +167,13 @@ export const REFERENCE_QUESTION: SetupQuestion = {
   help: "A channel or video to model this on. Stills are worth more than a link. Left blank, the team finds real videos to study.",
 };
 
-/** One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`. */
-export type Task = NonNullable<DefineInput["tasks"]>[number];
+/**
+ * One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`,
+ * and `needs_plan`: the board wakes the card only once the company has a plan, and activation wakes it
+ * (channel-first SPEC §5). The engine's schema gains the field with Track H1; an engine without it
+ * drops it on parse, so `naive.config.ts` says so out loud.
+ */
+export type Task = NonNullable<DefineInput["tasks"]>[number] & { needs_plan?: boolean };
 
 /**
  * The key of each template's day-one piece card — the card that starts the first piece's paid chain.
@@ -368,11 +373,12 @@ export function niche(
 export const MICRO_USD_PER_SECOND = 170_000;
 
 /**
- * Seedance 2.5, the allowed fallback, bills ~299,851 µUSD a second, ~1.8× Hailuo. The default
- * $20 task ceiling clears one 30-second piece on it (~$9) but not the retakes around it, so a
- * niche that renders on Seedance sizes its producer's ceiling from this rate (the raw-film niches).
+ * Seedance 2.5, the allowed fallback, bills 233,530 µUSD a second at cost (its `VIDEO_RATES` entry, the
+ * platform's table; `templates.test.ts` holds the two equal), ~1.8× Hailuo. The default $20 task ceiling
+ * clears one 30-second piece on it (~$7.01) but not the retakes around it, so a niche that renders on
+ * Seedance sizes its producer's ceiling from this rate (the raw-film niches).
  */
-export const SEEDANCE_MICRO_USD_PER_SECOND = 299_851;
+export const SEEDANCE_MICRO_USD_PER_SECOND = 233_530;
 
 /** What rendering a whole piece of this length costs, at its longest, at a model's rate. */
 export const renderMicroUsd = (length: Length, perSecond: number = MICRO_USD_PER_SECOND): number => length.max * perSecond;
@@ -521,9 +527,54 @@ export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "gen
  * next (~0.56× Seedance 2.5's price a second, and it renders the restyled frames Seedance refuses,
  * ADR-1120); Seedance 2.5 stays allowed. Every plan's segments and scenes keep to
  * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS`, which all three take.
- * `generate_image` is left unpinned, so it takes the cheapest priced model.
+ * `generate_image` is left unpinned, so it takes the cheapest priced model, except on the first-video
+ * crews' producer, which pins `STILL_MODELS`.
  */
 export const VIDEO_MODELS: readonly string[] = ["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
+
+/**
+ * THE FREE STILLS' IMAGE MODELS (owner, 2026-11-16: "a good one from a top image model", as much value
+ * in as little time as possible), pinned on the first-video crews' producer. The first one the live
+ * catalogue publishes renders; the second is there for the day the first is not published.
+ *
+ * Nano Banana 2.1 is the best quality per credit the gateway serves: Artificial Analysis text-to-image
+ * Elo 1176, against 1143 for Nano Banana 2 at twice the price and 1134 for Seedream 5.5 (read
+ * 2026-11-16). A 1K image (768×1376 at 9:16, above the 720p video it opens) is 1,120 output tokens at
+ * $30 per million: $0.0336, 168 credits (Google's Gemini API pricing page). About 16 s an image at its
+ * default thinking level (Artificial Analysis), so three side by side take about 16 s. It takes up to
+ * 14 reference images. Nano Banana 2 Lite is the same price, Elo 1110, 3.3 s, up to 5 references.
+ */
+export const STILL_MODELS: readonly string[] = ["google/gemini-nano-banana-2.1", "google/gemini-3.1-flash-lite-image"];
+
+/** What a credit is worth: 1 credit = 200 µUSD, so $1 = 5,000 credits (vetta-mono billing). */
+export const MICRO_USD_PER_CREDIT = 200;
+
+/** What every company starts with before it starts its team (owner, 2026-11-16; vetta-mono Track W). */
+export const FREE_CREDITS = 5_000;
+
+/**
+ * WHAT EACH VIDEO MODEL BILLS A SECOND, the platform's own rate table copied: vetta-mono
+ * `packages/billing/src/video-rates.ts` at 348f77caa (rates read 2026-10-21, unchanged 2026-11-04;
+ * FLUX 3 Max's launch promo ended 2026-11-07). A render is charged what the provider reports, at cost,
+ * with no markup; `minSeconds` is what a shorter call is billed as. Every model a seat pins must be
+ * here (`templates.test.ts`), so a card's cost line is never computed from a guess. Re-copy when the
+ * platform's table changes.
+ */
+export const VIDEO_RATES: Readonly<Record<string, { microUsdPerSecond: number; minSeconds?: number }>> = {
+  "heygen/heygen-video-1": { microUsdPerSecond: 36_000 },
+  "black-forest-labs/flux-3-max": { microUsdPerSecond: 170_000 },
+  "minimax/hailuo-3": { microUsdPerSecond: 130_000 },
+  "bytedance/seedance-2.5": { microUsdPerSecond: 233_530 },
+  // The platform's `alibaba/wan-3.0`, by the gateway's image-to-video id the influencer pins.
+  "alibaba/wan-3.0/image-to-video": { microUsdPerSecond: 100_000, minSeconds: 5 },
+};
+
+/** What `seconds` of video on `model` costs, in credits, as the platform bills it. */
+export const videoCredits = (model: string, seconds: number): number => {
+  const rate = VIDEO_RATES[model];
+  if (rate === undefined) throw new Error(`no rate for video model ${model}: copy it from vetta-mono video-rates.ts`);
+  return (Math.max(seconds, rate.minSeconds ?? 0) * rate.microUsdPerSecond) / MICRO_USD_PER_CREDIT;
+};
 
 /**
  * How a plan and a render treat the video model. The default path names none: `generate_video`
@@ -697,7 +748,7 @@ export const channelPlanCard = (firstAsk: string): Task =>
   });
 
 /** The analyst's two crons, the same on every template: the weekly report and the daily numbers. */
-export const analystSchedules = (focus: string): ScheduleDecl[] => [
+export const analystSchedules = (focus: string, watch = ""): ScheduleDecl[] => [
   schedule({
     cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, at the start of the week.
     summary: "Weekly report",
@@ -707,7 +758,9 @@ export const analystSchedules = (focus: string): ScheduleDecl[] => [
   schedule({
     cron: "5 9 * * *", // Daily 09:05 — every post gets a performance history.
     summary: "Performance analysis",
+    // The watch runs first: with no account connected yet, the numbers stop the fire at once.
     input:
+      (watch === "" ? "" : `${watch} Then the numbers. `) +
       "Daily performance check. If social.post_metrics is not offered, no account is connected yet: say so in one line and stop — never request_tools for a social tool. Otherwise call social.post_metrics with since_days 14 to record today's numbers for every post from the last two weeks. Do not edit, delete or repost anything. For any post running well above or below the channel's usual, comment one line on its Publish card saying what you think drove it — hook, topic, length or posting time.",
     budget_micro_usd: 2_000_000, // $2 — one metrics read and a few one-line comments.
   }),

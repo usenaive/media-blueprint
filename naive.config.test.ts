@@ -1,6 +1,6 @@
 /**
  * The blueprint as `naive up` would read it: it parses, it names its template, and it declares one
- * hosted app, Media manager, whose source is in `apps/media-manager`.
+ * hosted app, the channel's home, whose source is in `apps/media-manager`.
  */
 import { readFileSync } from "node:fs";
 import { BLUEPRINTS, collectFiles, defineProject } from "@usenaive-sdk/blueprints";
@@ -129,10 +129,28 @@ describe("naive.config", () => {
     const [app, ...rest] = project.apps;
     expect(rest).toEqual([]);
     expect([app!.name, app!.type, app!.deploy_dir]).toEqual(["media-manager", "fullstack", "apps/media-manager"]);
-    expect(app!.description).toBe("The channel's posts and numbers: what waits on you, what is scheduled, and what went out.");
+    expect(app!.description).toBe("The channel's home: every episode, and what each one waits on.");
     // An install may leave it out: the crew runs on the board without it.
     expect(app!.required).not.toBe(true);
     expect(JSON.parse(readFileSync(new URL("package.json", APP_DIR), "utf8")).name).toBe("media-manager");
+  });
+
+  /**
+   * Channel first (SPEC §3, §5): the app is the company's home, and the first video waits for a plan.
+   * Both fields are new in the engine's schema (Track H1). An engine without them drops them on parse,
+   * and the config says so out loud; this pins which engine is installed, so the day one that keeps
+   * them is, the second half fails and is turned around.
+   */
+  it("declares the app as the home and the first video as needing a plan, and says when the engine drops either", async () => {
+    expect(declaration.apps.map((app) => [app.name, app.home])).toEqual([["media-manager", true]]);
+    expect(declaration.tasks.filter((one) => one.needs_plan === true).map((one) => one.key)).toEqual(["first-briefs"]);
+    const kept = { home: project.apps.some((app) => "home" in app), needs_plan: project.tasks?.some((one) => "needs_plan" in one) };
+    expect(kept).toEqual({ home: false, needs_plan: false });
+    vi.resetModules();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await import("./naive.config");
+    expect(warn.mock.calls.map((call) => String(call[0]))).toContain("media: the installed @usenaive-sdk/blueprints drops home and needs_plan; publish only with an engine that keeps them.");
+    warn.mockRestore();
   });
 
   /**
@@ -258,14 +276,17 @@ describe("naive.config", () => {
     expect(project.questions.map((q) => q.key)).toEqual(ACTIVE.questions.map((q) => q.key));
     // One required — no question asks where the channel posts, or how often — plus the optional one (ADR-0757).
     expect(project.questions.length).toBe(ACTIVE.questions.length);
-    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(1);
+    // v3.7.0: the faceless form asks nothing it needs; its one question is optional.
+    expect(project.questions.filter((q) => q.optional !== true)).toHaveLength(0);
     for (const agent of project.agents) {
       expect(agent.role).toMatch(/\S/);
       // §31.11: a template that seeds `tasks` declares no intakes. The cards are the first work now.
       expect(agent.intake, agent.name).toBeUndefined();
       expect(agent.skills?.every((skill) => skill.startsWith("naive/"))).toBe(true);
     }
-    expect(project.tasks).toEqual(ACTIVE.tasks);
+    // Apart from `needs_plan`, which the installed engine drops (the test above).
+    const { needs_plan: _held, ...firstVideo } = ACTIVE.tasks.find((one) => one.needs_plan === true)!;
+    expect(project.tasks).toEqual(ACTIVE.tasks.map((one) => (one.needs_plan === true ? firstVideo : one)));
     expect(project.tasks).toHaveLength(ACTIVE.tasks.length);
     expect(project.agents.find((agent) => agent.name === "channel-manager")?.required).toBe(true);
     // The chain survives `defineProject` (engine 0.5.0 validates it), so `up` compiles the grants.

@@ -1,8 +1,8 @@
 # How the media blueprint works
 
 This repo declares a crew, its tools, its timers, its setup questions and its first day of cards,
-and it carries one hosted app, Media manager, whose source is in `apps/media-manager`. The platform
-runs all of it. Agents can pull, change and deploy Media manager like any app.
+and it carries one hosted app, the channel (`media-manager`), whose source is in `apps/media-manager`.
+The platform runs all of it. Agents can pull, change and deploy the channel app like any app.
 
 ## 1. What a template is
 
@@ -20,11 +20,15 @@ channel manager, the analyst's crons, the tool rules, the crew rules every promp
 - **The day-one cards** on the company board, keyed `media:<key>`. A re-apply answers the card it
   already wrote.
 - **The setup questions**, which the studio asks before anything is provisioned.
-- **Media manager**, a `fullstack` app deployed from its source in `apps/media-manager`. It is
-  signed in through Naive and reads posts and their files, spend, the setup's answers, a creator's
-  character and renders, and the connected accounts, with the read key the platform gives a template app. An install may leave it out.
+- **The channel app** (`media-manager`), a `fullstack` app deployed from its source in
+  `apps/media-manager` and declared `home: true`, so the studio opens it as the company's home. It is
+  signed in through Naive and reads the board's cards, the sessions waiting on the person, the
+  `Episodes` files, the setup's answers and a creator's character, with the read key the platform
+  gives a template app. It writes nothing: each decision is a link the studio opens in its sheet,
+  `?needs=<ses_ id>` for a waiting question or approval and `?say=<words>` for Ask CEO, posted to the
+  studio as `{ type: "naive:open", href }`, after one `naive:ready`. An install may leave it out.
 
-No secret beyond your own `NAIVE_API_KEY`, and that one never reaches Media manager: the apply mints
+No secret beyond your own `NAIVE_API_KEY`, and that one never reaches the app: the apply mints
 the app its own read key (from a clone, `naive up` needs an admin key to do it, or it refuses the app
 by name).
 
@@ -154,9 +158,19 @@ crew and ask nothing. All five need engine 0.17.0.
 
 ### Day one
 
-Each template seeds its set-up cards first — the channel plan, reference study, look, voice, report
-skeleton and, for generated shorts, the character bible (closed on a draft, approved later) — then
-one piece card for the head of the chain (`first-briefs`, `first-topic` or `first-moments`: the
+`faceless` and its niches (v3.7.0) start with the first video: `topics` (four ideas to pick from),
+then `episode` (the script, written once to `Episodes/<slug>.md`) and `references` (three stills and
+a picture choice), all on the company's free credits. `first-briefs` (one 8-second scene, or the
+raw-film niches' one 15-second call) is `needs_plan`: the board holds it until the company has a
+plan, and it says its cost in credits, at the template's own model rate, as it starts. `first-post`
+asks "Is this good?" on the approval card, and asks to connect an account only when none is,
+alone in its question. The study, look, hook style and bible
+follow the first post in week one, whatever became of it; an unanswered pick gets a nudge comment from
+the analyst's daily fire and is then defaulted to the first option, without the fire ever asking.
+
+Every other template seeds its set-up cards first — the channel plan, reference study, look, voice,
+report skeleton and, for generated shorts, the character bible (closed on a draft, approved later) —
+then one piece card for the head of the chain (`first-briefs`, `first-topic` or `first-moments`: the
 key 1.x already seeded, so a re-apply to an existing org seeds nothing and starts no paid piece).
 That piece runs its full chain to the approval card. The reference study never asks the operator: a
 blank reference answer means go and find two or three real videos in the niche.
@@ -231,10 +245,10 @@ a cron fire is not.
 - `handoffs: false` everywhere, so `send_to_agent` and `list_agents` are denied;
 - over all of that, the platform (vetta-mono ADR-1484) gives every seat `apps` at `ask` and `read`,
   `write`, `edit`, `ls`, `find`, `bash` at `allow` when it applies the template, so any seat can pull,
-  edit and deploy Media manager or build a new app, with each app action on an approval card; `apps`
+  edit and deploy the channel app or build a new app, with each app action on an approval card; `apps`
   reaches only this channel's own apps, never another project's in the same organization;
-- `generate_video` carries `config.models`: `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3,
-  with Seedance 2.5 allowed; on the `ai-influencer` producer,
+- `generate_video` carries `config.models`: `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3, with
+  Seedance 2.5 allowed; on the raw-film niches Seedance 2.5 alone; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
   Every generated short renders 5–15 second scenes;
 - `generate_speech`, `generate_music`, shell and file tools on every generated-short producer; `transcribe_audio` on

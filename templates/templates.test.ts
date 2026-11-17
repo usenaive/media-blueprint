@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { AI_INFLUENCER_BUDGETS, AI_INFLUENCER_MICRO_USD_PER_SECOND, AI_INFLUENCER_VIDEO_MODELS, DAY_ONE_PIECE, DEFAULT_TRAINED_LOOKS, INFLUENCER_BRAKE, INFLUENCER_CADENCE, INFLUENCER_FACE_FLAG, INFLUENCER_MANAGER_BRIEF, INFLUENCER_NICHE, INFLUENCER_NICHE_FIXED, INFLUENCER_PUBLIC, PERSONA_CHANGES, PERSONA_RULE, PRODUCER_SPEECH_VOICE, INFLUENCER_PAGES, NO_DRAWN_WORDS, ONE_OUTFIT, ONE_SET, PREBUILT_CREATORS, PRODUCER_SCENE_STEP, replaceSpan, SCRIPTWRITER_IMAGE_RULE, SCRIPTWRITER_VIDEO_CARRIES, STUDY_SPEND_MICRO_USD } from "./ai-influencer.ts";
 import { ACTIVE, CHANNEL_IDENTITY, CHANNEL_TIMEZONE, EMPIRES_PRODUCER_BUDGET, FFMPEG_SETUP, MUSIC_PUBLISHER_BRIEF, MUX_RECIPE, niche, OWN_CARDS, RAW_FILM_PRODUCER, RAW_FILM_SCRIPTWRITER, RAW_FILM_VIDEO_MODELS, SURREAL_SATIRE_PRODUCER, SURREAL_SATIRE_SCRIPTWRITER, TEMPLATES, TWO_CALL_PIECE_BUDGET } from "./index.ts";
-import { CONTINUITY_RULE } from "./faceless.ts";
+import { ALREADY_RUNNING, CONTINUITY_RULE, DIGEST_CREDITS, EDIT_CREDITS, EPISODES_FOLDER, FIRST_POST_TITLE, FIRST_RUN_WATCH, FIRST_VIDEO_RULE, freeRunCredits, OLD_FIRST_PIECE_TITLE, SERVICE_CREDITS, SLUG_RULE, STILLS, STILL_CREDITS, STILLS_MAX, STILLS_TURN_CREDITS, stillsCost, STUDY_FIRST_TASKS, turnCredits, WEEK_ONE, WORD_CREDITS, WORDS_ONLY } from "./faceless.ts";
 import {
   ASK_BY_DEFAULT_TOOLS,
   BUILTIN_TOOLS,
@@ -38,6 +38,10 @@ import {
   SEAT_MODEL,
   segmentsOf,
   VIDEO_MODELS,
+  VIDEO_RATES,
+  FREE_CREDITS,
+  MICRO_USD_PER_CREDIT,
+  STILL_MODELS,
   words,
 } from "./template.ts";
 import type { MediaTemplate, TemplateName } from "./template.ts";
@@ -97,6 +101,8 @@ const BASE_OF: Partial<Record<TemplateName, TemplateName>> = {
   "ai-influencer": "faceless",
   hardstyle: "music", techno: "music", rap: "music", pop: "music",
 };
+/** A template that starts on the first-video chain: `faceless` and every niche of it but the influencer. */
+const firstVideo = (template: MediaTemplate): boolean => template.tasks.some((task) => task.key === "references");
 const withNiches = <T,>(base: Partial<Record<TemplateName, T>>): Record<TemplateName, T> => {
   const out = { ...base } as Record<TemplateName, T>;
   for (const [niche, from] of Object.entries(BASE_OF)) out[niche as TemplateName] ??= base[from]!;
@@ -374,7 +380,9 @@ describe("the toolsets", () => {
       // The influencer pins the ones measured keeping a face, the raw-film niches Seedance; every other renderer the base's.
       const models = template.name === "ai-influencer" ? AI_INFLUENCER_VIDEO_MODELS : RAW_FILM.includes(template.name) ? RAW_FILM_VIDEO_MODELS : VIDEO_MODELS;
       expect(video.config, id).toEqual({ models });
-      expect(agent.tools?.configs["generate_image"]?.config, id).toBeUndefined();
+      // The first-video crews' producer pins the free stills' models; every other image is the platform's cheapest.
+      const firstVideo = agent.name === "producer" && template.tasks.some((one) => one.key === "references");
+      expect(agent.tools?.configs["generate_image"]?.config, id).toEqual(firstVideo ? { models: STILL_MODELS } : undefined);
     }
     expect(seat(TEMPLATES.faceless, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
     expect(seat(TEMPLATES.longform, "producer").tools?.configs["generate_video"]?.enabled).toBe(true);
@@ -384,13 +392,13 @@ describe("the toolsets", () => {
 
   /**
    * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
-   * FLUX 3 Max on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
+   * the platform's own default video model on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
   it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
-    for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
+    for (const [template, first] of [[TEMPLATES.faceless, "black-forest-labs/flux-3-max"], [TEMPLATES.longform, "black-forest-labs/flux-3-max"]] as const) {
       const producer = seat(template, "producer");
-      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("black-forest-labs/flux-3-max");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe(first);
       expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
@@ -428,14 +436,20 @@ describe("the board", () => {
    */
   it("seeds day one as a chain: set-up first, then one piece behind it", () => {
     const chains: Record<TemplateName, Record<string, string[]>> = withNiches<Record<string, string[]>>({
+      // v3.7.0: the first video first — four ideas, the script, the stills and a pick on the free
+      // credits, the video on a plan; the study, look, voice and bible follow it in week one.
       faceless: {
-        "channel-plan": [],
-        "reference-study": [],
+        topics: [],
+        episode: ["topics"],
+        references: ["episode"],
+        "first-briefs": ["references"],
+        "first-post": ["first-briefs"],
+        "reference-study": ["first-post"],
         look: ["reference-study"],
         "character-bible": ["reference-study"],
         "hook-style": ["reference-study"],
+        "channel-plan": ["look"],
         "report-frame": ["channel-plan"],
-        "first-briefs": ["look", "hook-style", "character-bible"],
       },
       // H5: the face and the persona start the first piece; the study runs after it starts.
       // The influencer's bible is drawn from the persona, so it waits on nothing either.
@@ -480,8 +494,9 @@ describe("the board", () => {
         for (const blocker of task.blocked_by ?? []) expect(seen, `${template.name}/${task.key}`).toContain(blocker);
         seen.add(task.key);
       }
-      // The piece is started by the head of the pipeline, and it is last (the influencer's study follows it, H5).
-      expect((template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1))?.assignee, template.name).toBe(template.pipeline[0]);
+      // The piece is started by the head of the pipeline; on the faceless crews the producer renders the first video itself.
+      const piece = template.tasks.find((task) => task.key === FIRST_PIECE_KEY[template.name]);
+      expect(piece?.assignee, template.name).toBe(firstVideo(template) ? "producer" : template.pipeline[0]);
     }
   });
 
@@ -491,12 +506,12 @@ describe("the board", () => {
    * the key it holds makes the re-apply a no-op on that card.
    */
   it("keys the day-one piece card with the key v1.x already seeded, never `first-piece`", () => {
-    expect(TEMPLATES.faceless.tasks.at(-1)?.key).toBe("first-briefs");
+    expect(FIRST_PIECE_KEY.faceless).toBe("first-briefs");
     expect(TEMPLATES.longform.tasks.at(-1)?.key).toBe("first-topic");
     expect(TEMPLATES.clipping.tasks.at(-1)?.key).toBe("first-moments");
     for (const template of all) {
-      // The influencer's study waits on its first piece, so it is declared after it (H5).
-      const piece = template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1);
+      // The influencer's study waits on its first piece, so it is declared after it (H5); the faceless week-one cards follow theirs.
+      const piece = firstVideo(template) ? template.tasks.find((task) => task.key === FIRST_PIECE_KEY.faceless) : template.name === "ai-influencer" ? template.tasks.at(-2) : template.tasks.at(-1);
       expect(piece?.key, template.name).toBe(FIRST_PIECE_KEY[template.name]);
       expect(template.tasks.map((task) => task.key), template.name).not.toContain("first-piece");
     }
@@ -681,7 +696,8 @@ describe("analytics", () => {
       const [weekly, daily] = analyst.schedules!;
       expect(weekly!.input, template.name).toMatch(/social\.post_metrics/);
       expect(weekly!.input, template.name).toMatch(/assignee channel-manager/);
-      expect(daily!.input, template.name).toMatch(/^Daily performance check\..*social\.post_metrics with since_days 14/s);
+      // The faceless crews' first-run watch comes first (it must run with no account connected).
+      expect(daily!.input, template.name).toMatch(/^(FIRST-RUN WATCH, first: .* Then the numbers\. )?Daily performance check\..*social\.post_metrics with since_days 14/s);
       expect(analyst.system, template.name).toMatch(/Weekly report: /);
       expect(analyst.system, template.name).toMatch(/more of.*less of/s);
       expect(seat(template, PUBLISHER).system, template.name).toMatch(/weekly report card wakes you/i);
@@ -777,7 +793,7 @@ describe("the setup questions", () => {
   const BASES: TemplateName[] = ["faceless", "longform", "clipping", "music"];
 
   it("asks one per base template, and a second that is optional", () => {
-    for (const name of BASES) {
+    for (const name of BASES.filter((one) => one !== "faceless")) {
       const template = TEMPLATES[name];
       expect(template.questions.filter((q) => q.optional !== true), name).toHaveLength(1);
       expect(template.questions.length, name).toBe(2);
@@ -1579,7 +1595,7 @@ describe("the empires niche makes raw video", () => {
   it("lets the producer pay for a whole Seedance piece and two retakes, and no more than a day's default", () => {
     const producer = seat(empires, "producer").budget!;
     expect(producer).toEqual(EMPIRES_PRODUCER_BUDGET);
-    // Three 15-second calls and two retakes, at Seedance's rate: ~$22.49 before turns.
+    // Three 15-second calls and two retakes, at Seedance's rate: ~$17.51 before turns.
     expect(producer.max_task_micro_usd).toBeGreaterThan(5 * 15 * SEEDANCE_MICRO_USD_PER_SECOND);
     expect(producer.max_task_micro_usd).toBeLessThanOrEqual(producer.cap_micro_usd);
     expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
@@ -1785,7 +1801,7 @@ describe("the legend-flex and surreal-satire niches make raw video", () => {
     it(`lets the producer pay for two Seedance calls and two retakes, and no more than a day's default (${template.name})`, () => {
       const producer = seat(template, "producer").budget!;
       expect(producer).toEqual(TWO_CALL_PIECE_BUDGET);
-      // Two 15-second calls and two retakes, at Seedance's rate: ~$17.99 before turns.
+      // Two 15-second calls and two retakes, at Seedance's rate: ~$14.01 before turns.
       expect(producer.max_task_micro_usd).toBeGreaterThan(4 * 15 * SEEDANCE_MICRO_USD_PER_SECOND);
       expect(producer.max_task_micro_usd).toBeLessThanOrEqual(producer.cap_micro_usd);
       expect(producer.cap_micro_usd).toBe(seat(TEMPLATES.faceless, "producer").budget!.cap_micro_usd);
@@ -1796,5 +1812,271 @@ describe("the legend-flex and surreal-satire niches make raw video", () => {
     for (const template of RAW_FILM.map((name) => TEMPLATES[name])) {
       expect(seat(template, PUBLISHER).tools?.configs["social.post"], template.name).toEqual({ enabled: true, permission: "ask" });
     }
+  });
+});
+
+/**
+ * THE FIRST VIDEO (v3.7.0, owner 2026-11-16). Every company starts with 5,000 free credits and the crew
+ * runs at once; the wall opens wherever the credits run out. So: connect (never waited on) and four
+ * ideas at once, the script, the stills and a picture choice, then the video and "Is this good?" — the
+ * cheap steps first, each costly one announced in credits, at its own template's rates, before it starts.
+ */
+describe("the first video", () => {
+  const FAMILY = all.filter((template) => template.name === "faceless" || (BASE_OF[template.name] === "faceless" && template.name !== "ai-influencer"));
+  const card = (template: MediaTemplate, key: string) => template.tasks.find((one) => one.key === key)!;
+  /** Every card a card waits on, however far back. */
+  const behind = (template: MediaTemplate, key: string): Set<string> => {
+    const out = new Set<string>();
+    const walk = (one: string) => {
+      for (const blocker of card(template, one).blocked_by ?? []) if (!out.has(blocker)) (out.add(blocker), walk(blocker));
+    };
+    walk(key);
+    return out;
+  };
+  const FIRST_RUN = ["topics", "episode", "references", FIRST_PIECE_KEY.faceless, "first-post"];
+  const pinned = (template: MediaTemplate): readonly string[] => (seat(template, "producer").tools!.configs["generate_video"]!.config as { models: string[] }).models;
+  const secondsOf = (template: MediaTemplate): number => Number(/sum to exactly (\d+) seconds/.exec(card(template, "episode").body!)![1]);
+  /** The video line from the platform's rate table, worked here by hand: seconds × µUSD a second ÷ 200, plus the edit, up to the next 100. */
+  const videoLine = (template: MediaTemplate): number => {
+    const rate = VIDEO_RATES[pinned(template)[0]!]!;
+    return Math.ceil((Math.max(secondsOf(template), rate.minSeconds ?? 0) * rate.microUsdPerSecond / 200 + EDIT_CREDITS) / 100) * 100;
+  };
+
+  it("never asks the operator from a scheduled fire: a fire that waits makes the platform skip every later one", () => {
+    for (const { agent, id } of everySeat) for (const fire of agent.schedules ?? []) expect(fire.input, `${id} ${fire.cron}`).not.toMatch(/ask_operator|ask the operator/i);
+    const daily = seat(TEMPLATES.faceless, "analyst").schedules!.find((one) => one.cron === "5 9 * * *")!;
+    expect(daily.input).toContain("never a question: this fire must not wait on the operator");
+  });
+
+  it("is every faceless crew's day one, and the influencer keeps its own", () => {
+    expect(FAMILY.length).toBe(17);
+    for (const template of FAMILY) expect(FIRST_RUN.map((key) => card(template, key)?.key), template.name).toEqual(FIRST_RUN);
+    expect(TEMPLATES["ai-influencer"].tasks.map((one) => one.key)).not.toContain("topics");
+  });
+
+  it("starts on the four ideas, with no connect card in front of them", () => {
+    for (const template of FAMILY) {
+      expect(template.tasks[0]?.key, template.name).toBe("topics");
+      for (const one of template.tasks.filter((card) => FIRST_RUN.includes(card.key) && card.key !== "first-post")) {
+        expect(one.body, `${template.name}/${one.key}`).not.toMatch(/type connect/);
+      }
+    }
+  });
+
+  it("asks to connect only at the first post, only with no account, alone in its question, with the video ready", () => {
+    for (const template of FAMILY) {
+      const body = card(template, "first-post").body!;
+      const read = body.indexOf("Read the connected accounts (social.accounts; not offered means none is connected).");
+      const ask = body.indexOf('If none is connected, this is the one time the channel asks: ask the operator once with ask_operator: prompt "Your video is ready. Connect an account to post it.", one field of type connect, key accounts, platforms ["youtube","tiktok","instagram"], and no other field.');
+      expect(read, template.name).toBeGreaterThan(-1);
+      expect(ask, template.name).toBeGreaterThan(read);
+      expect(body, template.name).toContain('with none, close this card done with the note "Not posted: no account yet. VIDEO: <the fil_ id>"');
+      // The only connect question on the whole chain.
+      expect(template.tasks.filter((one) => /type connect/.test(one.body ?? "")).map((one) => one.key), template.name).toEqual(["first-post"]);
+    }
+  });
+
+  it("asks a choice of four ideas it wrote, and keeps them on the card for the fallback", () => {
+    for (const template of FAMILY) {
+      const topics = card(template, "topics");
+      expect([topics.assignee, topics.blocked_by ?? []], template.name).toEqual(["trend-scout", []]);
+      expect(topics.body, template.name).toMatch(/one field: key topic, label "First video", type choice, the four ideas as options/);
+      expect(topics.body, template.name).toMatch(/with neither, four ideas in four different popular niches, so the pick sets the niche/);
+      const ideas = topics.body!.indexOf('Comment them on this card as "IDEAS: 1)');
+      expect(ideas, template.name).toBeGreaterThan(-1);
+      expect(ideas, template.name).toBeLessThan(topics.body!.indexOf("ask_operator"));
+    }
+  });
+
+  it("names each episode by a slug the Files folder rules take, writes it once, and keeps the title inside", () => {
+    expect(SLUG_RULE).toMatch(/letters and digits only, at most 48 characters/);
+    for (const template of FAMILY) {
+      const episode = card(template, "episode").body!;
+      expect(episode, template.name).toContain(SLUG_RULE);
+      expect(episode, template.name).toContain('Publish it once with publish_file, content the script in markdown starting "# <the topic>", name "<the slug>.md", folder "Episodes"');
+      const references = card(template, "references").body!;
+      expect(references, template.name).toContain('folder "Episodes/<the slug>"');
+      expect(references, template.name).not.toMatch(/publish_file/);
+      expect(references, template.name).toContain("Publish nothing else: the script file stays as it is.");
+      for (const key of ["topics", "episode"]) expect(card(template, key).body, `${template.name}/${key}`).toContain(WORDS_ONLY);
+    }
+    expect(EPISODES_FOLDER).toBe("Episodes");
+  });
+
+  it("asks for the pictures as a choice of the stills themselves, more than one allowed, at most one redo each", () => {
+    for (const template of FAMILY) {
+      const body = card(template, "references").body!;
+      expect(body, template.name).toMatch(/one field: key stills, label "References", type choice, multiple true/);
+      expect(body, template.name).toContain('details with each option\'s image "/files/<its fil_ id>/raw"');
+      expect(body, template.name).toContain(`once at most — ${STILLS_MAX} pictures on this card in all, redos included`);
+    }
+    expect([STILLS, STILLS_MAX]).toEqual([3, 6]);
+    expect("/files/fil_abc/raw").toMatch(/^\/(?:[^/]|$)/);
+  });
+
+  it("prices every template's video at its own first pinned model's rate, with the edit in it, as it starts", () => {
+    for (const template of FAMILY) {
+      expect(VIDEO_RATES[pinned(template)[0]!], template.name).toBeDefined();
+      const line = `about ${videoLine(template).toLocaleString("en-US")} credits`;
+      const video = card(template, FIRST_PIECE_KEY.faceless).body!;
+      const said = video.indexOf(`"Making the video: ${line}, ready in about 15 minutes."`);
+      expect(said, template.name).toBeGreaterThan(-1);
+      expect(said, template.name).toBeLessThan(video.indexOf("generate_video"));
+    }
+    // Worked by hand: 8 s at 170,000 µUSD/s is 6,800; 15 s at 233,530 µUSD/s is 17,515; each with the 1,300 around it.
+    expect(EDIT_CREDITS).toBe(1_300);
+    expect(pinned(TEMPLATES.faceless)[0]).toBe("black-forest-labs/flux-3-max");
+    expect(videoLine(TEMPLATES.faceless)).toBe(8_100);
+    expect(videoLine(TEMPLATES.empires)).toBe(18_900);
+    expect(card(TEMPLATES.empires, FIRST_PIECE_KEY.faceless).body).toContain("Making the video: about 18,900 credits");
+    // The ceilings' Seedance rate is the platform's, not a second figure.
+    expect(SEEDANCE_MICRO_USD_PER_SECOND).toBe(VIDEO_RATES["bytedance/seedance-2.5"]!.microUsdPerSecond);
+    // Every model any seat pins has the platform's rate copied.
+    for (const { agent } of everySeat) {
+      const config = agent.tools?.configs["generate_video"];
+      if (config?.enabled === true) for (const model of (config.config as { models: string[] }).models) expect(VIDEO_RATES[model], model).toBeDefined();
+    }
+  });
+
+  it("pins the free stills on the best image model per credit, with one fallback, never on the influencer", () => {
+    expect(STILL_MODELS).toEqual(["google/gemini-nano-banana-2.1", "google/gemini-3.1-flash-lite-image"]);
+    for (const template of FAMILY) expect(seat(template, "producer").tools?.configs["generate_image"], template.name).toEqual({ enabled: true, permission: "allow", config: { models: STILL_MODELS } });
+    expect(seat(TEMPLATES["ai-influencer"], "producer").tools?.configs["generate_image"]).toEqual({ enabled: true, permission: "allow" });
+  });
+
+  it("renders the stills side by side in one step once claimed, on one look, with one redo each", () => {
+    for (const template of FAMILY) {
+      const body = card(template, "references").body!;
+      expect(body, template.name).toContain(`ALL AT ONCE, in one step as soon as the card is claimed: comment on this card "Making ${STILLS} pictures for <the topic>." and make ${STILLS} generate_image calls in that same step, so they render side by side, never one after another`);
+      expect(body, template.name).toContain("no model argument");
+      expect(body, template.name).toContain("Every prompt carries the same words for the cast and the look, so the stills match; where a pinned skill ships a frame of the channel's look, pass that one frame in image_urls on every call.");
+      expect(body, template.name).toContain(`look at all of them with view_image, in one step, and render a broken one again (extra limbs, words in the picture, the wrong subject), once at most — ${STILLS_MAX} pictures on this card in all`);
+    }
+  });
+
+  it("puts no credit line in front of a pick: the stills are free, and the video waits for a plan", () => {
+    for (const template of FAMILY) {
+      const body = card(template, "references").body!;
+      const said = body.indexOf(`"Making ${STILLS} pictures for <the topic>."`);
+      expect(said, template.name).toBeGreaterThan(-1);
+      expect(said, template.name).toBeLessThan(body.indexOf("generate_image"));
+      expect(body, template.name).toContain('prompt "Pick the pictures for your video. Your pick starts the video.", one field');
+      for (const key of ["topics", "episode", "references"]) expect(card(template, key).body, `${template.name}/${key}`).not.toMatch(/credits/);
+    }
+  });
+
+  it("holds the first video for a plan, and only it", () => {
+    for (const template of FAMILY) {
+      expect(template.tasks.filter((one) => one.needs_plan === true).map((one) => one.key), template.name).toEqual([FIRST_PIECE_KEY.faceless]);
+    }
+    for (const template of Object.values(TEMPLATES).filter((one) => !FAMILY.includes(one))) {
+      expect(template.tasks.some((one) => "needs_plan" in one), template.name).toBe(false);
+    }
+  });
+
+  it("estimates every seat's turns from its real prompt, and the constants cover them on every template", () => {
+    for (const template of FAMILY) {
+      const prompt = (seatName: string, key: string) => (seat(template, seatName).system ?? "").length + (card(template, key).body ?? "").length;
+      const words = turnCredits(prompt("trend-scout", "topics"), "topics") + turnCredits(prompt("scriptwriter", "episode"), "episode") + DIGEST_CREDITS;
+      expect(words, template.name).toBeLessThanOrEqual(WORD_CREDITS);
+      expect(turnCredits(prompt("producer", "references"), "references"), template.name).toBeLessThanOrEqual(STILLS_TURN_CREDITS);
+      const around = turnCredits(prompt("producer", FIRST_PIECE_KEY.faceless), "first-briefs") + SERVICE_CREDITS + turnCredits(prompt(PUBLISHER, "first-post"), "first-post");
+      expect(around, template.name).toBeLessThanOrEqual(EDIT_CREDITS);
+      // And not padded past a fifth: an estimate, not a guess.
+      expect(words, template.name).toBeGreaterThan(WORD_CREDITS * 0.8);
+    }
+    // A prompt is re-sent every step: 10,000 characters over 8 steps at 6,000 read tokens is ~110 credits.
+    expect(turnCredits(10_000, "episode")).toBe(Math.ceil((8 * ((2_500 + 3_000 + 6_000 + 6_000) * 0.15 + 400 * 0.5)) / 200));
+  });
+
+  it("keeps what runs before a plan, the words and every still, inside the free credits on every template", () => {
+    // Nano Banana 2.1 at 1K, worked by hand: 1,120 output tokens at $30 a million is 33,600 µUSD, 168 credits; 170 with a reference read in.
+    expect((1_120 * 30) / MICRO_USD_PER_CREDIT).toBe(168);
+    expect(STILL_CREDITS).toBe(170);
+    // 3 × 170 + 300 turns at least; 6 × 170 + 300 at most (one redo each).
+    expect(stillsCost).toEqual({ min: 3 * 170 + STILLS_TURN_CREDITS, max: 6 * 170 + STILLS_TURN_CREDITS });
+    expect(freeRunCredits()).toBe(1_820);
+    expect(freeRunCredits()).toBeLessThanOrEqual(FREE_CREDITS / 2);
+    // The first video is short on purpose: one 8-second scene; the raw-film niches' one 15-second call is their skill's.
+    for (const template of FAMILY) expect(secondsOf(template), template.name).toBe(RAW_FILM.includes(template.name) ? 15 : 8);
+  });
+
+  it("renders the video only once the pictures are picked, and nothing else holds it", () => {
+    for (const template of FAMILY) {
+      expect(card(template, FIRST_PIECE_KEY.faceless).blocked_by, template.name).toEqual(["references"]);
+      expect([...behind(template, FIRST_PIECE_KEY.faceless)].sort(), template.name).toEqual(["episode", "references", "topics"]);
+    }
+  });
+
+  it("starts week one once the first post is decided, done, not posted or STOPPED, naming both STOPPED rules it sets aside", () => {
+    // The two rules, word for word as the seat holds them: one in the crew rules, one on every card.
+    const crewRule = /When a card you waited on closed STOPPED, stop the same way\./.exec(CREW_RULES)![0];
+    const cardRule = /A card you waited on that closed STOPPED means stop the same way\./.exec(CARD_ORDER)![0];
+    expect(WEEK_ONE).toContain(`your crew rules' "${crewRule}"`);
+    expect(WEEK_ONE).toContain(`this card's "${cardRule}"`);
+    expect(WEEK_ONE).toContain(`Do it whether that card closed done, "Not posted:" or STOPPED.`);
+    expect(WEEK_ONE).toContain(`titled exactly "${FIRST_POST_TITLE}"`);
+    for (const template of FAMILY) {
+      const study = card(template, "reference-study");
+      // After the first post, so week one never competes with it for the last free credits.
+      expect(study.blocked_by, template.name).toEqual(["first-post"]);
+      expect(card(template, "first-post").blocked_by, template.name).toEqual([FIRST_PIECE_KEY.faceless]);
+      // Said before the card's own rules, which would otherwise stop it behind a STOPPED card.
+      expect(study.body!.indexOf(WEEK_ONE), template.name).toBe(0);
+      expect(study.body!.indexOf(WEEK_ONE), template.name).toBeLessThan(study.body!.indexOf(CARD_ORDER));
+      for (const one of template.tasks) expect(one.blocked_by ?? [], `${template.name}/${one.key}`).not.toContain("character-bible");
+      for (const key of FIRST_RUN) {
+        for (const week of ["reference-study", "look", "hook-style", "character-bible", "channel-plan"]) expect(behind(template, key), `${template.name}/${key}`).not.toContain(week);
+      }
+      expect(card(template, "channel-plan").blocked_by, template.name).toEqual(["look"]);
+    }
+  });
+
+  it("nudges an unanswered pick with a comment after 12 hours, then goes on with the first option, never asking from the fire", () => {
+    for (const template of FAMILY) {
+      const daily = seat(template, "analyst").schedules!.find((one) => one.cron === "5 9 * * *")!;
+      expect(daily.input.startsWith(FIRST_RUN_WATCH), template.name).toBe(true);
+    }
+    expect(seat(TEMPLATES["ai-influencer"], "analyst").schedules!.find((one) => one.cron === "5 9 * * *")!.input).not.toContain("FIRST-RUN WATCH");
+    expect(seat(TEMPLATES.longform, "analyst").schedules!.find((one) => one.cron === "5 9 * * *")!.input).not.toContain("FIRST-RUN WATCH");
+    expect(FIRST_RUN_WATCH).toContain('find the cards titled exactly "Offer four ideas for the first video" and "Make the reference pictures" that are still doing');
+    const nudge = FIRST_RUN_WATCH.indexOf('with no NUDGED comment on it, comment on it "NUDGED: no pick yet; the team goes on with the first option at the next daily check" — a comment only, never a question');
+    const fallback = FIRST_RUN_WATCH.indexOf("with a NUDGED comment more than 20 hours old, close that card yourself");
+    expect(nudge).toBeGreaterThan(-1);
+    expect(nudge).toBeLessThan(fallback);
+    expect(FIRST_RUN_WATCH).toContain('"TOPIC: <the first idea on its IDEAS comment>"');
+    expect(FIRST_RUN_WATCH).toContain('"STILLS: <the first still of each scene>"');
+    expect(FIRST_VIDEO_RULE).toMatch(/If you wake to the operator's answer and this card is already done \(a note ending DEFAULTED\)/);
+  });
+
+  it("asks again before posting when no account was connected, through the publisher's own rule", () => {
+    for (const template of FAMILY) expect(seat(template, PUBLISHER).system, template.name).toMatch(/If social\.post is not offered, or no account is connected: .* ask the operator once with ask_operator to connect one/);
+  });
+
+  it("asks 'Is this good?' on the first video's own Publish card, seeded, never a second approval", () => {
+    for (const template of FAMILY) {
+      const post = card(template, "first-post");
+      expect([post.title, post.assignee], template.name).toEqual([FIRST_POST_TITLE, PUBLISHER]);
+      expect(post.body, template.name).toMatch(/If one is connected, tell the operator in one line: "Your video is ready\. Is this good\? Allow posts it/);
+      // Its one question is the connect one; "Is this good?" is the post's own approval.
+      expect(post.body!.match(/ask_operator/g), template.name).toHaveLength(1);
+      expect(card(template, FIRST_PIECE_KEY.faceless).body, template.name).toContain(`Its Publish card, "${FIRST_POST_TITLE}", already waits on this one: create no other.`);
+    }
+  });
+
+  it("closes quietly on a channel set up before, reading only this crew's cards by their exact titles", () => {
+    // The title 2.0–3.6 seeded on the first-piece card, which an older install still holds.
+    expect(OLD_FIRST_PIECE_TITLE).toBe(STUDY_FIRST_TASKS.find((one) => one.key === FIRST_PIECE_KEY.faceless)!.title);
+    for (const template of FAMILY) {
+      const topics = card(template, "topics").body!;
+      expect(topics, template.name).toMatch(/^First check that this channel is new: board_read with owner "channel-manager" and status "done", then board_read with owner "trend-scout"\./);
+      expect(topics, template.name).toContain(`If the first lists any card, or the second lists a card titled exactly "${OLD_FIRST_PIECE_TITLE}"`);
+      expect(topics, template.name).not.toMatch(/"Plan: …"/);
+      // A re-apply seeds first-post behind the held first-piece card, already done on an older channel.
+      expect(card(template, "first-post").body, template.name).toMatch(new RegExp(`^If the card this one waited on is titled exactly "${OLD_FIRST_PIECE_TITLE}", this channel was set up before this card existed: close this card done with the note "${ALREADY_RUNNING}`));
+      for (const key of FIRST_RUN) expect(card(template, key).body, `${template.name}/${key}`).toContain(FIRST_VIDEO_RULE);
+    }
+    expect(FIRST_VIDEO_RULE).toContain(`closed with a note starting ${ALREADY_RUNNING}, close this card done with the same note`);
+    expect(FIRST_VIDEO_RULE).toMatch(/comment one short line on this card — what is happening and what comes next/);
   });
 });

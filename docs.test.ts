@@ -43,9 +43,11 @@ describe("the README", () => {
    * seat's ceiling.
    */
   it("prints a day-one ceiling of one per-task ceiling per card", () => {
+    // The first-video chain (faceless, v3.7.0) renders and posts on seeded cards, so nothing is added.
+    const chain = (template: MediaTemplate) => (template.tasks.some((task) => task.key === "references") ? [] : template.pipeline.slice(1));
     const dayOne = (template: MediaTemplate) =>
       template.tasks.reduce((sum, task) => sum + ceiling(template, task.assignee!), 0) +
-      template.pipeline.slice(1).reduce((sum, seat) => sum + ceiling(template, seat), 0);
+      chain(template).reduce((sum, seat) => sum + ceiling(template, seat), 0);
     const said = /\(\$([\d.]+) on `faceless`, \$([\d.]+) on `longform`, \$([\d.]+) on `clipping`\)/.exec(README);
     expect(said).not.toBeNull();
     expect([Number(said![1]), Number(said![2]), Number(said![3])]).toEqual([

@@ -7,14 +7,15 @@ the crew, its timers and its first day of work into your organization.**
 [![engine: @usenaive-sdk/blueprints](https://img.shields.io/npm/v/@usenaive-sdk/blueprints?label=engine%3A%20%40usenaive-sdk%2Fblueprints&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/blueprints)
 [![CLI: @usenaive-sdk/vetta-cli](https://img.shields.io/npm/v/@usenaive-sdk/vetta-cli?label=cli%3A%20naive&color=0a7ea4)](https://www.npmjs.com/package/@usenaive-sdk/vetta-cli)
 
-Media manager is a hosted app whose source is in [`apps/media-manager`](apps/media-manager); agents
+The channel is a hosted app whose source is in [`apps/media-manager`](apps/media-manager); agents
 can pull, change and deploy it like any app. The crew runs on it and on the platform's own screens:
 
-- **Media manager.** One page under Apps, signed in through Naive: the creator's face and niche on a
-  channel that has one, a way to connect an account while none is, the week's numbers, then what waits
-  on you (each with a link to its chat, where you decide it), what is scheduled (a row of cards), a
-  creator's stills and clips, and what went out (a picture grid with each post's views). It reads the
-  platform with the read key Naive gives it; you set nothing up.
+- **The channel.** The company's home screen (`home: true`), signed in through Naive: the channel's
+  face and name, then its episodes as cards, each **Generating** (with the crew's last line), **Needs
+  you** (Pick a topic, Pick pictures, Start your team, Post), **Posted** or **Stopped**, and a
+  "Create new episode" card. Tap an episode for its steps, script and stills. It only shows: every
+  decision opens in the studio's sheet, through two links (`?needs=<session>` and `?say=<words>`).
+  It reads the platform with the read key Naive gives it; you set nothing up.
 - **The board.** Every piece is a chain of cards. Each card's body is the brief for one seat.
 - **The Media gallery.** Every render and every cut lands there on its own.
 - **The approval card.** One seat publishes. Every post waits for your **Allow**.
@@ -151,7 +152,7 @@ template's render (`AI_INFLUENCER_BUDGETS`: producer $8 a task, the others $3, t
 ```sh
 git clone https://github.com/usenaive/media-blueprint && cd media-blueprint
 pnpm install
-export NAIVE_API_KEY=…        # an admin key; never commit it. Media manager gets its own read key, not this one
+export NAIVE_API_KEY=…        # an admin key; never commit it. the channel app gets its own read key, not this one
 pnpm test && naive up
 ```
 
@@ -160,7 +161,7 @@ again changes only what changed. Pick the template in [`templates/index.ts`](tem
 (`ACTIVE`).
 
 The studio's catalog publishes this blueprint too, so a new channel can also be installed from the
-studio. From 3.0.0 the published tree of Media manager is its source; the platform builds it.
+studio. From 3.0.0 the published tree of the channel app is its source; the platform builds it.
 
 ### ⚠️ Known limit
 
@@ -266,10 +267,10 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
-| `producer` | Video production | — | `look` | Generates scene images and videos, edits the final piece, creates the Publish card |
-| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `first-briefs` | Starts each piece as a Plan card, with exemplars it opened |
-| `scriptwriter` | Hooks & scripts | — | `reference-study`, `character-bible`, `hook-style` | Drafts the continuity bible and asks for approval; writes every scene and prompt |
+| `channel-manager` | Channel lead | — | `first-post`, `channel-plan` | Asks where to post; publishes each piece on the cadence; reads the weekly report |
+| `producer` | Video production | — | `references`, `first-briefs`, `look` | Generates the reference stills and scene videos, edits the final piece, creates the Publish card |
+| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `topics` | Offers the first video's four ideas; starts each later piece as a Plan card |
+| `scriptwriter` | Hooks & scripts | — | `episode`, `reference-study`, `character-bible`, `hook-style` | Writes the first episode; drafts the continuity bible and asks for approval; writes every scene and prompt |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
 ### `longform`
@@ -308,7 +309,9 @@ The skills are the platform's `naive/*` catalogue, read with `read_skill`:
 
 ## 📝 The setup questions
 
-The studio asks at most three before anything is provisioned; the engine refuses a fifth. A niche
+The studio asks at most three before anything is provisioned; the engine refuses a fifth. It asks only the
+required ones before it hires, so `faceless` (whose one question is optional from v3.7.0) starts with none:
+a blank niche is chosen by the first topic pick. A niche
 template asks fewer: it **is** its niche, and its reference is the niche skill's playbook, so the
 niche and the reference questions are dropped (ADR-1143). A generative niche is then left asking
 nothing; a clipping niche keeps the sources it cannot cut without. `channel-cloning` is the one
@@ -316,7 +319,8 @@ exception: in place of the dropped niche it keeps a single question, the channel
 
 | Template | Questions |
 |---|---|
-| `faceless`, `longform` | Niche · Reference (optional) |
+| `faceless` | Niche (optional) |
+| `longform` | Niche · Reference (optional) |
 | `clipping` | Channels to cut from · Who sees a new YouTube video? (optional) |
 | `ufc`, `history`, `animal-feast`, `comics`, `cartoons-irl`, `dancing-animals`, `roadster`, `cat-stories`, `food-slime`, `glass-food`, `would-you-choose`, `fruit-drama`, `empires`, `legend-flex`, `surreal-satire` | None |
 | `channel-cloning` | Channel to clone |
@@ -343,6 +347,58 @@ day-one card closes.
 The cards are seeded on the company board. A card waiting on another is not woken, and costs
 nothing, until that card closes.
 
+On `faceless` and its niches (v3.7.0) day one is **the first video**, shown on the channel's home.
+Every company starts with 5,000 free credits. The topic, the script and the stills run on them; the
+video needs a plan. Its card is `needs_plan`, so the board holds it, with no turn spent, until the
+company has a plan, and activation wakes it:
+
+```
+topics       (trend-scout)      a choice of four ideas it wrote                    words only
+episode      (scriptwriter)     the script, filed once as Episodes/<slug>.md        words only
+references   (producer)         three stills, then a picture choice                 free credits
+first-briefs (producer)         needs_plan; "about 8,100 credits": one 8-second scene
+first-post   (channel-manager)  "Is this good?" on the approval card; connect only if no account is
+```
+
+What runs before a plan is at most ~1,820 credits (~$0.36) a sign-up:
+
+| Step | Credits at most |
+|---|---|
+| Words: topics, script, the CEO's five digests | 500 |
+| Stills: 3, one redo each at most, on Nano Banana 2.1 at 170 credits each, and their turns | 1,320 |
+| **Before a plan** | **1,820** |
+
+The stills render side by side in one step, on the producer's pinned `STILL_MODELS`: Nano Banana 2.1
+(`google/gemini-nano-banana-2.1`), then Nano Banana 2 Lite where it is not published. Every still's
+prompt carries the same cast and look words, and a pinned skill's frame of the look as a reference.
+
+The video is said when it starts, on the plan's credits. Its line is the producer's first pinned
+model's rate (`VIDEO_RATES`, copied from the platform's rate table) times the first video's length,
+plus about 1,300 credits: the producer's turns, voice, music and the first post's turn. Every seat's
+turns are estimated from its real prompt (`turnCredits`), and the tests hold each constant to that
+estimate.
+
+| Template | First video | Credits |
+|---|---|---|
+| `faceless` and its image-to-video niches | 8 s on FLUX 3 Max | ~8,100 |
+| `empires`, `legend-flex`, `surreal-satire` (raw film) | 15 s on Seedance 2.5 | ~18,900 |
+
+`topics` waits on nothing. Nothing asks where to post until the video is ready: the first post asks
+to connect only when no account is connected, and that is its one question. Week one waits for the
+first post to be decided — posted, not posted, or stopped — so it never competes with the first
+video for its seats, and a failed video never stops the channel: `reference-study` → `look`,
+`hook-style`, `character-bible`; `channel-plan` after `look`; then `report-frame`. Nothing on day one
+waits on the bible. A pick nobody makes doesn't hold the channel either: the analyst's daily fire
+comments a nudge on it after 12 hours, and at the next daily check goes on with the first option. It
+never asks from the fire, because a fire that waits on the person makes the platform skip every later
+one. Defaults are made, not asked: 9:16, the template's look and voice, 3× a week to every connected
+account; later pieces run 15–30 seconds. Each step comments one short line on its card. On a channel
+set up before (its manager has a done card, or its board holds the old "Start the channel's first
+piece"), `topics` closes at once on `ALREADY RUNNING`, the cards behind it do the same, and the first
+post closes too when it waits on the old card, so an update buys nothing.
+
+The other templates, and `ai-influencer`, keep the study-first day one:
+
 ```
 channel-plan ──→ report-frame
 reference-study ──→ look ─────┐
@@ -358,12 +414,12 @@ The first-piece card reuses the key 1.x already seeded (`first-briefs`, `first-t
 `first-moments`). A card is keyed `media:<key>` and a re-apply never re-seeds a key the board
 holds, so updating an existing channel to 2.0 does not start a new paid piece.
 
-Day one sets up the plan, reference, look, voice and a draft continuity bible, then starts **one**
-piece. That piece runs its full chain to your approval card. The timers start the rest.
+Day one starts **one** piece. That piece runs its full chain to your approval card. The timers
+start the rest.
 
 A card carries no budget of its own: a woken seat runs on its per-task ceiling. So day one is
 bounded by one ceiling per seeded card, plus one per card of the first piece's chain
-($200 on `faceless`, $290 on `longform`, $160 on `clipping`).
+($220 on `faceless`, $290 on `longform`, $160 on `clipping`).
 
 ## 💰 Money
 
@@ -377,12 +433,14 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   (`SEAT_MODEL` in `templates/template.ts`): $0.15/M input and $0.50/M output tokens, so a seat's
   turns cost a fraction of its renders.
 - `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
-  on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
+  on `faceless` and `longform`: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
   (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
   model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
   seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins
-  `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`).
-  `generate_image` is left unpinned, so it takes the cheapest priced model.
+  `AI_INFLUENCER_VIDEO_MODELS` (`templates/ai-influencer.ts`). The raw-film niches pin Seedance 2.5
+  alone.
+  `generate_image` is left unpinned, so it takes the cheapest priced model, except on the first-video
+  crews' producer, which pins `STILL_MODELS` for the free stills.
 
 ## 🔐 Tool permissions
 
@@ -405,7 +463,7 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
   frames; Short Form and Long Form producers assemble segments.
 - When the platform applies a template (vetta-mono ADR-1484) every seat also gets `apps` at `ask`
   and `read`, `write`, `edit`, `ls`, `find`, `bash` at `allow`, so the crew can pull, change and
-  deploy Media manager or build an app of its own. Each app action waits on an approval card, and
+  deploy the channel app or build an app of its own. Each app action waits on an approval card, and
   `apps` reaches only this channel's own apps.
 
 ## 🔁 Switching template

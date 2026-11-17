@@ -1,12 +1,14 @@
 /**
- * Media manager, the hosted app in `apps/media-manager`, as the host runs it: signed in through
- * Naive's ticket (`mintTicket` + `enter`, §29.10), reading the platform with the app's own key. The
- * API is a stubbed `fetch`; every response is the shape the SDK parses.
+ * The channel, the hosted app in `apps/media-manager`, as the host runs it: signed in through Naive's
+ * ticket (`mintTicket` + `enter`, §29.10), reading the platform with the app's own key. The API is a
+ * stubbed `fetch`; every response is the shape the API answers.
  */
 import { mintTicket } from "@usenaive-sdk/app";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./apps/media-manager/api/enter.ts";
-import { overview } from "./apps/media-manager/api/index.ts";
+import { ALREADY_RUNNING as APP_ALREADY_RUNNING, EPISODES_SHOWN, FIRST_RUN_TITLES, overview } from "./apps/media-manager/api/index.ts";
+import { ALREADY_RUNNING, EPISODE_TITLE, EPISODES_FOLDER, FIRST_POST_TITLE, FIRST_VIDEO_TITLE, REFERENCES_TITLE, TOPICS_TITLE } from "./templates/faceless.ts";
+import { TEMPLATES } from "./templates/index.ts";
 
 const ORIGIN = "https://media-manager.example";
 const ENV = {
@@ -17,58 +19,44 @@ const ENV = {
   NAIVE_API_KEY: "sk_live_media_manager",
   NAIVE_PROJECT: "my-channel",
 };
-/** Wednesday 2026-10-21 12:00 UTC: Monday 00:00 UTC is 2026-10-19. */
-const NOW = Date.parse("2026-10-21T12:00:00Z");
-const ULID = "0".repeat(26);
-const AGENT = `agt_${ULID}`;
-const SESSION = `ses_${ULID}`;
+const CEO = "agt_ceo";
+const BOARD = "brd_ceo";
 
 type Fixture = Record<string, unknown>;
-/** What only some channels hold: their characters, a creator's renders, and each identity's accounts. */
-type World = { characters?: Fixture[]; retired?: Fixture[]; files?: Fixture[]; accounts?: (Fixture[] | "unactivated")[] };
-const post = (over: Fixture): Fixture => ({
-  object: "post",
-  id: "pst_1",
-  status: "posted",
-  identity_id: null,
-  agent_id: null,
-  session_id: null,
-  tool_call_id: null,
-  content: null,
-  platforms: ["tiktok"],
-  file_ids: [],
-  media_urls: [],
-  visibility: null,
-  scheduled_at: null,
-  posted_at: null,
-  url: null,
-  error: null,
-  metrics: null,
-  measured_at: null,
-  duplicate_of: null,
-  created_at: "2026-10-01T00:00:00Z",
-  ...over,
-});
-const debit = (micro: number): Fixture => ({
-  id: `led_${ULID}`,
-  type: "debit",
-  amount_micro_usd: -micro,
-  balance_after_micro_usd: 10_000_000,
-  actor: { type: "system", id: "billing" },
-  session_id: null,
-  agent_id: null,
-  deployment_id: null,
-  line_items: [],
-  created_at: "2026-10-20T00:00:00Z",
-});
+type World = {
+  answers?: Fixture;
+  cards?: Fixture[];
+  /** Each card's comments, by card id. */
+  comments?: Record<string, Fixture[]>;
+  /** Session ids waiting on the person. */
+  questions?: string[];
+  approvals?: string[];
+  /** What `Episodes/` holds, newest first, and each file's words by id. */
+  files?: Fixture[];
+  texts?: Record<string, string>;
+  characters?: Fixture[];
+  retired?: Fixture[];
+  /** A path that answers 500. */
+  broken?: string;
+};
+
+let made = 0;
+/** A board card. `at` orders them: the API's `created_at`. */
+const card = (title: string, over: Fixture = {}): Fixture => {
+  made += 1;
+  return { id: `crd_${made}`, object: "board_card", board_id: BOARD, title, body: "", note: null, status: "todo", assignee: null, blocked_by: [], woken_session_id: null, created_at: `2026-11-16T00:00:${String(made).padStart(2, "0")}Z`, updated_at: "2026-11-16T09:00:00Z", ...over };
+};
+const comment = (body: string, at: string): Fixture => ({ id: `bcm_${at}`, object: "board_comment", card_id: "crd_x", author: "ses_1", body, created_at: at });
+const filed = (id: string, name: string, folder: string, content_type = "image/png"): Fixture => ({ id, object: "file", name, folder, content_type, created_at: "2026-11-16T00:00:00Z" });
+const list = (data: Fixture[], next_cursor: string | null = null) => Response.json({ data, has_more: next_cursor !== null, next_cursor });
 const install = (answers: Fixture): Fixture => ({
-  id: `bpi_${ULID}`,
+  id: `bpi_${"0".repeat(26)}`,
   object: "blueprint_install",
   project: "my-channel",
   blueprint: "media",
   template: "faceless",
   revision: 1,
-  artifact_version: "3.0.0",
+  artifact_version: "3.7.0",
   answers,
   source: "studio",
   report: null,
@@ -77,68 +65,62 @@ const install = (answers: Fixture): Fixture => ({
   applied_at: "2026-10-01T00:00:00Z",
   created_at: "2026-10-01T00:00:00Z",
 });
-const list = (data: Fixture[], next_cursor: string | null = null) => Response.json({ data, has_more: next_cursor !== null, next_cursor });
 
 /**
- * The channel as the API holds it: one post waiting, two scheduled, three posted, one failed. A post the crew
- * makes names its `file_ids` and carries no `media_urls`: the store's rows hardcode them empty (vetta-mono
- * `packages/db/src/queries/posts.ts`), so a fixture that sets them hides blank tiles.
+ * The first run as the board holds it, from the topics card to the first post: each card waits on the
+ * one before it. `upTo` cards are done; the next is `doing` on `ses_now`.
  */
-const CHANNEL = {
-  pending: [
-    post({ id: "pst_wait", status: "pending", content: "Cats on a skateboard", agent_id: AGENT, session_id: SESSION, platforms: ["tiktok", "youtube"], file_ids: ["fil_wait"] }),
-  ],
-  scheduled: [
-    post({ id: "pst_later", status: "scheduled", content: "Later one", scheduled_at: "2026-10-24T09:00:00Z", file_ids: ["fil_later"] }),
-    post({ id: "pst_soon", status: "scheduled", content: "Soon one", scheduled_at: "2026-10-22T09:00:00Z" }),
-  ],
-  posted: [
-    // This week (since Monday) and in the last 7×24 h.
-    post({ id: "pst_a", posted_at: "2026-10-20T10:00:00Z", metrics: { views: 30_000 }, url: "https://tiktok.example/a", file_ids: ["fil_a"] }),
-    // In the last 7×24 h, before Monday.
-    post({ id: "pst_b", posted_at: "2026-10-16T10:00:00Z", metrics: { views: 8_000.4 } }),
-    // In the 7×24 h before that.
-    post({ id: "pst_c", posted_at: "2026-10-10T10:00:00Z", metrics: { views: 19_000 } }),
-  ],
-  failed: [post({ id: "pst_x", status: "failed", error: "token expired", created_at: "2026-10-18T00:00:00Z" })],
-} as Record<string, Fixture[]>;
+function firstRun(upTo: number, over: Partial<Record<"topic" | "script" | "pictures" | "video" | "post", Fixture>> = {}): Fixture[] {
+  const steps = ["topic", "script", "pictures", "video", "post"] as const;
+  const titles = [TOPICS_TITLE, EPISODE_TITLE, REFERENCES_TITLE, FIRST_VIDEO_TITLE, FIRST_POST_TITLE];
+  const notes = ["TOPIC: Founder pivots mid-keynote\nNICHE: comedy", "SLUG: founder-pivots\nfil_script\n# Founder pivots mid-keynote", "STILLS: fil_still_1", "VIDEO: fil_video", "Posted pst_1"];
+  const cards: Fixture[] = [];
+  steps.forEach((step, at) => {
+    const status = at < upTo ? "done" : at === upTo ? "doing" : "blocked";
+    cards.push(card(titles[at]!, { status, note: at < upTo ? notes[at] : null, blocked_by: at === 0 ? [] : [cards[at - 1]!["id"]], woken_session_id: at === upTo ? "ses_now" : null, ...over[step] }));
+  });
+  return cards;
+}
 
-/** Stubs the API; `broken` names a path that answers with an error. Returns every request made. */
-function api(channel: Record<string, Fixture[]> = CHANNEL, answers: Fixture = { cadence: "daily" }, broken?: string, world: World = {}) {
+/** Stubs the API. Returns every request made. */
+function api(world: World = {}) {
   const seen: Request[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     seen.push(request);
     const url = new URL(request.url);
-    if (url.pathname === broken) {
-      return Response.json({ error: { type: "api_error", code: "internal_error", message: "the ledger is down", request_id: "req_1" } }, { status: 500 });
+    const path = url.pathname;
+    if (path === world.broken) return Response.json({ error: { type: "api_error", code: "internal_error", message: "the board is down", request_id: "req_1" } }, { status: 500 });
+    if (path === "/v1/blueprints/installs") return list([install(world.answers ?? {})]);
+    if (path === "/v1/me") return Response.json({ object: "identity", organization: { id: "org_1", name: "Co", mode: "live" } });
+    if (path === "/v1/organizations/org_1") return Response.json({ id: "org_1", object: "organization", ceo_agent_id: CEO });
+    if (path === `/v1/boards/${CEO}/cards`) {
+      // Pages of 100, as the API answers them.
+      const all = world.cards ?? [];
+      const start = url.searchParams.get("after") === null ? 0 : all.findIndex((one) => one["id"] === url.searchParams.get("after")) + 1;
+      const page = all.slice(start, start + Number(url.searchParams.get("limit")));
+      return list(page, start + page.length < all.length ? String(page[page.length - 1]!["id"]) : null);
     }
-    if (url.pathname === "/v1/posts") return list(channel[url.searchParams.get("status")!] ?? []);
-    if (url.pathname === "/v1/credits/ledger") {
-      return url.searchParams.get("after") === "cur_2" ? list([debit(250_000)]) : list([debit(1_250_000), debit(500_000)], "cur_2");
+    const comments = /^\/v1\/boards\/brd_ceo\/cards\/(crd_\w+)\/comments$/.exec(path);
+    if (comments) return list(world.comments?.[comments[1]!] ?? []);
+    if (path === "/v1/sessions") {
+      const reason = url.searchParams.get("stop_reason");
+      const ids = reason === "awaiting_answer" ? (world.questions ?? []) : reason === "awaiting_approval" ? (world.approvals ?? []) : [];
+      return list(ids.map((id) => ({ id, object: "session", status: "idle", stop_reason: reason })));
     }
-    if (url.pathname === "/v1/blueprints/installs") return list([install(answers)]);
-    if (url.pathname === "/v1/characters") return list(world.characters ?? []);
-    const byId = /^\/v1\/characters\/(chr_\w+)$/.exec(url.pathname);
+    if (path === "/v1/files") return list(world.files ?? []);
+    const text = /^\/v1\/files\/(fil_\w+)$/.exec(path);
+    if (text && url.searchParams.get("download") === "true" && world.texts?.[text[1]!] !== undefined) return new Response(world.texts[text[1]!]);
+    if (path === "/v1/characters") return list(world.characters ?? []);
+    const byId = /^\/v1\/characters\/(chr_\w+)$/.exec(path);
     if (byId) {
       const held = [...(world.characters ?? []), ...(world.retired ?? [])].find((one) => one["id"] === byId[1]);
       return held === undefined ? new Response("not found", { status: 404 }) : Response.json(held);
     }
-    if (url.pathname === "/v1/files") return list(world.files ?? []);
-    if (url.pathname === "/v1/identities") return list((world.accounts ?? []).map((_, at) => ({ id: `idn_${at}${ULID.slice(1)}`, object: "identity" })));
-    const accounts = /^\/v1\/identities\/idn_(\d)0+\/social\/accounts$/.exec(url.pathname);
-    if (accounts) {
-      const held = world.accounts?.[Number(accounts[1])];
-      return held === "unactivated"
-        ? Response.json({ error: { type: "invalid_request_error", code: "validation_failed", message: "social publishing is not activated for this identity", request_id: "req_2" } }, { status: 400 })
-        : list(held ?? []);
-    }
-    // §40: the signed address names the file, so its extension says what it is.
-    const minted = /^\/v1\/files\/(fil_\w+)\/url$/.exec(url.pathname);
+    const minted = /^\/v1\/files\/(fil_\w+)\/url$/.exec(path);
     if (minted && request.method === "POST") {
       const id = minted[1]!;
-      if (id === "fil_gone") return Response.json({ error: { type: "invalid_request_error", code: "not_found", message: "no such file", request_id: "req_3" } }, { status: 404 });
-      return Response.json({ object: "file_url", url: `https://api.example/v1/files/${id}/${id === "fil_later" || id.startsWith("fil_still") ? "still.png" : "final.mp4"}?org=org_1&sig=s`, expires_at: "2026-10-28T00:00:00Z" }, { status: 201 });
+      return Response.json({ object: "file_url", url: `https://api.example/v1/files/${id}/raw?sig=s`, expires_at: "2026-11-30T00:00:00Z" }, { status: 201 });
     }
     return new Response("not found", { status: 404 });
   });
@@ -146,13 +128,13 @@ function api(channel: Record<string, Fixture[]> = CHANNEL, answers: Fixture = { 
 }
 
 /** A browser that opened the app from Naive: the ticket posted to /api/enter, its cookie sent back. */
-async function signedIn(): Promise<Request> {
+async function signedIn(query = ""): Promise<Request> {
   const form = new FormData();
   form.set("ticket", await mintTicket(ENV.DASHBOARD_TOKEN, { sub: "usr_1", email: "ada@example.com", role: "owner", org: "org_1", app: "app_1", exp: Math.floor(Date.now() / 1000) + 120 }));
   vi.stubEnv("DASHBOARD_TOKEN", ENV.DASHBOARD_TOKEN);
   vi.stubEnv("NAIVE_APP_ID", ENV.NAIVE_APP_ID);
   const entered = await POST(new Request(`${ORIGIN}/api/enter`, { method: "POST", body: form }));
-  return new Request(`${ORIGIN}/`, { headers: { cookie: (entered.headers.get("set-cookie") ?? "").split(";")[0]! } });
+  return new Request(`${ORIGIN}/${query}`, { headers: { cookie: (entered.headers.get("set-cookie") ?? "").split(";")[0]! } });
 }
 
 const html = async (response: Response) => {
@@ -160,292 +142,271 @@ const html = async (response: Response) => {
   expect(response.headers.get("cache-control")).toBe("no-store");
   return response.text();
 };
-
-/** The text of one titled section, or `undefined` when it is not drawn. */
-const section = (page: string, title: string) => page.split("<section").find((part) => part.includes(`<h2>${title}</h2>`));
+const home = async (world: World = {}, query = "") => {
+  api(world);
+  return html(await overview(await signedIn(query), ENV));
+};
+/** The episode cards, newest first, each as its HTML. */
+const episodes = (page: string): string[] => page.split('<div class="ep">').slice(1);
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
-describe("Media manager", () => {
+describe("the channel", () => {
+  it("reads the board by the very titles the first run writes", () => {
+    expect(FIRST_RUN_TITLES).toEqual({ topic: TOPICS_TITLE, script: EPISODE_TITLE, pictures: REFERENCES_TITLE, video: FIRST_VIDEO_TITLE, post: FIRST_POST_TITLE });
+    expect(APP_ALREADY_RUNNING).toBe(ALREADY_RUNNING);
+    expect(EPISODES_FOLDER).toBe("Episodes");
+    const first = TEMPLATES.faceless.tasks.slice(0, 5).map((one) => one.title);
+    expect(first).toEqual(Object.values(FIRST_RUN_TITLES));
+  });
+
   it("sends a signed-out visitor back through the Studio, and says where to open it when it cannot", async () => {
     const seen = api();
-    const out = await overview(new Request(`${ORIGIN}/`), ENV, NOW);
+    const out = await overview(new Request(`${ORIGIN}/`), ENV);
     expect(out.status).toBe(303);
     expect(out.headers.get("location")).toBe("https://studio.example/apps/app_1/open");
     const { NAIVE_STUDIO_URL: _gone, ...noStudio } = ENV;
-    const lost = await overview(new Request(`${ORIGIN}/`), noStudio, NOW);
+    const lost = await overview(new Request(`${ORIGIN}/`), noStudio);
     expect(lost.status).toBe(401);
-    expect(await lost.text()).toContain("Open Media manager from Naive.");
-    // Nothing is read for someone nobody signed in.
+    expect(await lost.text()).toContain("Open your channel from Naive.");
     expect(seen).toEqual([]);
   });
 
-  it("draws views, posts this week and spend, then Waiting on you, Scheduled and Posted, from the app's own key", async () => {
-    const seen = api();
-    const page = await html(await overview(await signedIn(), ENV, NOW));
-    const numbers = page.split('<section class="numbers">')[1]!.split("</section>")[0]!;
-    // 30 000 + round(8 000.4) in the last 7×24 h, against 19 000 the week before.
-    expect(numbers).toContain("<strong>38k</strong>");
-    expect(numbers).toContain("+100%");
-    // One posted since Monday 00:00 UTC, against "daily".
-    expect(numbers).toMatch(/Posts this week<\/span><strong>1<\/strong><span class="muted">of 7<\/span>/);
-    // Two ledger pages of debits, followed by their cursor.
-    expect(numbers).toContain("<strong>$2.00</strong>");
-    expect(page.indexOf("<h2>Waiting on you</h2>")).toBeLessThan(page.indexOf("<h2>Scheduled</h2>"));
-    expect(page.indexOf("<h2>Scheduled</h2>")).toBeLessThan(page.indexOf("<h2>Posted</h2>"));
-    expect(section(page, "Waiting on you")).toContain("Needs you");
-    expect(section(page, "Waiting on you")).toContain('<video class="thumb" src="https://api.example/v1/files/fil_wait/final.mp4?org=org_1&amp;sig=s#t=0.1" muted playsinline preload="metadata">');
-    const scheduled = section(page, "Scheduled")!;
-    expect(scheduled.indexOf("Soon one")).toBeLessThan(scheduled.indexOf("Later one"));
-    expect(scheduled).toContain('<img class="thumb" src="https://api.example/v1/files/fil_later/still.png?org=org_1&amp;sig=s"');
-    // In the clock its slots are stated in, never a raw timestamp.
-    expect(scheduled).toContain("<time>Oct 24, 5:00 AM EDT</time>");
-    expect(page).not.toContain("2026-10-24T09:00:00Z");
-    const posted = section(page, "Posted")!;
-    expect(posted).toContain("30k views");
-    expect(posted).toContain("Didn't post");
-    expect(posted).toContain('<a href="https://tiktok.example/a" target="_blank" rel="noopener">Open ↗</a>');
-    // Newest first: the failed post (created 10-18) sits between a (10-20) and b (10-16).
-    expect(posted.indexOf("30k")).toBeLessThan(posted.indexOf("Didn't post"));
-    expect(posted.indexOf("Didn't post")).toBeLessThan(posted.indexOf("8k"));
-    // Every read is the app's own key, at most 50 per status; only scheduled asks the provider, and it goes first.
-    for (const request of seen) expect(request.headers.get("authorization")).toBe("Bearer sk_live_media_manager");
-    const statuses = seen.filter((one) => new URL(one.url).pathname === "/v1/posts").map((one) => new URL(one.url).searchParams);
-    expect(statuses.map((one) => one.get("status")).sort()).toEqual(["failed", "pending", "posted", "scheduled"]);
-    for (const query of statuses) expect([query.get("limit"), query.get("reconcile")]).toEqual(["50", query.get("status") === "scheduled" ? "true" : "false"]);
-    expect(statuses[0]!.get("status")).toBe("scheduled");
-    // A post with no file mints nothing, and each file mints once.
-    const minted = seen.filter((one) => one.method === "POST" && new URL(one.url).pathname.endsWith("/url")).map((one) => new URL(one.url).pathname.split("/")[3]);
-    expect(minted.sort()).toEqual(["fil_a", "fil_later", "fil_wait"]);
-    const ledger = seen.filter((one) => new URL(one.url).pathname === "/v1/credits/ledger").map((one) => new URL(one.url).searchParams);
-    expect(ledger.map((one) => [one.get("type"), one.get("from"), one.get("after")])).toEqual([
-      ["debit", "2026-10-14T12:00:00.000Z", null],
-      ["debit", "2026-10-14T12:00:00.000Z", "cur_2"],
-    ]);
-    const installs = seen.find((one) => new URL(one.url).pathname === "/v1/blueprints/installs")!;
-    expect(new URL(installs.url).searchParams.get("project")).toBe("my-channel");
+  it("names the channel by the words the person typed, with its cadence", async () => {
+    const page = await home({ answers: { niche: "silicon valley comedy" }, cards: firstRun(0) });
+    expect(page).toContain('<div class="kicker">3× a week</div><h1>Silicon Valley Comedy</h1>');
+    expect(page).toContain("<title>Silicon Valley Comedy</title>");
+    const blank = await home({ answers: { niche: "  ", cadence: "daily" } });
+    expect(blank).toContain('<div class="kicker">daily</div><h1>Your channel</h1>');
   });
 
-  it("still draws a link a post really carries, and leaves one blank tile when a file's link fails", async () => {
-    api({ posted: [post({ posted_at: "2026-10-20T10:00:00Z", media_urls: ["https://cdn.example/a.mp4"], file_ids: ["fil_never_minted"] }), post({ id: "pst_b", posted_at: "2026-10-19T10:00:00Z", file_ids: ["fil_gone"] })] });
-    const posted = section(await html(await overview(await signedIn(), ENV, NOW)), "Posted")!;
-    expect(posted).toContain('src="https://cdn.example/a.mp4#t=0.1"');
-    expect(posted).toContain('<div class="thumb"></div>');
+  it("opens on the first episode being made, after a Create new episode card that asks the CEO", async () => {
+    const page = await home({ cards: firstRun(0, { topic: { status: "todo", woken_session_id: null } }) });
+    expect(page).toContain('<h2 class="sec">Episodes</h2>');
+    const grid = page.split('<div class="grid">')[1]!;
+    expect(grid.indexOf("Create new episode")).toBeLessThan(grid.indexOf("Episode #1"));
+    expect(page).toContain('<a class="ep" data-bridge href="?say=New%20episode%3A%20">');
+    const [first, ...rest] = episodes(page);
+    expect(rest).toEqual([]);
+    expect(first).toContain('<span class="chip gen"><i></i>Generating</span>');
+    expect(first).toContain('<div class="waitline">Finding 4 ideas…</div>');
+    expect(first).toContain('<span class="title">Your first episode</span>');
   });
 
-  it("draws at most 12 Posted tiles, and mints links for no more than it draws", async () => {
-    const many = Array.from({ length: 30 }, (_, at) => post({ id: `pst_${at}`, posted_at: `2026-10-${String(at % 20 + 1).padStart(2, "0")}T10:00:00Z`, file_ids: [`fil_${at}`] }));
-    const seen = api({ posted: many });
-    const posted = section(await html(await overview(await signedIn(), ENV, NOW)), "Posted")!;
-    expect(posted.match(/<li class="card">/g)).toHaveLength(12);
-    expect(seen.filter((one) => one.method === "POST").length).toBe(12);
+  it("says what the working card said last, skipping the crew's lines for itself", async () => {
+    const cards = firstRun(1);
+    const seen = api({
+      cards,
+      comments: { [String(cards[1]!["id"])]: [comment("Hook picked, writing the two scenes now.", "2026-11-16T10:02:00Z"), comment("IDEAS: 1) a 2) b", "2026-11-16T10:03:00Z"), comment("Reading your niche first.", "2026-11-16T10:01:00Z")] },
+    });
+    const first = episodes(await html(await overview(await signedIn(), ENV)))[0]!;
+    expect(first).toContain('<div class="waitline">Hook picked, writing the two scenes now.</div>');
+    expect(first).toContain('<span class="title">Founder pivots mid-keynote</span>');
+    // Read off the card's own board.
+    expect(seen.some((one) => new URL(one.url).pathname === `/v1/boards/${BOARD}/cards/${String(cards[1]!["id"])}/comments`)).toBe(true);
+  });
+
+  it("asks for the pick through the studio's sheet: Needs you, Pick a topic, a ?needs= link to the waiting session", async () => {
+    const first = episodes(await home({ cards: firstRun(0), questions: ["ses_now"] }))[0]!;
+    expect(first).toContain('<span class="chip you"><i></i>Needs you</span>');
+    expect(first).toContain('<a class="pill" data-bridge href="?needs=ses_now">Pick a topic</a>');
+    // A doing card whose session is not waiting is still being made.
+    const working = episodes(await home({ cards: firstRun(0), questions: ["ses_other"] }))[0]!;
+    expect(working).toContain("Generating");
+    expect(working).not.toContain("?needs=");
+  });
+
+  it("shows the stills as they land, and asks for Pick pictures", async () => {
+    const first = episodes(
+      await home({ cards: firstRun(2), questions: ["ses_now"], files: [filed("fil_still_2", "b.png", "Episodes/founder-pivots"), filed("fil_still_1", "a.png", "Episodes/founder-pivots"), filed("fil_script", "founder-pivots.md", "Episodes", "text/markdown")] }),
+    )[0]!;
+    expect(first).toContain('<img src="https://api.example/v1/files/fil_still_1/raw?sig=s" alt="" loading="lazy">');
+    expect(first).toContain('<span class="line">Pick pictures</span>');
+    expect(first).toContain('<a class="pill" data-bridge href="?needs=ses_now">Pick pictures</a>');
+  });
+
+  it("says Start your team while the first video waits for a plan, with no link of its own", async () => {
+    const cards = firstRun(3, { video: { status: "blocked", woken_session_id: null } });
+    const first = episodes(await home({ cards }))[0]!;
+    expect(first).toContain("Needs you");
+    expect(first).toContain("Start your team");
+    expect(first).not.toContain('class="pill"');
+    // Only the first video waits for a plan: a later piece's blocked card is still being made.
+    const plan = card("Plan: Later piece", { status: "done" });
+    const stuck = episodes(await home({ cards: [plan, card("Render: Later piece", { status: "blocked", blocked_by: [plan["id"]] })] }))[0]!;
+    expect(stuck).not.toContain("Start your team");
+    expect(stuck).toContain("Making the video…");
+  });
+
+  it("says Post on the approval, and Connect on the first post's connect question", async () => {
+    const files = [filed("fil_video", "final.mp4", "Episodes/founder-pivots", "video/mp4"), filed("fil_still_1", "a.png", "Episodes/founder-pivots")];
+    const ready = episodes(await home({ cards: firstRun(4), approvals: ["ses_now"], files }))[0]!;
+    expect(ready).toContain('<a class="pill" data-bridge href="?needs=ses_now">Post</a>');
+    expect(ready).toContain('<video src="https://api.example/v1/files/fil_video/raw?sig=s#t=0.1" muted playsinline preload="metadata"></video>');
+    const connect = episodes(await home({ cards: firstRun(4), questions: ["ses_now"], files }))[0]!;
+    expect(connect).toContain('<span class="line">Connect to post</span>');
+    expect(connect).toContain('<a class="pill" data-bridge href="?needs=ses_now">Connect</a>');
+  });
+
+  it("says Posted with the day, and a skipped connect asks the CEO to post it", async () => {
+    const posted = episodes(await home({ cards: firstRun(5) }))[0]!;
+    expect(posted).toContain('<span class="chip posted"><i></i>Posted</span>');
+    expect(posted).toContain("Posted Nov 16");
+    const skipped = episodes(await home({ cards: firstRun(5, { post: { note: "Not posted: no account yet. VIDEO: fil_video" } }) }))[0]!;
+    expect(skipped).toContain("Needs you");
+    expect(skipped).toContain(`<a class="pill" data-bridge href="?say=${encodeURIComponent("Connect an account and post Episode 1.")}">Connect</a>`);
+  });
+
+  it("says Stopped, with Ask CEO, when any of its cards stopped", async () => {
+    const first = episodes(await home({ cards: firstRun(4, { video: { note: "STOPPED: the model was busy twice" } }) }))[0]!;
+    expect(first).toContain('<span class="chip stopped"><i></i>Stopped</span>');
+    expect(first).toContain(`href="?say=${encodeURIComponent("Episode 1 stopped. What happened?")}">Ask CEO</a>`);
+  });
+
+  it("draws no first episode on a channel that was already running", async () => {
+    const cards = firstRun(1, { topic: { note: `${ALREADY_RUNNING}: this channel already makes videos.` } });
+    expect(episodes(await home({ cards }))).toEqual([]);
+  });
+
+  it("follows each later piece from its Plan card to its Publish card, numbered oldest first and drawn newest first", async () => {
+    const run = firstRun(5);
+    const plan = card("Plan: Would you let AI run your standup?", { status: "done" });
+    const render = card("Render: AI standup", { status: "doing", blocked_by: [plan["id"]], woken_session_id: "ses_render" });
+    const study = card("Study three real channels", { blocked_by: [run[4]!["id"]] });
+    const page = await home({ cards: [study, render, ...run, plan], comments: { [String(render["id"])]: [comment("SCENE 1 IMAGE fil_scene_1", "2026-11-16T11:00:00Z"), comment("Rendering scene 2 of 2.", "2026-11-16T11:05:00Z")] } });
+    const [second, first] = episodes(page);
+    expect(second).toContain("Episode #2");
+    expect(second).toContain('<span class="title">Would you let AI run your standup?</span>');
+    expect(second).toContain('<img src="https://api.example/v1/files/fil_scene_1/raw?sig=s"');
+    expect(second).toContain('<span class="line">Rendering scene 2 of 2.</span>');
+    expect(first).toContain("Episode #1");
+    expect(first).toContain("Posted");
+    // A week-one card is no episode.
+    expect(episodes(page)).toHaveLength(2);
+  });
+
+  it(`draws at most ${EPISODES_SHOWN} episodes, reading every page of the board`, async () => {
+    const plans = Array.from({ length: 150 }, (_, at) => card(`Plan: Piece ${at + 1}`, { status: "done" }));
+    const seen = api({ cards: plans });
+    const page = await html(await overview(await signedIn(), ENV));
+    expect(episodes(page)).toHaveLength(EPISODES_SHOWN);
+    expect(episodes(page)[0]).toContain("Episode #150");
+    expect(seen.filter((one) => new URL(one.url).pathname === `/v1/boards/${CEO}/cards`)).toHaveLength(2);
+  });
+
+  it("opens an episode's page with its steps, its script and its stills", async () => {
+    const cards = firstRun(3, { video: { status: "blocked", woken_session_id: null } });
+    const files = [filed("fil_still_2", "b.png", "Episodes/founder-pivots"), filed("fil_still_1", "a.png", "Episodes/founder-pivots"), filed("fil_script", "founder-pivots.md", "Episodes", "text/markdown")];
+    const page = await home({ cards, files, texts: { fil_script: "# Founder pivots mid-keynote\n\nScene 1 · 4 s. <A founder> on stage." } }, `?episode=${String(cards[0]!["id"])}`);
+    expect(page).toContain('<a class="back" href="?">← Episodes</a>');
+    expect(page).toContain("<h2>Founder pivots mid-keynote</h2>");
+    expect(page).toContain('<li class="step done"><i></i>Topic</li><li class="step done"><i></i>Script</li><li class="step done"><i></i>Pictures</li><li class="step now"><i></i>Video · Start your team</li><li class="step "><i></i>Post</li>');
+    expect(page).toContain("Scene 1 · 4 s. &lt;A founder&gt; on stage.");
+    expect(page.indexOf("fil_still_1/raw")).toBeLessThan(page.indexOf("fil_still_2/raw"));
+    expect(page).not.toContain('<h2 class="sec">Episodes</h2>');
+  });
+
+  it("writes nothing: every read is a GET, and the only other call mints a file's link", async () => {
+    const cards = firstRun(2);
+    const seen = api({ cards, questions: ["ses_now"], files: [filed("fil_still_1", "a.png", "Episodes/founder-pivots")] });
+    await html(await overview(await signedIn(), ENV));
+    for (const one of seen) {
+      if (one.method !== "GET") expect([one.method, new URL(one.url).pathname]).toEqual(["POST", "/v1/files/fil_still_1/url"]);
+      expect(one.headers.get("authorization")).toBe(`Bearer ${ENV.NAIVE_API_KEY}`);
+    }
+  });
+
+  it("hands its links to the studio: naive:ready once, then naive:open for each marked link, to the studio's origin only", async () => {
+    const page = await home({ cards: firstRun(0), questions: ["ses_now"] });
+    const script = page.split("<script>")[1]!.split("</script>")[0]!;
+    expect(script).toContain('const to="https://studio.example"');
+    expect(script).toContain('parent.postMessage({type:"naive:ready"},to)');
+    expect(script).toContain('event.target.closest("a[data-bridge]")');
+    expect(script).toContain('parent.postMessage({type:"naive:open",href:link.getAttribute("href")},to)');
+    // Every outward link is one of the two the studio allows; the rest stay in the app, on its home and an episode's page.
+    const cards = firstRun(0);
+    const opened = await home({ cards, questions: ["ses_now"] }, `?episode=${String(cards[0]!["id"])}`);
+    for (const one of [page, opened]) {
+      for (const [, href] of one.matchAll(/<a [^>]*href="([^"]*)"/g)) expect(href!, href).toMatch(/^\?(needs=|say=|episode=|$)/);
+      expect(one).not.toContain('target="_blank"');
+    }
+    expect(opened).toContain('<a class="pill" data-bridge href="?needs=ses_now">Pick a topic</a>');
+  });
+
+  it("follows the system's dark mode, and draws no ring anywhere", async () => {
+    const page = await home({ cards: firstRun(0) });
+    expect(page).toContain("@media (prefers-color-scheme:dark)");
+    const css = page.split("<style>")[1]!.split("</style>")[0]!;
+    expect(css).toContain("a{color:inherit;text-decoration:none;outline:none}a:focus-visible{opacity:.6}");
+    expect(css.match(/outline:(?!none)/g)).toBeNull();
+    expect(css).not.toMatch(/box-shadow/);
+  });
+
+  it("says which read failed in its place and still draws the rest", async () => {
+    const page = await home({ cards: firstRun(0), broken: `/v1/boards/${CEO}/cards` });
+    expect(page).toContain("Couldn&#39;t read the board: the API answered 500");
+    expect(page).toContain("Create new episode");
+  });
+
+  it("escapes what the crew wrote", async () => {
+    const page = await home({ answers: { niche: `<b>x</b>` }, cards: firstRun(1, { topic: { note: `TOPIC: <script>alert("x")</script> & co` } }) });
+    expect(page).not.toContain("<script>alert");
+    expect(page).not.toContain("<b>x");
+    expect(page).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; co");
   });
 
   describe("a creator's channel", () => {
     const PRIYA = { id: "chr_priya", name: "Priya Raman", status: "ready", scope: "platform", persona: { niche: "Founder · build in public" }, sheet: ["/setup/characters/priya-raman.jpg"], source_images: [] };
     const MINE = { id: "chr_mine", name: "Lou", status: "ready", scope: "organization", persona: { niche: "Birdwatching" }, sheet: [], source_images: ["https://elsewhere.example/me.jpg", "fil_still_me"] };
 
-    it("leads with the prebuilt creator's face, name and niche, and a way to them in Naive", async () => {
-      api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [{ ...MINE, name: "Priya Raman" }, PRIYA] });
-      const page = await html(await overview(await signedIn(), ENV, NOW));
-      const header = page.split('<header class="creator">')[1]!.split("</header>")[0]!;
+    it("leads with the prebuilt creator's face, name and niche", async () => {
+      const page = await home({ answers: { character: "Priya Raman" }, characters: [{ ...MINE, name: "Priya Raman" }, PRIYA] });
+      const header = page.split('<header class="chead">')[1]!.split("</header>")[0]!;
       expect(header).toContain('src="https://studio.example/setup/characters/priya-raman.jpg"');
       expect(header).toContain("<h1>Priya Raman</h1>");
       expect(header).toContain("Founder · build in public");
-      expect(header).toContain('href="https://studio.example/orchestrator?pane=characters&amp;character=chr_priya"');
-      expect(page).not.toContain("<h1>Media manager</h1>");
     });
 
     it("finds a trained face by its setup answer, and never loads a link elsewhere as its picture", async () => {
-      api(CHANNEL, { character: "Upload your own photos" }, undefined, { characters: [PRIYA, { ...MINE, id: "chr_bad", status: "failed", name: "Lost" }, MINE] });
-      const page = await html(await overview(await signedIn(), ENV, NOW));
+      const page = await home({ answers: { character: "Upload your own photos" }, characters: [PRIYA, { ...MINE, id: "chr_bad", status: "failed", name: "Lost" }, MINE] });
       expect(page).toContain("<h1>Lou</h1>");
-      expect(page).toContain('src="https://api.example/v1/files/fil_still_me/still.png?org=org_1&amp;sig=s"');
+      expect(page).toContain('src="https://api.example/v1/files/fil_still_me/raw?sig=s"');
       expect(page).not.toContain("elsewhere.example");
     });
 
     it("keeps a channel installed before its creator was re-faced on the retired id it started with (ADR-1812)", async () => {
       const NEW = { ...PRIYA, id: "chr_bb1xr9kn5tav3nqbgq5w2p8g61", created_at: "2026-11-05T00:00:00Z" };
       const OLD = { ...PRIYA, id: "chr_0yxd67hvgwsz9xg8mrbbc1q33r", sheet: ["/setup/characters/retired/priya-raman.jpg"], created_at: "2026-09-01T00:00:00Z" };
-      const seen = api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [NEW], retired: [OLD] });
-      const page = await html(await overview(await signedIn(), ENV, NOW));
-      expect(page).toContain('src="https://studio.example/setup/characters/retired/priya-raman.jpg"');
-      expect(page).toContain("character=chr_0yxd67hvgwsz9xg8mrbbc1q33r");
-      const read = new URL(seen.find((one) => new URL(one.url).pathname === "/v1/files")!.url).searchParams;
-      expect(read.get("character")).toBe("chr_0yxd67hvgwsz9xg8mrbbc1q33r");
-    });
-
-    it("gives a channel installed after the re-face the new id", async () => {
-      const NEW = { ...PRIYA, id: "chr_bb1xr9kn5tav3nqbgq5w2p8g61", created_at: "2026-09-20T00:00:00Z" };
-      api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [NEW] });
-      expect(await html(await overview(await signedIn(), ENV, NOW))).toContain("character=chr_bb1xr9kn5tav3nqbgq5w2p8g61");
+      expect(await home({ answers: { character: "Priya Raman" }, characters: [NEW], retired: [OLD] })).toContain('src="https://studio.example/setup/characters/retired/priya-raman.jpg"');
     });
 
     it("picks the face trained since this channel was installed, not the org's first one", async () => {
       const OTHER = { ...MINE, id: "chr_other", name: "Kim", created_at: "2026-09-10T00:00:00Z" };
       const OURS = { ...MINE, created_at: "2026-10-01T00:20:00Z" };
-      api(CHANNEL, { character: "Upload your own photos" }, undefined, { characters: [OTHER, OURS] });
-      const page = await html(await overview(await signedIn(), ENV, NOW));
+      const page = await home({ answers: { character: "Upload your own photos" }, characters: [OTHER, OURS] });
       expect(page).toContain("<h1>Lou</h1>");
       expect(page).not.toContain("<h1>Kim</h1>");
     });
 
     it("says a face is still training", async () => {
-      api(CHANNEL, { character: "Upload your own photos" }, undefined, { characters: [{ ...MINE, status: "training" }] });
-      expect(await html(await overview(await signedIn(), ENV, NOW))).toContain("Training · about 20 min");
+      expect(await home({ answers: { character: "Upload your own photos" }, characters: [{ ...MINE, status: "training" }] })).toContain("Training · about 20 min");
     });
 
-    it("shows what was rendered as them, each opening it", async () => {
-      const seen = api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [PRIYA], files: [{ id: "fil_still_1" }, { id: "fil_clip_2" }] });
-      const made = section(await html(await overview(await signedIn(), ENV, NOW)), "Stills and clips")!;
-      expect(made).toContain('<a href="https://api.example/v1/files/fil_still_1/still.png?org=org_1&amp;sig=s" target="_blank"');
-      expect(made).toContain("fil_clip_2/final.mp4");
-      const read = new URL(seen.find((one) => new URL(one.url).pathname === "/v1/files")!.url).searchParams;
-      expect([read.get("character"), read.get("order"), read.get("limit")]).toEqual(["chr_priya", "desc", "12"]);
-    });
-
-    it("hides Stills and clips while there are none", async () => {
-      api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [PRIYA] });
-      expect(section(await html(await overview(await signedIn(), ENV, NOW)), "Stills and clips")).toBeUndefined();
-    });
-
-    it("counts posts with no goal, as this page can't know a cadence the operator changed on the board", async () => {
-      api(CHANNEL, { character: "Priya Raman" }, undefined, { characters: [PRIYA] });
-      expect(await html(await overview(await signedIn(), ENV, NOW))).toMatch(/Posts this week<\/span><strong>1<\/strong><\/div>/);
-    });
-
-    it("says it can't read the creator in place, and still draws the rest", async () => {
-      api(CHANNEL, { character: "Priya Raman" }, "/v1/characters", {});
-      const page = await html(await overview(await signedIn(), ENV, NOW));
-      expect(page).toContain("<h1>Media manager</h1>");
+    it("says it can't read the creator in place, and still draws the channel", async () => {
+      const page = await home({ answers: { character: "Priya Raman" }, broken: "/v1/characters" });
       expect(page).toContain("Couldn&#39;t read the creator");
-      expect(section(page, "Posted")).toContain("Open ↗");
+      expect(page).toContain("<h1>Your channel</h1>");
     });
-
-    it("draws no creator on a channel that picked none", async () => {
-      const seen = api();
-      const page = await html(await overview(await signedIn(), ENV, NOW));
-      expect(page).toContain("<h1>Media manager</h1>");
-      expect(page).not.toContain('class="creator"');
-      expect(seen.some((one) => new URL(one.url).pathname === "/v1/characters")).toBe(false);
-    });
-  });
-
-  describe("Connect an account", () => {
-    it("asks while nothing has gone out and no identity holds an account, activated or not", async () => {
-      api({}, {}, undefined, { accounts: ["unactivated", []] });
-      const page = await html(await overview(await signedIn(), ENV, NOW));
-      expect(page).toContain('<a href="https://studio.example/connections" target="_blank" rel="noopener">Connect in Naive ↗</a>');
-      expect(page).toContain("Nothing can post until one is connected.");
-    });
-
-    it("asks with no identity at all", async () => {
-      api({}, {}, undefined, {});
-      expect(await html(await overview(await signedIn(), ENV, NOW))).toContain("Connect an account");
-    });
-
-    it("stays quiet once an account exists", async () => {
-      api({}, {}, undefined, { accounts: ["unactivated", [{ id: "acc_1" }]] });
-      expect(await html(await overview(await signedIn(), ENV, NOW))).not.toContain("Connect an account");
-    });
-
-    it("never asks the provider once something has gone out, or is on its way", async () => {
-      for (const channel of [CHANNEL, { pending: CHANNEL.pending! }, { scheduled: CHANNEL.scheduled! }]) {
-        const seen = api(channel, {}, undefined, {});
-        expect(await html(await overview(await signedIn(), ENV, NOW))).not.toContain("Connect an account");
-        expect(seen.some((one) => new URL(one.url).pathname === "/v1/identities")).toBe(false);
-      }
-    });
-
-    it("says so when it can't tell, rather than claiming none is connected", async () => {
-      api({}, {}, "/v1/identities", {});
-      const page = await html(await overview(await signedIn(), ENV, NOW));
-      expect(page).toContain("Couldn&#39;t read the connected accounts");
-      expect(page).not.toContain("Connect an account");
-    });
-  });
-
-  it("follows the system's dark mode, and draws no focus ring", async () => {
-    api();
-    const page = await html(await overview(await signedIn(), ENV, NOW));
-    expect(page).toContain("@media (prefers-color-scheme:dark)");
-    expect(page).toMatch(/a\{color:inherit;outline:none\}a:focus-visible\{opacity:\.6\}/);
-  });
-
-  it("hides Waiting on you and Scheduled while empty and says nothing has posted yet", async () => {
-    api({}, {});
-    const page = await html(await overview(await signedIn(), ENV, NOW));
-    expect(page).not.toContain("Waiting on you");
-    expect(page).not.toContain("<h2>Scheduled</h2>");
-    expect(section(page, "Posted")).toContain("Nothing posted yet.");
-    // No cadence answered: the default "3× a week".
-    expect(page).toMatch(/Posts this week<\/span><strong>0<\/strong><span class="muted">of 3<\/span>/);
-  });
-
-  it("links a waiting post to its chat in Naive, where it is decided", async () => {
-    api({ pending: [...CHANNEL.pending!, post({ id: "pst_orphan", status: "pending", content: "No chat" })] });
-    const waiting = section(await html(await overview(await signedIn(), ENV, NOW)), "Waiting on you")!;
-    expect(waiting).toContain(`<a href="https://studio.example/agents/${AGENT}/sessions/${SESSION}" target="_blank" rel="noopener">Decide in Naive ↗</a>`);
-    // A post with no chat to decide it in carries no link.
-    expect(waiting.match(/Decide in Naive/g)).toHaveLength(1);
-  });
-
-  it("reads every debit up to 20 pages, and says \"at least\" when the week has more", async () => {
-    const pageOf = (after: string | null) => (after === null ? 0 : Number(after.slice(4)));
-    const stub = (pages: number) => {
-      const seen = api();
-      const posts = globalThis.fetch;
-      vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
-        const url = new URL(new Request(input, init).url);
-        if (url.pathname !== "/v1/credits/ledger") return posts(input, init);
-        seen.push(new Request(input, init));
-        const n = pageOf(url.searchParams.get("after"));
-        return list([debit(1_000_000)], n + 1 < pages ? `cur_${n + 1}` : null);
-      });
-      return seen;
-    };
-    const ledgerReads = (seen: Request[]) => seen.filter((one) => new URL(one.url).pathname === "/v1/credits/ledger").length;
-    const spentTile = (page: string) => page.split('<span class="label">Spent</span>')[1]!.split("</div>")[0]!;
-
-    // A busy week that ends on page 12: all of it is summed, with no "at least".
-    let seen = stub(12);
-    let tile = spentTile(await html(await overview(await signedIn(), ENV, NOW)));
-    expect(tile).toBe("<strong>$12.00</strong>");
-    expect(ledgerReads(seen)).toBe(12);
-
-    // More than 20 pages: the 20 read are summed and the tile says the real figure is higher.
-    seen = stub(25);
-    tile = spentTile(await html(await overview(await signedIn(), ENV, NOW)));
-    expect(tile).toBe('<span class="muted">at least</span><strong>$20.00</strong>');
-    expect(ledgerReads(seen)).toBe(20);
-  });
-
-  it("says which read failed in its place and still draws the rest", async () => {
-    api(CHANNEL, { cadence: "daily" }, "/v1/credits/ledger");
-    const page = await html(await overview(await signedIn(), ENV, NOW));
-    expect(page).toContain("Couldn&#39;t read spend: the ledger is down");
-    expect(page).toContain("<strong>38k</strong>");
-    expect(section(page, "Posted")).toContain("Open ↗");
-    expect(section(page, "Waiting on you")).toContain("Needs you");
-  });
-
-  it("escapes what the crew wrote", async () => {
-    api({ pending: [post({ status: "pending", content: `<script>alert("x")</script> & co`, platforms: ["<b>tiktok</b>"] })] });
-    const page = await html(await overview(await signedIn(), ENV, NOW));
-    expect(page).not.toContain("<script>");
-    expect(page).not.toContain("<b>tiktok");
-    expect(page).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; co");
   });
 
   it("POST /api/enter turns the platform's ticket into a session", async () => {
     api();
     const request = await signedIn();
     expect(request.headers.get("cookie")).toMatch(/^__Host-naive_session=/);
-    expect((await overview(request, ENV, NOW)).status).toBe(200);
-    // A ticket for another app is refused.
+    expect((await overview(request, ENV)).status).toBe(200);
     const form = new FormData();
     form.set("ticket", await mintTicket(ENV.DASHBOARD_TOKEN, { sub: "usr_1", email: null, role: "owner", org: "org_1", app: "app_2", exp: Math.floor(Date.now() / 1000) + 120 }));
     expect((await POST(new Request(`${ORIGIN}/api/enter`, { method: "POST", body: form }))).status).toBe(401);

@@ -2,8 +2,8 @@
  * The `media` blueprint, declared. This is the file `naive up` reads.
  *
  * The crew works on the platform's own primitives — cards on the company board, renders in the Media
- * gallery, and each post on the platform's approval card — and it carries one hosted app, Media
- * manager, whose source is in `apps/media-manager`: agents can pull, change and deploy it like any app.
+ * gallery, and each post on the platform's approval card — and it carries one hosted app, the
+ * channel's home, whose source is in `apps/media-manager`: agents can pull, change and deploy it like any app.
  * `templates/` holds the three crews; `ACTIVE` in `templates/index.ts` picks the one that runs.
  * Re-running `naive up` is idempotent — every resource is keyed by name.
  */
@@ -46,7 +46,9 @@ export const declaration = {
   roadmap: ROADMAP,
 
   /**
-   * One hosted app, Media manager: the channel's posts and numbers on one page (vetta-mono ADR-1482).
+   * One hosted app, the channel: its episodes as cards, each Generating, Needs you, Posted or Stopped
+   * (channel-first SPEC §3). `home: true` makes it the company's home screen: the studio frames it in
+   * place of the CEO welcome, and draws every decision itself, so the app only shows.
    * Its SOURCE ships in `apps/media-manager` and the host builds it, so the crew's agents can pull,
    * change and deploy it like an app they made. It replaces the 2.x mini app. `NAIVE_API_KEY` is the
    * read key the platform mints a template app (§29.7); it is only ever minted, never your shell key: a
@@ -57,8 +59,9 @@ export const declaration = {
     {
       name: "media-manager",
       type: "fullstack" as const,
-      description: "The channel's posts and numbers: what waits on you, what is scheduled, and what went out.",
+      description: "The channel's home: every episode, and what each one waits on.",
       deploy_dir: "apps/media-manager",
+      home: true,
       env: { NAIVE_API_KEY: { from_env: "NAIVE_API_KEY" }, DASHBOARD_TOKEN: { generate: true as const } },
     },
   ],
@@ -90,4 +93,13 @@ export const declaration = {
   ],
 };
 
-export default defineProject(declaration);
+const project = defineProject(declaration);
+/**
+ * `home` and `needs_plan` are new in the engine's schema (Track H1), and an engine without them drops
+ * them on parse. Said out loud: without `needs_plan` the first video renders before a plan.
+ */
+const dropped = [project.apps?.some((app) => "home" in app) ? null : "home", project.tasks?.some((one) => "needs_plan" in one) ? null : "needs_plan"].filter((field) => field !== null);
+if (dropped.length > 0) {
+  console.warn(`media: the installed @usenaive-sdk/blueprints drops ${dropped.join(" and ")}; publish only with an engine that keeps them.`);
+}
+export default project;
