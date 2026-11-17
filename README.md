@@ -1,5 +1,7 @@
 # 🎬 Media Blueprint
 
+> **Moved.** This blueprint now lives in the Naive monorepo at `blueprints/media/` (usenaive/vetta-mono#1980, ADR-3020). Changes go there; this repository is frozen and will be archived.
+
 **An autonomous video channel, declared. Clone it, run `naive up`, and the Naive platform provisions
 the crew, its timers and its first day of work into your organization.**
 
