@@ -369,7 +369,7 @@ describe("the toolsets", () => {
    * `generate_image` is left unpinned on purpose: the platform then takes the cheapest priced model.
    */
   it("pins the video models on every seat that renders, the default first, and on no other", () => {
-    expect(VIDEO_MODELS).toEqual(["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"]);
+    expect(VIDEO_MODELS).toEqual(["heygen/heygen-video-1", "black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"]);
     for (const { template, agent, id } of everySeat) {
       const video = agent.tools?.configs["generate_video"];
       if (video?.enabled !== true) continue;
@@ -386,13 +386,13 @@ describe("the toolsets", () => {
 
   /**
    * THE PINNED DEFAULT. The producers render with the first pinned model without anyone asking —
-   * FLUX 3 Max on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
+   * the platform's own default video model on every crew but the influencer's — and no brief, card or fire names, chooses or compares a model.
    * Another is named only when the operator's context explicitly asks for it.
    */
   it("renders with the first pinned model by default, and never has a seat pick or name a video model", () => {
     for (const template of [TEMPLATES.faceless, TEMPLATES.longform]) {
       const producer = seat(template, "producer");
-      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("black-forest-labs/flux-3-max");
+      expect((producer.tools?.configs["generate_video"]?.config as { models: string[] }).models[0], template.name).toBe("heygen/heygen-video-1");
       expect(producer.system, template.name).toContain(RENDER_MODEL_RULE);
     }
     expect(seat(TEMPLATES.faceless, "scriptwriter").system).toContain(PLAN_MODEL_RULE);
@@ -1885,16 +1885,16 @@ describe("the first video", () => {
   });
 
   it("says what each costly step costs, in credits, before it starts", () => {
-    // 1 credit = 200 µUSD; FLUX 3 Max at 170,000 µUSD a second is 850 credits a second.
-    expect([MICRO_USD_PER_CREDIT, VIDEO_CREDITS_PER_SECOND]).toEqual([200, 850]);
+    // 1 credit = 200 µUSD; the first pinned video model at 36,000 µUSD a second is 180 credits a second.
+    expect([MICRO_USD_PER_CREDIT, VIDEO_CREDITS_PER_SECOND]).toEqual([200, 180]);
     for (const template of FAMILY) {
       const references = card(template, "references").body!;
       const said = references.indexOf(`"Making ${STILLS} pictures for <the topic>: about ${STILLS_CREDITS} credits."`);
       expect(said, template.name).toBeGreaterThan(-1);
       expect(said, template.name).toBeLessThan(references.indexOf("generate_image"));
-      expect(references, template.name).toContain(`Your pick starts the video: about <the script's total seconds × 850> credits.`);
+      expect(references, template.name).toContain(`Your pick starts the video: about <the script's total seconds × 180> credits.`);
       const video = card(template, FIRST_PIECE_KEY.faceless).body!;
-      const announced = video.indexOf(`"Making the video: about <its total seconds × 850> credits`);
+      const announced = video.indexOf(`"Making the video: about <its total seconds × 180> credits`);
       expect(announced, template.name).toBeGreaterThan(-1);
       expect(announced, template.name).toBeLessThan(video.indexOf("generate_video"));
     }
@@ -1903,6 +1903,8 @@ describe("the first video", () => {
   it("keeps the cheap half of the first run well inside the 5,000 free credits", () => {
     // Estimate: four stills, plus the four text cards' turns at most ~100 credits each (GLM 5.3 flash).
     expect(STILLS_CREDITS + 4 * 100).toBeLessThanOrEqual(5_000 / 4);
+    // And a 15-second first video after them, with ~1,000 for voice, music and the edit.
+    expect(STILLS_CREDITS + 4 * 100 + 15 * VIDEO_CREDITS_PER_SECOND + 1_000).toBeLessThanOrEqual(5_000);
   });
 
   it("renders the video only once the pictures are picked, and nothing else holds it", () => {

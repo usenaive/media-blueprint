@@ -17,7 +17,7 @@ first, and each costly step says what it costs before it starts.
 | `topics` | trend-scout | nothing | A choice of four ideas it wrote. With no niche, four ideas in four niches: the pick sets it. | ~100 credits |
 | `episode` | scriptwriter | `topics` | The script, filed as `Episodes/<topic>.md`. | ~100 credits |
 | `references` | producer | `episode` | "Making 4 pictures: about 200 credits." Then a picture choice (`multiple`, `details[].image = /files/<id>/raw`) that says what the video will cost. | ~200–1,000 credits |
-| `first-briefs` | producer | `references` | "Making the video: about <seconds × 850> credits." Then the Publish card: "Is this good?" | see below |
+| `first-briefs` | producer | `references` | "Making the video: about <seconds × 180> credits." Then the Publish card: "Is this good?" | see below |
 
 - The first three cards are words only: no web pages, nothing generated.
 - With no account connected, the Publish card asks to connect again before it posts.
@@ -35,7 +35,7 @@ first, and each costly step says what it costs before it starts.
 - So the stills arrive with ~3,800–4,450 credits left.
 - The video on the pinned FLUX 3 Max: 850 credits a second, so 12,750 for 15 s and 25,500 for 30 s.
   The free credits run out at the video, as planned, and the person is asked to start their team.
-- With the platform's own default video model pinned first (a separate commit, the owner's call):
+- With the platform's own default video model pinned first (its own commit, so it can be dropped):
   180 credits a second, so 2,700 for 15 s, plus ~500–1,000 for voice, music and the edit. A 15 s
   first video then just fits inside the free credits; a 30 s one does not.
 

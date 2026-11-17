@@ -356,7 +356,7 @@ kickoff      (channel-manager)  connect card: Instagram, TikTok, YouTube — ask
 topics       (trend-scout)      a choice of four ideas it wrote                    words only
 episode      (scriptwriter)     the script, filed as Episodes/<topic>.md            words only
 references   (producer)         "about 200 credits": four stills, then a picture choice (pick one or more)
-first-briefs (producer)         "about <seconds × 850> credits": the video → Publish card: "Is this good?"
+first-briefs (producer)         "about <seconds × 180> credits": the video → Publish card: "Is this good?"
 ```
 
 `kickoff` and `topics` wait on nothing, on two seats, so the connect card never holds the topic back.
@@ -402,8 +402,10 @@ bounded by one ceiling per seeded card, plus one per card of the first piece's c
 - Every seat on every template, `ai-influencer` included, thinks with `z-ai/glm-5.3-flash`
   (`SEAT_MODEL` in `templates/template.ts`): $0.15/M input and $0.50/M output tokens, so a seat's
   turns cost a fraction of its renders.
-- `generate_video` renders with `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio) by default
-  on every template: it is first in the pinned allow-list `VIDEO_MODELS`, then `minimax/hailuo-3`
+- `generate_video` renders with `heygen/heygen-video-1` (the platform's own default, $0.036 a second
+  with sound, from a first frame) by default; a call with no still, or one it refuses, falls to
+  `black-forest-labs/flux-3-max` (FLUX 3 Max, native audio). Every template pins them in that order in
+  `VIDEO_MODELS`, then `minimax/hailuo-3`
   (which renders where FLUX 3 Max is not served or is refused) and `bytedance/seedance-2.5`, and no brief names a
   model unless your setup answers or context explicitly ask for another. Hailuo 3 renders 5 to 15
   seconds a call (FLUX 3 Max 5 to 20), so every segment and scene keeps to 5–15. `ai-influencer` pins

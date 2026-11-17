@@ -20,8 +20,8 @@ import {
   channelManager,
   channelPlanCard,
   lengthPhrase,
+  DEFAULT_VIDEO_MICRO_USD_PER_SECOND,
   lookCard,
-  MICRO_USD_PER_SECOND,
   PLATFORMS,
   PUBLISHER,
   referenceStudyCard,
@@ -126,8 +126,8 @@ export const WORDS_ONLY = "Words only on this card: make no picture, video, spee
 /** What a credit is worth: 1 credit = 200 µUSD, so $1 = 5,000 credits (vetta-mono billing). */
 export const MICRO_USD_PER_CREDIT = 200;
 
-/** What one second of the first video costs, in credits, on the pinned default model (`MICRO_USD_PER_SECOND`). */
-export const VIDEO_CREDITS_PER_SECOND = MICRO_USD_PER_SECOND / MICRO_USD_PER_CREDIT;
+/** What one second of the first video costs, in credits, on the first pinned model. */
+export const VIDEO_CREDITS_PER_SECOND = DEFAULT_VIDEO_MICRO_USD_PER_SECOND / MICRO_USD_PER_CREDIT;
 
 /**
  * What the four reference stills cost, in credits, said before they are made. AN ESTIMATE: `generate_image`

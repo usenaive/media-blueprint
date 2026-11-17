@@ -240,7 +240,7 @@ a cron fire is not.
   `write`, `edit`, `ls`, `find`, `bash` at `allow` when it applies the template, so any seat can pull,
   edit and deploy Media manager or build a new app, with each app action on an approval card; `apps`
   reaches only this channel's own apps, never another project's in the same organization;
-- `generate_video` carries `config.models`: `VIDEO_MODELS`, FLUX 3 Max first, then Hailuo 3,
+- `generate_video` carries `config.models`: `VIDEO_MODELS`, the platform's default (`heygen/heygen-video-1`) first, then FLUX 3 Max, Hailuo 3,
   with Seedance 2.5 allowed; on the `ai-influencer` producer,
   `AI_INFLUENCER_VIDEO_MODELS` (the two image-to-video models measured keeping a face).
   Every generated short renders 5–15 second scenes;

@@ -517,13 +517,25 @@ export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "gen
  * The video models a seat may render with, in order: the first one a deploy publishes and that can take
  * the request renders, alone (platform ADR-1769). If it's busy the call fails, uncharged, and the seat says so. The pin keeps the channel off any model the
  * platform's own default order might add. FLUX 3 Max is first (owner decision, 2026-10-22: native
- * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. Hailuo 3 is
+ * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. From
+ * v3.7.0 the platform's own default, `heygen/heygen-video-1`, is first: see `DEFAULT_VIDEO_MICRO_USD_PER_SECOND`. Hailuo 3 is
  * next (~0.56× Seedance 2.5's price a second, and it renders the restyled frames Seedance refuses,
  * ADR-1120); Seedance 2.5 stays allowed. Every plan's segments and scenes keep to
  * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS`, which all three take.
  * `generate_image` is left unpinned, so it takes the cheapest priced model.
  */
-export const VIDEO_MODELS: readonly string[] = ["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
+export const VIDEO_MODELS: readonly string[] = ["heygen/heygen-video-1", "black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
+
+/**
+ * WHAT THE FIRST PINNED MODEL BILLS A SECOND (proposal, 2026-11-16): `heygen/heygen-video-1`, the
+ * platform's own default since FLUX 3 Max's launch price ended on 2026-11-07 (vetta-mono
+ * `packages/billing/src/video-rates.ts`, ADR-1842 amended): $0.036 a second at 768p with sound, rated
+ * above FLUX 3 Max (blind-vote Elo 1123 against 1068). It renders 5 to 15 seconds a call from a first
+ * frame, so a call with no still falls through to FLUX 3 Max. At 180 credits a second a 15-second first
+ * video fits a company's 5,000 free credits; at FLUX 3 Max's 850 it does not. The ceilings stay sized
+ * from `MICRO_USD_PER_SECOND`, the dearest likely fallback.
+ */
+export const DEFAULT_VIDEO_MICRO_USD_PER_SECOND = 36_000;
 
 /**
  * How a plan and a render treat the video model. The default path names none: `generate_video`
