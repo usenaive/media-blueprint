@@ -2,35 +2,42 @@
 
 ## 3.7.0 (unreleased, not tagged)
 
-The first video, driven from the chat (owner and design, 2026-11-16). `faceless` and its sixteen
-niches only. `longform`, `clipping`, `music` and `ai-influencer` are unchanged.
+The first video, driven from the chat (owner, 2026-11-16). `faceless` and its sixteen niches only.
+`longform`, `clipping`, `music` and `ai-influencer` are unchanged.
 
-### Before payment: the CEO, in words (`before_start`)
+Every company starts with 5,000 free credits ($1), and the crew runs at once. When the credits run
+out, the platform asks the person to start their team (vetta-mono Track W). So the cheap steps come
+first, and each costly step says what it costs before it starts.
 
-A new template field, `before_start`: plain instructions (1,676 of 2,000 characters) that the setup
-CEO reads from the held install. Only the CEO runs before payment, and it makes nothing that costs.
+### Day one is the first video
 
-1. The connect card for Instagram, TikTok and YouTube. Skipping is fine; nothing waits on it.
-2. Four ideas for the first video, as one choice. With no niche, four ideas in four niches: the pick sets it.
-3. The picked idea's script, saved as `Episodes/<idea>.md`.
-4. The hook and scenes in one line each, then the button **Make the references** (`?start`), which opens the paywall.
+| Card | Seat | Waits on | What the person sees | Cost (estimate) |
+|---|---|---|---|---|
+| `kickoff` | channel-manager | nothing | The connect card for Instagram, TikTok, YouTube, asked after the card closes. Skippable. | ~50 credits |
+| `topics` | trend-scout | nothing | A choice of four ideas it wrote. With no niche, four ideas in four niches: the pick sets it. | ~100 credits |
+| `episode` | scriptwriter | `topics` | The script, filed as `Episodes/<topic>.md`. | ~100 credits |
+| `references` | producer | `episode` | "Making 4 pictures: about 200 credits." Then a picture choice (`multiple`, `details[].image = /files/<id>/raw`) that says what the video will cost. | ~200–1,000 credits |
+| `first-briefs` | producer | `references` | "Making the video: about <seconds × 850> credits." Then the Publish card: "Is this good?" | see below |
 
-**Depends on vetta-mono Track W.** The pinned engine (`@usenaive-sdk/blueprints` 0.19.2) does not
-know `before_start` and drops it without a word. Pin the engine release that carries it before
-publishing, or the CEO never sees these steps.
-
-### After payment: the crew
-
-| Card | Seat | Waits on | What the person sees |
-|---|---|---|---|
-| `references` | producer | nothing | Four stills from the newest `Episodes/` script (it writes one if none is there), then a picture choice: `multiple`, `details[].image = /files/<id>/raw`. The first step that spends. |
-| `first-briefs` | producer | `references` | The video from the picked stills, then the Publish card's approval: "Is this good?" |
-
+- The first three cards are words only: no web pages, nothing generated.
 - With no account connected, the Publish card asks to connect again before it posts.
-- Week one follows, behind the picked pictures: `reference-study` → `look`, `hook-style`,
-  `character-bible`; `channel-plan` after `look`; then `report-frame`. Nothing on day one waits on the bible.
+- Week one waits on the video, so it never spends what the video needs: `reference-study` →
+  `look`, `hook-style`, `character-bible`; `channel-plan` after `look`; then `report-frame`. Nothing on
+  day one waits on the bible.
 - Each step comments one short line on its card: what is happening, what is next.
-- Defaults, never asked: 15–30 s, 9:16, the template's look and voice, 3× a week.
+- Defaults, never asked: 15–30 s (the script takes the shorter end unless the idea needs more), 9:16,
+  the template's look and voice, 3× a week.
+
+### What 5,000 free credits cover (estimates; 1 credit = $0.0002)
+
+- Connect, topics and script: ~250 credits of seat turns.
+- Four stills: ~200–800 credits (the image price is the gateway's, not in code), plus ~100 of turns.
+- So the stills arrive with ~3,800–4,450 credits left.
+- The video on the pinned FLUX 3 Max: 850 credits a second, so 12,750 for 15 s and 25,500 for 30 s.
+  The free credits run out at the video, as planned, and the person is asked to start their team.
+- With the platform's own default video model pinned first (a separate commit, the owner's call):
+  180 credits a second, so 2,700 for 15 s, plus ~500–1,000 for voice, music and the edit. A 15 s
+  first video then just fits inside the free credits; a 30 s one does not.
 
 ### Questions
 
@@ -47,15 +54,15 @@ publishing, or the CEO never sees these steps.
 
 ### Existing channels
 
-- A re-apply seeds the new `references` key. On a channel that already has a Plan, Render or Publish
-  card, it closes at once on `ALREADY RUNNING`, and so does the video card behind it. Nothing is generated.
+- A re-apply seeds the new keys `kickoff`, `topics`, `episode` and `references`. On a channel that
+  already has a Plan, Render or Publish card, `kickoff` and `topics` close at once on
+  `ALREADY RUNNING`, and so does every card behind them. Nothing is generated.
 - The video card keeps the key `first-briefs`, which every older install already holds.
 
 ### Publish (owner step)
 
-1. Land Track W's `before_start` in vetta-mono and publish the engine that carries it.
-2. Pin that engine here (`package.json`, lockfile), run `pnpm test`, merge, then tag `v3.7.0`.
-3. In vetta-mono, run `scripts/publish-artifacts.mjs` for the `media` blueprint at `v3.7.0`. v3.6.0
-   was never published; v3.7.0 carries its changes.
-4. On staging, check one faceless start: the connect card, four ideas and the script come before
-   payment, and no image is made until "Make the references" is paid.
+1. Merge, then tag `v3.7.0` on media-blueprint `main`.
+2. In vetta-mono, run `scripts/publish-artifacts.mjs` for the `media` blueprint at `v3.7.0` (engine
+   `@usenaive-sdk/blueprints` `^0.19.2`, unchanged). v3.6.0 was never published; v3.7.0 carries it.
+3. On staging, start one faceless company: the connect card and four ideas come first, and each
+   costly step says its cost before the wall.

@@ -281,12 +281,6 @@ export interface MediaTemplate {
   questions: SetupQuestion[];
   /** Day one, as cards on the company board. */
   tasks: Task[];
-  /**
-   * What the setup CEO does with the person before the team starts (vetta-mono Track W): plain
-   * instructions, at most 2,000 characters, read into its prompt from the held install. Only words:
-   * before payment nothing generates. Absent on a template whose crew needs nothing first.
-   */
-  before_start?: string;
 }
 
 /**

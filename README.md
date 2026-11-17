@@ -266,10 +266,10 @@ woken by its cards.
 
 | Seat | Role | Timers | Day one | What it does |
 |---|---|---|---|---|
-| `channel-manager` | Channel lead | — | `channel-plan` | Publishes each piece on the cadence; reads the weekly report |
+| `channel-manager` | Channel lead | — | `kickoff`, `channel-plan` | Asks where to post; publishes each piece on the cadence; reads the weekly report |
 | `producer` | Video production | — | `references`, `first-briefs`, `look` | Generates the reference stills and scene videos, edits the final piece, creates the Publish card |
-| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | — | Starts each piece after the first as a Plan card, with exemplars it opened |
-| `scriptwriter` | Hooks & scripts | — | `reference-study`, `character-bible`, `hook-style` | Drafts the continuity bible and asks for approval; writes every scene and prompt |
+| `trend-scout` | Trends & briefs | Mon & Thu 06:00 ($10) | `topics` | Offers the first video's four ideas; starts each later piece as a Plan card |
+| `scriptwriter` | Hooks & scripts | — | `episode`, `reference-study`, `character-bible`, `hook-style` | Writes the first episode; drafts the continuity bible and asks for approval; writes every scene and prompt |
 | `analyst` | Performance | Mon 07:30 ($10), daily 09:05 ($2) | `report-frame` | Records the numbers; files the weekly report card |
 
 ### `longform`
@@ -346,24 +346,26 @@ day-one card closes.
 The cards are seeded on the company board. A card waiting on another is not woken, and costs
 nothing, until that card closes.
 
-On `faceless` and its niches (v3.7.0) day one is **the first video**, driven from the chat.
-
-Before payment only the CEO runs, on words, from the template's `before_start` (vetta-mono Track W):
-it shows the connect card for Instagram, TikTok and YouTube (skipping is fine), offers four ideas
-for the first video, writes the picked one's script to `Episodes/<idea>.md`, and ends on the button
-**Make the references**, which opens the paywall. After payment the crew's cards take over:
+On `faceless` and its niches (v3.7.0) day one is **the first video**, driven from the chat. Every
+company starts with free credits and the crew runs at once; when the credits run out, the platform
+asks the person to start their team, wherever that happens. So the cheap steps come first, and each
+costly step says what it costs before it starts:
 
 ```
-references   (producer)  four stills from the newest script, then a picture choice (pick one or more)   first paid step
-first-briefs (producer)  the video from the picked stills → Publish card: "Is this good?" on the approval card
+kickoff      (channel-manager)  connect card: Instagram, TikTok, YouTube — asked after it closes, skippable
+topics       (trend-scout)      a choice of four ideas it wrote                    words only
+episode      (scriptwriter)     the script, filed as Episodes/<topic>.md            words only
+references   (producer)         "about 200 credits": four stills, then a picture choice (pick one or more)
+first-briefs (producer)         "about <seconds × 850> credits": the video → Publish card: "Is this good?"
 ```
 
-Then week one, behind the picked pictures: `reference-study` → `look`, `hook-style`,
-`character-bible`; `channel-plan` after `look`, then `report-frame`. Nothing on day one waits on the
-bible. Defaults are made, not asked: 15–30 seconds, 9:16, the template's look and voice, 3× a week to
-every connected account; with none connected, the Publish card asks again. Each step comments one
-short line on its card. On a channel that already makes videos, `references` closes at once on
-`ALREADY RUNNING` and the video card behind it does the same, so an update buys nothing.
+`kickoff` and `topics` wait on nothing, on two seats, so the connect card never holds the topic back.
+Week one waits on the video, so it never spends what the video needs: `reference-study` → `look`,
+`hook-style`, `character-bible`; `channel-plan` after `look`; then `report-frame`. Nothing on day one
+waits on the bible. Defaults are made, not asked: 15–30 seconds, 9:16, the template's look and voice,
+3× a week to every connected account; with none connected, the Publish card asks again. Each step
+comments one short line on its card. On a channel that already makes videos, `kickoff` and `topics`
+close at once on `ALREADY RUNNING` and the cards behind them do the same, so an update buys nothing.
 
 The other templates, and `ai-influencer`, keep the study-first day one:
 
@@ -387,7 +389,7 @@ start the rest.
 
 A card carries no budget of its own: a woken seat runs on its per-task ceiling. So day one is
 bounded by one ceiling per seeded card, plus one per card of the first piece's chain
-($180 on `faceless`, $290 on `longform`, $160 on `clipping`).
+($240 on `faceless`, $290 on `longform`, $160 on `clipping`).
 
 ## 💰 Money
 

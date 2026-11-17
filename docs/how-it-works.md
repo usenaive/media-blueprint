@@ -154,12 +154,12 @@ crew and ask nothing. All five need engine 0.17.0.
 
 ### Day one
 
-`faceless` and its niches (v3.7.0) start with the first video. Before payment the setup CEO follows
-the template's `before_start`: the connect card (skippable), four ideas to pick from, the script in
-`Episodes/<idea>.md`, then the button "Make the references", which opens the paywall. After payment
-`references` makes four stills and asks a picture choice (the first step that spends), and
-`first-briefs` makes the video, then the Publish card's "Is this good?". The study, look, hook style
-and bible follow in week one; nothing on day one waits on them.
+`faceless` and its niches (v3.7.0) start with the first video, on the company's free credits:
+`kickoff` (the channel manager's connect card, asked after the card closes) and `topics` (four ideas to
+pick from) at once, then `episode` (the script, in `Episodes/<topic>.md`), `references` (four stills and
+a picture choice) and `first-briefs` (the video, then the Publish card's "Is this good?"). The first
+three are words only; the last two say what they cost in credits before they start. The study, look,
+hook style and bible follow the video in week one; nothing on day one waits on them.
 
 Every other template seeds its set-up cards first — the channel plan, reference study, look, voice,
 report skeleton and, for generated shorts, the character bible (closed on a draft, approved later) —

@@ -44,11 +44,6 @@ export const declaration = {
   built_on: ACTIVE.built_on,
   /** The first week as the studio's launch card says it (`canonical-spec §31.5`). Printed, never provisioned. */
   roadmap: ROADMAP,
-  /**
-   * What the setup CEO does with the person before the team starts (vetta-mono Track W): words only,
-   * ending on the button that opens the paywall. Read from the held install; never provisioned.
-   */
-  before_start: ACTIVE.before_start,
 
   /**
    * One hosted app, Media manager: the channel's posts and numbers on one page (vetta-mono ADR-1482).

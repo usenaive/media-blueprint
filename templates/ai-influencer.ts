@@ -360,8 +360,7 @@ const withInfluencerCards = (template: MediaTemplate): MediaTemplate => ({
     .sort((a, b) => Number(a.key === "reference-study") - Number(b.key === "reference-study")),
 });
 
-// The influencer's first piece is the face and the persona, made after payment: none of faceless's script first.
-const { before_start: _scriptFirst, ...base } = niche(FACELESS, {
+const base = niche(FACELESS, {
   name: "ai-influencer",
   title: "AI Influencer",
   description:
