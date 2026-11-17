@@ -167,8 +167,13 @@ export const REFERENCE_QUESTION: SetupQuestion = {
   help: "A channel or video to model this on. Stills are worth more than a link. Left blank, the team finds real videos to study.",
 };
 
-/** One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`. */
-export type Task = NonNullable<DefineInput["tasks"]>[number];
+/**
+ * One card the apply seeds on the company board (§31.11): `{ key, title, body, assignee, blocked_by }`,
+ * and `needs_plan`: the board wakes the card only once the company has a plan, and activation wakes it
+ * (channel-first SPEC §5). The engine's schema gains the field with Track H1; an engine without it
+ * drops it on parse, so `naive.config.ts` says so out loud.
+ */
+export type Task = NonNullable<DefineInput["tasks"]>[number] & { needs_plan?: boolean };
 
 /**
  * The key of each template's day-one piece card — the card that starts the first piece's paid chain.
