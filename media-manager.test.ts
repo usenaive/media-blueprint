@@ -6,7 +6,7 @@
 import { mintTicket } from "@usenaive-sdk/app";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./apps/media-manager/api/enter.ts";
-import { overview, STYLE_MEDIA, STYLES } from "./apps/media-manager/api/index.ts";
+import { overview, PLAYING_MAX, STYLE_MEDIA, STYLES } from "./apps/media-manager/api/index.ts";
 
 const ORIGIN = "https://media-manager.example";
 const ENV = {
@@ -468,34 +468,30 @@ describe("Media manager", () => {
 const filed = (id: string, name: string, folder: string, content_type = "image/png"): Fixture => ({ id, object: "file", name, folder, content_type, created_at: "2026-10-21T00:00:00Z" });
 
 describe("References", () => {
-  const STILLS = ["fil_still_a", "fil_still_b", "fil_still_c"].map((id, at) => filed(id, `still-${at}.png`, "Episodes/Rome burns"));
+  const STILLS = ["fil_still_a", "fil_still_b", "fil_still_c"].map((id, at) => filed(id, `still-${at}.png`, "Episodes/rome-burns"));
 
-  it("draws each episode's script title and its stills, the picked ones first and the rest dimmed", async () => {
+  it("draws each episode's own title, its stills, and how far it is, reading the script once with the app's key", async () => {
     const seen = api({}, {}, undefined, {
-      // Filed again once the stills were picked: the newest of a name is the episode.
-      episodes: [filed("fil_script_2", "Rome burns.md", "Episodes", "text/markdown"), ...STILLS, filed("fil_script_1", "Rome burns.md", "Episodes", "text/markdown")],
-      scripts: { fil_script_2: "# Rome burns in one night\nSTILLS: fil_still_c, fil_still_a\n\nHook…", fil_script_1: "# Old title" },
+      episodes: [filed("fil_script", "rome-burns.md", "Episodes", "text/markdown"), ...STILLS, filed("fil_other", "x.png", "Episodes/another-one")],
+      scripts: { fil_script: "# Rome burns in one night\n\nHook…" },
     });
     const refs = section(await html(await overview(await signedIn(), ENV, NOW)), "References")!;
-    expect(refs).toContain('<span class="title">Rome burns in one night</span> <span class="muted">2 picked</span>');
-    expect(refs).not.toContain("Old title");
-    const order = [...refs.matchAll(/files\/(fil_still_\w)\//g)].map((m) => m[1]);
-    expect(order).toEqual(["fil_still_c", "fil_still_a", "fil_still_b"]);
-    expect(refs).toMatch(/<li class="card dim"><img class="thumb" src="[^"]*fil_still_b/);
-    expect(refs).not.toMatch(/<li class="card dim"><img class="thumb" src="[^"]*fil_still_c/);
-    // One read of the folder, the newest script's words read once with the app's own key.
+    expect(refs).toContain('<span class="title">Rome burns in one night</span> <span class="muted">Pick in your chat</span>');
+    expect([...refs.matchAll(/files\/(fil_\w+)\//g)].map((m) => m[1])).toEqual(["fil_still_a", "fil_still_b", "fil_still_c"]);
     const listed = new URL(seen.find((one) => new URL(one.url).searchParams.get("folder") === "Episodes")!.url).searchParams;
     expect([listed.get("subfolders"), listed.get("order")]).toEqual(["true", "desc"]);
     const reads = seen.filter((one) => new URL(one.url).searchParams.get("download") === "true");
-    expect(reads.map((one) => new URL(one.url).pathname)).toEqual(["/v1/files/fil_script_2"]);
+    expect(reads.map((one) => new URL(one.url).pathname)).toEqual(["/v1/files/fil_script"]);
     expect(reads[0]!.headers.get("authorization")).toBe("Bearer sk_live_media_manager");
   });
 
-  it("says to pick in the chat while the stills wait on a pick", async () => {
-    api({}, {}, undefined, { episodes: [filed("fil_script_1", "Rome burns.md", "Episodes", "text/markdown"), ...STILLS], scripts: { fil_script_1: "# Rome burns" } });
-    const refs = section(await html(await overview(await signedIn(), ENV, NOW)), "References")!;
-    expect(refs).toContain("Pick in your chat");
-    expect(refs).not.toContain("dim");
+  it("says the video is ready once one is in the episode's folder, and the script alone before any still", async () => {
+    api({}, {}, undefined, { episodes: [filed("fil_script", "rome-burns.md", "Episodes", "text/markdown"), filed("fil_v", "final.mp4", "Episodes/rome-burns", "video/mp4"), ...STILLS], scripts: { fil_script: "# Rome burns" } });
+    expect(section(await html(await overview(await signedIn(), ENV, NOW)), "References")).toContain("Video ready");
+    api({}, {}, undefined, { episodes: [filed("fil_script", "rome-burns.md", "Episodes", "text/markdown")], scripts: {} });
+    const bare = section(await html(await overview(await signedIn(), ENV, NOW)), "References")!;
+    // A script it couldn't read is named by its slug.
+    expect(bare).toContain('<span class="title">rome-burns</span> <span class="muted">Script ready</span>');
   });
 
   it("is not drawn before the crew has filed an episode", async () => {
@@ -525,10 +521,17 @@ describe("Styles", () => {
       const player = grid.split(`<dialog id="style-${one.template}" class="player">`)[1]!.split("</dialog>")[0]!;
       expect(grid, one.template).toContain(`data-open="style-${one.template}"`);
       expect(player, one.template).toContain(`<video src="${STYLE_MEDIA}/${one.template}.mp4"`);
-      expect(player, one.template).toContain(`<a class="recreate" href="https://studio.example/setup?blueprint=media&amp;template=${one.template}" target="_blank" rel="noopener">Recreate this style</a>`);
+      // The Add card for this company, never a new company.
+      expect(player, one.template).toContain(`<a class="recreate" href="https://studio.example/orchestrator?add=media%2F${one.template}" target="_blank" rel="noopener">Recreate this style</a>`);
+      expect(player, one.template).not.toContain("/setup");
       expect(player.match(/<a /g), one.template).toHaveLength(1);
     }
     expect(grid).toContain("showModal()");
+    // Posters first, nothing loaded before it is seen, and at most four playing at once.
+    expect(grid).not.toMatch(/<video[^>]*autoplay/);
+    expect(grid.match(/preload="none"/g)).toHaveLength(2 * STYLES.length);
+    expect(PLAYING_MAX).toBe(4);
+    expect(grid).toContain("one.isIntersecting&&on.size<4");
   });
 
   it("leaves out the channel's own look, and every channel that is not a faceless one", async () => {

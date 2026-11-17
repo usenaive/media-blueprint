@@ -517,25 +517,43 @@ export const FOLLOWS_TOOL: Readonly<Record<string, string>> = { edit_video: "gen
  * The video models a seat may render with, in order: the first one a deploy publishes and that can take
  * the request renders, alone (platform ADR-1769). If it's busy the call fails, uncharged, and the seat says so. The pin keeps the channel off any model the
  * platform's own default order might add. FLUX 3 Max is first (owner decision, 2026-10-22: native
- * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. From
- * v3.7.0 the platform's own default, `heygen/heygen-video-1`, is first: see `DEFAULT_VIDEO_MICRO_USD_PER_SECOND`. Hailuo 3 is
+ * audio, 9:16, 5–20 s a call), so Hailuo 3 renders where FLUX 3 Max is unpublished or refused. Hailuo 3 is
  * next (~0.56× Seedance 2.5's price a second, and it renders the restyled frames Seedance refuses,
  * ADR-1120); Seedance 2.5 stays allowed. Every plan's segments and scenes keep to
  * `SEGMENT_MIN_SECONDS`–`SEGMENT_MAX_SECONDS`, which all three take.
  * `generate_image` is left unpinned, so it takes the cheapest priced model.
  */
-export const VIDEO_MODELS: readonly string[] = ["heygen/heygen-video-1", "black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
+export const VIDEO_MODELS: readonly string[] = ["black-forest-labs/flux-3-max", "minimax/hailuo-3", "bytedance/seedance-2.5"];
+
+/** What a credit is worth: 1 credit = 200 µUSD, so $1 = 5,000 credits (vetta-mono billing). */
+export const MICRO_USD_PER_CREDIT = 200;
+
+/** What every company starts with before it starts its team (owner, 2026-11-16; vetta-mono Track W). */
+export const FREE_CREDITS = 5_000;
 
 /**
- * WHAT THE FIRST PINNED MODEL BILLS A SECOND (proposal, 2026-11-16): `heygen/heygen-video-1`, the
- * platform's own default since FLUX 3 Max's launch price ended on 2026-11-07 (vetta-mono
- * `packages/billing/src/video-rates.ts`, ADR-1842 amended): $0.036 a second at 768p with sound, rated
- * above FLUX 3 Max (blind-vote Elo 1123 against 1068). It renders 5 to 15 seconds a call from a first
- * frame, so a call with no still falls through to FLUX 3 Max. At 180 credits a second a 15-second first
- * video fits a company's 5,000 free credits; at FLUX 3 Max's 850 it does not. The ceilings stay sized
- * from `MICRO_USD_PER_SECOND`, the dearest likely fallback.
+ * WHAT EACH VIDEO MODEL BILLS A SECOND, the platform's own rate table copied: vetta-mono
+ * `packages/billing/src/video-rates.ts` at 348f77caa (rates read 2026-10-21, unchanged 2026-11-04;
+ * FLUX 3 Max's launch promo ended 2026-11-07). A render is charged what the provider reports, at cost,
+ * with no markup; `minSeconds` is what a shorter call is billed as. Every model a seat pins must be
+ * here (`templates.test.ts`), so a card's cost line is never computed from a guess. Re-copy when the
+ * platform's table changes.
  */
-export const DEFAULT_VIDEO_MICRO_USD_PER_SECOND = 36_000;
+export const VIDEO_RATES: Readonly<Record<string, { microUsdPerSecond: number; minSeconds?: number }>> = {
+  "heygen/heygen-video-1": { microUsdPerSecond: 36_000 },
+  "black-forest-labs/flux-3-max": { microUsdPerSecond: 170_000 },
+  "minimax/hailuo-3": { microUsdPerSecond: 130_000 },
+  "bytedance/seedance-2.5": { microUsdPerSecond: 233_530 },
+  // The platform's `alibaba/wan-3.0`, by the gateway's image-to-video id the influencer pins.
+  "alibaba/wan-3.0/image-to-video": { microUsdPerSecond: 100_000, minSeconds: 5 },
+};
+
+/** What `seconds` of video on `model` costs, in credits, as the platform bills it. */
+export const videoCredits = (model: string, seconds: number): number => {
+  const rate = VIDEO_RATES[model];
+  if (rate === undefined) throw new Error(`no rate for video model ${model}: copy it from vetta-mono video-rates.ts`);
+  return (Math.max(seconds, rate.minSeconds ?? 0) * rate.microUsdPerSecond) / MICRO_USD_PER_CREDIT;
+};
 
 /**
  * How a plan and a render treat the video model. The default path names none: `generate_video`
@@ -709,7 +727,7 @@ export const channelPlanCard = (firstAsk: string): Task =>
   });
 
 /** The analyst's two crons, the same on every template: the weekly report and the daily numbers. */
-export const analystSchedules = (focus: string): ScheduleDecl[] => [
+export const analystSchedules = (focus: string, watch = ""): ScheduleDecl[] => [
   schedule({
     cron: "30 7 * * 1", // Monday 07:30 — last week's numbers, at the start of the week.
     summary: "Weekly report",
@@ -719,7 +737,9 @@ export const analystSchedules = (focus: string): ScheduleDecl[] => [
   schedule({
     cron: "5 9 * * *", // Daily 09:05 — every post gets a performance history.
     summary: "Performance analysis",
+    // The watch runs first: with no account connected yet, the numbers stop the fire at once.
     input:
+      (watch === "" ? "" : `${watch} Then the numbers. `) +
       "Daily performance check. If social.post_metrics is not offered, no account is connected yet: say so in one line and stop — never request_tools for a social tool. Otherwise call social.post_metrics with since_days 14 to record today's numbers for every post from the last two weeks. Do not edit, delete or repost anything. For any post running well above or below the channel's usual, comment one line on its Publish card saying what you think drove it — hook, topic, length or posting time.",
     budget_micro_usd: 2_000_000, // $2 — one metrics read and a few one-line comments.
   }),

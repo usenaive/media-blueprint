@@ -20,7 +20,7 @@
  *   · the cadence — daily, not the crews' 3× a week: its channel plan starts on it, and the manager and the scout are told it;
  *   · the brakes — the scout starts nothing while posts pile up unapproved, and the producer checks the face.
  */
-import { FACELESS, SEGMENTED_SHORT_FORM, STUDY_FIRST_TASKS } from "./faceless.ts";
+import { FACELESS, FIRST_RUN_WATCH, SEGMENTED_SHORT_FORM, STUDY_FIRST_TASKS } from "./faceless.ts";
 import {
   budgetOf,
   DEFAULT_CADENCE,
@@ -422,8 +422,10 @@ export const AI_INFLUENCER: MediaTemplate = withInfluencerCards({
           : OWN_NICHE(seat),
     // Day one's hard stops (H5): each seat's ceiling, and every fire inside it.
     budget: AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget,
+    // The first-run watch is the faceless chain's; the influencer keeps its own day one.
     schedules: (seat.schedules ?? []).map((fire) => ({
       ...fire,
+      input: fire.input.replace(`${FIRST_RUN_WATCH} Then the numbers. `, ""),
       budget_micro_usd: Math.min(fire.budget_micro_usd, (AI_INFLUENCER_BUDGETS[seat.name] ?? seat.budget).max_task_micro_usd),
     })),
     tools: {
